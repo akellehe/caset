@@ -398,6 +398,16 @@ class ProtonAnimator:
         self._done = False          # so the verdict is announced exactly once
         self._curv_cache = {}       # node_index -> (frame_computed, {cell_tuple: curvature})
         self._dump_dir = None       # set by run_build(dump_dir=...); None = no dumping
+        # Persistent-artist state (#670): trace Line2D handles updated via
+        # set_data instead of clear-and-replot; the spec_frame the spectra
+        # panels last DREW (they skip when it hasn't advanced — the draw-side
+        # multiplier of #671's recording gate); per-node cached layouts so a
+        # frozen node's panels are not re-laid-out and redrawn every frame.
+        self._trace_artists = {}
+        self._drawn_spec_frame = None
+        self._drawn_spec_node = None
+        self._drawn_nodes = set()
+        self._last_coords = {}
 
     @staticmethod
     def _make_schedule(n_nodes, init_steps, init_chunk, evolve_steps, evolve_chunk):
@@ -1048,8 +1058,16 @@ class ProtonAnimator:
         # once and shared by its primal + both dual panels.
         coords_by_node = {}
         for ni in range(len(self.nodes)):
+            if ni != self._active and ni in self._drawn_nodes:
+                # A non-active node's complex is frozen: keep its last layout
+                # and panels as drawn (#670). The cached coords keep the frame
+                # dump payload identical to a fresh draw.
+                coords_by_node[ni] = self._last_coords[ni]
+                continue
             coords = self._layouts[ni].coords(self.nodes[ni][0].st)
             coords_by_node[ni] = coords
+            self._last_coords[ni] = coords
+            self._drawn_nodes.add(ni)
             self._draw_complex(self._primal_axes[ni], ni, coords, self.nodes[ni][1])
             self._draw_dual(self._re_axes[ni], self._re_sms[ni], ni, coords,
                             0, _HEAT_CMAP, "dual — spatial curvature (Re ε)")
@@ -1066,19 +1084,38 @@ class ProtonAnimator:
                 print(f"\nframe dump failed: {exc!r}", flush=True)
 
         if getattr(self, "ax_null", None) is not None:
-            self.ax_null.clear()
             xs = range(len(self.hist["min_det2"]))
-            self.ax_null.semilogy(xs, self.hist["min_det2"], color="C0",
-                                  marker=".", label="min |det G| — triangles")
-            self.ax_null.semilogy(xs, self.hist["min_det3"], color="C3",
-                                  marker=".", label="min |det G| — tets")
-            self.ax_null.axhline(1e-6, color="0.6", ls=":", lw=0.8,
-                                 label="1e-6 (danger: near-degenerate)")
-            self.ax_null.set_title("null-face proximity (det G = 0 ⇔ face "
-                                   "tangent to the light cone)", fontsize=9)
-            self.ax_null.set_xlabel("frame")
-            self.ax_null.set_ylabel("min |det G|")
-        if getattr(self, "ax_spec", None) is not None and self.hist["sigma"]:
+            ta = self._trace_artists
+            if "null2" not in ta:                      # first frame: build once
+                self.ax_null.clear()
+                (ta["null2"],) = self.ax_null.semilogy(
+                    xs, self.hist["min_det2"], color="C0",
+                    marker=".", label="min |det G| — triangles")
+                (ta["null3"],) = self.ax_null.semilogy(
+                    xs, self.hist["min_det3"], color="C3",
+                    marker=".", label="min |det G| — tets")
+                self.ax_null.axhline(1e-6, color="0.6", ls=":", lw=0.8,
+                                     label="1e-6 (danger: near-degenerate)")
+                self.ax_null.set_title("null-face proximity (det G = 0 ⇔ face "
+                                       "tangent to the light cone)", fontsize=9)
+                self.ax_null.set_xlabel("frame")
+                self.ax_null.set_ylabel("min |det G|")
+            else:                                      # later frames: data only
+                ta["null2"].set_data(list(xs), self.hist["min_det2"])
+                ta["null3"].set_data(list(xs), self.hist["min_det3"])
+                self.ax_null.relim()
+                self.ax_null.autoscale_view()
+        # The spectrum/mode/annihilation panels draw hist rows the recorder
+        # refreshes on the #671 cadence; between refreshes their inputs are
+        # IDENTICAL, so redrawing is pure waste — skip until spec_frame
+        # advances (or the active node changes). Zero visual change.
+        spec_now = self.hist["spec_frame"][-1] if self.hist["spec_frame"] else None
+        active_now = self.hist["node"][-1] if self.hist["node"] else 0
+        spec_dirty = (spec_now is None
+                      or spec_now != self._drawn_spec_frame
+                      or active_now != self._drawn_spec_node)
+        if (getattr(self, "ax_spec", None) is not None and self.hist["sigma"]
+                and spec_dirty):
             ax = self.ax_spec
             ax.clear()
             sigma = self.hist["sigma"][-1]
@@ -1130,20 +1167,20 @@ class ProtonAnimator:
             ax.set_xlabel("rank (descending)")
             ax.set_ylabel("σ")
             self.ax_null.legend(loc="lower right", fontsize=7)
-        if getattr(self, "ax_mode", None) is not None and self.hist["mode_w"]:
+        if getattr(self, "ax_mode", None) is not None and self.hist["mode_w"] and spec_dirty:
             active = self.hist["node"][-1]
             self._draw_mode_heat(self.ax_mode, active,
                                  coords_by_node.get(active, {}),
                                  self.hist["mode_w"][-1], self._mode_sm,
                                  _MODE_CMAP, ("near-kernel", "smallest"))
         if (getattr(self, "ax_mode_head", None) is not None
-                and self.hist["mode_w_head"]):
+                and self.hist["mode_w_head"]) and spec_dirty:
             active = self.hist["node"][-1]
             self._draw_mode_heat(self.ax_mode_head, active,
                                  coords_by_node.get(active, {}),
                                  self.hist["mode_w_head"][-1], self._mode_head_sm,
                                  _MODE_CMAP_HEAD, ("near-null", "largest"))
-        if getattr(self, "ax_pair", None) is not None and self.hist["pair_w"]:
+        if getattr(self, "ax_pair", None) is not None and self.hist["pair_w"] and spec_dirty:
             active = self.hist["node"][-1]
             n_pairs = self.hist["pair_count"][-1]
             src_tag = (", Re-projected"
@@ -1158,26 +1195,44 @@ class ProtonAnimator:
                        f"(W-null{src_tag})"),
                 empty_note=getattr(self, "_pair_note",
                                    "no Krein classification yet"))
+        if spec_dirty:
+            self._drawn_spec_frame = spec_now
+            self._drawn_spec_node = active_now
         if (getattr(self, "ax_pair_trace", None) is not None
                 and self.hist["pair_count"]):
             ax = self.ax_pair_trace
-            ax.clear()
             xs = range(len(self.hist["pair_count"]))
-            ax.plot(xs, self.hist["pair_count"], color="C4", marker=".")
-            for b in self._boundaries:
+            ta = self._trace_artists
+            if "pairs" not in ta:                      # first frame: build once
+                ax.clear()
+                (ta["pairs"],) = ax.plot(xs, self.hist["pair_count"],
+                                         color="C4", marker=".")
+                ax.set_title("broken pairs (Re-projected off-locus) + real-ℓ² "
+                             "locus distance", fontsize=9)
+                ax.set_xlabel("frame")
+                ax.set_ylabel("pairs", color="C4")
+                ta["pairs_boundaries"] = 0
+            else:                                      # later frames: data only
+                ta["pairs"].set_data(list(xs), self.hist["pair_count"])
+                ax.relim()
+                ax.autoscale_view()
+            while ta["pairs_boundaries"] < len(self._boundaries):
+                b = self._boundaries[ta["pairs_boundaries"]]
                 ax.axvline(b - 0.5, color="0.6", ls="--", lw=0.8)
-            ax.set_title("broken pairs (Re-projected off-locus) + real-ℓ² "
-                         "locus distance", fontsize=9)
-            ax.set_xlabel("frame")
-            ax.set_ylabel("pairs", color="C4")
+                ta["pairs_boundaries"] += 1
             if getattr(self, "ax_pair_leak", None) is not None:
                 axl = self.ax_pair_leak
-                axl.clear()
-                axl.plot(xs, self.hist["im_leak"], color="C2", alpha=0.7,
-                         lw=1.0)
-                axl.set_ylabel("max|Im ℓ²| (locus distance)", color="C2",
-                               fontsize=8)
-                axl.tick_params(labelsize=6)
+                if "leak" not in ta:
+                    axl.clear()
+                    (ta["leak"],) = axl.plot(xs, self.hist["im_leak"],
+                                             color="C2", alpha=0.7, lw=1.0)
+                    axl.set_ylabel("max|Im ℓ²| (locus distance)", color="C2",
+                                   fontsize=8)
+                    axl.tick_params(labelsize=6)
+                else:
+                    ta["leak"].set_data(list(xs), self.hist["im_leak"])
+                    axl.relim()
+                    axl.autoscale_view()
 
     # ---- per-frame text hooks ----
     def _frame_label(self, frame):
