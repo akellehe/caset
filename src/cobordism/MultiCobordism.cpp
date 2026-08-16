@@ -857,14 +857,18 @@ void MultiCobordism::growBoundaryRegions() {
   // it. A block already carrying (residual < tolerance) is left alone, so it stops
   // growing once it represents its state.
   //
-  // GATED on the block's own residual: the shell is kept only when it does not
-  // RAISE the block's r_U term, so region growth can never raise F. The gate is
-  // Δ <= 0, not Δ < 0: a region too small to hold a full cell scores the constant
-  // full-leak residual, so its early shells are exactly Δ == 0 and must pass —
-  // a strict gate would starve initialization at the seed.
+  // UNGATED, deliberately (#649): the #636 port carried a per-block gate here
+  // (a shell that raised the block's own r_U term was reverted). It was not one
+  // of the ported capabilities, and it starves the directed-surgery build: its
+  // init phase leans on regions growing THROUGH residual-raising shells to
+  // reach the material where their holes open (measured: with the gate, the
+  // canonical directed build ends at the bare seed — 0 holes, colorR at the
+  // 3.0 floor — where ungated it converges). A growth-raised F is booked
+  // honestly into the trace by stage1Update (#607), so the acceptance
+  // bookkeeping stays exact either way.
   const auto growOneShell = [this](BoundaryBlock &block) {
-    const double residualBefore = residualForBoundaryBlock(block, spacetime_);
-    if (residualBefore < inputCarriedTolerance_) return;
+    if (residualForBoundaryBlock(block, spacetime_) < inputCarriedTolerance_)
+      return;
     std::set<std::uint64_t> expanded = block.vertices;
     for (const auto &topSimplex : spacetime_->getTopSimplices()) {
       auto cellVertexIds = topSimplex->topTuple();
@@ -877,10 +881,7 @@ void MultiCobordism::growBoundaryRegions() {
       if (touchesRegion)
         expanded.insert(cellVertexIds.begin(), cellVertexIds.end());
     }
-    std::set<std::uint64_t> original = std::move(block.vertices);
     block.vertices = std::move(expanded);
-    if (residualForBoundaryBlock(block, spacetime_) > residualBefore)
-      block.vertices = std::move(original);  // the shell hurt the carry: revert it
   };
   for (auto &inputBlock : inputBlocks_) growOneShell(inputBlock);
   // Localized OUTPUT blocks (a 2→2 recombination's diquark ⊔ antidiquark) grow the
@@ -909,9 +910,8 @@ bool MultiCobordism::stage1Update(int nCandidateMoves, bool growBoundaries,
   // region expand a shell so it can develop the holes that carry its state. Off
   // during the bulk evolution — the boundary ∂W is then frozen.
   //
-  // Growing a region CHANGES F and so must be booked into the trace (#607) —
-  // though with the per-block gate in `growBoundaryRegions` (a shell that raises
-  // the block's residual is reverted) the booked delta is now always <= 0.
+  // Growing a region CHANGES F and so must be booked into the trace (#607):
+  // growth is ungated, so the booked delta may have either sign.
   // `growBoundaryRegions` mutates only the boundary blocks' vertex sets and never
   // touches `spacetime_`, so `reggeActionGradient` is provably unchanged and the
   // whole objective change is `gamma_ * Δr_U` — exact, not an approximation of the
