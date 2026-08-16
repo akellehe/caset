@@ -48,11 +48,12 @@ class MultiCobordismCxxTest(unittest.TestCase):
         obj = CXX(self.host, [[1, w, w * w], [1, w * w, w]], [tgt], degrees=[3],
                   gamma=1.0, seed=0).objective()
         # 502.9710921237928 before #644; the near-kernel residual — the
-        # pre-topological register signal, +0.0045650478 on this closed S⁴ at
-        # k=3 for a 3-component target, computed on the COMBINATORIAL
-        # (unit-weight) L_3 — now enters r_u by design. The decomposition:
-        # regge_action_gradient 499.9710921 + r_u (3.0 leak + 0.00456 near-K).
-        self.assertAlmostEqual(obj, 502.975657171621, places=6)
+        # pre-topological register signal, +0.0093451402 on this closed S⁴ at
+        # k=3 for a 3-component target, computed on the METRIC L_3 (geometric
+        # by design: the causal-tuning channel is intended) — enters r_u. The
+        # decomposition: regge_action_gradient 499.9710921 + r_u (3.0 leak
+        # + 0.0093451 near-kernel).
+        self.assertAlmostEqual(obj, 502.9804372639758, places=6)
 
     def test_two_stage_grows_emergent_register(self):
         # The two-stage emergent run grows a b₃ color register out of the closed-S⁴ host.
