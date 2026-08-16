@@ -40,6 +40,11 @@ split into spatial- and temporal-curvature panels:
     panels: **spatial** = `Re ε·|★|` (the rotation angle-defect, from timelike hinges) and
     **temporal** = `Im ε·|★|` (the boost / light-cone content, from spacelike hinges — those
     whose normal plane is timelike). Both use a signed diverging colormap centered at 0.
+  * **spare row (single-node runs only)** — the null-face proximity trace, the descending
+    singular-value spectrum of the register operator `L_k`, and the **near-kernel mode
+    localization**: the primal skeleton painted by the summed weight `|ψᵢ|²` of the m
+    smallest-σ right singular vectors (the spectrum panel's red tail), showing WHICH
+    portion of the complex carries each almost-register.
 
 The figure title reports the live **convergence verdict**: whether the whole cobordism
 carries the singlet `{1, ω, ω²}` (color residual `r_state` ≈ 0) on its ≥ 3 emergent color
@@ -145,6 +150,10 @@ _MIN_QUARK_HOLES = 3       # a proton is three quarks ⇒ three color registers
 _HEAT_CMAP = "coolwarm"    # spatial (Re): diverging, blue = negative, white ≈ 0, red = positive
 _HEAT_CMAP_IM = "PuOr"     # temporal (Im): distinct diverging map for the boost/rapidity part
 _HEAT_REFRESH_EVERY = 4
+# Near-kernel mode weight is a non-negative share (the |ψ|² sum to 1 over the
+# k-cells), so its map is SEQUENTIAL, unlike the signed curvature maps: dark =
+# the modes don't live here, bright = they do.
+_MODE_CMAP = "magma"
 
 
 def face_gram_determinants(cells, squared_length):
@@ -291,6 +300,12 @@ class _StableLayout:
                           for i in range(4)]
         return self._view
 
+    def last_view(self):
+        """The most recently computed view bbox, WITHOUT advancing the easing —
+        for a second panel that shares the primal panel's frame (calling `view`
+        again in the same frame would double-step the ease)."""
+        return self._view
+
 
 class ProtonAnimator:
     """Animates the one-step proton build: the single `direct_node` — three bare quarks
@@ -328,7 +343,8 @@ class ProtonAnimator:
         self.k = degree
         self.hist = {"F": [], "gradN2": [], "rU": [], "b3": [], "holes": [],
                      "phase": [], "node": [], "lookahead": [], "tries": [],
-                     "min_det2": [], "min_det3": [], "sigma": []}
+                     "min_det2": [], "min_det3": [], "sigma": [],
+                     "mode_w": [], "mode_cells": []}
         self._boundaries = []       # step indices where a later node begins (trace markers)
         self._layouts = [_StableLayout() for _ in nodes]   # one per complex panel
         self._active = 0            # index of the node currently being driven
@@ -399,13 +415,33 @@ class ProtonAnimator:
         # sigma are the honest dimension count of its near-kernel (eigenvalue
         # magnitudes double-count at defective points). numpy's svd returns
         # them descending already.
-        nk_cells = cob.ChainComplex.fromSpacetime(st).numSimplices(self.k)
+        cc = cob.ChainComplex.fromSpacetime(st)
+        nk_cells = cc.numSimplices(self.k)
         if nk_cells > 0:
             L = np.array(cob.HodgeLaplacian(st).laplacian(self.k),
                          dtype=complex).reshape(nk_cells, nk_cells)
-            self.hist["sigma"].append(np.linalg.svd(L, compute_uv=False))
+            _u, sigma, vh = np.linalg.svd(L)
+            self.hist["sigma"].append(sigma)
+            # Mode LOCALIZATION of that tail: each right singular vector is a
+            # k-cochain — one component per k-cell, in `kSimplexVertices(k)`
+            # order — so |ψᵢ|², summed over the m smallest-σ modes and
+            # normalized to total 1, is the per-cell share of the
+            # almost-register. Rows of `vh` pair with `sigma` descending, so
+            # the tail is the LAST m rows (the conjugate in vᵢ = conj(vh[i])
+            # drops out under |·|²).
+            m = 3
+            if hasattr(node, "expectedRegisterCount"):
+                m = int(node.expectedRegisterCount())
+            tail = vh[max(0, nk_cells - m):]
+            w = (np.abs(tail) ** 2).sum(axis=0)
+            total = float(w.sum())
+            self.hist["mode_w"].append(w / total if total > 0 else w)
+            self.hist["mode_cells"].append(
+                [tuple(c) for c in cc.kSimplexVertices(self.k)])
         else:
             self.hist["sigma"].append(np.array([]))
+            self.hist["mode_w"].append(np.array([]))
+            self.hist["mode_cells"].append([])
         # Null-face proximity: the smallest |det G| over the complex's triangles
         # and tets — 0 = a face exactly tangent to the light cone (degenerate).
         min_det2, min_det3 = _min_abs_gram_dets(st)
@@ -445,16 +481,20 @@ class ProtonAnimator:
         self._re_axes = [axes[i][2] for i in range(n_nodes)]
         self._im_axes = [axes[i][3] for i in range(n_nodes)]
         # A single-node run leaves row 1's panels free: claim the first for the
-        # null-face proximity trace and the second for the rolling singular-value
-        # spectrum, blank the rest. (Multi-node grids keep every panel for
-        # complexes, so both extras are skipped there.)
+        # null-face proximity trace, the second for the rolling singular-value
+        # spectrum, and the third for the near-kernel mode localization, blank
+        # the rest. (Multi-node grids keep every panel for complexes, so the
+        # extras are skipped there.)
         self.ax_null = axes[n_nodes][1] if n_nodes < n_rows else None
         self.ax_spec = axes[n_nodes][2] if n_nodes < n_rows else None
+        self.ax_mode = axes[n_nodes][3] if n_nodes < n_rows else None
         for row in range(n_nodes, n_rows):
             for column in (1, 2, 3):
                 if self.ax_null is not None and axes[row][column] is self.ax_null:
                     continue
                 if self.ax_spec is not None and axes[row][column] is self.ax_spec:
+                    continue
+                if self.ax_mode is not None and axes[row][column] is self.ax_mode:
                     continue
                 axes[row][column].axis("off")
         # Persistent colorbars (created ONCE — recreating per frame piles them up). Each dual
@@ -470,6 +510,16 @@ class ProtonAnimator:
                 cbar.set_label(label, fontsize=7)
                 cbar.ax.tick_params(labelsize=6)
                 sms.append(sm)
+        # The mode-localization panel's colorbar (also persistent). Sequential,
+        # floor pinned at 0: the weights are non-negative shares, so only the
+        # top of the range renormalizes per frame.
+        self._mode_sm = None
+        if self.ax_mode is not None:
+            self._mode_sm = ScalarMappable(cmap=_MODE_CMAP, norm=Normalize(0.0, 1.0))
+            cbar = self.fig.colorbar(self._mode_sm, ax=self.ax_mode,
+                                     fraction=0.046, pad=0.04)
+            cbar.set_label("near-kernel mode weight  Σₘ|ψ|² per edge", fontsize=7)
+            cbar.ax.tick_params(labelsize=6)
         return self.fig
 
     def _draw_complex(self, ax, node_index, coords, title):
@@ -686,6 +736,73 @@ class ProtonAnimator:
         ax.set_title(f"{title}  ({n} cells)", fontsize=9)
         ax.set_xticks([]); ax.set_yticks([])
 
+    def _draw_mode_heat(self, ax, node_index, coords):
+        """The mode-localization panel: WHICH portion of the complex carries the
+        near-kernel tail. The m smallest-σ right singular vectors of the metric
+        `L_k` (the red tail in the spectrum panel) are k-cochains — one weight
+        `|ψᵢ|²` per k-cell (recorded by `_record` as `mode_w`/`mode_cells`) —
+        summed over the modes and spread from each k-cell onto its vertex-pair
+        edges, then painted on the SAME stable layout as the primal panel. For a
+        genuine (open) register the weight sits exactly on the hole-boundary
+        cells; for a causally-tuned near-kernel (no hole) it shows where the
+        almost-register is forming. The register hole outlines are overlaid
+        (dashed) so on-hole vs off-hole localization reads directly. The title's
+        PR is the participation ratio `1/Σᵢwᵢ²` of the normalized per-cell
+        weights — the effective number of k-cells the tail lives on."""
+        from matplotlib.collections import LineCollection
+        node, _label = self.nodes[node_index]
+        st = node.st
+        ax.clear()
+        weights = self.hist["mode_w"][-1]
+        cells = self.hist["mode_cells"][-1]
+        m = 3
+        if hasattr(node, "expectedRegisterCount"):
+            m = int(node.expectedRegisterCount())
+        if len(weights) == 0 or not coords:
+            ax.text(0.5, 0.5, "no k-cells yet", transform=ax.transAxes,
+                    ha="center", va="center", fontsize=9, color="0.45")
+            ax.set_title(f"near-kernel |ψ|² — {m} smallest-σ modes", fontsize=9)
+            ax.set_xticks([]); ax.set_yticks([])
+            return
+        edge_w = {}
+        for cell, w in zip(cells, weights):
+            for a, b in itertools.combinations(sorted(cell), 2):
+                edge_w[(a, b)] = edge_w.get((a, b), 0.0) + float(w)
+        segments, values, hole_segments = [], [], []
+        holes = cob.MultiCobordism.emergent_holes(st, self.k)
+        hole_vsets = [set(h) for h in holes]
+        for e in st.getEdgeList().toVector():
+            a, b = e.getSource().getId(), e.getTarget().getId()
+            if a not in coords or b not in coords:
+                continue
+            segments.append([coords[a], coords[b]])
+            values.append(edge_w.get((min(a, b), max(a, b)), 0.0))
+            if any(a in vs and b in vs for vs in hole_vsets):
+                hole_segments.append([coords[a], coords[b]])
+        values = np.array(values)
+        vmax = float(values.max()) if values.size and values.max() > 0 else 1.0
+        if self._mode_sm is not None:
+            self._mode_sm.set_clim(0.0, vmax)
+        lines = LineCollection(segments, cmap=_MODE_CMAP, linewidths=1.6, zorder=2)
+        lines.set_array(values)
+        lines.set_clim(0.0, vmax)
+        ax.add_collection(lines)
+        if hole_segments:                        # register outlines, dashed overlay
+            ax.add_collection(LineCollection(hole_segments, colors="C3",
+                                             linewidths=0.9, linestyles="--",
+                                             alpha=0.9, zorder=3))
+        pts = np.array(list(coords.values()))
+        ax.scatter(pts[:, 0], pts[:, 1], c="0.55", s=5, zorder=1)
+        view = self._layouts[node_index].last_view()
+        if view is not None:
+            ax.set_xlim(view[0], view[1])
+            ax.set_ylim(view[2], view[3])
+        participation = 1.0 / float((weights ** 2).sum())   # weights sum to 1
+        ax.set_aspect("equal")
+        ax.set_title(f"near-kernel |ψ|² — {m} smallest-σ modes, "
+                     f"PR {participation:.1f}/{len(weights)} cells", fontsize=9)
+        ax.set_xticks([]); ax.set_yticks([])
+
     def _redraw(self):
         xs = range(len(self.hist["F"]))
         self.axm.clear()
@@ -805,6 +922,10 @@ class ProtonAnimator:
             ax.set_xlabel("rank (descending)")
             ax.set_ylabel("σ")
             self.ax_null.legend(loc="lower right", fontsize=7)
+        if getattr(self, "ax_mode", None) is not None and self.hist["mode_w"]:
+            active = self.hist["node"][-1]
+            self._draw_mode_heat(self.ax_mode, active,
+                                 coords_by_node.get(active, {}))
 
     # ---- per-frame text hooks ----
     def _frame_label(self, frame):
