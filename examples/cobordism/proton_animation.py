@@ -119,6 +119,14 @@ if "OMP_NUM_THREADS" not in os.environ or "--threads" in sys.argv:
             pass
     for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
         os.environ[_var] = _n
+# Workers SLEEP at OpenMP barriers instead of spinning. GNU OpenMP's default
+# wait policy spins, and a perf sample of the live drive showed 55% of all
+# self-time inside libgomp doing exactly that: the engine's parallel regions
+# (candidate batch, action gradient/Hessian) are short, so at high --threads
+# the idle workers burn most of the CPU between regions and contend with the
+# serial sections. Like the thread count above, this must be set BEFORE
+# OpenMP initializes; an explicit value in the caller's environment wins.
+os.environ.setdefault("OMP_WAIT_POLICY", "passive")
 
 import numpy as np
 from scipy.sparse.csgraph import shortest_path
