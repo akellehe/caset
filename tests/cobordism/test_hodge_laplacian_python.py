@@ -624,9 +624,9 @@ class TestMetricWeights(unittest.TestCase):
         np.testing.assert_allclose(np.array(cob.HodgeLaplacian(st).weights(0)),
                                    np.ones(4), atol=1e-12)
 
-    def test_edge_weights_are_sqrt_length_in_column_order(self):
-        # Distinct edge lengths pin down both the values (volume of an edge =
-        # sqrt(l^2)) and the canonical sorted-vertex-id column order.
+    def test_edge_weights_are_squared_length_in_column_order(self):
+        # Distinct edge lengths pin down both the values (the V^2 weight of an
+        # edge is exactly l^2) and the canonical sorted-vertex-id column order.
         st = _from_simplices(4, [(0, 1), (1, 2), (2, 3), (3, 0), (0, 2)])
         lengths = {(0, 1): 1.0, (0, 2): 4.0, (0, 3): 9.0, (1, 2): 16.0, (2, 3): 25.0}
         for e in st.getEdgeList().toVector():
@@ -634,7 +634,7 @@ class TestMetricWeights(unittest.TestCase):
             e.setLength(cmath.sqrt(complex(lengths[key])))
             e.setPhase(0.0)
         order = sorted(lengths)  # (0,1),(0,2),(0,3),(1,2),(2,3)
-        expected = [math.sqrt(lengths[t]) for t in order]
+        expected = [lengths[t] for t in order]
         np.testing.assert_allclose(np.array(cob.HodgeLaplacian(st).weights(1)),
                                    expected, atol=1e-12)
 

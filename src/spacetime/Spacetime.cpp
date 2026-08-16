@@ -347,13 +347,17 @@ std::shared_ptr<Spacetime> Spacetime::fromCells(
   }
 
   // Uniform Hermitian pin: overwrite every edge's geometry. Skipped under the
-  // tracked-metric rule, where the auto-wired causal lengths are the geometry.
-  // if (!vertexTimes) {
+  // tracked-metric rule, where the auto-wired causal lengths ARE the geometry —
+  // pinning there would overwrite every timelike edge with a spacelike unit
+  // length and hand back a Euclidean complex in disguise (#644; the guard was
+  // found commented out, contradicting both this comment and the causal-sign
+  // tests).
+  if (!vertexTimes) {
     for (const auto &edge : st->getEdgeList()->toVector()) {
       edge->setLength(std::sqrt(std::complex<double>{weight, 0.0}));
       edge->setPhase(phase);
     }
-  // }
+  }
   return st;
 }
 

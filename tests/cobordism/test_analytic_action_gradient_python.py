@@ -99,8 +99,8 @@ class ExactActionGradientTest(unittest.TestCase):
         self.assertGreater(len(grad), 0)
         worst = 0.0
         for e in list(grad)[:8]:
-            fd = _central(self._set(self.emap[e]), hs.dualVolume).real
-            worst = max(worst, abs(float(grad[e]) - fd))
+            fd = _central(self._set(self.emap[e]), hs.dualVolume)
+            worst = max(worst, abs(complex(grad[e]) - complex(fd)))
         self.assertLess(worst, _TOL)
 
     # --- the Lorentzian action is genuinely complex; never reduce it to Re ---
