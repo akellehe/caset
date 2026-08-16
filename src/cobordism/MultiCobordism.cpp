@@ -7,6 +7,7 @@
 #include <cmath>
 #include <limits>
 #include <numeric>
+#include <set>
 #include <stdexcept>
 
 #include <Eigen/Dense>
@@ -513,23 +514,27 @@ MultiCobordism::MoveSpec MultiCobordism::drawRandomMoveSpecification(
       moveKind == kFlipMove || moveKind == kIFlipMove)
     return {moveKind,
             {static_cast<std::uint64_t>(randomNumberGenerator_() % (1u << 31))}};
-  std::vector<std::vector<std::uint64_t>> topCellTuples;
-  for (const auto &topSimplex : spacetime.getTopSimplices())
-    topCellTuples.push_back(topSimplex->topTuple());
-  if (topCellTuples.empty()) return {kNoop, {}};
-  const auto &chosenCell =
-      topCellTuples[randomNumberGenerator_() % topCellTuples.size()];
-  if (moveKind == kConeOut) return {kConeOut, chosenCell};
+  if (moveKind == kConeOut) {
+    std::vector<std::vector<std::uint64_t>> topCellTuples;
+    for (const auto &topSimplex : spacetime.getTopSimplices())
+      topCellTuples.push_back(topSimplex->topTuple());
+    if (topCellTuples.empty()) return {kNoop, {}};
+    return {kConeOut,
+            topCellTuples[randomNumberGenerator_() % topCellTuples.size()]};
+  }
   // cone_in and cone_in_timelike share a payload (the facet to cone onto); only
-  // the apex-edge disposition differs when applied.
-  const std::size_t droppedVertexIndex =
-      randomNumberGenerator_() % chosenCell.size();
-  std::vector<std::uint64_t> coneInFace;
-  for (std::size_t vertexIndex = 0; vertexIndex < chosenCell.size();
-       ++vertexIndex)
-    if (vertexIndex != droppedVertexIndex)
-      coneInFace.push_back(chosenCell[vertexIndex]);
-  return {moveKind, coneInFace};
+  // the apex-edge disposition differs when applied. Only a BOUNDARY facet (one
+  // coface) can accept a cone — an interior facet already has two cofaces, so
+  // coning it would be non-manifold and the gate rejects it after a full
+  // build+apply+deltaF evaluation. Drawing from getBoundary() directly spends
+  // the batch on the coneable set only (measured on a 13-cell build frame: the
+  // old cell×dropped-vertex draw had 65 outcomes aliasing onto 41 facets, 17
+  // coneable, with interior duds drawn twice as often as valid facets). The
+  // facet's stored vertex order is passed through verbatim.
+  auto boundaryFacets = spacetime.getBoundary();
+  if (boundaryFacets.empty()) return {kNoop, {}};  // closed: nothing coneable
+  return {moveKind,
+          boundaryFacets[randomNumberGenerator_() % boundaryFacets.size()]};
 }
 
 bool MultiCobordism::applyMoveSpecification(
@@ -719,11 +724,30 @@ double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth) {
     for (int candidateIndex = 0; candidateIndex < nCandidateMoves;
          ++candidateIndex)
       specifications.push_back(drawRandomMoveSpecification(*spacetime_));
-    std::vector<double> deltas(static_cast<std::size_t>(nCandidateMoves),
+    // Deduplicate exact (kind, payload) repeats before evaluating: the batch
+    // samples with replacement, and on a small complex the same spec recurs
+    // (the cone-in space can be a dozen-odd facets). Duplicates carry
+    // identical deltas, so dropping every copy after the first cannot change
+    // the lexicographic (delta, index) winner — the committed move is
+    // bit-identical, only the wasted build+apply+deltaF evaluations go away.
+    // The RNG stream is untouched (all nCandidateMoves draws happen above).
+    // Pachner specs carry RNG-seed payloads, so only exact seed repeats
+    // collapse there; the cone/disposition kinds dedup by actual site.
+    {
+      std::set<MoveSpec> seenSpecifications;
+      std::vector<MoveSpec> distinctSpecifications;
+      distinctSpecifications.reserve(specifications.size());
+      for (auto &specification : specifications)
+        if (seenSpecifications.insert(specification).second)
+          distinctSpecifications.push_back(std::move(specification));
+      specifications = std::move(distinctSpecifications);
+    }
+    const int distinctCount = static_cast<int>(specifications.size());
+    std::vector<double> deltas(static_cast<std::size_t>(distinctCount),
                                std::numeric_limits<double>::infinity());
-    std::vector<Snapshot> snapshots(static_cast<std::size_t>(nCandidateMoves));
+    std::vector<Snapshot> snapshots(static_cast<std::size_t>(distinctCount));
 #pragma omp parallel for schedule(dynamic)
-    for (int candidateIndex = 0; candidateIndex < nCandidateMoves;
+    for (int candidateIndex = 0; candidateIndex < distinctCount;
          ++candidateIndex) {
       auto candidateSpacetime = build(currentSnapshot);
       if (!applyMoveSpecification(
@@ -737,7 +761,7 @@ double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth) {
         snapshots[static_cast<std::size_t>(candidateIndex)] =
             snapshotOf(*candidateSpacetime);
     }
-    for (int candidateIndex = 0; candidateIndex < nCandidateMoves;
+    for (int candidateIndex = 0; candidateIndex < distinctCount;
          ++candidateIndex) {
       const double objectiveDelta =
           deltas[static_cast<std::size_t>(candidateIndex)];
@@ -1007,7 +1031,8 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
 std::vector<double> MultiCobordism::run(int maxIters, int nCandidateMoves,
                                         bool growBoundaries, double beta,
                                         double alpha0, double relTol,
-                                        int maxLookahead) {
+                                        int maxLookahead,
+                                        int relaxBudgetPerMove) {
   std::vector<double> objectiveTrace = {objective()};
   double stepScale = alpha0;
   lastStage2Stationary_ = false;  // for maxIters == 0; each update reports its own
@@ -1029,10 +1054,10 @@ std::vector<double> MultiCobordism::run(int maxIters, int nCandidateMoves,
     // "Full" relaxation still needs a safety budget (as runStage2's maxIters):
     // near a slow descent tail the line search can accept a near-unbounded
     // number of threshold-sized micro-steps, so the stationarity test alone
-    // does not bound the loop in practice.
-    constexpr int kRelaxBudgetPerMove = 10;
+    // does not bound the loop in practice. Caller-tunable (#666); the
+    // stationarity test remains the real terminator.
     bool geometryRelaxed = false;
-    for (int relaxIndex = 0; relaxIndex < kRelaxBudgetPerMove; ++relaxIndex) {
+    for (int relaxIndex = 0; relaxIndex < relaxBudgetPerMove; ++relaxIndex) {
       if (!stage2Update(beta, relTol, objectiveTrace, stepScale)) break;
       geometryRelaxed = true;
     }
@@ -1054,7 +1079,7 @@ std::vector<double> MultiCobordism::run(int maxIters, int nCandidateMoves,
       // also enable new moves). Exit only once stationary at 1e-12 too.
       constexpr double kExitRelTol = 1e-12;
       bool tighterPassFoundDescent = false;
-      for (int relaxIndex = 0; relaxIndex < kRelaxBudgetPerMove; ++relaxIndex) {
+      for (int relaxIndex = 0; relaxIndex < relaxBudgetPerMove; ++relaxIndex) {
         if (!stage2Update(beta, kExitRelTol, objectiveTrace, stepScale)) break;
         tighterPassFoundDescent = true;
       }
