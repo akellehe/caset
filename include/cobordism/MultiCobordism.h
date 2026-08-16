@@ -359,11 +359,16 @@ class MultiCobordism {
   /// stage 2 descends `β‖∇S‖² + Γ·r_U`), so the shared trace mixes the two
   /// scales — the default `beta = 1` keeps one coherent `F`.
   /// `lastStage2Stationary()` reports the LAST geometric update's outcome.
+  /// `relaxBudgetPerMove` caps the stage-2 updates that follow each committed
+  /// move (and the tight exit re-check): the stationarity test is the real
+  /// terminator, the cap only bounds slow descent tails where the line search
+  /// accepts a near-unbounded run of threshold-sized micro-steps.
   /// Returns the combined `F` trace.
   std::vector<double> run(int maxIters = 200, int nCandidateMoves = 12,
                           bool growBoundaries = false,
                           double beta = 1.0, double alpha0 = 0.05,
-                          double relTol = 10e-9, int maxLookahead = 1);
+                          double relTol = 10e-9, int maxLookahead = 1,
+                          int relaxBudgetPerMove = 10);
 
   /// One canonical solve action on THIS node, the unit a search policy (Proton's build
   /// restart loop, a greedy driver, or the RL agent) composes — so the solve is driven

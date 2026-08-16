@@ -879,6 +879,7 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("grow_boundaries") = false, py::arg("beta") = 1.0,
            py::arg("alpha0") = 0.05, py::arg("rel_tol") = 10e-9,
            py::arg("max_lookahead") = 1,
+           py::arg("relax_budget_per_move") = 10,
            py::call_guard<py::gil_scoped_release>(),
            "The combined drive: each iteration takes ONE combinatorial stage-1 "
            "update (a best-dF move, deepening to max_lookahead-move sequences "
@@ -894,6 +895,10 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "max_lookahead parameterize the combinatorial half exactly as in "
            "run_stage1; beta/alpha0/rel_tol the geometric half exactly as in "
            "run_stage2 (keep beta=1 for one coherent F trace). "
+           "relax_budget_per_move caps the stage-2 updates after each "
+           "committed move (and the tight exit re-check); the stationarity "
+           "test is the real terminator, the cap only bounds slow descent "
+           "tails of threshold-sized line-search micro-steps. "
            "last_stage2_stationary reports the LAST geometric update's outcome. "
            "Returns the combined F trace.")
       .def_property_readonly("should_propose_dispositions",

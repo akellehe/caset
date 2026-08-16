@@ -345,12 +345,13 @@ class ProtonAnimator:
                  stage1_candidates=_STAGE1_CANDIDATES, stage2_beta=1.0,
                  max_lookahead_depth=_MAX_LOOKAHEAD_DEPTH,
                  max_lookahead_tries=_MAX_LOOKAHEAD_TRIES,
-                 stage2_alpha0=0.05, stage2_rel_tol=10e-9):
+                 stage2_alpha0=0.05, stage2_rel_tol=10e-9, relax_budget=10):
         self._common_init(nodes, degree)
         self.s1c, self.s2_beta = stage1_candidates, stage2_beta
         self.lookahead_depth = max_lookahead_depth
         self.lookahead_tries = max_lookahead_tries
         self.s2_alpha0, self.s2_rel_tol = stage2_alpha0, stage2_rel_tol
+        self.relax_budget = relax_budget
         self._schedule = self._make_schedule(len(nodes), init_steps, init_chunk,
                                              evolve_steps, evolve_chunk)
         self._frames = len(self._schedule)
@@ -409,7 +410,8 @@ class ProtonAnimator:
             node.run(max_iters=count, n_candidate_moves=self.s1c,
                      grow_boundaries=(phase == "init"), beta=self.s2_beta,
                      alpha0=self.s2_alpha0, rel_tol=self.s2_rel_tol,
-                     max_lookahead=self.lookahead_depth)
+                     max_lookahead=self.lookahead_depth,
+                     relax_budget_per_move=self.relax_budget)
             if int(node.last_stage1_lookahead) > 0:
                 break
         self._record(node, node_index, phase, tries)
@@ -1315,7 +1317,7 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
               max_lookahead_depth=_MAX_LOOKAHEAD_DEPTH,
               max_lookahead_tries=_MAX_LOOKAHEAD_TRIES,
               stage2_beta=1.0, interval=200,  # interval: ms/frame; GIF/MP4 fps = 1000/interval
-              stage2_alpha0=0.05, stage2_rel_tol=10e-9,
+              stage2_alpha0=0.05, stage2_rel_tol=10e-9, relax_budget=10,
               dump_dir=None, **anim_kw):
     """Run the one-step proton build over `nodes` with the combined `run` drive: an init
     pass (`grow_boundaries=True`) then an evolution pass (`grow_boundaries=False`), each
@@ -1336,10 +1338,14 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
             # deliberately not applied.
             node.run(max_iters=init_steps, n_candidate_moves=stage1_candidates,
                      grow_boundaries=True, beta=stage2_beta,
-                     max_lookahead=max_lookahead_depth)
+                     alpha0=stage2_alpha0, rel_tol=stage2_rel_tol,
+                     max_lookahead=max_lookahead_depth,
+                     relax_budget_per_move=relax_budget)
             node.run(max_iters=evolve_steps, n_candidate_moves=stage1_candidates,
                      grow_boundaries=False, beta=stage2_beta,
-                     max_lookahead=max_lookahead_depth)
+                     alpha0=stage2_alpha0, rel_tol=stage2_rel_tol,
+                     max_lookahead=max_lookahead_depth,
+                     relax_budget_per_move=relax_budget)
             st = node.st
             out.append((label, {
                 "F": float(node.objective()),
@@ -1359,7 +1365,8 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                    max_lookahead_depth=max_lookahead_depth,
                    max_lookahead_tries=max_lookahead_tries,
                    stage2_beta=stage2_beta, stage2_alpha0=stage2_alpha0,
-                   stage2_rel_tol=stage2_rel_tol, interval=interval,
+                   stage2_rel_tol=stage2_rel_tol, relax_budget=relax_budget,
+                   interval=interval,
                    dump_dir=dump_dir, **anim_kw).hist
 
 
@@ -1408,6 +1415,12 @@ def main():
                          "path re-checks at 1e-12 regardless): larger = less "
                          "geometric work per committed move, more moves per "
                          "second")
+    ap.add_argument("--relax-budget", type=int, default=10, dest="relax_budget",
+                    help="cap on stage-2 relaxation updates after each "
+                         "committed move (and on the tight exit re-check). The "
+                         "stationarity test at --rel-tol is the real "
+                         "terminator; this only bounds slow descent tails of "
+                         "threshold-sized line-search micro-steps")
     ap.add_argument("--init-chunk", type=int, default=_INIT_CHUNK, dest="init_chunk",
                     help="init-pass run iterations per animation frame")
     ap.add_argument("--evolve-chunk", type=int, default=_EVOLVE_CHUNK,
@@ -1450,6 +1463,7 @@ def main():
                        init_chunk=args.init_chunk, evolve_chunk=args.evolve_chunk,
                        stage1_candidates=args.candidates, stage2_beta=args.beta,
                        stage2_alpha0=args.alpha0, stage2_rel_tol=args.rel_tol,
+                       relax_budget=args.relax_budget,
                        max_lookahead_depth=args.max_lookahead_depth,
                        max_lookahead_tries=args.max_lookahead_tries,
                        dump_dir=args.dump_dir)
