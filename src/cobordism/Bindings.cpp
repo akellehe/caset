@@ -804,6 +804,21 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def_static("emergent_holes", &MultiCobordism::emergentHoles,
                   py::arg("st"), py::arg("k"))
       .def_static("regge_action_gradient", &MultiCobordism::reggeActionGradient, py::arg("st"))
+      .def_static("nearKernelResidual", &MultiCobordism::nearKernelResidual,
+           py::arg("st"), py::arg("register_degree"),
+           py::arg("expected_register_count"),
+           "The pre-topological register signal: the normalized sum of the "
+           "expected_register_count smallest squared SINGULAR values of the "
+           "signed L_k (n * sum_m sigma^2 / sum_all sigma^2; range [0, m]; "
+           "scale-invariant, so it opens no conformal-inflation channel). "
+           "Saturates at exactly 0 once b_k reaches the expected count; before "
+           "any register exists it is the objective's only register-seeking "
+           "gradient (the period residual is a step function in the topology). "
+           "The count comes from the TARGETS (one register per target "
+           "component), never a constant.")
+      .def("expectedRegisterCount", &MultiCobordism::expectedRegisterCount,
+           "The number of registers the targets ask for: the largest component "
+           "count over every input and output target vector.")
       .def_static("r_state", &MultiCobordism::residualOfTargetStateAgainstHarmonic,
                   py::arg("st"), py::arg("k"), py::arg("target"))
       .def("r_u", &MultiCobordism::rU, py::arg("st"))

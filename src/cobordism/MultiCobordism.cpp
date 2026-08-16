@@ -14,6 +14,7 @@
 #include "Logger.h"
 #include "cobordism/ChainComplex.h"
 #include "cobordism/EigenstateSynthesis.h"
+#include "cobordism/HodgeLaplacian.h"
 #include "cobordism/SurgicalCone.h"
 #include "matter/MatterConfiguration.h"
 #include "mesh/Edge.h"
@@ -337,7 +338,64 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
           totalResidual += residualOfTargetStateAgainstHarmonicWithDistinctMatching(
               spacetime, registerDegree, outputTarget, claimedMatchings);
   }
+  // The pre-topological register signal (#644): the period residuals above are
+  // STEP functions in the topology — exactly flat until a register exists — so
+  // they carry no register-seeking gradient at a seed. The near-kernel residual
+  // is the same functional continued below the topological threshold, and it
+  // saturates at 0 the moment b_k reaches the expected count (see the header).
+  const std::size_t expectedRegisters = expectedRegisterCount();
+  if (expectedRegisters > 0)
+    for (int registerDegree : registerDegrees_)
+      totalResidual += nearKernelResidual(spacetime, registerDegree,
+                                          expectedRegisters);
   return totalResidual;
+}
+
+std::size_t MultiCobordism::expectedRegisterCount() const {
+  std::size_t expected = 0;
+  for (const auto &target : inputTargets_)
+    expected = std::max(expected, target.size());
+  for (const auto &target : outputTargets_)
+    expected = std::max(expected, target.size());
+  return expected;
+}
+
+double MultiCobordism::nearKernelResidual(
+    const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
+    std::size_t expectedRegisterCount) {
+  if (expectedRegisterCount == 0) return 0.0;
+  cobordism::HodgeLaplacian laplacian(spacetime);
+  const std::vector<std::complex<double>> flat =
+      laplacian.laplacian(registerDegree, /*metric=*/true);
+  const std::size_t n = static_cast<std::size_t>(
+      std::llround(std::sqrt(static_cast<double>(flat.size()))));
+  // No k-cells at all: every expected register is missing — the worst case on
+  // the normalized scale, 1 per missing dimension.
+  if (n == 0) return static_cast<double>(expectedRegisterCount);
+  Eigen::MatrixXcd L(static_cast<Eigen::Index>(n), static_cast<Eigen::Index>(n));
+  for (std::size_t i = 0; i < n; ++i)
+    for (std::size_t j = 0; j < n; ++j)
+      L(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) =
+          flat[i * n + j];
+  // Singular values of the NON-normal signed operator: the smooth surrogate for
+  // the eigenvalue magnitudes (they share the kernel exactly).
+  Eigen::BDCSVD<Eigen::MatrixXcd> svd(L);
+  const Eigen::VectorXd sigma = svd.singularValues();  // descending
+  double total = 0.0;
+  for (Eigen::Index i = 0; i < sigma.size(); ++i) total += sigma[i] * sigma[i];
+  // L identically zero: every mode is kernel — nothing left to open.
+  if (total <= 0.0) return 0.0;
+  const std::size_t m = std::min(expectedRegisterCount, n);
+  double smallest = 0.0;
+  for (std::size_t i = 0; i < m; ++i) {
+    const double s = sigma[static_cast<Eigen::Index>(n - 1 - i)];
+    smallest += s * s;
+  }
+  // n * (smallest m) / (all): scale-invariant (L is degree −1 in l^2, so a raw
+  // spectral sum is a conformal-inflation descent channel; the ratio is degree
+  // 0). Missing dimensions count 1 each — the generic-mode value.
+  return static_cast<double>(n) * smallest / total +
+         static_cast<double>(expectedRegisterCount - m);
 }
 
 double MultiCobordism::objective() const {
