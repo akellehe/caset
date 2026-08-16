@@ -364,7 +364,8 @@ class ProtonAnimator:
                      "phase": [], "node": [], "lookahead": [], "tries": [],
                      "min_det2": [], "min_det3": [], "sigma": [],
                      "mode_w": [], "mode_w_head": [], "mode_cells": [],
-                     "pair_count": [], "pair_w": [], "im_leak": []}
+                     "pair_count": [], "pair_w": [], "im_leak": [],
+                     "sigma_cancel": [], "pair_src": []}
         self._boundaries = []       # step indices where a later node begins (trace markers)
         self._layouts = [_StableLayout() for _ in nodes]   # one per complex panel
         self._active = 0            # index of the node currently being driven
@@ -473,12 +474,65 @@ class ProtonAnimator:
             # exactly when the structure exists.
             krein = KreinModes(st, self.k)
             self.hist["im_leak"].append(float(krein.imag_interval_leak))
+            source = "live"
+            if not krein.on_locus and krein.imag_interval_leak > 0:
+                # The LIVE state spends most of a build OFF the real-ℓ² locus
+                # (stage 2 explores complex intervals), which would leave the
+                # annihilation panels empty for whole runs. Fall back to the
+                # Re-PROJECTION diagnostic — classify the disposition content
+                # Re ℓ² (spectrum shift vs the live operator measured ~1%
+                # median on build frames) — and LABEL it, rather than showing
+                # nothing. The content-convention cause is NOT projectable
+                # (weights stay imaginary), so it still reports unavailable.
+                try:
+                    proj_cells = [sorted(v.getId() for v in c.getVertices())
+                                  for c in st.getTopSimplices()]
+                    proj_sq = {}
+                    for e in st.getEdgeList().toVector():
+                        a, b = e.getSource().getId(), e.getTarget().getId()
+                        proj_sq[(min(a, b), max(a, b))] = complex(
+                            (e.getLength() ** 2).real, 0.0)
+                    proj_times = {v.getId(): float(v.getTime())
+                                  for v in st.getVertexList().toVector()}
+                    projected = tessera.observables.LiveComplex.load(
+                        proj_cells, proj_sq, proj_times, 4)
+                    candidate = KreinModes(getattr(projected, "st", projected),
+                                           self.k)
+                    if candidate.on_locus:
+                        krein = candidate
+                        source = "projected"
+                except Exception:   # degenerate projection → report off-locus
+                    pass
             if krein.on_locus:
+                self.hist["pair_src"].append(source)
                 self.hist["pair_count"].append(float(krein.pair_count))
-                self.hist["pair_w"].append(krein.pair_heat())
+                # Weights/eigenvectors are indexed by the (possibly projected)
+                # operator's own cell order; remap onto the LIVE `mode_cells`
+                # order every panel consumer uses. The projection changes
+                # lengths only, so the cell SETS coincide and the map is total.
+                live_cells = self.hist["mode_cells"][-1]
+                position = {cell: i for i, cell in enumerate(krein.cells)}
+                permutation = np.array([position[c] for c in live_cells])
+                self.hist["pair_w"].append(krein.pair_heat()[permutation])
+                # Which SINGULAR directions the broken pairs span. There is no
+                # canonical σ↔λ map on a non-normal operator, so the honest
+                # marking is subspace overlap: per descending rank r, the
+                # weight of its right singular vector inside the span of the
+                # pair modes (both conjugate partners — the factor 2; on the
+                # locus the operator is real, so the partners' overlaps
+                # coincide). One fully-cancelled direction contributes ≈ 1;
+                # the total is 2·pairs.
+                cancel = np.zeros(sigma.size)
+                for i in krein.pair_indices:
+                    v = krein.eigenvectors[permutation, i]
+                    v = v / np.linalg.norm(v)
+                    cancel += 2.0 * np.abs(vh @ v) ** 2
+                self.hist["sigma_cancel"].append(cancel)
             else:
+                self.hist["pair_src"].append("none")
                 self.hist["pair_count"].append(float("nan"))
                 self.hist["pair_w"].append(np.array([]))
+                self.hist["sigma_cancel"].append(np.array([]))
                 self._pair_note = f"off the real-ℓ² locus: {krein.reason}"
         else:
             self.hist["sigma"].append(np.array([]))
@@ -487,6 +541,8 @@ class ProtonAnimator:
             self.hist["pair_count"].append(0.0)
             self.hist["pair_w"].append(np.array([]))
             self.hist["im_leak"].append(0.0)
+            self.hist["sigma_cancel"].append(np.array([]))
+            self.hist["pair_src"].append("none")
             self.hist["mode_cells"].append([])
         # Null-face proximity: the smallest |det G| over the complex's triangles
         # and tets — 0 = a face exactly tangent to the light cone (degenerate).
@@ -870,7 +926,10 @@ class ProtonAnimator:
         if view is not None:
             ax.set_xlim(view[0], view[1])
             ax.set_ylim(view[2], view[3])
-        participation = 1.0 / float((weights ** 2).sum())   # weights sum to 1
+        weight_power = float((weights ** 2).sum())
+        # weights sum to 1 — except the legitimate all-zero case (e.g. the
+        # annihilation heat with zero broken pairs), where PR reads 0.
+        participation = 1.0 / weight_power if weight_power > 0 else 0.0
         ax.set_aspect("equal")
         ax.set_title(f"{title}, PR {participation:.1f}/{len(weights)} cells",
                      fontsize=9)
@@ -964,6 +1023,7 @@ class ProtonAnimator:
             ax = self.ax_spec
             ax.clear()
             sigma = self.hist["sigma"][-1]
+            n_cancelled = 0
             m = 3
             node = self.nodes[self.hist["node"][-1]][0]
             if hasattr(node, "expectedRegisterCount"):
@@ -978,7 +1038,18 @@ class ProtonAnimator:
                 ranks = np.arange(1, sigma.size + 1)
                 # The m smallest are the near-kernel tail the objective watches.
                 colors = ["C3" if i >= sigma.size - m else "C0" for i in range(sigma.size)]
-                ax.bar(ranks, shown, width=0.9, color=colors, zorder=3)
+                bars = ax.bar(ranks, shown, width=0.9, color=colors, zorder=3)
+                # Green-edge the CANCELLED directions: ranks whose right
+                # singular vector lies majority (≥ ½) inside the span of the
+                # broken conjugate pairs (Re-projected when off-locus).
+                cancel = (self.hist["sigma_cancel"][-1]
+                          if self.hist["sigma_cancel"] else np.array([]))
+                if cancel.size == sigma.size:
+                    for bar, share in zip(bars, cancel):
+                        if share >= 0.5:
+                            bar.set_edgecolor("C2")
+                            bar.set_linewidth(1.8)
+                            n_cancelled += 1
                 # Rolling ghost: the last few frames' spectra as fading steps, so
                 # the spectrum's drift toward the kernel is visible in one look.
                 for age, past in enumerate(reversed(self.hist["sigma"][-6:-1]), 1):
@@ -990,8 +1061,10 @@ class ProtonAnimator:
                 ax.axhline(floor, color="0.6", ls=":", lw=0.8)
                 ax.set_yscale("log")
                 ax.set_xlim(0.5, sigma.size + 0.5)
+            cancel_tag = (f"; green edge: {n_cancelled} cancelled (pairs)"
+                          if n_cancelled else "")
             ax.set_title(f"σ(L{self.k}) descending — red: {m}-smallest "
-                         "(near-kernel tail)", fontsize=9)
+                         f"(near-kernel tail){cancel_tag}", fontsize=9)
             ax.set_xlabel("rank (descending)")
             ax.set_ylabel("σ")
             self.ax_null.legend(loc="lower right", fontsize=7)
@@ -1011,12 +1084,16 @@ class ProtonAnimator:
         if getattr(self, "ax_pair", None) is not None and self.hist["pair_w"]:
             active = self.hist["node"][-1]
             n_pairs = self.hist["pair_count"][-1]
+            src_tag = (", Re-projected"
+                       if (self.hist["pair_src"]
+                           and self.hist["pair_src"][-1] == "projected") else "")
             self._draw_mode_heat(
                 self.ax_pair, active, coords_by_node.get(active, {}),
                 self.hist["pair_w"][-1], self._pair_sm, _MODE_CMAP_PAIR,
-                title=("annihilation heat — off the real-ℓ² locus"
+                title=("annihilation heat — unavailable"
                        if math.isnan(n_pairs) else
-                       f"annihilation heat — {int(n_pairs)} broken pairs (W-null)"),
+                       f"annihilation heat — {int(n_pairs)} broken pairs "
+                       f"(W-null{src_tag})"),
                 empty_note=getattr(self, "_pair_note",
                                    "no Krein classification yet"))
         if (getattr(self, "ax_pair_trace", None) is not None
@@ -1027,8 +1104,8 @@ class ProtonAnimator:
             ax.plot(xs, self.hist["pair_count"], color="C4", marker=".")
             for b in self._boundaries:
                 ax.axvline(b - 0.5, color="0.6", ls="--", lw=0.8)
-            ax.set_title("broken pairs (gaps = off-locus) + real-ℓ² locus "
-                         "distance", fontsize=9)
+            ax.set_title("broken pairs (Re-projected off-locus) + real-ℓ² "
+                         "locus distance", fontsize=9)
             ax.set_xlabel("frame")
             ax.set_ylabel("pairs", color="C4")
             if getattr(self, "ax_pair_leak", None) is not None:
