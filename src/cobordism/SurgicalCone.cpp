@@ -154,7 +154,7 @@ std::pair<bool, std::string> SurgicalCone::coneOut(
       if (covered(u, v)) continue;
       const auto it = eidx.find({std::min(u, v), std::max(u, v)});
       if (it == eidx.end()) continue;  // already absent
-      m.edges.emplace_back(u, v, (it->second->getLength() * it->second->getLength()),
+      m.edges.emplace_back(u, v, it->second->getLength(),
                            it->second->getPhase());
       toRemove.push_back(it->second);
     }
@@ -289,7 +289,7 @@ void SurgicalCone::undoConeOut(const Move &m) {
   for (const auto &[u, v, w, theta] : m.edges) {
     const auto it = eidx.find({std::min(u, v), std::max(u, v)});
     if (it != eidx.end()) {
-      it->second->setLength(std::sqrt(w));  // the recorded complex l2, bit-exact
+      it->second->setLength(w);  // the recorded complex LENGTH, bit-exact
       it->second->setPhase(theta);
     }
   }

@@ -53,7 +53,7 @@ It drives only the **public** `Proton` (`recombination_node`/`formation_node`),
 `MultiCobordism` (the combined `run`, plus `betti`, `emergent_holes`,
 `regge_action_gradient`, `r_state`, `r_u`, `objective`, `st`), and the geometry readers
 (`Spacetime.getTopSimplices`/`getDualAdjacency`/`getSimplices`,
-`Simplex.lorentzianDeficitAngle`/`dualVolume`) APIs — the *same* node setups
+`Simplex.deficitAngle`/`dualVolume`) APIs — the *same* node setups
 and drive `Proton.build()` uses, so the animation shows the real class. The C++ engine is
 untouched.
 
@@ -119,7 +119,7 @@ _MIN_QUARK_HOLES = 3       # a proton is three quarks ⇒ three color registers
 # hinges (the (d-2)=2-simplices, i.e. triangles); we localize it to each top cell (dual
 # node) as the SIGNED sum over its hinges of Re(lorentzian deficit) · |dual volume| — the
 # Regge angle-defect action density, keeping ε's sign so negative (saddle) curvature shows.
-# `Simplex.lorentzianDeficitAngle` is expensive, so the heat is recomputed only
+# `Simplex.deficitAngle` is expensive, so the heat is recomputed only
 # every `_HEAT_REFRESH_EVERY` frames on the active node (the frozen node's geometry doesn't
 # change, so its heat is cached) — the cheap dual *graph* still redraws every frame.
 _HEAT_CMAP = "coolwarm"    # spatial (Re): diverging, blue = negative, white ≈ 0, red = positive
@@ -146,7 +146,7 @@ def _mds_layout(st):
     np.fill_diagonal(W, 0.0)
     for e in edges:
         a, b = idx[e.getSource().getId()], idx[e.getTarget().getId()]
-        w = (math.sqrt(max(abs(e.getLength()**2).real), 1e-6))
+        w = math.sqrt(max(abs((e.getLength()**2).real), 1e-6))
         W[a, b] = W[b, a] = min(W[a, b], w)
     D = shortest_path(W, method="D", directed=False)
     finite = np.isfinite(D)
@@ -339,8 +339,10 @@ class ProtonAnimator:
         # Persistent colorbars (created ONCE — recreating per frame piles them up). Each dual
         # panel self-normalizes per frame; we just update the mappable's clim. Re (spatial) and
         # Im (temporal) use distinct diverging colormaps so the two channels read apart.
-        self._re_sms, self._im_sms = [], []
+        self._primal_sms, self._re_sms, self._im_sms = [], [], []
         for axset, sms, cmap, label in (
+                (self._primal_axes, self._primal_sms, _HEAT_CMAP,
+                 "hinge curvature  Re ε·|★|"),
                 (self._re_axes, self._re_sms, _HEAT_CMAP, "spatial curvature  Re ε·|★|"),
                 (self._im_axes, self._im_sms, _HEAT_CMAP_IM, "temporal curvature  Im ε·|★|")):
             for ax in axset:
@@ -351,10 +353,31 @@ class ProtonAnimator:
                 sms.append(sm)
         return self.fig
 
-    def _draw_complex(self, ax, node_index, coords, title):
+    def _draw_complex(self, ax, sm, node_index, coords, title):
         node, _label = self.nodes[node_index]
         st = node.st
         ax.clear()
+        # Curvature heat on the PRIMAL complex, mirroring the dual panels: in 4D
+        # the hinges are exactly the triangles, so each projected hinge triangle
+        # is filled with its own spatial curvature Re ε·|★| (signed, diverging
+        # map, symmetric range) under the wireframe. The temporal channel stays
+        # on the dual panels.
+        hinge_re, _hinge_im = self._hinge_curvature_cached(node_index, st)
+        tris, vals = [], []
+        for tri, re_val in hinge_re.items():
+            if all(v in coords for v in tri):
+                tris.append([coords[v] for v in tri])
+                vals.append(re_val)
+        if tris:
+            from matplotlib.collections import PolyCollection
+            vmax = max(max(abs(v) for v in vals), 1e-12)
+            from matplotlib.colors import Normalize
+            norm = Normalize(-vmax, vmax)
+            pc = PolyCollection(tris, array=np.array(vals), cmap=_HEAT_CMAP,
+                                norm=norm, alpha=0.5, edgecolors="none",
+                                zorder=0.5)
+            ax.add_collection(pc)
+            sm.set_clim(-vmax, vmax)
         # Each emergent color hole (register) is a removed top cell — a k=3 hole is a
         # 4-simplex, 5 vertices — whose boundary edges stay in the complex. OUTLINE each
         # register cell by reddening the edges whose endpoints both lie in that hole's vertex
@@ -395,13 +418,13 @@ class ProtonAnimator:
 
     # ---- dual complex + curvature heat ----
     @staticmethod
-    def _cell_curvature(st):
-        """Per-top-cell curvature, BOTH channels of the COMPLEX Lorentzian deficit, from the one
-        `lorentzianDeficitAngle` per hinge: `Re(deficit)·|★|` — the spatial angle-defect
-        (rotation) curvature, carried by timelike hinges — and `Im(deficit)·|★|` — the temporal
-        boost / light-cone content, carried by spacelike hinges (those whose normal plane is
-        timelike). Both SIGNED (ε<0 = saddle; Im sign = boost direction). Returns
-        {cell-tuple: (re_sum, im_sum)}."""
+    def _hinge_curvature(st):
+        """Per-HINGE curvature, BOTH channels of the COMPLEX Lorentzian deficit:
+        `Re(deficit)·|★|` — the spatial angle-defect (rotation) curvature — and
+        `Im(deficit)·|★|` — the temporal boost / light-cone content. Both SIGNED
+        (ε<0 = saddle; Im sign = boost direction). Returns {tri-tuple: (re, im)};
+        in 4D the hinges are exactly the triangles, so this is also what the
+        primal panels paint directly."""
         hinge_re, hinge_im = {}, {}
         for s in st.getSimplices():
             vs = s.getVertices()
@@ -409,9 +432,9 @@ class ProtonAnimator:
                 continue
             key = tuple(sorted(v.getId() for v in vs))
             try:
-                deficit = complex(s.lorentzianDeficitAngle())
+                deficit = complex(s.deficitAngle())
                 # complex-tolerant positive dual-measure weight (dualVolume
-                # is real today; abs(complex(...)) survives it going complex)
+                # is complex; the heat weight is its magnitude)
                 weight = abs(complex(s.dualVolume()))
                 hinge_re[key] = deficit.real * weight
                 hinge_im[key] = deficit.imag * weight
@@ -420,13 +443,20 @@ class ProtonAnimator:
                 # failure (TypeError, ValueError) must propagate, never
                 # render as zero curvature.
                 hinge_re[key] = hinge_im[key] = 0.0
+        return hinge_re, hinge_im
+
+    @classmethod
+    def _cell_curvature(cls, st):
+        """Per-top-cell curvature: the per-hinge channels of `_hinge_curvature`
+        summed over each cell's triangles. Returns {cell-tuple: (re_sum, im_sum)}."""
+        hinge_re, hinge_im = cls._hinge_curvature(st)
         curv = {}
         for c in st.getTopSimplices():
             cell = tuple(sorted(v.getId() for v in c.getVertices()))
             tris = [tuple(sorted(t)) for t in itertools.combinations(cell, 3)]
             curv[cell] = (sum(hinge_re.get(t, 0.0) for t in tris),
                           sum(hinge_im.get(t, 0.0) for t in tris))
-        return curv
+        return curv, (hinge_re, hinge_im)
 
     def _cell_curvature_cached(self, node_index, st):
         """`_cell_curvature` is expensive, so recompute it only every `_HEAT_REFRESH_EVERY`
@@ -437,8 +467,14 @@ class ProtonAnimator:
         stale = (node_index == self._active
                  and frame - cached[0] >= _HEAT_REFRESH_EVERY) if cached else True
         if cached is None or stale or frame >= self._frames:
-            self._curv_cache[node_index] = (frame, self._cell_curvature(st))
+            cellcurv, hingecurv = self._cell_curvature(st)
+            self._curv_cache[node_index] = (frame, cellcurv, hingecurv)
         return self._curv_cache[node_index][1]
+
+    def _hinge_curvature_cached(self, node_index, st):
+        """The per-hinge channels behind `_cell_curvature_cached`, same cache entry."""
+        self._cell_curvature_cached(node_index, st)
+        return self._curv_cache[node_index][2]
 
     def _draw_dual(self, ax, sm, node_index, coords, channel, cmap, title):
         """One dual-complex curvature panel (nodes = top cells at their primal centroids, edges
@@ -532,7 +568,8 @@ class ProtonAnimator:
         # once and shared by its primal + both dual panels.
         for ni in range(len(self.nodes)):
             coords = self._layouts[ni].coords(self.nodes[ni][0].st)
-            self._draw_complex(self._primal_axes[ni], ni, coords, self.nodes[ni][1])
+            self._draw_complex(self._primal_axes[ni], self._primal_sms[ni],
+                               ni, coords, self.nodes[ni][1])
             self._draw_dual(self._re_axes[ni], self._re_sms[ni], ni, coords,
                             0, _HEAT_CMAP, "dual — spatial curvature (Re ε)")
             self._draw_dual(self._im_axes[ni], self._im_sms[ni], ni, coords,
@@ -1027,7 +1064,23 @@ def main():
     ap.add_argument("--precone", type=int, default=0,
                     help="pre-grow each node's single-Δ⁴ seed by this many gated "
                          "cone-in moves before optimization (0 = bare seed)")
+    ap.add_argument("--hodge-weights", choices=("content", "squared"),
+                    default="content", dest="hodge_weights",
+                    help="which quantity the Hodge inner-product weight W_k is "
+                         "built from, for EVERY operator in the run (r_U, the "
+                         "near-kernel residual, the register readout): "
+                         "'content' = V, the k-content — an edge weighs its "
+                         "length, so a timelike cell's weight is IMAGINARY; "
+                         "'squared' = V², the engine default — an edge weighs "
+                         "exactly its ℓ², real and signed. Both are fully "
+                         "Lorentzian; this example defaults to 'content'.")
     args = ap.parse_args()
+    # One flip, process-wide, BEFORE any node is built (flipping mid-run would
+    # mix conventions across cached spectra).
+    _CONVENTION = {"content": cob.HodgeWeightConvention.Content,
+                   "squared": cob.HodgeWeightConvention.SquaredContent}[args.hodge_weights]
+    cob.HodgeLaplacian.setDefaultWeightConvention(_CONVENTION)
+    ProtonAnimator._TITLE_PREFIX += f"  ·  W = {'V' if args.hodge_weights == 'content' else 'V²'}"
     if args.rl or args.train:   # RL-driven two-step build — SAME charts as the fixed drive
         result, train_info = run_rl(cache_dir=args.policy_dir, retrain=args.train,
                                     train_iters=args.train_iters, episodes=args.episodes,

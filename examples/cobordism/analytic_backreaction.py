@@ -22,7 +22,7 @@ The gradient splits into two exact pieces:
 
         dS/dL_e = eps_e          (the deficit on edge e, complex/Sorkin),
 
-    which we already compute (`Simplex.lorentzianDeficitAngle`). Chain rule to the
+    which we already compute (`Simplex.deficitAngle`). Chain rule to the
     squared-length variable: dS/d(l^2_e) = eps_e / (2 L_e). This gives d(Re S) and
     d(Im S) together; d|Im S|/d(l^2_e) = sign(Im S) * d(Im S)/d(l^2_e).
     NOTE: tessera's action is the *dual* (Sorkin) action; this module VERIFIES the

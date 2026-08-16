@@ -24,6 +24,7 @@ spacetime directly from explicit simplex vertex tuples.
 """
 
 import math
+import types
 import unittest
 
 import numpy as np
@@ -131,7 +132,14 @@ def _close_mod_2pi(a, b, tol=1e-9):
 def _holonomy(st, cycle):
     wl = tessera.WilsonLoop(st)
     by_id = _vertices_by_id(st)
-    return wl.evaluateU1Connection([by_id[c] for c in cycle])
+    r = wl.evaluateU1Connection([by_id[c] for c in cycle])
+    if not hasattr(r, "loopSize"):  # degenerate/open cycles return {} unchanged
+        return r
+    # WilsonResult.value is complex-typed for the deficit-angle mode's sake; a
+    # U(1) holonomy is a real phase, and this asserts that rather than assuming.
+    v = complex(r.value)
+    assert v.imag == 0.0, f"U(1) holonomy grew an imaginary part: {v}"
+    return types.SimpleNamespace(value=v.real, loopSize=r.loopSize)
 
 
 # --------------------------------------------------------------------------- #

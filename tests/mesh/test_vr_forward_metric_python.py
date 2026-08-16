@@ -2,9 +2,10 @@
 
 Covers the three acceptance criteria:
 
-  1. the spacelike VR metric law d_VR² = (−log(I/iMax))² with the I < ε·iMax
-     floor — ``Edge.vanRaamsdonkLength`` (static law);
-  2. the time-aware signed squared length — a forward-time *worldline* edge
+  1. the spacelike VR metric law d_VR = −log(I/iMax) with the I < ε·iMax
+     floor — ``Edge.vanRaamsdonkLength`` (static law). It returns the LENGTH,
+     not its square (#639): the whole Edge API speaks lengths now;
+  2. the time-aware signed length — a forward-time *worldline* edge
      (endpoints on different time slices) is null (0), a same-slice edge is
      spacelike — ``Edge.vanRaamsdonkLengthFor``;
   3. fail-loudly admissibility — an inadmissible spacelike simplex raises, a
@@ -72,10 +73,10 @@ def _triangle(st):
 # (1) The spacelike VR metric law (Edge static).
 # --------------------------------------------------------------------------- #
 class TestMetricLaw(unittest.TestCase):
-    def test_spacelike_matches_minus_log_squared(self):
+    def test_spacelike_matches_minus_log(self):
         for frac in (0.9, 0.5, 0.1):
             I = frac * IMAX
-            expected = (-math.log(I / IMAX)) ** 2
+            expected = -math.log(I / IMAX)
             got = tessera.Edge.vanRaamsdonkLength(I, IMAX, 1e-10)
             self.assertAlmostEqual(got, expected, places=12)
 
@@ -85,17 +86,17 @@ class TestMetricLaw(unittest.TestCase):
 
     def test_floor_below_epsilon(self):
         for eps in (1e-10, 1e-3, 0.1):
-            cap2 = (-math.log(eps)) ** 2
+            cap = -math.log(eps)
             self.assertAlmostEqual(
                 tessera.Edge.vanRaamsdonkLength(0.0, IMAX, eps),
-                cap2, places=9)
+                cap, places=9)
             self.assertAlmostEqual(
                 tessera.Edge.vanRaamsdonkLength(0.5 * eps * IMAX, IMAX, eps),
-                cap2, places=9)
+                cap, places=9)
         eps = 0.1
         self.assertLess(
             tessera.Edge.vanRaamsdonkLength(2.0 * eps * IMAX, IMAX, eps),
-            (-math.log(eps)) ** 2)
+            -math.log(eps))
 
 
 # --------------------------------------------------------------------------- #
@@ -111,7 +112,7 @@ class TestForwardTimeNullEdges(unittest.TestCase):
         em = _edge_map(st)
 
         I = 0.5 * IMAX  # un-floored, so we test the real metric value
-        expected_spacelike = (-math.log(0.5)) ** 2
+        expected_spacelike = -math.log(0.5)
 
         # (0, 1): same slice -> spacelike, the metric law value.
         self.assertAlmostEqual(

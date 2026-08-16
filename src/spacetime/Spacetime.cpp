@@ -132,16 +132,17 @@ Spacetime::CreateSimplexResult Spacetime::createSimplexTracked(
 ) {
   CreateSimplexResult result;
   Edges edges_{};
-  bool isLorentzian =
-    metric->getSignature()->getSignatureType() == SignatureType::Lorentzian;
   for (std::size_t i = 0; i < vertices.size() - 1; i++) {
     for (std::size_t j = i + 1; j < vertices.size(); j++) {
-      double squaredLen = a;  // spacelike: ℓ² = a
-      if (isLorentzian && vertices[i]->getTime() != vertices[j]->getTime()) {
-        squaredLen = -alpha * a;  // timelike: ℓ² = -α·a
-      }
+      // Auto-wired causal LENGTHS (#639): same-time => spacelike l = sqrt(a),
+      // cross-slice => timelike l = i*sqrt(alpha*a) (l^2 = -alpha*a). Always
+      // Lorentzian — the old signature guard made a non-Lorentzian metric wire
+      // every edge spacelike, which was a Euclidean path (#641).
+      std::complex<double> len{std::sqrt(this->a), 0.0};
+      if (vertices[i]->getTime() != vertices[j]->getTime())
+        len = {0.0, std::sqrt(alpha * this->a)};
       auto [edge, inserted] =
-        edgeList->tryAdd(vertices[i], vertices[j], squaredLen);
+        edgeList->tryAdd(vertices[i], vertices[j], len);
       // Mirror createEdge: register the edge on the endpoints'
       // adjacency lists.  addOutEdge/addInEdge dedupe internally so
       // calling them on a pre-existing edge is a no-op.
@@ -162,11 +163,12 @@ Spacetime::CreateSimplexResult Spacetime::createSimplexTracked(
 }
 
 std::pair<SimplexPtr, bool> Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
-  double spacelikeSquaredLength = a;           // ℓ² = a
-  double timelikeSquaredLength = -alpha * a;    // ℓ² = -α·a
-  if (getMetric()->getSignature()->getSignatureType() != SignatureType::Lorentzian) {
-    timelikeSquaredLength = a;  // Euclidean: all edges positive
-  }
+  // The factory speaks LENGTHS (#639): spacelike ℓ = √a is real, timelike
+  // ℓ = i·√(α·a) is imaginary (ℓ² = -α·a). There is no non-Lorentzian branch —
+  // the old "Euclidean: all edges positive" fallback was a Euclidean path and
+  // is gone (#641).
+  const std::complex<double> spacelikeLength{std::sqrt(a), 0.0};
+  const std::complex<double> timelikeLength{0.0, std::sqrt(alpha * a)};
   TemporalOrientation orientation = {
     std::get<0>(numericOrientation),
     std::get<1>(numericOrientation)
@@ -182,7 +184,7 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(const std::tuple<uint8_t, u
     VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime)});
     for (const auto &existingVertex : vertices) {
       EdgePtr edge = edgeList->
-          add(existingVertex, newVertex, spacelikeSquaredLength);
+          add(existingVertex, newVertex, spacelikeLength);
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
       edges.push_back(edge);
@@ -198,9 +200,9 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(const std::tuple<uint8_t, u
     for (const auto &existingVertex : vertices) {
       EdgePtr edge;
       if (existingVertex->getTime() < newVertex->getTime()) {
-        edge = edgeList->add(existingVertex, newVertex, timelikeSquaredLength);
+        edge = edgeList->add(existingVertex, newVertex, timelikeLength);
       } else {
-        edge = edgeList->add(existingVertex, newVertex, spacelikeSquaredLength);
+        edge = edgeList->add(existingVertex, newVertex, spacelikeLength);
       }
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
@@ -220,7 +222,7 @@ double Spacetime::getA() const noexcept {
 }
 
 std::pair<SimplexPtr, bool> Spacetime::createSimplex(std::size_t k) {
-  double squaredLength = a;  // all same-time → spacelike: ℓ² = a
+  const std::complex<double> spacelikeLength{std::sqrt(a), 0.0};  // same-time → spacelike ℓ = √a
   VertexPtrs vertices = {};
   vertices.reserve(k);
   Edges edges = {};
@@ -229,7 +231,7 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(std::size_t k) {
     // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
     VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime)});
     for (const auto &existingVertex : vertices) {
-      EdgePtr edge = edgeList->add(existingVertex, newVertex, squaredLength);
+      EdgePtr edge = edgeList->add(existingVertex, newVertex, spacelikeLength);
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
       edges.push_back(edge);
@@ -345,13 +347,17 @@ std::shared_ptr<Spacetime> Spacetime::fromCells(
   }
 
   // Uniform Hermitian pin: overwrite every edge's geometry. Skipped under the
-  // tracked-metric rule, where the auto-wired causal lengths are the geometry.
-  // if (!vertexTimes) {
+  // tracked-metric rule, where the auto-wired causal lengths ARE the geometry —
+  // pinning there would overwrite every timelike edge with a spacelike unit
+  // length and hand back a Euclidean complex in disguise (#644; the guard was
+  // found commented out, contradicting both this comment and the causal-sign
+  // tests).
+  if (!vertexTimes) {
     for (const auto &edge : st->getEdgeList()->toVector()) {
       edge->setLength(std::sqrt(std::complex<double>{weight, 0.0}));
       edge->setPhase(phase);
     }
-  // }
+  }
   return st;
 }
 

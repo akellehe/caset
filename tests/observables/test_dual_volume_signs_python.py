@@ -109,15 +109,17 @@ def _oracle(st, tolerance=TOLERANCE):
         all_spacelike = all(e.isSpacelike() for e in s.getEdges())
         entry["n_all_spacelike" if all_spacelike else "n_mixed_signature"] += 1
 
-        dual_volume = s.dualVolume()
-        if dual_volume < 0.0:
+        # Complex-typed reads; the sign tallies are defined on the real part,
+        # exactly as the C++ observable reads them (#640).
+        dual_volume = complex(s.dualVolume())
+        if dual_volume.real < 0.0:
             entry["n_negative_dual_volume"] += 1
 
-        barycentric = s.circumcenterBarycentric()
-        if barycentric and min(barycentric) < 0.0:
+        barycentric = [complex(b) for b in s.circumcenterBarycentric()]
+        if barycentric and min(b.real for b in barycentric) < 0.0:
             entry["n_circumcenter_outside"] += 1
 
-        if s.circumradiusSquared() < 0.0:
+        if complex(s.circumradiusSquared()).real < 0.0:
             entry["n_negative_circumradius"] += 1
 
         volume = s.volume()
@@ -125,7 +127,7 @@ def _oracle(st, tolerance=TOLERANCE):
             entry["n_degenerate_volume"] += 1
             continue
 
-        ratio = dual_volume / volume
+        ratio = (dual_volume / complex(volume)).real
         entry["ratios"].append(ratio)
         if ratio < 0.0:
             entry["n_negative_star"] += 1

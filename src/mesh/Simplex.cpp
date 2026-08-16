@@ -778,7 +778,7 @@ std::vector<std::complex<double>> Simplex::cayleyMengerCanonical(
     return B;
 }
 
-std::complex<double> Simplex::lorentzianDihedralAngle(SimplexPtr hinge) const {
+std::complex<double> Simplex::dihedralAngle(SimplexPtr hinge) const {
     const int dPlus1 = static_cast<int>(vertices.size());
     // The two vertices of this simplex not in the hinge.
     const auto hingeVerts = hinge->getVertices();
@@ -826,10 +826,20 @@ std::complex<double> Simplex::lorentzianDihedralAngle(SimplexPtr hinge) const {
     const std::complex<double> Cjj = cof[static_cast<std::size_t>(bj) * n + bj];
     const std::complex<double> denom = principalSqrt(Cii) * principalSqrt(Cjj);
     if (std::abs(denom) < 1e-15) return {0.0, 0.0};
-    return std::acos(-Cij / denom);
+    std::complex<double> r = -Cij / denom;
+    // acos is cut on (-inf,-1] and [1,inf), so for a REAL ratio with |r| > 1 --
+    // the same-sign (boost) wedge -- the sign of Im(theta) is decided by which
+    // side of the cut the argument sits on, i.e. by the sign of its zero
+    // imaginary part. Complex division leaves that to floating-point accident,
+    // so it is pinned here instead: +0.0, the side the real-typed
+    // acos(complex(r, 0.0)) took. The boost ORIENTATION is not determined by
+    // edge lengths alone (a PT reflection flips it at identical l^2), so this is
+    // a convention -- but it must be a stated one, not an emergent rounding.
+    if (r.imag() == 0.0) r = {r.real(), 0.0};
+    return std::acos(r);
 }
 
-std::complex<double> Simplex::lorentzianDeficitAngle() const {
+std::complex<double> Simplex::deficitAngle() const {
     using cd = std::complex<double>;
     const cd twoPi(2.0 * std::numbers::pi, 0.0);
     if (!spacetime || vertices.empty()) return twoPi;
@@ -838,19 +848,19 @@ std::complex<double> Simplex::lorentzianDeficitAngle() const {
     (void)topSize;
     cd sum(0.0, 0.0);
     for (auto *sigma : incidentTopCells())
-        sum += sigma->lorentzianDihedralAngle(const_cast<Simplex *>(this));
+        sum += sigma->dihedralAngle(const_cast<Simplex *>(this));
     return twoPi - sum;
 }
 
 std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>>
-Simplex::lorentzianDeficitAngleGradient() const {
+Simplex::deficitAngleGradient() const {
     using cd = std::complex<double>;
     std::map<std::pair<std::uint64_t, std::uint64_t>, cd> grad;
     if (!spacetime || vertices.empty()) return grad;
     const int topSize =
         spacetime->getMetric()->getSignature()->getDimensions() + 1;
 
-    // The top cells containing this hinge -- the same set lorentzianDeficitAngle
+    // The top cells containing this hinge -- the same set deficitAngle
     // sums over. d(eps)/dl^2 = -sum_tau d(theta_tau)/dl^2.
     (void)topSize;
     for (auto *tau : incidentTopCells()) {
@@ -881,13 +891,18 @@ Simplex::lorentzianDeficitAngleGradient() const {
         const cd Cij = C[bi * n + bj];
         const cd Cii = C[bi * n + bi];
         const cd Cjj = C[bj * n + bj];
-        // Same unified branch as lorentzianDihedralAngle (#638): two separate
+        // Same unified branch as dihedralAngle (#638): two separate
         // principal roots, one expression for every causal regime. The sC/sP
         // sign flags and the crossing/non-crossing dispatch this replaces were
         // artifacts of folding the product under one root.
         const cd denom = principalSqrt(Cii) * principalSqrt(Cjj);
         if (std::abs(denom) < 1e-300) continue;
-        const cd r = -Cij / denom;
+        cd r = -Cij / denom;
+        // Pin the branch side exactly as the value does: for a real ratio with
+        // |r| > 1 the sign of Im(theta) is decided by the sign of the zero
+        // imaginary part, and the derivative must sit on the SAME sheet as the
+        // value or it disagrees with a finite difference of it.
+        if (r.imag() == 0.0) r = {r.real(), 0.0};
         const cd theta = std::acos(r);
         const cd sinTheta = std::sin(theta);
         if (std::abs(sinTheta) < 1e-300) continue;       // flat/folded: skip
@@ -922,7 +937,7 @@ Simplex::lorentzianDeficitAngleGradient() const {
 std::map<std::pair<std::pair<std::uint64_t, std::uint64_t>,
                    std::pair<std::uint64_t, std::uint64_t>>,
          std::complex<double>>
-Simplex::lorentzianDeficitAngleHessian() const {
+Simplex::deficitAngleHessian() const {
     using cd = std::complex<double>;
     using EK = std::pair<std::uint64_t, std::uint64_t>;
     std::map<std::pair<EK, EK>, cd> hess;
@@ -931,7 +946,7 @@ Simplex::lorentzianDeficitAngleHessian() const {
         spacetime->getMetric()->getSignature()->getDimensions() + 1;
 
     // d^2(eps)/dl^2_e dl^2_f = -sum_tau d^2(theta_tau). Same top-cell set and
-    // cofactor machinery as lorentzianDeficitAngleGradient, carried one more
+    // cofactor machinery as deficitAngleGradient, carried one more
     // derivative: d^2 theta = (d2theta/dr^2) dr_e dr_f + (dtheta/dr) d2r.
     for (const auto &tau : vertices[0]->getSimplices()) {
         if (static_cast<int>(tau->size()) != topSize) continue;
@@ -970,7 +985,12 @@ Simplex::lorentzianDeficitAngleHessian() const {
         // dtheta/dr = -1/sin(theta) and d2theta/dr2 = -r/sin^3(theta).
         const cd denom = principalSqrt(Cii) * principalSqrt(Cjj);
         if (std::abs(denom) < 1e-300) continue;
-        const cd r = -Cij / denom;
+        cd r = -Cij / denom;
+        // Pin the branch side exactly as the value does: for a real ratio with
+        // |r| > 1 the sign of Im(theta) is decided by the sign of the zero
+        // imaginary part, and the derivative must sit on the SAME sheet as the
+        // value or it disagrees with a finite difference of it.
+        if (r.imag() == 0.0) r = {r.real(), 0.0};
         const cd theta = std::acos(r);
         const cd sinT = std::sin(theta);
         if (std::abs(sinT) < 1e-300) continue;

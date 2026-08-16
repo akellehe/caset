@@ -198,7 +198,7 @@ def layout_from_spacetime(verts, edges, **kwargs):
             # vertices together — the multicobordism animation's convention
             # (#581).
             rest_lens.append(
-                (math.sqrt(max(abs(e.getLength()**2).real), 1e-6)))
+                math.sqrt(max(abs((e.getLength()**2).real), 1e-6)))
 
     pos = force_layout_3d(len(verts), edge_idx,
                           rest_lengths=rest_lens, **kwargs)

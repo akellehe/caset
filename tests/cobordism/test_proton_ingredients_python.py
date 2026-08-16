@@ -35,7 +35,13 @@ class MultiCobordismEmptyOutputsTest(unittest.TestCase):
         host = cob.ProtonIngredients().formation_node(1).st
         node = cob.MultiCobordism(host, [[1.0, -1.0, 0.0]], [], degrees=[3],
                                   gamma=1.0, seed=0)
-        self.assertEqual(node.r_u(node.st), 0.0)
+        # r_u is no longer zero on a bare complex: it carries the near-kernel
+        # residual — the pre-topological register signal (#644) — which is
+        # deliberately nonzero BEFORE any register exists. Bare r_u is exactly
+        # that term and nothing else.
+        near = cob.MultiCobordism.nearKernelResidual(node.st, 3,
+                                                     node.expectedRegisterCount())
+        self.assertAlmostEqual(node.r_u(node.st), near, places=12)
         self.assertEqual(len(node.outputs), 0)
         self.assertTrue(math.isfinite(node.objective()))
 
@@ -47,10 +53,12 @@ class MultiCobordismEmptyOutputsTest(unittest.TestCase):
                                   gamma=1.0, seed=0)
         vertex_id = host.getVertexList().toVector()[0].getId()
         node.seed_inputs([vertex_id])
+        near = cob.MultiCobordism.nearKernelResidual(node.st, 3,
+                                                     node.expectedRegisterCount())
         node.set_input_residual_weight(1.0)
-        r_at_weight_1 = node.r_u(node.st)
+        r_at_weight_1 = node.r_u(node.st) - near   # the weighted input terms alone
         node.set_input_residual_weight(2.0)
-        r_at_weight_2 = node.r_u(node.st)
+        r_at_weight_2 = node.r_u(node.st) - near
         self.assertAlmostEqual(r_at_weight_2, 2.0 * r_at_weight_1, places=9)
 
 
@@ -71,10 +79,12 @@ class ProtonIngredientsNodesTest(unittest.TestCase):
         ingredients_node = cob.ProtonIngredients(seed=5).formation_node(6)
         self.assertEqual(len(ingredients_node.inputs), 2)
         self.assertEqual(len(ingredients_node.outputs), 0)
+        near = cob.MultiCobordism.nearKernelResidual(
+            ingredients_node.st, 3, ingredients_node.expectedRegisterCount())
         ingredients_node.set_input_residual_weight(1.0)
-        r_at_weight_1 = ingredients_node.r_u(ingredients_node.st)
+        r_at_weight_1 = ingredients_node.r_u(ingredients_node.st) - near
         ingredients_node.set_input_residual_weight(2.0)
-        r_at_weight_2 = ingredients_node.r_u(ingredients_node.st)
+        r_at_weight_2 = ingredients_node.r_u(ingredients_node.st) - near
         self.assertAlmostEqual(r_at_weight_2, 2.0 * r_at_weight_1, places=9)
 
     def test_joint_node_is_three_fixed_pairs_and_nothing_else(self):
@@ -85,10 +95,12 @@ class ProtonIngredientsNodesTest(unittest.TestCase):
         node = cob.ProtonIngredients(seed=5).joint_node(5)
         self.assertEqual(len(node.inputs), 3)
         self.assertEqual(len(node.outputs), 0)
+        near = cob.MultiCobordism.nearKernelResidual(node.st, 3,
+                                                     node.expectedRegisterCount())
         node.set_input_residual_weight(1.0)
-        r_at_weight_1 = node.r_u(node.st)
+        r_at_weight_1 = node.r_u(node.st) - near   # the weighted input terms alone
         node.set_input_residual_weight(2.0)
-        r_at_weight_2 = node.r_u(node.st)
+        r_at_weight_2 = node.r_u(node.st) - near
         self.assertAlmostEqual(r_at_weight_2, 2.0 * r_at_weight_1, places=9)
         node.run_stage1(max_steps=10, n_candidate_moves=4,
                         grow_boundaries=True)

@@ -149,7 +149,7 @@ class TestEuclideanAngles(unittest.TestCase):
         _materialize(st)
         tri = _triangle(st)
         v0 = _vertices_by_id(st)[0]
-        theta = tri.lorentzianDihedralAngle(v0)     # interior angle at vertex 0
+        theta = tri.dihedralAngle(v0)     # interior angle at vertex 0
         self.assertAlmostEqual(theta.real, math.pi / 3.0, places=10)
         self.assertAlmostEqual(theta.imag, 0.0, places=12)
 
@@ -157,7 +157,7 @@ class TestEuclideanAngles(unittest.TestCase):
         st = _flat_flower()
         _materialize(st)
         centre = _vertices_by_id(st)[0]
-        eps = centre.lorentzianDeficitAngle()       # 2π − 4·(π/2) = 0
+        eps = centre.deficitAngle()       # 2π − 4·(π/2) = 0
         self.assertAlmostEqual(eps.real, 0.0, places=8)
         self.assertAlmostEqual(eps.imag, 0.0, places=10)
 
@@ -168,7 +168,7 @@ class TestTetrahedronSurface(unittest.TestCase):
         _materialize(st)
         verts = _vertices_by_id(st)
         self.assertEqual(len(verts), 4)
-        defs = [v.lorentzianDeficitAngle() for v in verts.values()]
+        defs = [v.deficitAngle() for v in verts.values()]
         for e in defs:
             self.assertAlmostEqual(e.real, math.pi, places=8)   # 2π − 3·(π/3)
             self.assertAlmostEqual(e.imag, 0.0, places=10)
@@ -206,17 +206,16 @@ class TestLorentzianBoost(unittest.TestCase):
         _materialize(st)
         tri = _triangle(st)
         v0 = _vertices_by_id(st)[0]
-        theta = tri.lorentzianDihedralAngle(v0)
+        theta = tri.dihedralAngle(v0)
         beta = math.acosh(2.0 / math.sqrt(3.0))     # ≈ 0.54931
         self.assertAlmostEqual(abs(theta.imag), beta, places=8)   # boost survives
         # Real part sits at a light-cone branch point (0 or π).
         self.assertTrue(abs(theta.real) < 1e-8 or
                         abs(theta.real - math.pi) < 1e-8)
-        # Contrast: the clamped dihedralAngle throws the boost away — it lands at
-        # a real branch point (0 or π) instead of carrying the rapidity.
-        clamped = tri.lorentzianDihedralAngle(v0, False)
+        # The boost is carried, not thrown away: the real part sits at a branch
+        # point (0 or pi) and the rapidity is the imaginary part. There is no
+        # longer a clamped real-typed overload to contrast against (#638).
         self.assertGreater(abs(theta.imag), 1e-2)
-        self.assertTrue(abs(clamped) < 1e-8 or abs(clamped - math.pi) < 1e-8)
 
     def test_dual_action_goes_complex_with_a_timelike_edge(self):
         st = _tetra_surface(timelike_edge=(0, 1))   # one edge timelike

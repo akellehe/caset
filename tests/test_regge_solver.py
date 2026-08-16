@@ -1,4 +1,5 @@
 """Tests for the Regge equation solver."""
+import cmath
 import math
 import unittest
 
@@ -28,11 +29,16 @@ class TestDihedralAngles(unittest.TestCase):
                 for facet in s.getFacets():
                     for hinge in facet.getFacets():
                         if len(hinge.getVertices()) == 3:
-                            angle = solver.lorentzianDihedralAngle(s, hinge)
-                            self.assertGreater(angle, 0.0,
-                                "Dihedral angle should be positive")
-                            self.assertLess(angle, math.pi,
-                                "Dihedral angle should be < π")
+                            angle = solver.dihedralAngle(s, hinge)
+                            # The Lorentzian dihedral angle is complex: the real
+                            # part is the rotation content (continuous in (0, π)
+                            # for a spacelike-normal wedge, quantized to
+                            # {0, π/2, π} in the boost/crossing regimes) and the
+                            # imaginary part is the boost. Both bounds hold on
+                            # the real part in every regime.
+                            self.assertTrue(cmath.isfinite(angle))
+                            self.assertGreaterEqual(angle.real, 0.0)
+                            self.assertLessEqual(angle.real, math.pi)
                             return
         self.skipTest("No suitable hinge found")
 
@@ -44,9 +50,11 @@ class TestDihedralAngles(unittest.TestCase):
         # Find a hinge and compute its deficit angle
         for s in st.getSimplices():
             if len(s.getVertices()) == 3 and len(s.getCofaces()) > 0:
-                eps = solver.lorentzianDeficitAngle(s)
-                # Deficit can be positive, negative, or zero
-                self.assertIsInstance(eps, float)
+                eps = solver.deficitAngle(s)
+                # The Lorentzian deficit is complex: Re is the angle defect,
+                # Im the boost (rapidity) content around the hinge.
+                self.assertIsInstance(eps, complex)
+                self.assertTrue(cmath.isfinite(eps))
                 return
         self.skipTest("No hinge with cofaces found")
 
@@ -59,7 +67,9 @@ class TestReggeAction(unittest.TestCase):
         matter = tessera.MatterConfiguration()
         solver = tessera.ReggeSolver(st, matter)
         S = solver.reggeAction()
-        self.assertTrue(math.isfinite(S), f"Regge action should be finite, got {S}")
+        # Complex Lorentzian action: Re from the angle defects, Im from the
+        # boost content of spacelike hinges.
+        self.assertTrue(cmath.isfinite(S), f"Regge action should be finite, got {S}")
 
 
 class TestActionGradientNorm(unittest.TestCase):
@@ -107,7 +117,7 @@ class TestMatterConfiguration(unittest.TestCase):
         # so just check that it doesn't crash
         solver = tessera.ReggeSolver(st, matter)
         S = solver.totalAction()
-        self.assertTrue(math.isfinite(S))
+        self.assertTrue(cmath.isfinite(S))
 
 
 class TestHingeArea(unittest.TestCase):
@@ -119,6 +129,12 @@ class TestHingeArea(unittest.TestCase):
         for s in st.getSimplices():
             if len(s.getVertices()) == 3 and len(s.getEdges()) >= 3:
                 area = tessera.ReggeSolver.hingeArea(s)
-                self.assertGreaterEqual(area, 0.0)
+                # Complex Heron area. On real signed l^2 the radicand is real,
+                # so the area is either real (spacelike triangle) or purely
+                # imaginary (timelike) — never generic complex. Assert that
+                # invariant instead of positivity.
+                self.assertTrue(cmath.isfinite(area))
+                self.assertAlmostEqual(min(abs(area.real), abs(area.imag)),
+                                       0.0, places=9)
                 return
         self.skipTest("No triangle found")

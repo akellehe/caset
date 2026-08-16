@@ -97,7 +97,9 @@ private:
   // Captured by apply() — for rollback
   bool applied_ = false;
   // Edge data captured before deletion: (sourcePtr, targetPtr, the full
-  // COMPLEX squaredLength, and the U(1) phase) so rollback restores the
+  // COMPLEX length — recorded as the LENGTH, not l^2: the sqrt/square
+  // round-trip is not bit-exact and loses the branch (#639) — and the U(1)
+  // phase) so rollback restores the
   // edge bit-exactly — a Re-only record silently projected analytically
   // continued geometry onto the real axis and dropped the connection
   // phase on every rejected move (#581).  EdgePtr alone is not enough
@@ -105,7 +107,7 @@ private:
   struct EdgeRecord {
     VertexPtr source;
     VertexPtr target;
-    std::complex<double> squaredLength;
+    std::complex<double> length;
     double phase;
   };
   std::vector<EdgeRecord> deletedEdges_;

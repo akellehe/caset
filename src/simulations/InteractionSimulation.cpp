@@ -377,7 +377,7 @@ double cellHingeAction(const double edgeSq[10]) {
     v[4] = st.createVertex(4, std::vector<double>{1.0});
     for (int e = 0; e < 10; ++e)
         (void)st.createEdge(v[kCellEdges[e].u], v[kCellEdges[e].v],
-                            edgeSq[e]);
+                            std::sqrt(std::complex<double>(edgeSq[e])));
     auto [cell, created] = st.createSimplex(
         VertexPtrs{v[0], v[1], v[2], v[3], v[4]});
     (void)created;
@@ -385,7 +385,7 @@ double cellHingeAction(const double edgeSq[10]) {
     for (SimplexPtr facet : cell->getFacets())
         for (SimplexPtr hinge : facet->getFacets())
             if (hinge->getVertices().size() == 3)
-                s += (hinge->area() * hinge->lorentzianDeficitAngle()).real();
+                s += (hinge->area() * hinge->deficitAngle()).real();
     return s;
 }
 
@@ -984,7 +984,8 @@ bool InteractionSimulation::interact() {
     VertexPtr label[5] = {x, y, xp, ab, yp};
     for (int e = 0; e < 10; ++e)
         (void)spacetime_->createEdge(label[kCellEdges[e].u],
-                                     label[kCellEdges[e].v], edgeSq[e]);
+                                     label[kCellEdges[e].v],
+                                     std::sqrt(std::complex<double>(edgeSq[e])));
     auto [cell, created] =
         spacetime_->createSimplex(VertexPtrs{x, y, xp, ab, yp});
     (void)created;
@@ -992,7 +993,7 @@ bool InteractionSimulation::interact() {
         for (SimplexPtr hinge : facet->getFacets())
             if (hinge->getVertices().size() == 3)
                 hingeAction_[hinge] =
-                    (hinge->area() * hinge->lorentzianDeficitAngle()).real();
+                    (hinge->area() * hinge->deficitAngle()).real();
 
     stateOf_[xp] = res.statePrimeX;
     stateOf_[ab] = res.stateAB;
@@ -1490,7 +1491,7 @@ InteractionSimulation::getDeficitAngleDistribution() const {
     for (SimplexPtr s : spacetime_->getSimplices()) {
         if (s->getVertices().size() != 3) continue;
         if (s->getCofaces().empty()) continue;
-        out.push_back(s->lorentzianDeficitAngle().real());
+        out.push_back(s->deficitAngle().real());
     }
     return out;
 }

@@ -162,7 +162,7 @@ InteriorHinges::InteriorHinges(std::shared_ptr<const Spacetime> spacetime,
       ++nHingesBoundary;
       continue;
     }
-    const std::complex<double> deficit = s->lorentzianDeficitAngle();
+    const std::complex<double> deficit = s->deficitAngle();
     Hinge hinge;
     hinge.re = deficit.real();
     hinge.im = deficit.imag();

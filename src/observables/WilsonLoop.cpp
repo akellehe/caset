@@ -317,15 +317,18 @@ WilsonResult WilsonLoop::evaluateDeficitAngle(const LoopPath &loop) const {
     r.enclosedHinges = static_cast<int>(enclosedHinges.size());
 
     if (enclosedHinges.size() == 1) {
-        // Hinge loop: exact Wilson loop value
-        double eps = enclosedHinges[0]->lorentzianDeficitAngle().real();
+        // Hinge loop: exact Wilson loop value. The deficit is COMPLEX and the
+        // holonomy character keeps it whole: cos(Re eps) rotates, the boost
+        // part enters as a cosh. A .real() here silently discarded the boost
+        // content (#644).
+        const std::complex<double> eps = enclosedHinges[0]->deficitAngle();
         r.value = (static_cast<double>(d_ - 2) + 2.0 * std::cos(eps))
                   / static_cast<double>(d_);
     } else {
-        // General loop: U(1) approximation — product of cos(epsilon)
-        double product = 1.0;
+        // General loop: U(1) approximation — product of cos(epsilon), complex.
+        std::complex<double> product{1.0, 0.0};
         for (const auto &h : enclosedHinges)
-            product *= std::cos(h->lorentzianDeficitAngle().real());
+            product *= std::cos(h->deficitAngle());
         r.value = product;
     }
     return r;
@@ -436,16 +439,16 @@ const std::vector<WilsonResult> &WilsonLoop::getMeasurements() const {
     return measurements_;
 }
 
-std::map<int, double> WilsonLoop::getAverageBySize() const {
-    std::map<int, double> sums;
+std::map<int, std::complex<double>> WilsonLoop::getAverageBySize() const {
+    std::map<int, std::complex<double>> sums;
     std::map<int, int> counts;
     for (const auto &r : measurements_) {
         sums[r.loopSize] += r.value;
         counts[r.loopSize]++;
     }
-    std::map<int, double> avg;
+    std::map<int, std::complex<double>> avg;
     for (const auto &[sz, s] : sums)
-        avg[sz] = s / counts[sz];
+        avg[sz] = s / static_cast<double>(counts.at(sz));
     return avg;
 }
 

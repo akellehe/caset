@@ -75,7 +75,7 @@ class SignatureChangeReadersTest(unittest.TestCase):
 
         # (a) The complex Sorkin/Asante–Dittrich deficit is sane on EVERY hinge.
         for h in _hinges(st):
-            eps = complex(h.lorentzianDeficitAngle())
+            eps = complex(h.deficitAngle())
             self.assertTrue(cmath.isfinite(eps),
                             f"non-finite deficit {eps} on hinge "
                             f"{[v.getId() for v in h.getVertices()]}")

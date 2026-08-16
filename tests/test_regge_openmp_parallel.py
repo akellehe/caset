@@ -9,7 +9,7 @@ deterministically into the shared result (see ``src/simulations/ReggeSolver.cpp`
 
 The optimization lives entirely in C++; this module only *tests* it. The serial
 reference oracles below re-accumulate the per-hinge contributions in a plain
-Python loop using the exposed per-hinge methods (``lorentzianDeficitAngle``,
+Python loop using the exposed per-hinge methods (``deficitAngle``,
 ``dualVolume``, and their gradients/Hessians). The per-hinge *values* come from
 C++; only the *reduction order* differs between the serial reference and the
 parallel reduction — which is exactly what parallelization changes. So agreement
@@ -100,16 +100,16 @@ def _serial_gradient(st):
     edges, eidx = _edge_index(st)
     g = [0j] * len(edges)
     for h in _collect_hinges(st):
-        eps = complex(h.lorentzianDeficitAngle())
-        dv = float(h.dualVolume())
-        for e, d_eps in h.lorentzianDeficitAngleGradient().items():
+        eps = complex(h.deficitAngle())
+        dv = complex(h.dualVolume())
+        for e, d_eps in h.deficitAngleGradient().items():
             i = eidx.get(e)
             if i is not None:
                 g[i] += dv * complex(d_eps)
         for e, d_dv in h.dualVolumeGradient().items():
             i = eidx.get(e)
             if i is not None:
-                g[i] += float(d_dv) * eps
+                g[i] += complex(d_dv) * eps
     return np.array(g, dtype=complex)
 
 
@@ -120,12 +120,12 @@ def _serial_hessian(st):
     E = len(edges)
     H = np.zeros((E, E), dtype=complex)
     for h in _collect_hinges(st):
-        eps = complex(h.lorentzianDeficitAngle())
-        V = float(h.dualVolume())
-        d_eps = {k: complex(v) for k, v in h.lorentzianDeficitAngleGradient().items()}
-        d_v = {k: float(v) for k, v in h.dualVolumeGradient().items()}
-        d2_eps = {k: complex(v) for k, v in h.lorentzianDeficitAngleHessian().items()}
-        d2_v = {k: float(v) for k, v in h.dualVolumeHessian().items()}
+        eps = complex(h.deficitAngle())
+        V = complex(h.dualVolume())
+        d_eps = {k: complex(v) for k, v in h.deficitAngleGradient().items()}
+        d_v = {k: complex(v) for k, v in h.dualVolumeGradient().items()}
+        d2_eps = {k: complex(v) for k, v in h.deficitAngleHessian().items()}
+        d2_v = {k: complex(v) for k, v in h.dualVolumeHessian().items()}
         for e, dVe in d_v.items():
             ie = eidx.get(e)
             if ie is None:

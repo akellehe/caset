@@ -38,9 +38,10 @@ class EmergentProtonAnimationTest(unittest.TestCase):
 
     def _tiny_anim(self, nodes):
         # One chunk per phase per node: init → evolve → stage2 = 3 frames/node.
+        # ProtonAnimator's combined-run drive has no separate stage-2 pass, so
+        # there is no stage2_iters parameter (the old test predates the API).
         return self.ep.EmergentProtonAnimator(nodes, init_steps=2, init_chunk=2,
-                                              evolve_steps=2, evolve_chunk=2,
-                                              stage2_iters=1)
+                                              evolve_steps=2, evolve_chunk=2)
 
     def test_step_b_pins_nothing(self):
         nodes = self.ep.build_ingredients_nodes(seed=3)
@@ -50,14 +51,17 @@ class EmergentProtonAnimationTest(unittest.TestCase):
     def test_frames_advance_and_verdict_is_observational(self):
         nodes = self.ep.build_ingredients_nodes(seed=3)
         anim = self._tiny_anim(nodes)
-        self.assertEqual(anim._frames, 6)
-        for f in range(6):
+        # The combined-run drive interleaves stage 2 into every run iteration,
+        # so the schedule is two phases per node (init, evolve) — the separate
+        # "stage2" frame this test once expected predates that drive.
+        self.assertEqual(anim._frames, 4)
+        for f in range(4):
             anim._advance(f)
-        self.assertEqual(len(anim.hist["F"]), 6)
+        self.assertEqual(len(anim.hist["F"]), 4)
         self.assertEqual(anim.hist["phase"],
-                         ["init", "evolve", "stage2", "init", "evolve", "stage2"])
-        self.assertEqual(anim.hist["node"], [0, 0, 0, 1, 1, 1])
-        self.assertEqual(anim._boundaries, [3])          # Step B began at frame index 3
+                         ["init", "evolve", "init", "evolve"])
+        self.assertEqual(anim.hist["node"], [0, 0, 1, 1])
+        self.assertEqual(anim._boundaries, [2])          # Step B began at frame index 2
         stationary, singlet_diagnostic, holes = anim.verdict()
         self.assertIsInstance(stationary, bool)
         self.assertIsInstance(singlet_diagnostic, float)

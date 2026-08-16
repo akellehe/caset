@@ -37,7 +37,7 @@ using namespace ::tessera::spacetime;
 ///     `RegisterContext` constructor materializes it C++-side, the #451 lesson).
 ///   * **Signature-aware readings.** Dual volumes are the circumcentric signed
 ///     `Simplex::dualVolume`; the deficit is the complex
-///     `Simplex::lorentzianDeficitAngle`. Masses use Re ε; |Im ε| (boost
+///     `Simplex::deficitAngle`. Masses use Re ε; |Im ε| (boost
 ///     content) is always reported, never dropped.
 ///   * **Dimension-correct radius.** `r = V^{1/4}` on a 4-complex — the root
 ///     tracks the top dimension.

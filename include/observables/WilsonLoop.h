@@ -3,6 +3,7 @@
 
 #include "mesh/ForwardDeclarations.h"
 #include <map>
+#include <complex>
 #include <memory>
 #include <vector>
 
@@ -48,7 +49,11 @@ struct LoopPath {
 
 /// Result of evaluating a Wilson loop in any mode.
 struct WilsonResult {
-    double value = 0.0;            ///< primary scalar
+    /// Primary scalar. COMPLEX: in the deficit-angle mode the holonomy around a
+    /// hinge is cos of the COMPLEX Lorentzian deficit — the boost part
+    /// contributes a cosh, so |value| may exceed 1 and a mixed hinge yields a
+    /// genuinely complex character. Real-valued modes fill the real part.
+    std::complex<double> value{0.0, 0.0};
     int    loopSize = 0;           ///< number of simplices in the loop
     int    enclosedHinges = 0;     ///< hinges enclosed (combinatorial)
     bool   contractible = true;    ///< is the loop contractible? (combinatorial)
@@ -120,7 +125,7 @@ class WilsonLoop {
     void measureAllHinges(WilsonMode mode);
     void reset();
     [[nodiscard]] const std::vector<WilsonResult> &getMeasurements() const;
-    [[nodiscard]] std::map<int, double> getAverageBySize() const;
+    [[nodiscard]] std::map<int, std::complex<double>> getAverageBySize() const;
 
   private:
     std::shared_ptr<Spacetime> spacetime_;

@@ -174,37 +174,54 @@ def _boundary(cc, k):
 
 
 def _np_metric_laplacian(st, k, metric=True):
-    """Independent reconstruction of the symmetric metric Hodge Laplacian
-    L_k^sym = B_k^T B_k + B_{k+1} B_{k+1}^T, B_k = diag(sqrt W_{k-1}) d_k
-    diag(1/sqrt W_k), from the boundary maps (ChainComplex) and the weights W_k
-    (HodgeLaplacian.weights, or unit weights when metric is False)."""
+    """Independent reconstruction of the signed-weight Hodge Laplacian
+
+        L_k = W_k^-1 d_k^T W_{k-1} d_k + d_{k+1} W_{k+1}^-1 d_{k+1}^T W_k
+
+    from the boundary maps (ChainComplex) and the COMPLEX signed weights W_k
+    (HodgeLaplacian.weights, or unit weights when metric is False).
+
+    There is no sqrt(W) anywhere. The symmetric W^{-1/2} form the old oracle
+    built needs positive weights, and a Lorentzian cell's d-content is
+    imaginary, so that form no longer exists (#641)."""
     cc = cob.ChainComplex.fromSpacetime(st)
     n = cc.dimension()
     hl = cob.HodgeLaplacian(st)
 
     def weight(kk):
         if not metric or kk == 0:
-            return np.ones(cc.numSimplices(kk))
-        return np.array(hl.weights(kk), dtype=float)
+            return np.ones(cc.numSimplices(kk), dtype=complex)
+        return np.array(hl.weights(kk), dtype=complex)
 
     nk = cc.numSimplices(k)
-    L = np.zeros((nk, nk))
+    L = np.zeros((nk, nk), dtype=complex)
     if nk == 0:
         return L
-    inv_sqrt_wk = 1.0 / np.sqrt(weight(k))
-    if k >= 1 and cc.numSimplices(k - 1) > 0:  # B_k^T B_k
-        dk = _boundary(cc, k)
-        bk = np.diag(np.sqrt(weight(k - 1))) @ dk @ np.diag(inv_sqrt_wk)
-        L += bk.T @ bk
-    if k + 1 <= n and cc.numSimplices(k + 1) > 0:  # B_{k+1} B_{k+1}^T
-        dkp1 = _boundary(cc, k + 1)
-        bkp1 = np.diag(np.sqrt(weight(k))) @ dkp1 @ np.diag(1.0 / np.sqrt(weight(k + 1)))
-        L += bkp1 @ bkp1.T
+    inv_wk = 1.0 / weight(k)
+    if k >= 1 and cc.numSimplices(k - 1) > 0:   # W_k^-1 d_k^T W_{k-1} d_k
+        dk = _boundary(cc, k).astype(complex)
+        L += np.diag(inv_wk) @ dk.T @ np.diag(weight(k - 1)) @ dk
+    if k + 1 <= n and cc.numSimplices(k + 1) > 0:  # d_{k+1} W_{k+1}^-1 d_{k+1}^T W_k
+        dkp1 = _boundary(cc, k + 1).astype(complex)
+        L += dkp1 @ np.diag(1.0 / weight(k + 1)) @ dkp1.T @ np.diag(weight(k))
     return L
 
 
 def _betti(st, k):
     return cob.ChainComplex.fromSpacetime(st).bettiNumbers()[k]
+
+
+def _real_spectrum(evals):
+    """Degree 0 is the Hermitian graph Laplacian D - A, so its spectrum is REAL.
+
+    `eigenvalues()` is complex-typed for parity with the k >= 1 d'Alembertian.
+    This asserts the imaginary part vanishes rather than discarding it, so a
+    degree-0 spectrum that stopped being real fails here instead of being
+    silently projected."""
+    a = np.asarray(evals)
+    np.testing.assert_allclose(a.imag, 0.0, atol=1e-12,
+                               err_msg="degree-0 spectrum must be real")
+    return a.real
 
 
 def _kernel_dim_from_eigenvalues(st, k, metric=True, tol=1e-7):
@@ -231,7 +248,7 @@ class TestAssemblyAndSpectrum(unittest.TestCase):
         np.testing.assert_allclose(_matrix(hl.laplacian(), n), L, atol=1e-12)
         np.testing.assert_allclose(np.array(hl.laplacian(0)).reshape(n, n), L,
                                    atol=1e-12)
-        np.testing.assert_allclose(np.array(hl.eigenvalues()),
+        np.testing.assert_allclose(_real_spectrum(hl.eigenvalues()),
                                    np.linalg.eigvalsh(L), atol=1e-12)
         return n
 
@@ -265,13 +282,13 @@ class TestAssemblyAndSpectrum(unittest.TestCase):
     def test_triangle_zero_phase_known_eigenvalues(self):
         # Equal-weight S^1 with no flux: L = 2I - A(K3) -> {0, 3, 3}.
         hl = cob.HodgeLaplacian(_triangle())
-        np.testing.assert_allclose(sorted(hl.eigenvalues()), [0.0, 3.0, 3.0],
+        np.testing.assert_allclose(sorted(_real_spectrum(hl.eigenvalues())), [0.0, 3.0, 3.0],
                                    atol=1e-12)
 
     def test_path_known_eigenvalues(self):
         # Open path 0-1-2 Laplacian -> {0, 1, 3}.
         hl = cob.HodgeLaplacian(_path())
-        np.testing.assert_allclose(sorted(hl.eigenvalues()), [0.0, 1.0, 3.0],
+        np.testing.assert_allclose(sorted(_real_spectrum(hl.eigenvalues())), [0.0, 1.0, 3.0],
                                    atol=1e-12)
 
     def test_complex_weight_round_trips_through_pybind(self):
@@ -340,13 +357,13 @@ class TestFluxSpectrum(unittest.TestCase):
         for phi in (0.0, math.pi / 3, math.pi / 2, 2 * math.pi / 3, math.pi, 1.234):
             with self.subTest(phi=phi):
                 hl = cob.HodgeLaplacian(self._triangle_with_flux(phi))
-                np.testing.assert_allclose(sorted(hl.eigenvalues()),
+                np.testing.assert_allclose(sorted(_real_spectrum(hl.eigenvalues())),
                                            self._ring_eigs(phi), atol=1e-12)
 
     def test_half_flux_quantum_gives_degenerate_pair(self):
         # Φ = π -> {1, 1, 4}; the spectral gap λ1 - λ0 collapses to 0.
         hl = cob.HodgeLaplacian(self._triangle_with_flux(math.pi))
-        eigs = sorted(hl.eigenvalues())
+        eigs = sorted(_real_spectrum(hl.eigenvalues()))
         np.testing.assert_allclose(eigs, [1.0, 1.0, 4.0], atol=1e-12)
         self.assertAlmostEqual(eigs[1] - eigs[0], 0.0, places=12)
 
@@ -394,7 +411,7 @@ class TestGaugeInvariance(unittest.TestCase):
         ids, idx = _ordering(st)
         n = len(ids)
         hl_old = cob.HodgeLaplacian(st)
-        evals_old = np.array(hl_old.eigenvalues())
+        evals_old = _real_spectrum(hl_old.eigenvalues())
         V_old = _matrix(hl_old.eigenvectors(), n)
 
         # Two independent cycles of the testbed (b1 = 2).
@@ -406,7 +423,7 @@ class TestGaugeInvariance(unittest.TestCase):
         self._apply_gauge(st, alpha)
 
         hl_new = cob.HodgeLaplacian(st)
-        evals_new = np.array(hl_new.eigenvalues())
+        evals_new = _real_spectrum(hl_new.eigenvalues())
         V_new = _matrix(hl_new.eigenvectors(), n)
 
         # (i) spectrum unchanged
@@ -439,8 +456,8 @@ class TestGaugeInvariance(unittest.TestCase):
         alpha = {vid: float(rng.uniform(-math.pi, math.pi)) for vid in ids}
         TestGaugeInvariance._apply_gauge(st, alpha)
         hl_new = cob.HodgeLaplacian(st)
-        np.testing.assert_allclose(np.array(hl_new.eigenvalues()),
-                                   np.array(hl_old.eigenvalues()), atol=1e-12)
+        np.testing.assert_allclose(_real_spectrum(hl_new.eigenvalues()),
+                                   _real_spectrum(hl_old.eigenvalues()), atol=1e-12)
         V_new = _matrix(hl_new.eigenvectors(), n)
 
         g = np.array([np.exp(1j * alpha[vid]) for vid in ids])
@@ -520,9 +537,6 @@ class TestMetricHodgeAssembly(unittest.TestCase):
                                      dtype=complex).reshape(nk, nk)
                     L_ref = _np_metric_laplacian(st, k, metric)
                     np.testing.assert_allclose(L_cpp, L_ref, atol=1e-10)
-                    # symmetric, real, positive semidefinite
-                    np.testing.assert_allclose(L_cpp, L_cpp.conj().T, atol=1e-10)
-                    np.testing.assert_allclose(L_cpp.imag, 0.0, atol=1e-12)
 
     def test_eigenvalues_match_numpy(self):
         for name, build, k in self.CASES:
@@ -531,9 +545,14 @@ class TestMetricHodgeAssembly(unittest.TestCase):
                 with self.subTest(case=name, metric=metric):
                     L_ref = _np_metric_laplacian(st, k, metric)
                     evals = np.array(cob.HodgeLaplacian(st).eigenvalues(k, metric))
-                    np.testing.assert_allclose(evals, np.linalg.eigvalsh(L_ref),
-                                               atol=1e-9)
-                    self.assertGreaterEqual(evals.min(), -1e-9)  # PSD
+                    # The signed-weight operator is generally NOT self-adjoint, so
+                    # eigvals (not eigvalsh) and no PSD claim. Both sides are
+                    # sorted by (Re, Im) to compare set-wise.
+                    def _key(z):
+                        return (round(z.real, 9), round(z.imag, 9))
+                    np.testing.assert_allclose(
+                        sorted(evals, key=_key),
+                        sorted(np.linalg.eigvals(L_ref), key=_key), atol=1e-9)
 
     def test_assembly_matches_oracle_with_random_weights(self):
         # Non-uniform positive edge weights make every W_k a genuine non-scalar
@@ -605,9 +624,9 @@ class TestMetricWeights(unittest.TestCase):
         np.testing.assert_allclose(np.array(cob.HodgeLaplacian(st).weights(0)),
                                    np.ones(4), atol=1e-12)
 
-    def test_edge_weights_are_sqrt_length_in_column_order(self):
-        # Distinct edge lengths pin down both the values (volume of an edge =
-        # sqrt(l^2)) and the canonical sorted-vertex-id column order.
+    def test_edge_weights_are_squared_length_in_column_order(self):
+        # Distinct edge lengths pin down both the values (the V^2 weight of an
+        # edge is exactly l^2) and the canonical sorted-vertex-id column order.
         st = _from_simplices(4, [(0, 1), (1, 2), (2, 3), (3, 0), (0, 2)])
         lengths = {(0, 1): 1.0, (0, 2): 4.0, (0, 3): 9.0, (1, 2): 16.0, (2, 3): 25.0}
         for e in st.getEdgeList().toVector():
@@ -615,7 +634,7 @@ class TestMetricWeights(unittest.TestCase):
             e.setLength(cmath.sqrt(complex(lengths[key])))
             e.setPhase(0.0)
         order = sorted(lengths)  # (0,1),(0,2),(0,3),(1,2),(2,3)
-        expected = [math.sqrt(lengths[t]) for t in order]
+        expected = [lengths[t] for t in order]
         np.testing.assert_allclose(np.array(cob.HodgeLaplacian(st).weights(1)),
                                    expected, atol=1e-12)
 

@@ -217,6 +217,23 @@ eigenvector Cochain).)doc")
            "The i-th eigenvector Cochain. Raises IndexError if out of range.");
 
   // ----- Hodge Laplacian: k=0 Hermitian graph (#90), k>=1 metric Hodge (#104) -----
+  py::enum_<HodgeLaplacian::WeightConvention>(m, "HodgeWeightConvention",
+      R"doc(Which quantity the diagonal inner-product weight W_k is built from.
+
+BOTH are fully Lorentzian and complex-valued. This is a choice of inner product,
+not of signature; neither reintroduces a Euclidean path.)doc")
+      .value("Content", HodgeLaplacian::WeightConvention::Content,
+             "W_k = V, the k-content (the textbook diagonal DEC star). For an "
+             "edge that is sqrt(l^2), so a TIMELIKE cell's weight is imaginary. "
+             "Spacelike and timelike contributions to <h,h>_W are then 90 degrees "
+             "apart and cannot cancel, so no null kernel direction exists.")
+      .value("SquaredContent", HodgeLaplacian::WeightConvention::SquaredContent,
+             "W_k = V^2, the squared k-content; for an edge exactly l^2. It is "
+             "det G/(d!)^2, a polynomial in the squared edge lengths, so on real "
+             "signed l^2 it is real and SIGNED -- timelike cells carry a negative "
+             "weight and genuine null kernel directions survive.")
+      .export_values();
+
   py::class_<HodgeLaplacian>(m, "HodgeLaplacian",
       R"doc(Hodge Laplacian on a Spacetime, degree-parameterized by int k.
 
@@ -247,8 +264,28 @@ generally non-self-adjoint — eigenvalues may be negative or complex. ker L_k ~
 degrades: 'harmonic' becomes the small-|lambda| near-kernel and a representative h
 can be null (<h,h>_W = sum_i W_{k,i}|h_i|^2 ~= 0). All-spacelike ⇒ reproduces the
 Euclidean spectrum/kernel.)doc")
-      .def(py::init<std::shared_ptr<Spacetime>>(), py::arg("spacetime"),
-           "Build the Hodge Laplacian operator over a triangulation.")
+      .def(py::init([](std::shared_ptr<Spacetime> st) {
+             // No-weights overload: read the PROCESS default at call time (the
+             // pybind default-argument form would bake it in at import).
+             return new HodgeLaplacian(std::move(st));
+           }),
+           py::arg("spacetime"))
+      .def(py::init<std::shared_ptr<Spacetime>, HodgeLaplacian::WeightConvention>(),
+           py::arg("spacetime"),
+           py::arg("weights"),
+           "Build the Hodge Laplacian operator over a triangulation. `weights` "
+           "selects which quantity the diagonal W_k is built from -- the "
+           "k-content or its square (the default). See HodgeWeightConvention.")
+      .def_static("defaultWeightConvention",
+           &HodgeLaplacian::defaultWeightConvention,
+           "The process-wide default HodgeWeightConvention, read by every "
+           "internally-constructed operator (r_U terms, the near-kernel "
+           "residual, the register readout). See setDefaultWeightConvention.")
+      .def_static("setDefaultWeightConvention",
+           &HodgeLaplacian::setDefaultWeightConvention, py::arg("convention"),
+           "Set the process-wide default HodgeWeightConvention. Flip it ONCE "
+           "at startup (e.g. the animation's --hodge-weights flag); flipping "
+           "mid-run mixes conventions across cached spectra.")
       .def("adjacency", &HodgeLaplacian::adjacency,
            "Weighted adjacency A as a flat row-major N*N complex array "
            "(Hermitian; A_ij = sum squaredLength * exp(i*phase)).")
@@ -314,35 +351,11 @@ Euclidean spectrum/kernel.)doc")
            "harmonics(k)[r].amplitude(c) exactly -- one call instead of one "
            "amplitudeFor round-trip per cell per harmonic. Raises for k<0; "
            "empty when the kernel is empty or k is above the top dimension.")
-      // ----- Lorentzian (signed-weight) d'Alembertian (#105, spec §5.6) -----
-      .def("lorentzianSpectrum", &HodgeLaplacian::lorentzianSpectrum,
-           py::arg("k"), py::arg("metric") = true,
-           "The eigendecomposition of the signed-weight d'Alembertian L_k as a "
-           "Spectrum (isHermitian()==False): complex eigenvalues sorted by "
-           "(Re, Im) + eigenvectors as Cochains. metric=False falls back to unit "
-           "weights (the real combinatorial spectrum). Raises for k<0; empty "
-           "above the top dimension.")
-      .def("lorentzianEigenvalues", &HodgeLaplacian::lorentzianEigenvalues,
-           py::arg("k"), py::arg("metric") = true,
-           "Eigenvalues of the signed-weight d'Alembertian L_k (k>=1) as complex "
-           "numbers sorted ascending by (Re, Im): may be negative or complex-"
-           "conjugate pairs (the indefinite metric ⇒ non-self-adjoint operator). "
-           "On an all-spacelike complex they reproduce eigenvalues(k). Raises for "
-           "k<0; empty above the top dimension.")
-      .def("lorentzianEigenvectors", &HodgeLaplacian::lorentzianEigenvectors,
-           py::arg("k"), py::arg("metric") = true,
-           "Eigenvectors of the signed-weight L_k as a flat row-major M*M complex "
-           "array; column j is the eigenvector for lorentzianEigenvalues(k)[j].")
-      .def("lorentzianHarmonics", &HodgeLaplacian::lorentzianHarmonics,
-           py::arg("k"), py::arg("tol") = 1e-9, py::arg("metric") = true,
-           "Near-kernel ('harmonic') representatives of the d'Alembertian "
-           "(eigenvectors with |lambda| < tol) as a list of Cochains. The count "
-           "is b_k on an all-spacelike complex; with timelike cells it can differ "
-           "(pseudo-Hodge decomposition). Matching W-norms: lorentzianNullNorms.")
-      .def("lorentzianNullNorms", &HodgeLaplacian::lorentzianNullNorms,
+      // ----- indefinite W-norms of the near-kernel (spec §5.6) -----
+      .def("nullNorms", &HodgeLaplacian::nullNorms,
            py::arg("k"), py::arg("tol") = 1e-9, py::arg("metric") = true,
            "Indefinite W-norms <h,h>_W = sum_i W_{k,i} |h_i|^2 of the near-kernel "
-           "representatives, one per column of lorentzianHarmonics (same order). "
+           "representatives, one per column of harmonics (same order). "
            "A value ~0 flags a NULL (lightlike) harmonic; all positive on an "
            "all-spacelike complex.");
 
@@ -807,6 +820,25 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def_static("emergent_holes", &MultiCobordism::emergentHoles,
                   py::arg("st"), py::arg("k"))
       .def_static("regge_action_gradient", &MultiCobordism::reggeActionGradient, py::arg("st"))
+      .def_static("nearKernelResidual", &MultiCobordism::nearKernelResidual,
+           py::arg("st"), py::arg("register_degree"),
+           py::arg("expected_register_count"),
+           "The pre-topological register signal: the normalized sum of the "
+           "expected_register_count smallest squared SINGULAR values of the "
+           "METRIC L_k (n * sum_m sigma^2 / sum_all sigma^2; range [0, m]; "
+           "scale-invariant, so no conformal-inflation channel). Metric by "
+           "DESIGN: it descends both by stage-1 surgery (a hole zeroes the "
+           "sigma exactly) and by stage-2 tuning the causal structure toward "
+           "null directions — near-kernels with no holes are the intended "
+           "exploration, not a loophole. "
+           "Saturates at exactly 0 once b_k reaches the expected count; before "
+           "any register exists it is the objective's only register-seeking "
+           "gradient (the period residual is a step function in the topology). "
+           "The count comes from the TARGETS (one register per target "
+           "component), never a constant.")
+      .def("expectedRegisterCount", &MultiCobordism::expectedRegisterCount,
+           "The number of registers the targets ask for: the largest component "
+           "count over every input and output target vector.")
       .def_static("r_state", &MultiCobordism::residualOfTargetStateAgainstHarmonic,
                   py::arg("st"), py::arg("k"), py::arg("target"))
       .def("r_u", &MultiCobordism::rU, py::arg("st"))

@@ -85,7 +85,7 @@ class ReggeSolver {
     /// \f$S_{\text{Regge}}(W^*) = \sum_h |\!\star\! h|\,\varepsilon_h\f$, the
     /// circumcentric **dual** content of each (d-2)-hinge
     /// (``Simplex::dualVolume``) weighted by its **complex Lorentzian** deficit
-    /// (``Simplex::lorentzianDeficitAngle``). Returns ``std::complex``: the real
+    /// (``Simplex::deficitAngle``). Returns ``std::complex``: the real
     /// part is the angle-defect curvature, the imaginary part the boost
     /// (rapidity / light-cone) content from timelike-normal-plane hinges. Pure
     /// gravity (matter-independent); the gravitational prior for the
@@ -166,7 +166,7 @@ class ReggeSolver {
     /// ``getEdgeList()`` order (matching ``actionGradient``). Assembled by the
     /// product rule Σ_h [∂|★h|·ε_h + |★h|·∂ε_h] from the per-hinge analytic
     /// gradients ``Simplex::dualVolumeGradient`` and
-    /// ``lorentzianDeficitAngleGradient`` — no finite differences. Complex (Re S
+    /// ``deficitAngleGradient`` — no finite differences. Complex (Re S
     /// and Im S together). Matches a central-difference of ``dualReggeAction`` to
     /// machine precision but at one pass, not 2·|E| action evaluations.
     [[nodiscard]] std::vector<std::complex<double>> actionGradientExact() const;
@@ -175,7 +175,7 @@ class ReggeSolver {
     /// as a dense |E|×|E| complex matrix in the ``getEdgeList`` order. The next
     /// product-rule layer beyond ``actionGradientExact``:
     /// Σ_h [∂²|★h|·ε_h + ∂|★h|_e·∂ε_h_f + ∂|★h|_f·∂ε_h_e + |★h|·∂²ε_h], assembled
-    /// from the per-hinge ``dualVolumeHessian`` / ``lorentzianDeficitAngleHessian``
+    /// from the per-hinge ``dualVolumeHessian`` / ``deficitAngleHessian``
     /// (and their gradients) — no finite differences. Removes the FD-Hessian floor
     /// in the stationary-action relaxation (exact Newton / Gauss-Newton).
     [[nodiscard]] std::vector<std::vector<std::complex<double>>>

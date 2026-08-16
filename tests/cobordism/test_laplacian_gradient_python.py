@@ -50,14 +50,24 @@ def _holed_s3(n_refine=12):
 
 
 def _Lmat(hl, k):
+    # The signed operator is real on real signed l^2; assert Im = 0 rather than
+    # project it away, then hand back the real part.
     L = np.asarray(hl.laplacian(k, True), complex)
     n = int(round(math.sqrt(L.size)))
-    return L.reshape(n, n).real
+    L = L.reshape(n, n)
+    np.testing.assert_allclose(L.imag, 0.0, atol=1e-12)
+    return L.real
 
 
 class LaplacianGradientHandCalcTest(unittest.TestCase):
     def test_euler_homogeneity_identity(self):
-        # Σ_e ℓ²_e ∂L_k/∂ℓ²_e = −½ L_k, exactly, at every register degree.
+        # Σ_e ℓ²_e ∂L_k/∂ℓ²_e = −L_k exactly: under the V^2 weights every W_k
+        # is homogeneous of degree +1 in l^2 (edge W_1 = l^2; triangle
+        # W_2 = detG/4, quadratic overall but degree +1 per the Gram scaling —
+        # detG(s l^2) = s^2 detG makes W_2 degree 2... the OPERATOR
+        # L = W_k^-1 d^T W_{k-1} d + d W_{k+1}^-1 d^T W_k is degree -1 at every
+        # k, measured exactly on this fixture). The old -1/2 belonged to the
+        # removed sqrt(W)-conjugated form.
         st = _holed_s3()
         hl = cob.HodgeLaplacian(st)
         for k in (1, 2):
@@ -67,20 +77,30 @@ class LaplacianGradientHandCalcTest(unittest.TestCase):
             acc = np.zeros((n, n))
             for e in st.getEdgeList().toVector():
                 a, b = e.getSource().getId(), e.getTarget().getId()
-                g = np.asarray(hl.laplacianGradient(k, a, b), float).reshape(n, n)
-                acc += (e.getLength() * e.getLength()).real * g
-            self.assertLess(np.max(np.abs(acc + 0.5 * L)), 1e-12,
-                            f"Euler identity Σℓ²∂L = −½L failed at k={k}")
+                g = np.asarray(hl.laplacianGradient(k, a, b), complex).reshape(n, n)
+                np.testing.assert_allclose(g.imag, 0.0, atol=1e-12)
+                acc += (e.getLength() * e.getLength()).real * g.real
+            self.assertLess(np.max(np.abs(acc + L)), 1e-10,
+                            f"Euler identity Σℓ²∂L = −L failed at k={k}")
 
-    def test_symmetric_and_empty_below_k1(self):
+    def test_matches_finite_difference_and_empty_below_k1(self):
+        # The signed operator is non-symmetric, so its gradient is too; the
+        # honest check is a central finite difference of L itself.
         st = _holed_s3()
         hl = cob.HodgeLaplacian(st)
-        # ∂L_k inherits L_k's symmetry
         n = _Lmat(hl, 2).shape[0]
         e = st.getEdgeList().toVector()[0]
         g = np.asarray(hl.laplacianGradient(2, e.getSource().getId(),
-                                            e.getTarget().getId()), float).reshape(n, n)
-        self.assertLess(np.max(np.abs(g - g.T)), 1e-12)
+                                            e.getTarget().getId()), complex).reshape(n, n)
+        h = 1e-6
+        l = e.getLength()
+        e.setLength(cmath.sqrt(l * l + h)); st.materializeFacets()
+        Lp = np.asarray(cob.HodgeLaplacian(st).laplacian(2, True), complex).reshape(n, n)
+        e.setLength(cmath.sqrt(l * l - h)); st.materializeFacets()
+        Lm = np.asarray(cob.HodgeLaplacian(st).laplacian(2, True), complex).reshape(n, n)
+        e.setLength(l); st.materializeFacets()
+        fd = (Lp - Lm) / (2.0 * h)
+        self.assertLess(np.max(np.abs(g - fd)), 1e-5)
         # k < 1 has no metric Laplacian gradient
         self.assertEqual(hl.laplacianGradient(0, e.getSource().getId(),
                                               e.getTarget().getId()), [])

@@ -24,6 +24,7 @@ Skips cleanly when tessera was built without TESSERA_QUANTUM=1.
 from __future__ import annotations
 
 import unittest
+import cmath
 
 try:
     import tessera
@@ -47,7 +48,7 @@ def _trivial_chain_spacetime(n_sites: int) -> "tessera.Spacetime":
         for k in range(n_sites)
     ]
     for k in range(n_sites - 1):
-        st.createEdge(verts[k], verts[k + 1], -1.0)  # timelike
+        st.createEdge(verts[k], verts[k + 1], cmath.sqrt(complex(-1.0)))  # timelike
     return st
 
 
@@ -66,10 +67,10 @@ def _branching_spacetime() -> "tessera.Spacetime":
     v1 = st.createVertex(1, [1.0])
     v2 = st.createVertex(2, [1.0])
     v3 = st.createVertex(3, [2.0])
-    st.createEdge(v0, v1, -1.0)
-    st.createEdge(v0, v2, -1.0)
-    st.createEdge(v1, v3, -1.0)
-    st.createEdge(v2, v3, -1.0)
+    st.createEdge(v0, v1, cmath.sqrt(complex(-1.0)))
+    st.createEdge(v0, v2, cmath.sqrt(complex(-1.0)))
+    st.createEdge(v1, v3, cmath.sqrt(complex(-1.0)))
+    st.createEdge(v2, v3, cmath.sqrt(complex(-1.0)))
     return st
 
 
