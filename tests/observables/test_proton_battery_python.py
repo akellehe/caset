@@ -109,18 +109,28 @@ class SingletResidualEquivalenceTest(unittest.TestCase):
 
 
 class PairLoopFlavorPublishedTableTest(unittest.TestCase):
-    """PairLoopFlavor reproduces the PUBLISHED #576 per-fixture table."""
+    """PairLoopFlavor reproduces the recorded per-fixture table.
+
+    Re-frozen for the complexified-Regge engine (#644): the V^2 Hodge weights
+    move every spectral magnitude, so the #576-era numbers are historical. The
+    TOPOLOGICAL reads survived the migration bit-for-bit — odd_loop and
+    dual_hole below are identical to the #576 table on every fixture, and
+    r_u stays < 1e-20 — while loop_q/q/rho rescaled and the multiplicity_2_1
+    verdict flipped on three fixtures (#576: True/True/True/False; now
+    False/False/True/True). The flips are a REAL readout change under the new
+    inner product, recorded here deliberately, not smoothed over.
+    """
 
     # fixture -> (loop_q to 5dp, odd_loop, dual_hole, rho to 3dp, multiplicity)
     TABLE = {
-        "synthetic_b3_3.json": ((0.06054, 0.05971, 0.06063), (0, 2), 1, 0.103,
-                                True),
-        "synthetic_b3_4.json": ((0.05726, 0.05971, 0.06074), (0, 1), 2, 0.348,
-                                True),
-        "synthetic_b3_5.json": ((0.05542, 0.05722, 0.05772), (0, 1), 2, 0.248,
-                                True),
-        "converged_b3_3.json": ((0.05153, 0.05165, 0.05177), (0, 1), 2, 0.665,
+        "synthetic_b3_3.json": ((0.00798, 0.00791, 0.00803), (0, 2), 1, 0.559,
                                 False),
+        "synthetic_b3_4.json": ((0.00731, 0.00749, 0.00765), (0, 1), 2, 0.618,
+                                False),
+        "synthetic_b3_5.json": ((0.00733, 0.00773, 0.00775), (0, 1), 2, 0.036,
+                                True),
+        "converged_b3_3.json": ((0.00626, 0.00629, 0.00629), (0, 1), 2, 0.175,
+                                True),
     }
 
     def test_published_rows(self):
@@ -142,14 +152,16 @@ class PairLoopFlavorPublishedTableTest(unittest.TestCase):
         # the pair-loop gate tolerance (1e-9), tighter than the 5-dp table above.
         _meta, st = _composite_spin("synthetic_b3_3.json")
         record = obs.PairLoopFlavor().record(_register(st))
-        q = [0.0298121883979804, 0.03073188676971647, 0.02990226224557105]
-        loop_q = [0.060544075167696866, 0.05971445064355145,
-                  0.06063414901528751]
+        # Re-frozen from this engine on 2026-08-16 (#644, V^2 weights); the
+        # previous constants were the #576-era |vol|-weight read.
+        q = [0.0039256984597337875, 0.00405312793847565, 0.003981372983158158]
+        loop_q = [0.007978826398209437, 0.007907071442891945,
+                  0.008034500921633807]
         for measured, oracle in zip(record["q"], q):
             self.assertAlmostEqual(measured, oracle, places=9)
         for measured, oracle in zip(record["loop_q"], loop_q):
             self.assertAlmostEqual(measured, oracle, places=9)
-        self.assertAlmostEqual(record["rho"], 0.10298138531509772, places=9)
+        self.assertAlmostEqual(record["rho"], 0.559024842350687, places=9)
         self.assertLess(record["r_u"], 1e-20)
 
     def test_oriented_weights_pin_the_singlet_root_fixed(self):

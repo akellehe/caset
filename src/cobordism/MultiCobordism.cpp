@@ -365,8 +365,16 @@ double MultiCobordism::nearKernelResidual(
     std::size_t expectedRegisterCount) {
   if (expectedRegisterCount == 0) return 0.0;
   cobordism::HodgeLaplacian laplacian(spacetime);
+  // COMBINATORIAL operator (unit weights): its kernel is exactly the topology
+  // (dim ker = b_k), so the term counts registers the way emergent_holes does.
+  // The metric version was gameable: stage 2 discovered it could tune the
+  // causal structure to the null-crossing locus and manufacture spectral
+  // near-kernels with NO holes (a probe ended 18/18 edges timelike, 0 holes,
+  // colorR at floor). With unit weights there is nothing to tune — only
+  // stage-1 topology moves can lower it, which is exactly whose job opening
+  // registers is (#644).
   const std::vector<std::complex<double>> flat =
-      laplacian.laplacian(registerDegree, /*metric=*/true);
+      laplacian.laplacian(registerDegree, /*metric=*/false);
   const std::size_t n = static_cast<std::size_t>(
       std::llround(std::sqrt(static_cast<double>(flat.size()))));
   // No k-cells at all: every expected register is missing — the worst case on

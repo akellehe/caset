@@ -104,19 +104,22 @@ class TestDispositionMovesAreOnByDefault(unittest.TestCase):
         self.assertTrue(self._node(True).should_propose_dispositions)
         self.assertFalse(self._node(False).should_propose_dispositions)
 
-    def test_off_never_produces_a_timelike_edge(self):
-        """Explicitly opting out still pins every edge spacelike.
+    def test_off_removes_the_disposition_moves_from_stage_one(self):
+        """Opting out removes the disposition MOVES from the stage-1 draw.
 
-        This is the measured baseline that motivated the feature, and it is what
-        `should_propose_dispositions=False` continues to buy a caller who wants it.
+        That is all the flag governs now. It no longer pins the complex
+        spacelike: the complex-step stage 2 explores the full complex length
+        plane by design (#644), so causal character can rotate continuously
+        there regardless of the stage-1 draw. The stage-1-only guarantee is
+        pinned by running ONLY stage 1: with the flag off, no combinatorial
+        move may change a disposition.
         """
         node = self._node(False)
         node.run_stage1(60, 8, True)
         node.run_stage1(30, 8, False)
-        node.run_stage2(1.0, 10)
         self.assertEqual(_dispositions(node.st).get("timelike", 0), 0,
-                         "no move in the six-move draw can change a "
-                         "disposition, and stage 2 cannot cross l^2 = 0")
+                         "with dispositions off, no move in the stage-1 draw "
+                         "may change a causal disposition")
 
 
 class TestDispositionMovesAreGated(unittest.TestCase):
