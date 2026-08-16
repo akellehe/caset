@@ -1047,8 +1047,11 @@ class ProtonAnimator:
                 if cancel.size == sigma.size:
                     for bar, share in zip(bars, cancel):
                         if share >= 0.5:
+                            # Hatched, not just edged: a 1-pixel outline on a
+                            # narrow bar is invisible at panel size.
+                            bar.set_hatch("//")
                             bar.set_edgecolor("C2")
-                            bar.set_linewidth(1.8)
+                            bar.set_linewidth(1.4)
                             n_cancelled += 1
                 # Rolling ghost: the last few frames' spectra as fading steps, so
                 # the spectrum's drift toward the kernel is visible in one look.
