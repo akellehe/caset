@@ -138,9 +138,8 @@ Spacetime::CreateSimplexResult Spacetime::createSimplexTracked(
       // cross-slice => timelike l = i*sqrt(alpha*a) (l^2 = -alpha*a). Always
       // Lorentzian — the old signature guard made a non-Lorentzian metric wire
       // every edge spacelike, which was a Euclidean path (#641).
-      std::complex<double> len{std::sqrt(this->a), 0.0};
-      if (vertices[i]->getTime() != vertices[j]->getTime())
-        len = {0.0, std::sqrt(alpha * this->a)};
+      const std::complex<double> len = autoWiredLength(
+          vertices[i]->getTime() != vertices[j]->getTime());
       auto [edge, inserted] =
         edgeList->tryAdd(vertices[i], vertices[j], len);
       // Mirror createEdge: register the edge on the endpoints'
@@ -167,8 +166,8 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(const std::tuple<uint8_t, u
   // ℓ = i·√(α·a) is imaginary (ℓ² = -α·a). There is no non-Lorentzian branch —
   // the old "Euclidean: all edges positive" fallback was a Euclidean path and
   // is gone (#641).
-  const std::complex<double> spacelikeLength{std::sqrt(a), 0.0};
-  const std::complex<double> timelikeLength{0.0, std::sqrt(alpha * a)};
+  const std::complex<double> spacelikeLength = autoWiredLength(false);
+  const std::complex<double> timelikeLength = autoWiredLength(true);
   TemporalOrientation orientation = {
     std::get<0>(numericOrientation),
     std::get<1>(numericOrientation)
@@ -222,7 +221,7 @@ double Spacetime::getA() const noexcept {
 }
 
 std::pair<SimplexPtr, bool> Spacetime::createSimplex(std::size_t k) {
-  const std::complex<double> spacelikeLength{std::sqrt(a), 0.0};  // same-time → spacelike ℓ = √a
+  const std::complex<double> spacelikeLength = autoWiredLength(false);  // same-time class
   VertexPtrs vertices = {};
   vertices.reserve(k);
   Edges edges = {};
@@ -581,6 +580,13 @@ SpacetimeType Spacetime::getSpacetimeType() const noexcept {
 
 double Spacetime::getCurrentTime() const noexcept {
   return static_cast<double>(currentTime);
+}
+
+std::complex<double> Spacetime::autoWiredLength(bool crossSlice) const noexcept {
+  const double squaredMagnitude = crossSlice ? alpha * a : a;
+  if (balancedEdgeWiring_) return balancedLength(squaredMagnitude);
+  return crossSlice ? std::complex<double>{0.0, std::sqrt(squaredMagnitude)}
+                    : std::complex<double>{std::sqrt(squaredMagnitude), 0.0};
 }
 
 std::uint64_t Spacetime::metricRevisionKey() const noexcept {

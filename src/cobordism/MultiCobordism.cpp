@@ -74,7 +74,7 @@ MultiCobordism::MultiCobordism(
     const std::vector<std::vector<complexd>> &outputTargets,
     const std::vector<int> &degrees, double gamma, std::uint64_t seed,
     int precone, bool shouldProposeDispositions, bool preconeTimelike,
-    bool preconeAlternate)
+    bool preconeAlternate, bool balancedEdgeWiring)
     : spacetime_(std::move(host)),
       inputTargets_(inputTargets),
       outputTargets_(outputTargets),
@@ -85,7 +85,11 @@ MultiCobordism::MultiCobordism(
               : *std::max_element(registerDegrees_.begin(),
                                   registerDegrees_.end())),
       gamma_(gamma),
+      balancedEdgeWiring_(balancedEdgeWiring),
       randomNumberGenerator_(seed) {
+  // The wiring mode must reach the host BEFORE any precone growth below wires
+  // its first edge (#690).
+  if (spacetime_) spacetime_->setBalancedEdgeWiring(balancedEdgeWiring_);
   // Assigned in the body rather than the init list: the member is declared last,
   // and C++ initializes in DECLARATION order, so an init-list entry here would
   // reorder-warn. It is a plain bool with an in-class default, so nothing depends
@@ -472,6 +476,9 @@ std::shared_ptr<Spacetime> MultiCobordism::build(
     const Snapshot &complexSnapshot) const {
   auto rebuiltSpacetime = Spacetime::fromCells(spacetime_->getDimensions(),
                                                complexSnapshot.first, 1.0, 0.0);
+  // Candidate clones inherit the wiring mode so COMBINATORIAL MOVES scored on
+  // them wire their new edges under the same convention (#690).
+  rebuiltSpacetime->setBalancedEdgeWiring(balancedEdgeWiring_);
   for (auto *edge : rebuiltSpacetime->getEdgeList()->toVector()) {
     const auto savedEntry = complexSnapshot.second.find(edgeKey(edge));
     if (savedEntry != complexSnapshot.second.end())

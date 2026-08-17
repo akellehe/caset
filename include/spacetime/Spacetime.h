@@ -524,6 +524,32 @@ class Spacetime {
       spectralSlotRevision_ = metricRevisionKey();
     }
 
+    /// Balanced (causally undecided) edge-wiring mode (#690). OFF (default):
+    /// new edges are wired on the causal axes — same-time ℓ = (√a, 0),
+    /// cross-slice ℓ = (0, √(α·a)). ON: every auto-wired edge gets EQUAL real
+    /// and imaginary components with the same per-class magnitude —
+    /// ℓ = √(a/2)·(1+i) resp. √(α·a/2)·(1+i) — so ℓ² is purely imaginary
+    /// (Re ℓ² = 0: born exactly on the null locus) and stage-2 relaxation
+    /// must choose each edge's causal character. Creation-time convention
+    /// only; existing edges are never rewritten by toggling this.
+    void setBalancedEdgeWiring(bool balanced) noexcept {
+      balancedEdgeWiring_ = balanced;
+    }
+    [[nodiscard]] bool balancedEdgeWiring() const noexcept {
+      return balancedEdgeWiring_;
+    }
+    /// The balanced length of a given squared magnitude m: ℓ = √(m/2)·(1+i),
+    /// so |ℓ|² = m and ℓ² = i·m.
+    [[nodiscard]] static std::complex<double> balancedLength(
+        double squaredMagnitude) noexcept {
+      const double c = std::sqrt(squaredMagnitude * 0.5);
+      return {c, c};
+    }
+    /// The auto-wiring rule for a new edge, honoring the wiring mode:
+    /// `crossSlice` = the endpoints sit on different time slices (the
+    /// timelike class, scale α·a); same-slice edges use scale a.
+    [[nodiscard]] std::complex<double> autoWiredLength(bool crossSlice) const noexcept;
+
     /// Unregister every *orphaned* sub-simplex: a non-top simplex (size < d+1)
     /// that is no longer a face of any current top cell. Lazy facet/hinge
     /// materialisation (``Simplex::getFacets``) registers sub-simplices that a
@@ -923,6 +949,8 @@ class Spacetime {
     /// Spectral-cache slot; valid iff spectralSlotRevision_ == metricRevisionKey().
     mutable std::shared_ptr<void> spectralSlot_{};
     mutable std::uint64_t spectralSlotRevision_{0};
+    /// See setBalancedEdgeWiring().
+    bool balancedEdgeWiring_{false};
 
     std::vector<std::shared_ptr<Observable> > observables{};
 };
