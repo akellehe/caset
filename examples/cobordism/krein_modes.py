@@ -58,7 +58,7 @@ class KreinModes:
     `cells` is the k-cell vertex-tuple list in `kSimplexVertices(k)` order —
     the index space of every eigenvector component and per-cell weight."""
 
-    def __init__(self, st, degree, im_tol=1e-8, locus_tol=1e-9):
+    def __init__(self, st, degree, im_tol=1e-8, locus_tol=1e-9, null_tol=1e-6):
         chain_complex = cob.ChainComplex.fromSpacetime(st)
         self.degree = degree
         self.cells = [tuple(c) for c in chain_complex.kSimplexVertices(degree)]
@@ -99,6 +99,26 @@ class KreinModes:
             else:
                 self.reason = (f"complex edge intervals (max|Im ℓ²| = "
                                f"{self.imag_interval_leak:.3e})")
+            # Off the real-l^2 locus the conjugate pairing dissolves, but
+            # W_k L_k stays COMPLEX-SYMMETRIC for any complex weights, so the
+            # BILINEAR self-norm eta_i = v_i^T W v_i (NO conjugation) is
+            # defined everywhere: |eta| -> 0 is the coordinate-free
+            # annihilation-proximity signal (an exceptional-point mode is
+            # bilinearly self-orthogonal identically), and on the locus eta
+            # reduces to the real +/- Krein norm. Pairing-dependent notions
+            # (pair_count, signatures) deliberately stay locus-only (#694).
+            self.laplacian = laplacian
+            self.weights = np.array(hodge.weights(degree),
+                                    dtype=complex).reshape(-1)
+            eigenvalues, eigenvectors = np.linalg.eig(self.laplacian)
+            self.eigenvalues = eigenvalues
+            self.eigenvectors = eigenvectors
+            self._classify_bilinear(null_tol)
+            self.real_indices = []
+            self.pair_indices = []
+            squared_norms = (np.abs(eigenvectors) ** 2).sum(axis=0)
+            self.w_norms = np.real(self.bilinear_norms) / np.maximum(
+                squared_norms, 1e-300)
             return
         self.on_locus = True
         self.reason = ""
@@ -123,6 +143,37 @@ class KreinModes:
         # pair's localization.
         self.pair_indices = [i for i in range(self.n_cells)
                              if eigenvalues[i].imag > im_tol]
+        self._classify_bilinear(null_tol)
+
+    def _classify_bilinear(self, null_tol):
+        """The locus-independent classification (#694): per-mode BILINEAR
+        self-norm eta_i = v_i^T W v_i and its normalized magnitude, the
+        quasi-null index q_i = |eta_i| / (|v_i|^T |W| |v_i|) in [0, ~1].
+        q -> 0 marks annihilation content: on the locus both members of every
+        broken conjugate pair, off it the exceptional-point-adjacent modes."""
+        v, w = self.eigenvectors, np.asarray(self.weights, dtype=complex)
+        eta = np.einsum("in,i,in->n", v, w, v)
+        scale = np.einsum("in,i,in->n", np.abs(v), np.abs(w), np.abs(v))
+        self.bilinear_norms = eta
+        with np.errstate(invalid="ignore", divide="ignore"):
+            self.quasi_null_index = np.where(scale > 0,
+                                             np.abs(eta) / scale, 0.0)
+        self.null_indices = [i for i in range(self.n_cells)
+                             if self.quasi_null_index[i] <= null_tol]
+
+    @property
+    def null_mode_count(self):
+        """Number of quasi-null (bilinearly self-orthogonal) modes — defined
+        EVERYWHERE. On the locus this is exactly 2 x pair_count (both members
+        of every broken pair are W-null), so consumers displaying
+        null_mode_count / 2 get a trace continuous across locus crossings."""
+        return len(self.null_indices)
+
+    def null_heat(self):
+        """Per-cell |psi|^2 over every quasi-null mode, normalized to total 1.
+        Defined everywhere; on the locus it matches pair_heat (conjugate
+        partners share |psi|^2)."""
+        return self.cell_weight(self.null_indices)
 
     @property
     def pair_count(self):
