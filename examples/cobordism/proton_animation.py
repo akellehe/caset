@@ -1009,7 +1009,26 @@ class ProtonAnimator:
         self.axm.clear()
         self.axm.plot(xs, self.hist["F"], label="F (objective)", color="C0")
         self.axm.plot(xs, self.hist["gradN2"], label="‖∇S‖²", color="C1")
-        self.axm.plot(xs, self.hist["rU"], label="r_U", color="C2")
+        # The residual AS IT ENTERS F: Γ·r_U = F − ‖∇S‖² by definition, so no
+        # engine getter is needed and the identity is exact. At large Γ this
+        # trace visually hugs F — which is the point: the bare r_U line below
+        # (kept, dashed, pre-prefactor) is orders of magnitude away from the
+        # term the objective actually trades against ‖∇S‖², and plotting only
+        # the bare residual made every committed move look F-increasing (the
+        # two big lines render flat at their scale while ‖∇S‖² visibly rises).
+        gamma_ru = [f - g for f, g in zip(self.hist["F"], self.hist["gradN2"])]
+        self.axm.plot(xs, gamma_ru, label="Γ·r_U (= F − ‖∇S‖²)", color="C4",
+                      lw=1.0, alpha=0.9)
+        self.axm.plot(xs, self.hist["rU"], label="r_U (bare, pre-Γ)", color="C2",
+                      ls="--", alpha=0.6)
+        # Per-frame ΔF, signed, on the same symlog axis: descent shows as a
+        # NEGATIVE trace regardless of F's absolute scale, so "is the
+        # objective actually decreasing" is answerable at a glance even when
+        # F's own line renders flat.
+        if len(self.hist["F"]) > 1:
+            dF = [b - a for a, b in zip(self.hist["F"], self.hist["F"][1:])]
+            self.axm.plot(list(xs)[1:], dF, label="ΔF (per frame)",
+                          color="C5", marker=".", ms=3, lw=0.8)
         for b in self._boundaries:
             self.axm.axvline(b - 0.5, color="0.6", ls="--", lw=0.8)
         # LOOKAHEAD INDICATOR: ring the F trace where the committed stage-1 sequence
