@@ -74,7 +74,7 @@ MultiCobordism::MultiCobordism(
     const std::vector<std::vector<complexd>> &outputTargets,
     const std::vector<int> &degrees, double gamma, std::uint64_t seed,
     int precone, bool shouldProposeDispositions, bool preconeTimelike,
-    bool preconeAlternate, bool balancedEdgeWiring)
+    bool preconeAlternate, bool balancedEdgeWiring, bool singularValueRatio)
     : spacetime_(std::move(host)),
       inputTargets_(inputTargets),
       outputTargets_(outputTargets),
@@ -86,6 +86,7 @@ MultiCobordism::MultiCobordism(
                                   registerDegrees_.end())),
       gamma_(gamma),
       balancedEdgeWiring_(balancedEdgeWiring),
+      singularValueRatio_(singularValueRatio),
       randomNumberGenerator_(seed) {
   // The wiring mode must reach the host BEFORE any precone growth below wires
   // its first edge (#690).
@@ -354,9 +355,14 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
     // reference it is "the harmonic of the entire structure", NEVER a pinned
     // region. Read it off the WHOLE complex so the bulk loop drives the whole to
     // carry it (the output EMERGES; it is not frozen by seedOutputs).
-    for (int registerDegree : registerDegrees_)
-      totalResidual += residualOfTargetStateAgainstHarmonicWithDistinctMatching(
-          spacetime, registerDegree, outputTargets_.front(), claimedMatchings);
+    // In the singularValueRatio mode this period read is part of the
+    // whole-complex term the ratio below replaces, so it is skipped — the
+    // output target then names an EXPECTATION for the after-the-fact readout
+    // (and sizes expectedRegisterCount), never a scored prescription.
+    if (!singularValueRatio_)
+      for (int registerDegree : registerDegrees_)
+        totalResidual += residualOfTargetStateAgainstHarmonicWithDistinctMatching(
+            spacetime, registerDegree, outputTargets_.front(), claimedMatchings);
   } else {
     // Multiple outputs (e.g. a 2->2 recombination → diquark ⊔ antidiquark) live in
     // distinct regions: read each off its own constructed block. EMPTY outputTargets
@@ -372,6 +378,16 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
         for (const auto &outputTarget : outputTargets_)
           totalResidual += residualOfTargetStateAgainstHarmonicWithDistinctMatching(
               spacetime, registerDegree, outputTarget, claimedMatchings);
+  }
+  if (singularValueRatio_) {
+    // The whole-complex term in the ratio mode (#697): one scale-invariant
+    // spectral-shape term per degree covers BOTH regimes the two terms below
+    // split between — it reads the full spectrum, so it presses from the bare
+    // seed (no topological threshold) and keeps pressing after the holes open
+    // (the lower half keeps collapsing past the exact kernel).
+    for (int registerDegree : registerDegrees_)
+      totalResidual += singularValueHalfSumRatio(spacetime, registerDegree);
+    return totalResidual;
   }
   // The pre-topological register signal (#644): the period residuals above are
   // STEP functions in the topology — exactly flat until a register exists — so
@@ -440,6 +456,43 @@ double MultiCobordism::nearKernelResidual(
   // 0). Missing dimensions count 1 each — the generic-mode value.
   return static_cast<double>(n) * smallest / total +
          static_cast<double>(expectedRegisterCount - m);
+}
+
+double MultiCobordism::singularValueHalfSumRatio(
+    const std::shared_ptr<Spacetime> &spacetime, int registerDegree) {
+  cobordism::HodgeLaplacian laplacian(spacetime);
+  // The SAME operator nearKernelResidual reads (metric, signed, generally
+  // non-normal — see its comment); the two terms are alternatives for the one
+  // whole-complex slot in rU, so they must see the same spectrum.
+  const std::vector<std::complex<double>> flat =
+      laplacian.laplacian(registerDegree, /*metric=*/true);
+  const std::size_t n = static_cast<std::size_t>(
+      std::llround(std::sqrt(static_cast<double>(flat.size()))));
+  // No k-cells: the worst case on the [0, 1] scale. Returning the perfect 0
+  // here would reward deleting every k-cell over collapsing the spectrum.
+  if (n == 0) return 1.0;
+  const std::size_t h = n / 2;
+  if (h == 0) return 0.0;  // a single mode: no pair of halves to compare
+  Eigen::MatrixXcd L(static_cast<Eigen::Index>(n), static_cast<Eigen::Index>(n));
+  for (std::size_t i = 0; i < n; ++i)
+    for (std::size_t j = 0; j < n; ++j)
+      L(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) =
+          flat[i * n + j];
+  Eigen::BDCSVD<Eigen::MatrixXcd> svd(L);
+  const Eigen::VectorXd sigma = svd.singularValues();  // descending
+  double upperHalfSum = 0.0;
+  double lowerHalfSum = 0.0;
+  for (std::size_t i = 0; i < h; ++i) {
+    upperHalfSum += sigma[static_cast<Eigen::Index>(i)];
+    lowerHalfSum += sigma[static_cast<Eigen::Index>(n - h + i)];
+  }
+  // L identically zero: every mode is kernel — nothing left to collapse.
+  if (upperHalfSum <= 0.0) return 0.0;
+  // Each lower-half value is bounded by its upper-half counterpart (descending
+  // order), so the ratio lives in [0, 1]; and L is homogeneous of degree −1 in
+  // l^2, so a uniform rescale scales every sigma alike and cancels — degree 0,
+  // the same closed conformal-inflation channel as nearKernelResidual.
+  return lowerHalfSum / upperHalfSum;
 }
 
 double MultiCobordism::objective() const {
