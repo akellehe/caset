@@ -81,6 +81,7 @@ inline void removeAndClearEdges(Edges &edges, Spacetime *st) {
   for (const auto &e : edges) {
     e->getSource()->removeOutEdge(e);
     e->getTarget()->removeInEdge(e);
+    st->absorbRemovedEdgeRevisions(e);   // #692: keep metricRevisionKey monotone
     st->getEdgeList()->remove(e);
   }
   edges.clear();

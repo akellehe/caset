@@ -349,6 +349,12 @@ probability. Sits next to ``modularityOnSkeleton``.
 Uses the topology's builder (e.g. Toroid staircase triangulation) to
 create the initial simplicial complex.  The actual number of simplices
 may differ slightly due to slab quantization.)doc")
+      .def("metricRevisionKey", &Spacetime::metricRevisionKey,
+           "Monotone metric revision: structural revision + every live edge's "
+           "length and phase revision counters. Strictly increases under any "
+           "mutation (creation, setLength, setPhase, simplex register/"
+           "unregister, edge removal), so it can key caches and assert "
+           "invariants (#692).")
       .def_static("fromCells", &Spacetime::fromCells,
            py::arg("dimensions"), py::arg("cells"),
            py::arg("weight") = 1.0, py::arg("phase") = 0.0,

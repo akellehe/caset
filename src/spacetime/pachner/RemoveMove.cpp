@@ -237,12 +237,14 @@ bool RemoveMove::applyPreGeometric() {
   for (const auto &e : inCopy) {
     e->getSource()->removeOutEdge(e);
     v_->removeInEdge(e);
+    st_->absorbRemovedEdgeRevisions(e);
     st_->getEdgeList()->remove(e);
   }
   Edges outCopy(v_->getOutEdges().begin(), v_->getOutEdges().end());
   for (const auto &e : outCopy) {
     e->getTarget()->removeInEdge(e);
     v_->removeOutEdge(e);
+    st_->absorbRemovedEdgeRevisions(e);
     st_->getEdgeList()->remove(e);
   }
   (void)st_->removeIfIsolated(v_);
@@ -292,12 +294,14 @@ bool RemoveMove::apply() {
   for (const auto &e : inCopy) {
     e->getSource()->removeOutEdge(e);
     v_->removeInEdge(e);
+    st_->absorbRemovedEdgeRevisions(e);
     st_->getEdgeList()->remove(e);
   }
   Edges outCopy(v_->getOutEdges().begin(), v_->getOutEdges().end());
   for (const auto &e : outCopy) {
     e->getTarget()->removeInEdge(e);
     v_->removeOutEdge(e);
+    st_->absorbRemovedEdgeRevisions(e);
     st_->getEdgeList()->remove(e);
   }
   (void)st_->removeIfIsolated(v_);

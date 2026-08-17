@@ -139,6 +139,7 @@ Vertex::moveEdgesToImpl(
     const std::complex<double> movedLength = oldEdge->getLength();
     const double movedPhase = oldEdge->getPhase();
 
+    spacetime->absorbRemovedEdgeRevisions(oldEdge);
     spacetime->getEdgeList()->remove(oldEdge);
 
     // For inEdges: redirect edge to point TO the new vertex (new source = vertex)
