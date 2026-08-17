@@ -545,6 +545,18 @@ class Spacetime {
       const double c = std::sqrt(squaredMagnitude * 0.5);
       return {c, c};
     }
+    /// Absorb a departing edge's revision counters into the structural
+    /// revision, called immediately BEFORE removing it from the edge list.
+    /// metricRevisionKey() sums live edges' counters, so an uncompensated
+    /// removal would DECREASE the key and could later collide with a stamp
+    /// made for an older geometry — a false spectral-cache hit (#692). The
+    /// +1 covers the removal event itself; the mirror of the absorption
+    /// Simplex::removeEdge already performs for its own geometry cache.
+    void absorbRemovedEdgeRevisions(const EdgePtr &edge) noexcept {
+      if (edge)
+        structuralRevision_ += edge->lengthRevision() + edge->phaseRevision() + 1;
+    }
+
     /// The auto-wiring rule for a new edge, honoring the wiring mode:
     /// `crossSlice` = the endpoints sit on different time slices (the
     /// timelike class, scale α·a); same-slice edges use scale a.

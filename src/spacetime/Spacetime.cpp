@@ -1450,6 +1450,7 @@ void Spacetime::removeEdge(const EdgePtr &edge) {
   if (edge == nullptr) return;
   if (auto src = edge->getSource()) src->removeOutEdge(edge);
   if (auto tgt = edge->getTarget()) tgt->removeInEdge(edge);
+  absorbRemovedEdgeRevisions(edge);
   edgeList->remove(edge);
 }
 
