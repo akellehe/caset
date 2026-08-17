@@ -1430,8 +1430,9 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
               stage1_candidates=_STAGE1_CANDIDATES,
               max_lookahead_depth=_MAX_LOOKAHEAD_DEPTH,
               max_lookahead_tries=_MAX_LOOKAHEAD_TRIES,
+              stage2_alpha0=0.05, stage2_rel_tol=10e-9,
               stage2_beta=1.0, interval=200,  # interval: ms/frame; GIF/MP4 fps = 1000/interval
-              stage2_alpha0=0.05, stage2_rel_tol=10e-9, relax_budget=10,
+              relax_budget=10,
               dump_dir=None, **anim_kw):
     """Run the one-step proton build over `nodes` with the combined `run` drive: an init
     pass (`grow_boundaries=True`) then an evolution pass (`grow_boundaries=False`), each
