@@ -194,7 +194,18 @@ class Edge {
 
     /// Set the U(1) connection phase (radians).  Used by the Hermitian-weighted
     /// Laplacian and its gauge transform to rephase the edge without rebuilding the mesh.
-    void setPhase(double p) noexcept { phase = p; }
+    void setPhase(double p) noexcept {
+      phase = p;
+      ++phaseRevision_;
+    }
+
+    /// Monotone ``setPhase`` counter, the phase analogue of ``lengthRevision``.
+    /// The k=0 Hermitian Laplacian reads phases, so the shared spectrum cache
+    /// keys on BOTH counters; the Simplex geometry cache (Gram/Cayley-Menger)
+    /// keys on lengths alone and deliberately ignores this one.
+    [[nodiscard]] std::uint64_t phaseRevision() const noexcept {
+      return phaseRevision_;
+    }
 
     /// Walk a closed loop of ordered directed steps (each Edge's
     /// getSource()->getTarget() is one traversal step). Invokes f(sourceId,
@@ -264,6 +275,8 @@ class Edge {
     std::complex<double> length_{};
     /// Monotone ``setLength`` counter read by ``lengthRevision()``; see there.
     std::uint64_t lengthRevision_{0};
+    /// Monotone ``setPhase`` counter read by ``phaseRevision()``; see there.
+    std::uint64_t phaseRevision_{0};
     double phase = 0.0;
 
     Simplices simplices_{};

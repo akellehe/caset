@@ -286,7 +286,20 @@ class HodgeLaplacian {
       std::vector<std::complex<double>> evecs{};         // flat |C_k|*|C_k|, columns
       std::vector<std::complex<double>> wk{};                          // signed W_k, length |C_k|
     };
-    mutable std::unordered_map<long long, SpectrumCache> spectrumCache_{};
+    /// The spectrum map, SHARED across every HodgeLaplacian built on the same
+    /// spacetime at the same geometry (#688): the residual/readout path
+    /// constructs a fresh operator per call (~275x per objective evaluation,
+    /// measured on #683), and a per-instance map re-ran the dense
+    /// ComplexEigenSolver each time. The constructor adopts the spacetime's
+    /// revision-stamped spectral slot when current, else creates a fresh map
+    /// and stores it; entries are keyed by (k, metric, weight convention), so
+    /// instances with different conventions share the map without collisions.
+    /// The deliberately-uncached ``apply``/``residual`` honesty paths and the
+    /// k=0 Hermitian decomposition below are untouched.
+    struct SharedSpectrumMap {
+      std::unordered_map<long long, SpectrumCache> map{};
+    };
+    std::shared_ptr<SharedSpectrumMap> sharedSpectra_{};
 
     // Throw for k < 0 (no negative-degree chains).
     static void requireNonNegativeDegree(int k);
