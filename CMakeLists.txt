@@ -53,9 +53,12 @@ endif()
 # configs (Debug etc.), where it both links and runs and dev builds want the
 # speed; Release falls back to the system default linker. This is a
 # single-config build (scikit-build sets CMAKE_BUILD_TYPE), so a plain
-# CMAKE_BUILD_TYPE guard is sufficient.
+# CMAKE_BUILD_TYPE guard is sufficient. RelWithDebInfo is excluded for the
+# same reason: it is the Release build plus DWARF (#682) — same LTO link,
+# same lld/mold hazard.
 if (NOT "$ENV{TESSERA_FAST_LINKER}" STREQUAL "0"
-        AND NOT CMAKE_BUILD_TYPE STREQUAL "Release")
+        AND NOT CMAKE_BUILD_TYPE STREQUAL "Release"
+        AND NOT CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
     find_program(MOLD_PROGRAM mold)
     find_program(LLD_PROGRAM ld.lld)
     if (MOLD_PROGRAM)
@@ -329,9 +332,16 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR TESSERA_PROFILE)
     message(STATUS "DEBUGGING (-O1, -g3) Support ON.")
     target_compile_options(tessera_core PRIVATE
         -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls)
-elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    message(STATUS "DEBUGGING (-O1, -g3) Support OFF, will use -O3.")
-    target_compile_options(tessera_core PRIVATE -O3)
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    # -g adds DWARF so perf/addr2line can name static functions; it changes
+    # nothing about code generation, so runtime performance is identical to
+    # the plain -O3 build. The shipped build type is RelWithDebInfo because
+    # pybind11_add_module post-build STRIPS Release modules (keeping its LTO
+    # extras) but exempts RelWithDebInfo — Release-with-symbols is impossible
+    # without giving up the pybind11 extras (#682). The -O3 here overrides the
+    # -O2 that CMake's default RelWithDebInfo flags would otherwise apply.
+    message(STATUS "DEBUGGING Support OFF, will use -O3 -g (symbols kept).")
+    target_compile_options(tessera_core PRIVATE -O3 -g)
 endif()
 
 if (TESSERA_VERBOSE)
