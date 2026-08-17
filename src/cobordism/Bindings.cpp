@@ -812,13 +812,15 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
                     std::vector<std::vector<std::complex<double>>>,
                     std::vector<std::vector<std::complex<double>>>,
                     std::vector<int>, double, std::uint64_t, int, bool, bool,
-                    bool>(),
+                    bool, bool, bool>(),
            py::arg("host"), py::arg("input_targets"), py::arg("output_targets"),
            py::arg("degrees") = std::vector<int>{3}, py::arg("gamma") = 1.0,
            py::arg("seed") = 0, py::arg("precone") = 0,
            py::arg("should_propose_dispositions") = true,
            py::arg("precone_timelike") = false,
-           py::arg("precone_alternate") = false)
+           py::arg("precone_alternate") = false,
+           py::arg("balanced_edge_wiring") = false,
+           py::arg("singular_value_ratio") = false)
       .def_static("betti", &MultiCobordism::betti, py::arg("st"))
       .def_static("emergent_holes", &MultiCobordism::emergentHoles,
                   py::arg("st"), py::arg("k"))
@@ -839,6 +841,18 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "gradient (the period residual is a step function in the topology). "
            "The count comes from the TARGETS (one register per target "
            "component), never a constant.")
+      .def_static("singularValueHalfSumRatio",
+           &MultiCobordism::singularValueHalfSumRatio,
+           py::arg("st"), py::arg("register_degree"),
+           "The scale-invariant spectral-shape term the singular_value_ratio "
+           "mode scores as rU's whole-complex contribution, replacing both the "
+           "single-output period residual and nearKernelResidual: the sum of "
+           "the lower half of the singular values of the METRIC L_k over the "
+           "sum of the upper half (odd counts leave the median out of both). "
+           "Range [0, 1]; degree 0 in l^2, so no conformal-inflation channel; "
+           "no target enters — what the register carries is read afterwards. "
+           "An empty degree (no k-cells) scores the worst case 1; a single "
+           "mode or an identically-zero L_k scores 0.")
       .def("expectedRegisterCount", &MultiCobordism::expectedRegisterCount,
            "The number of registers the targets ask for: the largest component "
            "count over every input and output target vector.")
@@ -1044,14 +1058,15 @@ Observable readers (charge/mass/radius/spin) read OFF block() in their own
 tickets.)doc");
   protonClass
       .def(py::init<std::uint64_t, int, double, double, int, bool, bool, bool,
-                    bool>(),
+                    bool, bool>(),
            py::arg("seed") = 0,
            py::arg("register_degree") = 3, py::arg("gamma") = 50.0,
            py::arg("input_weight") = 20.0, py::arg("precone") = 0,
            py::arg("should_use_directed_surgery") = false,
            py::arg("precone_timelike") = false,
            py::arg("precone_alternate") = false,
-           py::arg("balanced_edges") = false)
+           py::arg("balanced_edges") = false,
+           py::arg("singular_value_ratio") = false)
       .def_static("omega", &Proton::omega, "omega = exp(2*pi*i/3).")
       .def_static("singlet", &Proton::singlet,
                   "The proton color singlet {1, w, w*w}.")

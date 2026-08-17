@@ -79,11 +79,17 @@ class Proton {
   ///   * `preconeAlternate` — instead alternate the cone-ins timelike/spacelike
   ///                        for balanced causal content at one uniform
   ///                        edge-length magnitude (wins over `preconeTimelike`).
+  ///   * `singularValueRatio` — every node scores the whole-complex term of
+  ///                        `rU` with the scale-invariant singular-value
+  ///                        half-sum ratio instead of the singlet period
+  ///                        residual + near-kernel pair
+  ///                        (`MultiCobordism::singularValueHalfSumRatio`); the
+  ///                        singlet stays the after-the-fact readout verdict.
   explicit Proton(std::uint64_t seed = 0, int registerDegree = 3,
                   double gamma = 50.0, double inputWeight = 20.0,
                   int precone = 0, bool shouldUseDirectedSurgery = false,
                   bool preconeTimelike = false, bool preconeAlternate = false,
-                  bool balancedEdges = false);
+                  bool balancedEdges = false, bool singularValueRatio = false);
 
   /// Build the proton, restarting across seeds until step B's whole cobordism
   /// carries the singlet with `≥ minQuarkHoles` holes (or `maxRestarts` is
@@ -171,6 +177,7 @@ class Proton {
   int registerDegree_;
   double gamma_;
   bool balancedEdges_{false};
+  bool singularValueRatio_{false};  // forwarded to every node (see the ctor)
   double inputResidualWeight_;
   int precone_;  // gated cone-ins pre-grown into each node's seed (ctor → nodes)
   bool shouldUseDirectedSurgery_;  // build() uses the directed cone-out/cone-in probes

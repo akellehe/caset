@@ -87,6 +87,11 @@ class MultiCobordism {
   /// cone-ins timelike/spacelike for balanced causal content at one uniform
   /// edge-length magnitude (it wins when both are set). Defaults keep the
   /// all-spacelike precone.
+  /// `singularValueRatio` swaps the WHOLE-COMPLEX term of `rU` — both regimes:
+  /// the single-output period residual and its `nearKernelResidual`
+  /// continuation — for the scale-invariant singular-value half-sum ratio
+  /// (`singularValueHalfSumRatio`). The input-block residuals keep anchoring
+  /// the input states; nothing prescribes WHAT the whole comes to carry.
   MultiCobordism(
       std::shared_ptr<Spacetime> host,
       const std::vector<std::vector<std::complex<double>>> &inputTargets,
@@ -95,7 +100,8 @@ class MultiCobordism {
       std::uint64_t seed = 0, int precone = 0,
       bool shouldProposeDispositions = true, bool preconeTimelike = false,
       bool preconeAlternate = false,
-                 bool balancedEdgeWiring = false);
+                 bool balancedEdgeWiring = false,
+                 bool singularValueRatio = false);
 
   /// Move-kind names. Named rather than spelled as string literals at each site:
   /// every kind is written in the draw and compared in the apply, and a typo in
@@ -274,6 +280,25 @@ class MultiCobordism {
   [[nodiscard]] static double nearKernelResidual(
       const std::shared_ptr<Spacetime> &st, int registerDegree,
       std::size_t expectedRegisterCount);
+
+  /// The scale-invariant spectral-shape term the `singularValueRatio` mode uses
+  /// as the whole-complex contribution to `rU`, in place of BOTH the
+  /// single-output period residual and `nearKernelResidual`: the ratio of the
+  /// sum of the lower half of the singular values of the METRIC `L_k` (the same
+  /// signed operator `nearKernelResidual` reads) to the sum of the upper half.
+  /// With `n` values descending and `h = n/2` (integer division), it is
+  /// `(σ_{n−h+1} + … + σ_n) / (σ_1 + … + σ_h)`; an odd `n` leaves the median out
+  /// of both halves. Each lower-half value is bounded by its upper-half
+  /// counterpart, so the ratio lives in `[0, 1]`, and `L_k` is homogeneous of
+  /// degree −1 in `l^2`, so a uniform rescale of the geometry scales every
+  /// `σ` alike and cancels — degree 0, no conformal-inflation channel, no
+  /// prescribed target: the term rewards a collapsing lower half of the
+  /// spectrum, and WHAT the register comes to carry is read out afterwards.
+  /// No `k`-cells at all returns 1 (the worst case — an empty complex must not
+  /// score as a collapsed spectrum); `n = 1` and an identically-zero `L_k`
+  /// return 0 (no pair of halves to compare / every mode already kernel).
+  [[nodiscard]] static double singularValueHalfSumRatio(
+      const std::shared_ptr<Spacetime> &st, int registerDegree);
 
   /// The number of registers the targets ask for: the largest component count
   /// over every input and output target vector (each component is carried by
@@ -598,6 +623,9 @@ class MultiCobordism {
   /// #690: propagated to every spacetime this node constructs
   /// (host before precone, and each candidate snapshot rebuild).
   bool balancedEdgeWiring_{false};
+  /// #697: `rU`'s whole-complex term is `singularValueHalfSumRatio` instead of
+  /// the period residual + `nearKernelResidual` pair (see the constructor).
+  bool singularValueRatio_{false};
   /// Weight on the input-block residual terms in `rU` (see setInputResidualWeight).
   double inputResidualWeight_ = 1.0;
   /// An input region stops growing (growInputRegions) once its residual drops below
