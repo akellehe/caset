@@ -499,6 +499,31 @@ class Spacetime {
       bettiCacheRevision_ = structuralRevision_;
     }
 
+    /// Monotone METRIC revision: the structural revision plus the sum of every
+    /// edge's length and phase revisions. Any combinatorial change, any
+    /// ``setLength``, and any ``setPhase`` strictly increases it, so an
+    /// unchanged value proves the operators built from this spacetime's
+    /// geometry (the Hodge Laplacians and their spectra) are unchanged.
+    /// O(#edges) walk per call — trivial beside the O(n³) work it gates.
+    [[nodiscard]] std::uint64_t metricRevisionKey() const noexcept;
+
+    /// The opaque spectral-cache slot stamped at the CURRENT metric revision,
+    /// or nullptr when stale. The payload type is owned by the cobordism layer
+    /// (HodgeLaplacian's shared spectrum map); this layer only provides the
+    /// revision-stamped storage so the cache dies with the spacetime. The same
+    /// non-synchronization contract as the Betti slot applies: candidate
+    /// spacetimes are thread-private clones, and the shared complex is scored
+    /// serially.
+    [[nodiscard]] std::shared_ptr<void> cachedSpectralSlot() const noexcept {
+      return spectralSlotRevision_ == metricRevisionKey() ? spectralSlot_
+                                                          : nullptr;
+    }
+    /// Store the spectral payload computed against the CURRENT metric revision.
+    void storeSpectralSlot(std::shared_ptr<void> payload) const noexcept {
+      spectralSlot_ = std::move(payload);
+      spectralSlotRevision_ = metricRevisionKey();
+    }
+
     /// Unregister every *orphaned* sub-simplex: a non-top simplex (size < d+1)
     /// that is no longer a face of any current top cell. Lazy facet/hinge
     /// materialisation (``Simplex::getFacets``) registers sub-simplices that a
@@ -895,6 +920,9 @@ class Spacetime {
     /// Betti cache slot; valid iff bettiCacheRevision_ == structuralRevision_.
     mutable std::vector<int> bettiCache_{};
     mutable std::uint64_t bettiCacheRevision_{0};
+    /// Spectral-cache slot; valid iff spectralSlotRevision_ == metricRevisionKey().
+    mutable std::shared_ptr<void> spectralSlot_{};
+    mutable std::uint64_t spectralSlotRevision_{0};
 
     std::vector<std::shared_ptr<Observable> > observables{};
 };

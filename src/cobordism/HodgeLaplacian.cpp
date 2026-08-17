@@ -250,7 +250,21 @@ HodgeLaplacian::WeightConvention HodgeLaplacian::defaultWeightConvention_ =
 HodgeLaplacian::HodgeLaplacian(std::shared_ptr<Spacetime> st,
                                WeightConvention weights)
     : st_(std::move(st)), weightConvention_(weights) {
-  if (!st_) return;
+  if (!st_) {
+    sharedSpectra_ = std::make_shared<SharedSpectrumMap>();
+    return;
+  }
+  // Adopt the spacetime's shared spectrum map when its revision stamp is
+  // current; otherwise start a fresh one and stamp it (#688). Geometry
+  // changes after construction do not touch this instance: it keeps the
+  // map it captured, exactly like the old per-instance cache.
+  if (auto slot = std::static_pointer_cast<SharedSpectrumMap>(
+          st_->cachedSpectralSlot())) {
+    sharedSpectra_ = std::move(slot);
+  } else {
+    sharedSpectra_ = std::make_shared<SharedSpectrumMap>();
+    st_->storeSpectralSlot(sharedSpectra_);
+  }
   // Stable vertex order: sort by id, then id -> 0..N-1.
   const auto &verts = st_->getVertexList()->toVector();
   ids_.reserve(verts.size());
@@ -415,7 +429,12 @@ std::vector<std::complex<double>> HodgeLaplacian::laplacianGradient(
 
 const HodgeLaplacian::SpectrumCache &HodgeLaplacian::ensureSpectrum(
     int k, bool metric) const {
-  const long long key = static_cast<long long>(k) * 2 + (metric ? 1 : 0);
+  // (k, metric, weight convention): the map is shared across instances (#688)
+  // whose conventions may differ, so the convention is part of the key.
+  const long long key =
+      (static_cast<long long>(k) * 2 + (metric ? 1 : 0)) * 2 +
+      (weightConvention_ == WeightConvention::SquaredContent ? 1 : 0);
+  auto &spectrumCache_ = sharedSpectra_->map;
   const auto cached = spectrumCache_.find(key);
   if (cached != spectrumCache_.end()) return cached->second;
 

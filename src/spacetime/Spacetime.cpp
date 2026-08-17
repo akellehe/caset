@@ -583,6 +583,14 @@ double Spacetime::getCurrentTime() const noexcept {
   return static_cast<double>(currentTime);
 }
 
+std::uint64_t Spacetime::metricRevisionKey() const noexcept {
+  std::uint64_t key = structuralRevision_;
+  if (edgeList)
+    for (const auto &edge : edgeList->toVector())
+      key += edge->lengthRevision() + edge->phaseRevision();
+  return key;
+}
+
 const std::shared_ptr<EdgeList> &Spacetime::getEdgeList() const noexcept {
   return edgeList;
 }
