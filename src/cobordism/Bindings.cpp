@@ -281,6 +281,11 @@ Euclidean spectrum/kernel.)doc")
            "The process-wide default HodgeWeightConvention, read by every "
            "internally-constructed operator (r_U terms, the near-kernel "
            "residual, the register readout). See setDefaultWeightConvention.")
+      .def_static("defaultWeightConvention",
+           &HodgeLaplacian::defaultWeightConvention,
+           "The process-global default weight convention new HodgeLaplacian "
+           "instances adopt — capture it before setDefaultWeightConvention "
+           "to restore the prior state exactly.")
       .def_static("setDefaultWeightConvention",
            &HodgeLaplacian::setDefaultWeightConvention, py::arg("convention"),
            "Set the process-wide default HodgeWeightConvention. Flip it ONCE "

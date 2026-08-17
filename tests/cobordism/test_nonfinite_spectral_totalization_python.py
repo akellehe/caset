@@ -42,12 +42,12 @@ def _overflowed_holed_surface():
 class NonfiniteSpectralTotalizationTest(unittest.TestCase):
 
     def setUp(self):
+        self._prior_convention = cob.HodgeLaplacian.defaultWeightConvention()
         cob.HodgeLaplacian.setDefaultWeightConvention(
             cob.HodgeWeightConvention.SquaredContent)
 
     def tearDown(self):
-        cob.HodgeLaplacian.setDefaultWeightConvention(
-            cob.HodgeWeightConvention.Content)
+        cob.HodgeLaplacian.setDefaultWeightConvention(self._prior_convention)
 
     def test_near_kernel_residual_totalizes(self):
         st = _overflowed_holed_surface()
