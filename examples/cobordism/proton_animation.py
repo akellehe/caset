@@ -551,35 +551,22 @@ class ProtonAnimator:
             source = "live"
             if not krein.on_locus and krein.imag_interval_leak > 0:
                 # The LIVE state spends most of a build OFF the real-ℓ² locus
-                # (stage 2 explores complex intervals), which would leave the
-                # annihilation panels empty for whole runs. Fall back to the
-                # Re-PROJECTION diagnostic — classify the disposition content
-                # Re ℓ² (spectrum shift vs the live operator measured ~1%
-                # median on build frames) — and LABEL it, rather than showing
-                # nothing. The content-convention cause is NOT projectable
-                # (weights stay imaginary), so it still reports unavailable.
-                try:
-                    proj_cells = [sorted(v.getId() for v in c.getVertices())
-                                  for c in st.getTopSimplices()]
-                    proj_sq = {}
-                    for e in st.getEdgeList().toVector():
-                        a, b = e.getSource().getId(), e.getTarget().getId()
-                        proj_sq[(min(a, b), max(a, b))] = complex(
-                            (e.getLength() ** 2).real, 0.0)
-                    proj_times = {v.getId(): float(v.getTime())
-                                  for v in st.getVertexList().toVector()}
-                    projected = tessera.observables.LiveComplex.load(
-                        proj_cells, proj_sq, proj_times, 4)
-                    candidate = KreinModes(getattr(projected, "st", projected),
-                                           self.k)
-                    if candidate.on_locus:
-                        krein = candidate
-                        source = "projected"
-                except Exception:   # degenerate projection → report off-locus
-                    pass
-            if krein.on_locus:
+                # (stage 2 explores complex intervals). The classification no
+                # longer projects or refuses there: KreinModes now carries the
+                # BILINEAR W-form generalization (#694) — quasi-null modes,
+                # defined for genuinely complex ℓ², reducing exactly to the
+                # broken-pair set on the locus — so the panels read the LIVE
+                # operator with the imaginary part included, labeled as such.
+                source = "bilinear"
+            if krein.on_locus or krein.null_indices is not None:
                 self.hist["pair_src"].append(source)
-                self.hist["pair_count"].append(float(krein.pair_count))
+                # On the locus: the exact broken-pair count. Off it: half the
+                # quasi-null MODE count — equal to pair_count whenever both
+                # are defined, so the trace is continuous across locus
+                # crossings and the off-locus value is labeled by pair_src.
+                self.hist["pair_count"].append(
+                    float(krein.pair_count) if krein.on_locus
+                    else krein.null_mode_count / 2.0)
                 # Weights/eigenvectors are indexed by the (possibly projected)
                 # operator's own cell order; remap onto the LIVE `mode_cells`
                 # order every panel consumer uses. The projection changes
@@ -587,7 +574,10 @@ class ProtonAnimator:
                 live_cells = self.hist["mode_cells"][-1]
                 position = {cell: i for i, cell in enumerate(krein.cells)}
                 permutation = np.array([position[c] for c in live_cells])
-                self.hist["pair_w"].append(krein.pair_heat()[permutation])
+                heat = (krein.pair_heat() if krein.on_locus
+                        else krein.null_heat())
+                self.hist["pair_w"].append(
+                    heat[permutation] if heat.size else heat)
                 # Which SINGULAR directions the broken pairs span. There is no
                 # canonical σ↔λ map on a non-normal operator, so the honest
                 # marking is subspace overlap: per descending rank r, the
@@ -597,10 +587,18 @@ class ProtonAnimator:
                 # coincide). One fully-cancelled direction contributes ≈ 1;
                 # the total is 2·pairs.
                 cancel = np.zeros(sigma.size)
-                for i in krein.pair_indices:
+                if krein.on_locus:
+                    # one representative per pair, x2 for both partners
+                    marked = [(i, 2.0) for i in krein.pair_indices]
+                else:
+                    # off-locus (#694): every quasi-null mode counted once —
+                    # equals the on-locus accounting when both are defined
+                    marked = [(i, 1.0) for i in krein.null_indices]
+                for i, factor in marked:
                     v = krein.eigenvectors[permutation, i]
-                    v = v / np.linalg.norm(v)
-                    cancel += 2.0 * np.abs(vh @ v) ** 2
+                    nrm = np.linalg.norm(v)
+                    if nrm > 0:
+                        cancel += factor * np.abs(vh @ (v / nrm)) ** 2
                 self.hist["sigma_cancel"].append(cancel)
             else:
                 self.hist["pair_src"].append("none")
@@ -1183,9 +1181,9 @@ class ProtonAnimator:
         if getattr(self, "ax_pair", None) is not None and self.hist["pair_w"] and spec_dirty:
             active = self.hist["node"][-1]
             n_pairs = self.hist["pair_count"][-1]
-            src_tag = (", Re-projected"
-                       if (self.hist["pair_src"]
-                           and self.hist["pair_src"][-1] == "projected") else "")
+            src = self.hist["pair_src"][-1] if self.hist["pair_src"] else ""
+            src_tag = {"projected": ", Re-projected",
+                       "bilinear": ", bilinear W-form (off-locus)"}.get(src, "")
             self._draw_mode_heat(
                 self.ax_pair, active, coords_by_node.get(active, {}),
                 self.hist["pair_w"][-1], self._pair_sm, _MODE_CMAP_PAIR,
