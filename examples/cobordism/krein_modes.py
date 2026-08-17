@@ -68,6 +68,14 @@ class KreinModes:
         self.w_norms = np.array([])
         self.real_indices = []
         self.pair_indices = []
+        # De-rotated structure (#703), filled only OFF the locus: the dominant
+        # spectral ray phase (mod pi), exact conjugate pairs about that ray,
+        # and the forming quasi-null modes with the adaptive cut used.
+        self.ray_phase = 0.0
+        self.derotated_pair_partners = []
+        self.derotated_pair_indices = []
+        self.forming_indices = []
+        self.forming_cut = None
         # How far the EDGE INTERVALS stand off the real locus (an absolute
         # max |Im ℓ²| — the state-space distance), and how far the OPERATOR
         # does (relative max |Im L| — what actually breaks the dichotomy).
@@ -119,6 +127,7 @@ class KreinModes:
             squared_norms = (np.abs(eigenvectors) ** 2).sum(axis=0)
             self.w_norms = np.real(self.bilinear_norms) / np.maximum(
                 squared_norms, 1e-300)
+            self._derotated_classification(im_tol)
             return
         self.on_locus = True
         self.reason = ""
@@ -160,6 +169,60 @@ class KreinModes:
                                              np.abs(eta) / scale, 0.0)
         self.null_indices = [i for i in range(self.n_cells)
                              if self.quasi_null_index[i] <= null_tol]
+
+    def _derotated_classification(self, im_tol):
+        """Dominant-ray de-rotation (#703). Balanced-edge geometry makes every
+        edge interval purely imaginary, so the degree-k weights carry one
+        phase each and `L_k` is a phase-rotated NEAR-REAL operator: the
+        conjugate structure the on-locus branch reads about the real axis
+        lives about the ray `e^{i phi} R` instead (measured phi = -pi/2 under
+        V^2, -pi/4 under V). Measure phi as the doubled-angle mean (phase is
+        only defined mod pi), rotate the spectrum back, and pair modes exactly
+        as the on-locus branch would: genuinely off-ray, with the conjugate
+        partner present (1e-6 relative — the rotated realness is approximate,
+        so closure is a match, not an identity). At phi = 0 on a real
+        spectrum this reduces to the on-locus pairing. FORMING modes are the
+        quasi-null tail: bilinear self-norm below a quarter of the median —
+        the coordinate-free "meaningfully departing toward W-nullness" band
+        (exact nulls, q <= null_tol, are a subset by construction)."""
+        lam = self.eigenvalues
+        mags = np.abs(lam)
+        scale = float(mags.max()) if mags.size else 0.0
+        if scale <= 0:
+            return
+        nonzero = mags > 1e-12 * scale
+        if nonzero.any():
+            doubled_mean = np.mean(np.exp(2j * np.angle(lam[nonzero])))
+            if np.abs(doubled_mean) > 0:
+                self.ray_phase = float(0.5 * np.angle(doubled_mean))
+        rotated = lam * np.exp(-1j * self.ray_phase)
+        off_ray = rotated.imag
+        unmatched = set(range(self.n_cells))
+        pairs = []
+        for i in np.argsort(-np.abs(off_ray)):
+            i = int(i)
+            if i not in unmatched or off_ray[i] <= im_tol * scale:
+                continue
+            candidates = [j for j in unmatched
+                          if j != i and off_ray[j] < -im_tol * scale]
+            if not candidates:
+                continue
+            distances = np.abs(rotated[candidates] - np.conj(rotated[i]))
+            best = int(np.argmin(distances))
+            if distances[best] <= 1e-6 * max(abs(rotated[i]), 1e-30):
+                partner = candidates[best]
+                pairs.append((i, partner))
+                unmatched.discard(i)
+                unmatched.discard(partner)
+        self.derotated_pair_partners = pairs
+        self.derotated_pair_indices = [i for i, _ in pairs]
+        q = self.quasi_null_index
+        if q is not None and q.size:
+            median = float(np.median(q))
+            if median > 0:
+                self.forming_cut = median / 4.0
+                self.forming_indices = [
+                    i for i in range(self.n_cells) if q[i] <= self.forming_cut]
 
     @property
     def null_mode_count(self):
