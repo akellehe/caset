@@ -1043,13 +1043,15 @@ accessors lazily trigger build() on first use, so `Proton().block()` just works.
 Observable readers (charge/mass/radius/spin) read OFF block() in their own
 tickets.)doc");
   protonClass
-      .def(py::init<std::uint64_t, int, double, double, int, bool, bool, bool>(),
+      .def(py::init<std::uint64_t, int, double, double, int, bool, bool, bool,
+                    bool>(),
            py::arg("seed") = 0,
            py::arg("register_degree") = 3, py::arg("gamma") = 50.0,
            py::arg("input_weight") = 20.0, py::arg("precone") = 0,
            py::arg("should_use_directed_surgery") = false,
            py::arg("precone_timelike") = false,
-           py::arg("precone_alternate") = false)
+           py::arg("precone_alternate") = false,
+           py::arg("balanced_edges") = false)
       .def_static("omega", &Proton::omega, "omega = exp(2*pi*i/3).")
       .def_static("singlet", &Proton::singlet,
                   "The proton color singlet {1, w, w*w}.")

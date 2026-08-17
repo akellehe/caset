@@ -94,7 +94,8 @@ class MultiCobordism {
       const std::vector<int> &degrees = {3}, double gamma = 1.0,
       std::uint64_t seed = 0, int precone = 0,
       bool shouldProposeDispositions = true, bool preconeTimelike = false,
-      bool preconeAlternate = false);
+      bool preconeAlternate = false,
+                 bool balancedEdgeWiring = false);
 
   /// Move-kind names. Named rather than spelled as string literals at each site:
   /// every kind is written in the draw and compared in the apply, and a typo in
@@ -594,6 +595,9 @@ class MultiCobordism {
   /// register degree (the degree-free validity check needs only the coarsest one).
   int dualComplexGateDegree_;
   double gamma_;
+  /// #690: propagated to every spacetime this node constructs
+  /// (host before precone, and each candidate snapshot rebuild).
+  bool balancedEdgeWiring_{false};
   /// Weight on the input-block residual terms in `rU` (see setInputResidualWeight).
   double inputResidualWeight_ = 1.0;
   /// An input region stops growing (growInputRegions) once its residual drops below

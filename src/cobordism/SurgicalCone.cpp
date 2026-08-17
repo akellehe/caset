@@ -249,8 +249,11 @@ std::pair<bool, std::string> SurgicalCone::coneIn(
           e->getTarget() != nullptr &&
           (e->getSource()->getId() == apexId ||
            e->getTarget()->getId() == apexId))
-        e->setLength(std::sqrt(
-            std::complex<double>(kTimelikeSquaredLength, 0.0)));
+        e->setLength(st_->balancedEdgeWiring()
+                         ? ::tessera::spacetime::Spacetime::balancedLength(
+                               -kTimelikeSquaredLength)
+                         : std::sqrt(std::complex<double>(
+                               kTimelikeSquaredLength, 0.0)));
   }
   for (const auto &e : r.newEdges)
     if (e != nullptr && e->getSource() != nullptr && e->getTarget() != nullptr)

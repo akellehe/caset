@@ -40,7 +40,7 @@ std::vector<std::complex<double>> Proton::singlet() {
 
 Proton::Proton(std::uint64_t seed, int registerDegree, double gamma,
                double inputWeight, int precone, bool shouldUseDirectedSurgery,
-               bool preconeTimelike, bool preconeAlternate)
+               bool preconeTimelike, bool preconeAlternate, bool balancedEdges)
     : baseSeed_(seed),
       registerDegree_(registerDegree),
       gamma_(gamma),
@@ -48,9 +48,11 @@ Proton::Proton(std::uint64_t seed, int registerDegree, double gamma,
       precone_(precone),
       shouldUseDirectedSurgery_(shouldUseDirectedSurgery),
       preconeTimelike_(preconeTimelike),
-      preconeAlternate_(preconeAlternate) {}
+      preconeAlternate_(preconeAlternate) {
+  balancedEdges_ = balancedEdges;
+}
 
-std::shared_ptr<Spacetime> Proton::buildMinimalSeed() {
+std::shared_ptr<Spacetime> Proton::buildMinimalSeed(bool balancedEdges) {
   using namespace ::tessera::spacetime;
   auto metric =
       std::make_shared<Metric>(true, Signature(kDim, SignatureType::Lorentzian));
@@ -62,8 +64,13 @@ std::shared_ptr<Spacetime> Proton::buildMinimalSeed() {
   auto host = std::make_shared<Spacetime>(metric, SpacetimeType::CDT, 1.0, 1.0,
                                           Foliation::PREFERRED, topology);
   host->build();
+  // #690: the wiring mode is stamped before ANY growth, and the seed's own
+  // uniform |l^2| = 1 edges honor it too (balanced: l = sqrt(1/2)*(1+i)).
+  host->setBalancedEdgeWiring(balancedEdges);
   for (auto *edge : host->getEdgeList()->toVector())
-    edge->setLength(std::sqrt(complexd(1.0, 0.0)));
+    edge->setLength(balancedEdges
+                        ? ::tessera::spacetime::Spacetime::balancedLength(1.0)
+                        : std::sqrt(complexd(1.0, 0.0)));
   return host;
 }
 
@@ -77,7 +84,7 @@ std::shared_ptr<MultiCobordism> Proton::recombinationNode(std::uint64_t seed) co
       {complexd(1.0, 0.0), complexd(0.0, 0.0), complexd(-1.0, 0.0)}};
   const std::vector<complexd> diquark = {complexd(1.0, 0.0), w};
   const std::vector<complexd> antidiquark = {complexd(1.0, 0.0), w * w};
-  auto host = buildMinimalSeed();
+  auto host = buildMinimalSeed(balancedEdges_);
   // Capture the seed vertex IDS (not Vertex*) BEFORE constructing the node: with
   // precone_ > 0 the ctor regrows spacetime_ into a fresh complex, destroying the
   // original host's Vertex objects — but the seed ids persist through the rebuilds
@@ -88,7 +95,8 @@ std::shared_ptr<MultiCobordism> Proton::recombinationNode(std::uint64_t seed) co
   auto node = std::make_shared<MultiCobordism>(
       host, pairs, std::vector<std::vector<complexd>>{diquark, antidiquark},
       std::vector<int>{registerDegree_}, gamma_, seed, precone_,
-      /*shouldProposeDispositions=*/true, preconeTimelike_, preconeAlternate_);
+      /*shouldProposeDispositions=*/true, preconeTimelike_, preconeAlternate_,
+      balancedEdges_);
   node->setInputResidualWeight(inputResidualWeight_);
   node->seedInputs({seedVertexIds[0], seedVertexIds[1]});
   node->seedOutputs({seedVertexIds[2], seedVertexIds[3]});
@@ -102,7 +110,7 @@ std::shared_ptr<MultiCobordism> Proton::formationNode(std::uint64_t seed) const 
   const complexd w = omega();
   const std::vector<complexd> diquark = {complexd(1.0, 0.0), w};
   const std::vector<complexd> thirdQuark = {w * w};
-  auto host = buildMinimalSeed();
+  auto host = buildMinimalSeed(balancedEdges_);
   // Capture the seed vertex IDS before constructing the node (see recombinationNode):
   // precone_ > 0 regrows the complex in the ctor, but the seed ids persist.
   std::vector<std::uint64_t> seedVertexIds;
@@ -112,7 +120,8 @@ std::shared_ptr<MultiCobordism> Proton::formationNode(std::uint64_t seed) const 
       host, std::vector<std::vector<complexd>>{diquark, thirdQuark},
       std::vector<std::vector<complexd>>{singlet()},
       std::vector<int>{registerDegree_}, gamma_, seed, precone_,
-      /*shouldProposeDispositions=*/true, preconeTimelike_, preconeAlternate_);
+      /*shouldProposeDispositions=*/true, preconeTimelike_, preconeAlternate_,
+      balancedEdges_);
   node->setInputResidualWeight(inputResidualWeight_);
   node->seedInputs({seedVertexIds[0], seedVertexIds[1]});
   return node;
@@ -130,7 +139,7 @@ std::shared_ptr<MultiCobordism> Proton::directNode(std::uint64_t seed) const {
   const std::vector<std::vector<complexd>> quarksAndAntiquarks = {
       {complexd(1.0, 0.0)}, {w}, {w * w},
       {complexd(1.0, 0.0)}, {std::conj(w)}, {std::conj(w * w)}};
-  auto host = buildMinimalSeed();
+  auto host = buildMinimalSeed(balancedEdges_);
   // Capture the seed vertex IDS before constructing the node (see recombinationNode):
   // precone_ > 0 regrows the complex in the ctor, but the seed ids persist.
   std::vector<std::uint64_t> seedVertexIds;
@@ -139,7 +148,8 @@ std::shared_ptr<MultiCobordism> Proton::directNode(std::uint64_t seed) const {
   auto node = std::make_shared<MultiCobordism>(
       host, quarksAndAntiquarks, std::vector<std::vector<complexd>>{singlet()},
       std::vector<int>{registerDegree_}, gamma_, seed, precone_,
-      /*shouldProposeDispositions=*/true, preconeTimelike_, preconeAlternate_);
+      /*shouldProposeDispositions=*/true, preconeTimelike_, preconeAlternate_,
+      balancedEdges_);
   node->setInputResidualWeight(inputResidualWeight_);
   // Six blocks on a 5-vertex Δ⁴ seed: the anchors cycle. On the bare seed every
   // block's region is the seed's full cell-neighbourhood regardless — the anchor

@@ -82,7 +82,8 @@ class Proton {
   explicit Proton(std::uint64_t seed = 0, int registerDegree = 3,
                   double gamma = 50.0, double inputWeight = 20.0,
                   int precone = 0, bool shouldUseDirectedSurgery = false,
-                  bool preconeTimelike = false, bool preconeAlternate = false);
+                  bool preconeTimelike = false, bool preconeAlternate = false,
+                  bool balancedEdges = false);
 
   /// Build the proton, restarting across seeds until step B's whole cobordism
   /// carries the singlet with `≥ minQuarkHoles` holes (or `maxRestarts` is
@@ -162,12 +163,14 @@ class Proton {
   /// ALL of its topology out of this one simplex through stage 1's F-lowering candidate
   /// draw, and the geometry out of the relaxation — nothing is pre-built (no host
   /// refinement, no metric jitter).
-  [[nodiscard]] static std::shared_ptr<Spacetime> buildMinimalSeed();
+  [[nodiscard]] static std::shared_ptr<Spacetime> buildMinimalSeed(
+      bool balancedEdges = false);
 
   // ---- configuration ----
   std::uint64_t baseSeed_;
   int registerDegree_;
   double gamma_;
+  bool balancedEdges_{false};
   double inputResidualWeight_;
   int precone_;  // gated cone-ins pre-grown into each node's seed (ctor → nodes)
   bool shouldUseDirectedSurgery_;  // build() uses the directed cone-out/cone-in probes

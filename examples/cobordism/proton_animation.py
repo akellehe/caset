@@ -1373,7 +1373,8 @@ class ProtonAnimator:
             raise state["error"]
 
 
-def build_proton_nodes(seed=3, precone=0, precone_timelike=False, gamma=50.0):
+def build_proton_nodes(seed=3, precone=0, precone_timelike=False, gamma=50.0,
+                       balanced_edges=False):
     """The single one-step `MultiCobordism` node the animation drives, as a 1-element
     list: `Proton.direct_node` — the three bare quarks `{1}`, `{ω}`, `{ω²}` plus their
     three anti-quarks (three q-q̄ pairs) as inputs and the proton singlet as the single
@@ -1386,7 +1387,7 @@ def build_proton_nodes(seed=3, precone=0, precone_timelike=False, gamma=50.0):
     `precone=0` (the default) leaves the bare seed untouched. `gamma` is the r_U
     weight in F (the engine default 50)."""
     p = cob.Proton(seed=seed, precone=precone, precone_timelike=precone_timelike,
-                   gamma=gamma)
+                   gamma=gamma, balanced_edges=balanced_edges)
     return [
         (p.direct_node(seed), "Proton — 3 q-q̄ pairs → singlet {1, ω, ω²} (one step)"),
     ]
@@ -1548,6 +1549,14 @@ def main():
                          "threshold-sized line-search micro-steps")
     ap.add_argument("--init-chunk", type=int, default=_INIT_CHUNK, dest="init_chunk",
                     help="init-pass run iterations per animation frame")
+    ap.add_argument("--balanced-edges", action="store_true", dest="balanced_edges",
+                    help="wire EVERY new edge (seed, precone, and combinatorial "
+                         "moves) with equal real and imaginary length components "
+                         "at the same per-class magnitude — l = sqrt(a/2)*(1+i) "
+                         "same-time, sqrt(alpha*a/2)*(1+i) cross-slice, so "
+                         "Re l^2 = 0 exactly: every edge is born causally "
+                         "undecided ON the null locus and stage 2 must choose "
+                         "its character")
     ap.add_argument("--spectra-every", type=int, default=_SPECTRA_REFRESH_EVERY,
                     dest="spectra_every",
                     help="recompute the O(n^3) spectrum/mode/Krein panels at "
@@ -1589,7 +1598,8 @@ def main():
         f"  ·  W = {'V' if args.hodge_weights == 'content' else 'V²'}")
     nodes = build_proton_nodes(seed=args.seed, precone=args.precone,
                                precone_timelike=args.precone_timelike,
-                               gamma=args.gamma)
+                               gamma=args.gamma,
+                               balanced_edges=args.balanced_edges)
     result = run_build(nodes, visualize=args.live, save=args.save, init_steps=args.init,
                        evolve_steps=args.evolve,
                        init_chunk=args.init_chunk, evolve_chunk=args.evolve_chunk,
