@@ -237,6 +237,18 @@ MultiCobordism::RelabelingMatch MultiCobordism::bestRelabelingOfTarget(
     const Eigen::VectorXcd &targetVector,
     const std::set<std::vector<int>> &claimedMatchings, bool skipClaimed) {
   // min over the relabelings of the target components of ||pdT c - ts||^2 (lstsq c).
+  // Total over EVERY configuration (#699): a non-finite period matrix (an
+  // unbounded stage-2 trial overflowed the polynomial cell weights, so the
+  // harmonic periods left double range) scores +inf — an infinitely bad
+  // configuration the line search rejects — instead of handing non-finite
+  // input to BDCSVD, whose compute/solve is undefined behavior with asserts
+  // compiled out (measured: a general protection fault inside rank()).
+  if (!periodMatrixTransposed.allFinite()) {
+    std::vector<int> identityRelabeling(
+        static_cast<std::size_t>(targetVector.size()));
+    std::iota(identityRelabeling.begin(), identityRelabeling.end(), 0);
+    return {std::numeric_limits<double>::infinity(), identityRelabeling, true};
+  }
   Eigen::BDCSVD<Eigen::MatrixXcd> periodSvd(
       periodMatrixTransposed, Eigen::ComputeThinU | Eigen::ComputeThinV);
   RelabelingMatch bestMatch;
@@ -437,6 +449,9 @@ double MultiCobordism::nearKernelResidual(
     for (std::size_t j = 0; j < n; ++j)
       L(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) =
           flat[i * n + j];
+  // Total over EVERY configuration (#699): a non-finite operator evaluates to
+  // +inf (see bestRelabelingOfTarget) rather than reaching BDCSVD.
+  if (!L.allFinite()) return std::numeric_limits<double>::infinity();
   // Singular values of the NON-normal signed operator: the smooth surrogate for
   // the eigenvalue magnitudes (they share the kernel exactly).
   Eigen::BDCSVD<Eigen::MatrixXcd> svd(L);
@@ -478,6 +493,8 @@ double MultiCobordism::singularValueHalfSumRatio(
     for (std::size_t j = 0; j < n; ++j)
       L(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) =
           flat[i * n + j];
+  // Total over EVERY configuration (#699): +inf, as nearKernelResidual.
+  if (!L.allFinite()) return std::numeric_limits<double>::infinity();
   Eigen::BDCSVD<Eigen::MatrixXcd> svd(L);
   const Eigen::VectorXd sigma = svd.singularValues();  // descending
   double upperHalfSum = 0.0;
