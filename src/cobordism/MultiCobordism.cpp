@@ -954,11 +954,17 @@ void MultiCobordism::preconeCells(int count, bool timelike, bool alternate) {
   }
 }
 
-void MultiCobordism::growBoundaryRegions() {
-  // Expand one block's region by a shell — the vertices of every top cell touching
-  // it — so it tracks the bulk's growth and gets room to open the holes that carry
-  // it. A block already carrying (residual < tolerance) is left alone, so it stops
-  // growing once it represents its state.
+void MultiCobordism::growBlockRegions() {
+  // Expand one block's READ WINDOW by a shell — the vertices of every top cell
+  // touching it — so it tracks the bulk's growth and gets room to open the holes
+  // that carry it. A block already carrying (residual < tolerance) is left alone,
+  // so it stops growing once it represents its state.
+  //
+  // This grows a SCORING REGION, never the cobordism's boundary: a block is a
+  // vertex set plus a target, and that set selects the sub-complex the block's
+  // residual is read over. Nothing here creates a cell, an edge, or a vertex —
+  // the only write is to `block.vertices`, and every `spacetime_` access below
+  // is a read.
   //
   // GATED on the block's own residual: the shell is kept only when it does not
   // RAISE the block's r_U term, so region growth can never raise F. The gate is
@@ -1008,15 +1014,16 @@ bool MultiCobordism::stage1Update(int nCandidateMoves, bool growBoundaries,
                                   int maxLookahead) {
   // The register is "carried" (converged) once the summed r_U is essentially zero.
   constexpr double kRegisterCarriedTolerance = 1e-3;
-  // INITIALIZATION ONLY: while establishing the boundary, let each not-yet-carrying
-  // region expand a shell so it can develop the holes that carry its state. Off
-  // during the bulk evolution — the boundary ∂W is then frozen.
+  // INITIALIZATION ONLY: while establishing the boundary states, let each
+  // not-yet-carrying block expand its scoring region by a shell so it can develop
+  // the holes that carry its state. Off during the bulk evolution — the regions
+  // are then frozen too. This never moves ∂W (see growBlockRegions).
   //
   // Growing a region CHANGES F and so must be booked into the trace (#607) —
-  // though with the per-block gate in `growBoundaryRegions` (a shell that raises
+  // though with the per-block gate in `growBlockRegions` (a shell that raises
   // the block's residual is reverted) the booked delta is now always <= 0.
-  // `growBoundaryRegions` mutates only the boundary blocks' vertex sets and never
-  // touches `spacetime_`, so `reggeActionGradient` is provably unchanged and the
+  // `growBlockRegions` mutates only the blocks' scoring-region vertex sets and
+  // never touches `spacetime_`, so `reggeActionGradient` is provably unchanged and the
   // whole objective change is `gamma_ * Δr_U` — exact, not an approximation of the
   // kind `deltaF` makes for the gradient term. Leaving it unbooked let the
   // accumulated trace drift arbitrarily far from `objective()` (measured at tens of
@@ -1024,7 +1031,7 @@ bool MultiCobordism::stage1Update(int nCandidateMoves, bool growBoundaries,
   // acceptance, moves were being committed against a number that was not F.
   if (growBoundaries) {
     const double residualBeforeGrowth = rU(spacetime_);
-    growBoundaryRegions();
+    growBlockRegions();
     const double growthObjectiveDelta =
         gamma_ * (rU(spacetime_) - residualBeforeGrowth);
     if (growthObjectiveDelta != 0.0)
@@ -1079,7 +1086,7 @@ void MultiCobordism::seedBlocks(
     std::vector<BoundaryBlock> &destinationBlocks) {
   // Seed one boundary block per (seed vertex, target): its initial region is the seed
   // vertex's cell-neighbourhood. The block is NOT pre-grown here — runStage1's
-  // growBoundaryRegions grows it under the objective, so the carrying topology is fully
+  // growBlockRegions grows it under the objective, so the carrying topology is fully
   // emergent. The seed vertex is the only anchor (it distinguishes one input/output
   // from another); everything else emerges.
   for (std::size_t blockIndex = 0;
