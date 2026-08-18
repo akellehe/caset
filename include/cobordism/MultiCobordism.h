@@ -204,14 +204,6 @@ class MultiCobordism {
   [[nodiscard]] static std::vector<std::vector<std::uint64_t>> emergentHoles(
       const Spacetime &st, int k);
   /// `Σ_e |actionGradientExact_e|²` — the full-complex Regge extremization term.
-  /// The identity of a boundary block's REGION as one 64-bit number: the
-  /// hash `Fingerprint` computes for a set of identifiers, applied to the
-  /// block's vertex identifiers. It names the region for the parent
-  /// spacetime's sub-complex Betti store
-  /// (`Spacetime::cachedSubcomplexBettiNumbers`). The implementation says why
-  /// a `Fingerprint` object cannot hold a region of this size.
-  [[nodiscard]] static std::uint64_t blockVertexSetKey(
-      const std::set<std::uint64_t> &vertices);
   [[nodiscard]] static double reggeActionGradient(const std::shared_ptr<Spacetime> &st);
   /// The relabeling-invariant, zero-filled residual of `targetState` against the
   /// `L_k` harmonic of `spacetime` over its emergent holes (`r_state` in the

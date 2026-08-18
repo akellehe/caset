@@ -827,13 +827,6 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("balanced_edge_wiring") = false,
            py::arg("singular_value_ratio") = false)
       .def_static("betti", &MultiCobordism::betti, py::arg("st"))
-      .def_static("blockVertexSetKey", &MultiCobordism::blockVertexSetKey,
-           py::arg("vertices"),
-           "The identity of a boundary block's region as one 64-bit number: "
-           "the hash Fingerprint computes for a set of identifiers, applied "
-           "to the region's vertex identifiers. Names the region for the "
-           "parent spacetime's sub-complex Betti store. Order-independent, "
-           "and unlike a Fingerprint object it holds regions of any size.")
       .def_static("emergent_holes", &MultiCobordism::emergentHoles,
                   py::arg("st"), py::arg("k"))
       .def_static("regge_action_gradient", &MultiCobordism::reggeActionGradient, py::arg("st"))

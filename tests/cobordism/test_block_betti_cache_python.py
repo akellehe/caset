@@ -29,27 +29,45 @@ def _node(seed=5):
     return cob.Proton(seed=seed).direct_node(seed)
 
 
-class BlockRegionKeyTest(unittest.TestCase):
-    """The region key names a vertex set, at any region size."""
+class RegionFingerprintTest(unittest.TestCase):
+    """`Fingerprint.fingerprintOf` names a set of identifiers at any size."""
 
-    def test_distinguishes_regions_beyond_the_fingerprint_capacity(self):
-        # A Fingerprint object holds at most tessera::mesh::kMax = 8
-        # identifiers and discards every one past the eighth without
-        # reporting it, so regions agreeing on their first eight vertices
-        # would share an entry. Block regions routinely exceed that (a
-        # live-run complex carried 21 vertices), so the key must separate
-        # sets that differ only past the eighth member.
-        key = cob.MultiCobordism.blockVertexSetKey
+    def test_holds_sets_larger_than_an_instance_can(self):
+        # A Fingerprint INSTANCE stores at most tessera::mesh::kMax = 8
+        # identifiers and drops the rest silently, so sets agreeing on their
+        # first eight members would share a name. Block regions routinely
+        # exceed that (a live-run complex carried 21 vertices), which is why
+        # the region key calls the static instead of holding an instance.
+        name = tessera.mesh.Fingerprint.fingerprintOf
         base = set(range(1, 9))
-        keys = {key(base | {tail}) for tail in range(9, 20)}
-        self.assertEqual(len(keys), 11)
-        self.assertNotIn(key(base), keys)
+        names = {name(base | {tail}) for tail in range(9, 20)}
+        self.assertEqual(len(names), 11)
+        self.assertNotIn(name(base), names)
 
-    def test_distinct_sets_differ(self):
-        key = cob.MultiCobordism.blockVertexSetKey
-        self.assertNotEqual(key({1, 2, 3}), key({1, 2, 4}))
-        self.assertNotEqual(key({1, 2, 3}), key({1, 2}))
-        self.assertEqual(key({1, 2, 3}), key({3, 2, 1}))
+    def test_instance_and_static_are_one_implementation(self):
+        # `fingerprint()` delegates to `fingerprintOf`, so an instance and a
+        # caller hashing the same identifiers cannot drift apart.
+        fingerprint = tessera.mesh.Fingerprint
+        for ids in ({1, 2, 3}, {7}, {11, 4, 9, 2}, set(range(1, 9))):
+            self.assertEqual(fingerprint(sorted(ids)).fingerprint(),
+                             fingerprint.fingerprintOf(ids))
+
+    def test_instance_truncates_where_the_static_does_not(self):
+        # Nine identifiers: the instance keeps kMax = 8 of them and its hash
+        # no longer names the set it was given, which is exactly why the
+        # region key calls the static.
+        fingerprint = tessera.mesh.Fingerprint
+        ids = set(range(1, 10))
+        self.assertNotEqual(fingerprint(sorted(ids)).fingerprint(),
+                            fingerprint.fingerprintOf(ids))
+        self.assertEqual(fingerprint(sorted(ids)).fingerprint(),
+                         fingerprint.fingerprintOf(set(range(1, 9))))
+
+    def test_names_the_set_not_the_order(self):
+        name = tessera.mesh.Fingerprint.fingerprintOf
+        self.assertEqual(name({1, 2, 3}), name({3, 2, 1}))
+        self.assertNotEqual(name({1, 2, 3}), name({1, 2, 4}))
+        self.assertNotEqual(name({1, 2, 3}), name({1, 2}))
 
 
 class BlockBettiCacheTest(unittest.TestCase):

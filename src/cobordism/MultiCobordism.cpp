@@ -346,10 +346,16 @@ double MultiCobordism::residualForBoundaryBlockWithDistinctMatchings(
   // form — per block, per line-search trial, per candidate (measured: 47.5%
   // of live-run cycles). The block's topology is a pure function of the
   // PARENT's cells and the vertex set, so the parent caches the numbers per
-  // (structural revision, vertex-set key): on a hit, pre-seed the child's
+  // (structural revision, region fingerprint): on a hit, pre-seed the child's
   // slot so betti() inside the scoring below never computes; on a miss, store
   // the child's freshly computed numbers back on the parent (#705).
-  const std::uint64_t vertexSetKey = blockVertexSetKey(boundaryBlock.vertices);
+  //
+  // The region is named by `Fingerprint::fingerprintOf` over its vertex
+  // identifiers — the class's own hash, called as a static because a
+  // `Fingerprint` INSTANCE holds only `kMax` identifiers and drops the rest
+  // silently, while a block region grows across the complex.
+  const std::uint64_t vertexSetKey =
+      ::tessera::mesh::Fingerprint::fingerprintOf(boundaryBlock.vertices);
   if (const auto *cached =
           spacetime->cachedSubcomplexBettiNumbers(vertexSetKey))
     blockSubcomplex->storeBettiNumbers(*cached);
@@ -359,27 +365,6 @@ double MultiCobordism::residualForBoundaryBlockWithDistinctMatchings(
   if (const auto *computed = blockSubcomplex->cachedBettiNumbers())
     spacetime->storeSubcomplexBettiNumbers(vertexSetKey, *computed);
   return residual;
-}
-
-std::uint64_t MultiCobordism::blockVertexSetKey(
-    const std::set<std::uint64_t> &vertices) {
-  // Exactly the hash `Fingerprint` computes for a set of identifiers: each
-  // identifier through `Fingerprint::mix64` (the shared avalanche mixer),
-  // combined with exclusive-or so the result does not depend on the order the
-  // identifiers arrive in. This calls that mixer rather than restating one,
-  // so both hashes stay one implementation.
-  //
-  // A `Fingerprint` OBJECT cannot hold a block region: `tessera::mesh::kMax`
-  // caps a fingerprint at 8 identifiers and `addId` discards every one past
-  // the eighth without reporting it, which is right for a simplex (at most 5
-  // vertices) and wrong here — a block region grows to cover much of the
-  // complex (measured: 21 vertices in the complex at frame 119 of a live
-  // run), so the ninth vertex onward would vanish from the key and two
-  // genuinely different regions could share one entry.
-  std::uint64_t hash = 0;
-  for (const std::uint64_t vertexId : vertices)
-    hash ^= ::tessera::mesh::Fingerprint::mix64(vertexId);
-  return hash;
 }
 
 double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
