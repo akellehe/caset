@@ -388,9 +388,15 @@ class ProtonAnimator:
         # Relaxation-only drive (#716): no combinatorial moves of any kind —
         # no Pachner moves, no surgical cones, no disposition flips — and no
         # growth of the blocks' scoring regions, so the triangulation is fixed
-        # and F descends within one region. `relax_chunk` is how much relaxation ONE frame advances, so a
-        # descent can be watched instead of finishing inside a single frame;
-        # defaulting it to relax_budget reproduces the existing cadence.
+        # and F descends within one region.
+        #
+        # The two relaxation knobs are DISTINCT and neither shadows the other.
+        # `relax_budget` is the engine's relaxBudgetPerMove: how much
+        # relaxation follows a committed move in the interleaved drive.
+        # `relax_chunk` belongs to the relaxation-only drive alone, where a
+        # frame IS a block of stage-2 iterations and there is no committed move
+        # to budget against; it defaults to relax_budget so the two agree when
+        # unset.
         self.no_combinatorial_moves = bool(no_combinatorial_moves)
         self.relax_chunk = int(relax_chunk) if relax_chunk else int(relax_budget)
         self.status = bool(status)
@@ -475,7 +481,7 @@ class ProtonAnimator:
                          grow_boundaries=(phase == "init"), beta=self.s2_beta,
                          alpha0=self.s2_alpha0, rel_tol=self.s2_rel_tol,
                          max_lookahead=self.lookahead_depth,
-                         relax_budget_per_move=self.relax_chunk)
+                         relax_budget_per_move=self.relax_budget)
                 if int(node.last_stage1_lookahead) > 0:
                     break
             self._last_relax_steps = None   # `run` does not report its trace
@@ -1580,7 +1586,7 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
     (GIF/MP4) to animate it step-by-step (slower); that returns the per-step history."""
     if not visualize and not save:
         out = []
-        chunked = bool(no_combinatorial_moves or relax_chunk)
+        chunked = bool(no_combinatorial_moves)
         for node, label in nodes:
             if chunked:
                 # A chunked headless drive, so `--no-combinatorial-moves` and
@@ -1602,7 +1608,7 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                                      beta=stage2_beta, alpha0=stage2_alpha0,
                                      rel_tol=stage2_rel_tol,
                                      max_lookahead=max_lookahead_depth,
-                                     relax_budget_per_move=chunk)
+                                     relax_budget_per_move=relax_budget)
                             accepted = None
                         if status:
                             st_now = node.st
@@ -1768,12 +1774,13 @@ def main():
                          "sigma, modes, Krein). Default 3 (L_3 on a "
                          "4-manifold)")
     ap.add_argument("--relax-chunk", type=int, default=None, dest="relax_chunk",
-                    help="geometric-relaxation iterations advanced per frame, "
-                         "so a descent can be watched instead of finishing "
-                         "inside one frame. Under --no-combinatorial-moves this "
-                         "is the stage-2 iterations per frame; otherwise it caps "
-                         "the per-frame relaxation. Default: --relax-budget "
-                         "(today's cadence)")
+                    help="stage-2 iterations one frame advances in the "
+                         "relaxation-only drive, so a descent can be watched "
+                         "instead of finishing inside a single frame. Requires "
+                         "--no-combinatorial-moves: in the interleaved drive a "
+                         "frame is one move plus its relaxation, and the amount "
+                         "of that relaxation is --relax-budget. Default: "
+                         "--relax-budget")
     ap.add_argument("--no-status", action="store_false", dest="status",
                     help="silence the per-frame status line (F, its change, "
                          "the objective's two terms, cell/Betti/hole counts, "
@@ -1817,6 +1824,11 @@ def main():
     cob.HodgeLaplacian.setDefaultWeightConvention(convention)
     ProtonAnimator._TITLE_PREFIX += (
         f"  ·  W = {'V' if args.hodge_weights == 'content' else 'V²'}")
+    if args.relax_chunk and not args.no_combinatorial_moves:
+        ap.error("--relax-chunk applies to the relaxation-only drive; pass "
+                 "--no-combinatorial-moves with it. In the interleaved drive a "
+                 "frame is one move plus its relaxation, and that relaxation is "
+                 "sized by --relax-budget.")
     nodes = build_proton_nodes(seed=args.seed, precone=args.precone,
                                precone_timelike=args.precone_timelike,
                                gamma=args.gamma,
