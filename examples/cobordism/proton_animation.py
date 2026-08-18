@@ -391,7 +391,8 @@ class ProtonAnimator:
                      "min_det2": [], "min_det3": [], "sigma": [],
                      "mode_w": [], "mode_w_head": [], "mode_cells": [],
                      "pair_count": [], "pair_w": [], "im_leak": [],
-                     "sigma_cancel": [], "pair_src": [], "spec_frame": []}
+                     "sigma_cancel": [], "sigma_cancel_soft": [],
+                     "pair_src": [], "spec_frame": []}
         self._boundaries = []       # step indices where a later node begins (trace markers)
         self._layouts = [_StableLayout() for _ in nodes]   # one per complex panel
         self._active = 0            # index of the node currently being driven
@@ -493,7 +494,7 @@ class ProtonAnimator:
         else:
             for key in ("sigma", "mode_w", "mode_w_head", "mode_cells",
                         "im_leak", "pair_src", "pair_count", "pair_w",
-                        "sigma_cancel", "spec_frame"):
+                        "sigma_cancel", "sigma_cancel_soft", "spec_frame"):
                 self.hist[key].append(self.hist[key][-1])
         # Null-face proximity: the smallest |det G| over the complex's triangles
         # and tets — 0 = a face exactly tangent to the light cone (degenerate).
@@ -564,9 +565,12 @@ class ProtonAnimator:
                 # quasi-null MODE count — equal to pair_count whenever both
                 # are defined, so the trace is continuous across locus
                 # crossings and the off-locus value is labeled by pair_src.
+                # On the locus: the exact broken-pair count. Off it: the
+                # DE-ROTATED pair count (#703) — pairs about the measured
+                # dominant ray, the same definition the locus reads at phi=0.
                 self.hist["pair_count"].append(
                     float(krein.pair_count) if krein.on_locus
-                    else krein.null_mode_count / 2.0)
+                    else float(len(krein.derotated_pair_partners)))
                 # Weights/eigenvectors are indexed by the (possibly projected)
                 # operator's own cell order; remap onto the LIVE `mode_cells`
                 # order every panel consumer uses. The projection changes
@@ -575,7 +579,11 @@ class ProtonAnimator:
                 position = {cell: i for i, cell in enumerate(krein.cells)}
                 permutation = np.array([position[c] for c in live_cells])
                 heat = (krein.pair_heat() if krein.on_locus
-                        else krein.null_heat())
+                        else krein.cell_weight(sorted(
+                            {i for pair in krein.derotated_pair_partners
+                             for i in pair}
+                            | set(krein.null_indices)
+                            | set(krein.forming_indices))))
                 self.hist["pair_w"].append(
                     heat[permutation] if heat.size else heat)
                 # Which SINGULAR directions the broken pairs span. There is no
@@ -587,24 +595,37 @@ class ProtonAnimator:
                 # coincide). One fully-cancelled direction contributes ≈ 1;
                 # the total is 2·pairs.
                 cancel = np.zeros(sigma.size)
+                soft_cancel = np.zeros(sigma.size)
                 if krein.on_locus:
                     # one representative per pair, x2 for both partners
                     marked = [(i, 2.0) for i in krein.pair_indices]
+                    soft_marked = []
                 else:
-                    # off-locus (#694): every quasi-null mode counted once —
-                    # equals the on-locus accounting when both are defined
-                    marked = [(i, 1.0) for i in krein.null_indices]
-                for i, factor in marked:
-                    v = krein.eigenvectors[permutation, i]
-                    nrm = np.linalg.norm(v)
-                    if nrm > 0:
-                        cancel += factor * np.abs(vh @ (v / nrm)) ** 2
+                    # off-locus (#703): HARD = exact structure — de-rotated
+                    # conjugate pairs (both partners, once each) plus exact
+                    # W-null modes; SOFT = the forming quasi-null band
+                    # (q below a quarter of the median), minus the hard set.
+                    hard = ({i for pair in krein.derotated_pair_partners
+                             for i in pair} | set(krein.null_indices))
+                    marked = [(i, 1.0) for i in sorted(hard)]
+                    soft_marked = [(i, 1.0)
+                                   for i in krein.forming_indices
+                                   if i not in hard]
+                for rows, marks in ((cancel, marked),
+                                    (soft_cancel, soft_marked)):
+                    for i, factor in marks:
+                        v = krein.eigenvectors[permutation, i]
+                        nrm = np.linalg.norm(v)
+                        if nrm > 0:
+                            rows += factor * np.abs(vh @ (v / nrm)) ** 2
                 self.hist["sigma_cancel"].append(cancel)
+                self.hist["sigma_cancel_soft"].append(soft_cancel)
             else:
                 self.hist["pair_src"].append("none")
                 self.hist["pair_count"].append(float("nan"))
                 self.hist["pair_w"].append(np.array([]))
                 self.hist["sigma_cancel"].append(np.array([]))
+                self.hist["sigma_cancel_soft"].append(np.array([]))
                 self._pair_note = f"off the real-ℓ² locus: {krein.reason}"
         else:
             self.hist["sigma"].append(np.array([]))
@@ -614,6 +635,7 @@ class ProtonAnimator:
             self.hist["pair_w"].append(np.array([]))
             self.hist["im_leak"].append(0.0)
             self.hist["sigma_cancel"].append(np.array([]))
+            self.hist["sigma_cancel_soft"].append(np.array([]))
             self.hist["pair_src"].append("none")
             self.hist["mode_cells"].append([])
 
@@ -1154,11 +1176,17 @@ class ProtonAnimator:
                 bars = ax.bar(ranks, shown, width=0.9, color=colors, zorder=3)
                 # Green-edge the CANCELLED directions: ranks whose right
                 # singular vector lies majority (≥ ½) inside the span of the
-                # broken conjugate pairs (Re-projected when off-locus).
+                # exact pair structure — broken conjugate pairs on the locus,
+                # de-rotated pairs about the dominant ray plus exact W-null
+                # modes off it (#703). Dotted green edge: the FORMING band
+                # (quasi-null q below a quarter of the median), not yet exact.
                 cancel = (self.hist["sigma_cancel"][-1]
                           if self.hist["sigma_cancel"] else np.array([]))
+                soft = (self.hist["sigma_cancel_soft"][-1]
+                        if self.hist["sigma_cancel_soft"] else np.array([]))
+                n_forming = 0
                 if cancel.size == sigma.size:
-                    for bar, share in zip(bars, cancel):
+                    for rank_index, (bar, share) in enumerate(zip(bars, cancel)):
                         if share >= 0.5:
                             # Hatched, not just edged: a 1-pixel outline on a
                             # narrow bar is invisible at panel size.
@@ -1166,6 +1194,12 @@ class ProtonAnimator:
                             bar.set_edgecolor("C2")
                             bar.set_linewidth(1.4)
                             n_cancelled += 1
+                        elif (soft.size == sigma.size
+                              and soft[rank_index] >= 0.5):
+                            bar.set_edgecolor("C2")
+                            bar.set_linewidth(1.2)
+                            bar.set_linestyle((0, (1, 1)))
+                            n_forming += 1
                 # Rolling ghost: the last few frames' spectra as fading steps, so
                 # the spectrum's drift toward the kernel is visible in one look.
                 for age, past in enumerate(reversed(self.hist["sigma"][-6:-1]), 1):
@@ -1179,6 +1213,8 @@ class ProtonAnimator:
                 ax.set_xlim(0.5, sigma.size + 0.5)
             cancel_tag = (f"; green edge: {n_cancelled} cancelled (pairs)"
                           if n_cancelled else "")
+            if n_forming:
+                cancel_tag += f"; dotted: {n_forming} forming"
             ax.set_title(f"σ(L{self.k}) descending — red: {m}-smallest "
                          f"(near-kernel tail){cancel_tag}", fontsize=9)
             ax.set_xlabel("rank (descending)")
