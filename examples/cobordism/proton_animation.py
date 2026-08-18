@@ -105,6 +105,7 @@ import json
 import math
 import os
 import sys
+import time
 
 # --threads must take effect BEFORE tessera loads: OpenMP reads OMP_NUM_THREADS
 # at library initialization, so a post-import setting is silently ignored. The
@@ -376,13 +377,30 @@ class ProtonAnimator:
                  max_lookahead_depth=_MAX_LOOKAHEAD_DEPTH,
                  max_lookahead_tries=_MAX_LOOKAHEAD_TRIES,
                  stage2_alpha0=0.05, stage2_rel_tol=10e-9, relax_budget=10,
-                 spectra_every=_SPECTRA_REFRESH_EVERY):
+                 spectra_every=_SPECTRA_REFRESH_EVERY, no_combinatorial_moves=False,
+                 relax_chunk=None, status=True):
         self._common_init(nodes, degree)
         self.s1c, self.s2_beta = stage1_candidates, stage2_beta
         self.lookahead_depth = max_lookahead_depth
         self.lookahead_tries = max_lookahead_tries
         self.s2_alpha0, self.s2_rel_tol = stage2_alpha0, stage2_rel_tol
         self.relax_budget = relax_budget
+        # Relaxation-only drive (#716): no combinatorial moves of any kind —
+        # no Pachner moves, no surgical cones, no disposition flips — and no
+        # growth of the blocks' scoring regions, so the triangulation is fixed
+        # and F descends within one region.
+        #
+        # The two relaxation knobs are DISTINCT and neither shadows the other.
+        # `relax_budget` is the engine's relaxBudgetPerMove: how much
+        # relaxation follows a committed move in the interleaved drive.
+        # `relax_chunk` belongs to the relaxation-only drive alone, where a
+        # frame IS a block of stage-2 iterations and there is no committed move
+        # to budget against; it defaults to relax_budget so the two agree when
+        # unset.
+        self.no_combinatorial_moves = bool(no_combinatorial_moves)
+        self.relax_chunk = int(relax_chunk) if relax_chunk else int(relax_budget)
+        self.status = bool(status)
+        self._t0 = time.time()
         self.spectra_every = max(1, int(spectra_every))
         self._schedule = self._make_schedule(len(nodes), init_steps, init_chunk,
                                              evolve_steps, evolve_chunk)
@@ -393,6 +411,7 @@ class ProtonAnimator:
         layouts, and curvature cache — everything `_redraw`/`_draw_*`/`verdict` read."""
         self.nodes = nodes                  # [(MultiCobordism, label), ...] in order
         self.k = degree
+        self._last_relax_steps = None       # accepted stage-2 steps this frame
         self.hist = {"F": [], "gradN2": [], "rU": [], "b3": [], "holes": [],
                      "phase": [], "node": [], "lookahead": [], "tries": [],
                      "min_det2": [], "min_det3": [], "sigma": [],
@@ -449,15 +468,71 @@ class ProtonAnimator:
         # default of 1 try is exactly the historical single-draw behaviour and
         # the retries cost nothing on frames that succeed immediately.
         tries = 0
-        for tries in range(1, max(self.lookahead_tries, 1) + 1):
-            node.run(max_iters=count, n_candidate_moves=self.s1c,
-                     grow_boundaries=(phase == "init"), beta=self.s2_beta,
-                     alpha0=self.s2_alpha0, rel_tol=self.s2_rel_tol,
-                     max_lookahead=self.lookahead_depth,
-                     relax_budget_per_move=self.relax_budget)
-            if int(node.last_stage1_lookahead) > 0:
-                break
+        if self.no_combinatorial_moves:
+            # Stage 2 alone. `run_stage2` returns its objective trace, so the
+            # number of ACCEPTED relaxation steps this frame is len(trace) - 1.
+            trace = node.run_stage2(beta=self.s2_beta, max_iters=self.relax_chunk,
+                                    alpha0=self.s2_alpha0, rel_tol=self.s2_rel_tol)
+            self._last_relax_steps = max(len(trace) - 1, 0)
+            tries = 1
+        else:
+            for tries in range(1, max(self.lookahead_tries, 1) + 1):
+                node.run(max_iters=count, n_candidate_moves=self.s1c,
+                         grow_boundaries=(phase == "init"), beta=self.s2_beta,
+                         alpha0=self.s2_alpha0, rel_tol=self.s2_rel_tol,
+                         max_lookahead=self.lookahead_depth,
+                         relax_budget_per_move=self.relax_budget)
+                if int(node.last_stage1_lookahead) > 0:
+                    break
+            self._last_relax_steps = None   # `run` does not report its trace
         self._record(node, node_index, phase, tries)
+        if self.status:
+            self._print_status(node, frame, phase, tries)
+
+    def _print_status(self, node, frame, phase, tries):
+        """One line per frame on stdout: where the drive is, and what is
+        blocking it. Everything here is read from signals the engine already
+        publishes — no extra computation beyond what `_record` just stored.
+
+        The two obstruction signals are the point of this line:
+
+        * `stage1` — `last_stage1_lookahead` is the lookahead depth whose
+          candidate was committed, or 0 when the whole batch found nothing that
+          lowered F. Zero means the combinatorial search is stuck: every drawn
+          move either failed the validity gate or did not improve the
+          objective, so the topology cannot currently leave this region.
+        * `stage2` — `last_stage2_stationary` is true when the line search
+          halved its step all the way down without finding a descending trial.
+          That is the geometric relaxation reporting it has reached the bottom
+          of this region (to `--rel-tol`), not a failure.
+        """
+        history = self.hist
+        objective = history["F"][-1]
+        change = (objective - history["F"][-2]) if len(history["F"]) > 1 else 0.0
+        gradient_norm_squared = history["gradN2"][-1]
+        bare_residual = history["rU"][-1]
+        cell_count = len(node.st.getTopSimplices())
+        if self.no_combinatorial_moves:
+            stage1_note = "stage1 off (--no-combinatorial-moves)"
+        elif int(node.last_stage1_lookahead) > 0:
+            stage1_note = (f"stage1 committed at depth "
+                           f"{int(node.last_stage1_lookahead)}"
+                           + (f" after {tries} draws" if tries > 1 else ""))
+        else:
+            stage1_note = (f"stage1 STUCK: none of {self.s1c} candidates lowered F"
+                           + (f" in {tries} draws" if tries > 1 else ""))
+        if node.last_stage2_stationary:
+            stage2_note = "stage2 STATIONARY (no descending step found)"
+        elif self._last_relax_steps is not None:
+            stage2_note = f"stage2 {self._last_relax_steps} steps accepted"
+        else:
+            stage2_note = "stage2 descending"
+        print(f"f{frame + 1:04d} {phase:<6} | F {objective:.6e} "
+              f"dF {change:+.3e} | grad2 {gradient_norm_squared:.3e} "
+              f"G*rU {objective - gradient_norm_squared:.3e} rU {bare_residual:.3e} | "
+              f"cells {cell_count} b{self.k} {history['b3'][-1]} "
+              f"holes {history['holes'][-1]} | {stage1_note} | {stage2_note} | "
+              f"{time.time() - self._t0:.0f}s", flush=True)
 
     def _record(self, node, node_index, phase, tries=1):
         st = node.st
@@ -1434,7 +1509,8 @@ class ProtonAnimator:
 
 
 def build_proton_nodes(seed=3, precone=0, precone_timelike=False, gamma=50.0,
-                       balanced_edges=False, singular_value_ratio=False):
+                       balanced_edges=False, singular_value_ratio=False,
+                       degree=3):
     """The single one-step `MultiCobordism` node the animation drives, as a 1-element
     list: `Proton.direct_node` — the three bare quarks `{1}`, `{ω}`, `{ω²}` plus their
     three anti-quarks (three q-q̄ pairs) as inputs and the proton singlet as the single
@@ -1448,7 +1524,8 @@ def build_proton_nodes(seed=3, precone=0, precone_timelike=False, gamma=50.0,
     weight in F (the engine default 50)."""
     p = cob.Proton(seed=seed, precone=precone, precone_timelike=precone_timelike,
                    gamma=gamma, balanced_edges=balanced_edges,
-                   singular_value_ratio=singular_value_ratio)
+                   singular_value_ratio=singular_value_ratio,
+                   register_degree=degree)
     return [
         (p.direct_node(seed), "Proton — 3 q-q̄ pairs → singlet {1, ω, ω²} (one step)"),
     ]
@@ -1488,6 +1565,7 @@ def animate(nodes, save=None, interval=200, dump_dir=None, **kw):
 
 
 def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEPS,
+              no_combinatorial_moves=False, relax_chunk=None, status=True,
               evolve_steps=_EVOLVE_STEPS,
               stage1_candidates=_STAGE1_CANDIDATES,
               max_lookahead_depth=_MAX_LOOKAHEAD_DEPTH,
@@ -1508,7 +1586,57 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
     (GIF/MP4) to animate it step-by-step (slower); that returns the per-step history."""
     if not visualize and not save:
         out = []
+        chunked = bool(no_combinatorial_moves)
         for node, label in nodes:
+            if chunked:
+                # A chunked headless drive, so `--no-combinatorial-moves` and
+                # `--relax-chunk` mean the same thing with and without a
+                # window, and the status line is available either way. The
+                # DEFAULT headless path below is left exactly as it was.
+                chunk = int(relax_chunk) if relax_chunk else int(relax_budget)
+                started = time.time()
+                for phase, steps in (("init", init_steps), ("evolve", evolve_steps)):
+                    for step_index in range(steps):
+                        if no_combinatorial_moves:
+                            trace = node.run_stage2(
+                                beta=stage2_beta, max_iters=chunk,
+                                alpha0=stage2_alpha0, rel_tol=stage2_rel_tol)
+                            accepted = max(len(trace) - 1, 0)
+                        else:
+                            node.run(max_iters=1, n_candidate_moves=stage1_candidates,
+                                     grow_boundaries=(phase == "init"),
+                                     beta=stage2_beta, alpha0=stage2_alpha0,
+                                     rel_tol=stage2_rel_tol,
+                                     max_lookahead=max_lookahead_depth,
+                                     relax_budget_per_move=relax_budget)
+                            accepted = None
+                        if status:
+                            st_now = node.st
+                            stage1_note = ("stage1 off (--no-combinatorial-moves)" if no_combinatorial_moves
+                                           else (f"stage1 committed at depth "
+                                                 f"{int(node.last_stage1_lookahead)}"
+                                                 if int(node.last_stage1_lookahead) > 0
+                                                 else "stage1 STUCK: no candidate lowered F"))
+                            stage2_note = ("stage2 STATIONARY (no descending step found)"
+                                           if node.last_stage2_stationary
+                                           else (f"stage2 {accepted} steps accepted"
+                                                 if accepted is not None
+                                                 else "stage2 descending"))
+                            print(f"{phase:<6} {step_index + 1:04d} | "
+                                  f"F {float(node.objective()):.6e} | "
+                                  f"cells {len(st_now.getTopSimplices())} | "
+                                  f"{stage1_note} | {stage2_note} | "
+                                  f"{time.time() - started:.0f}s", flush=True)
+                        if no_combinatorial_moves and node.last_stage2_stationary:
+                            break   # nothing left to relax and nothing to reopen it
+                st = node.st
+                out.append((label, {
+                    "F": float(node.objective()),
+                    "gradN2": float(cob.MultiCobordism.regge_action_gradient(st)),
+                    "rU": float(node.r_u(st)),
+                    "b3": int(cob.MultiCobordism.betti(st)[degree]),
+                    "holes": len(cob.MultiCobordism.emergent_holes(st, degree))}))
+                continue
             # The batched path runs each pass in ONE `run` call, so the engine's
             # own internal retry loop already spans every iteration — the
             # per-frame `max_lookahead_tries` retry has no meaning here and is
@@ -1543,6 +1671,7 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                    max_lookahead_tries=max_lookahead_tries,
                    stage2_beta=stage2_beta, stage2_alpha0=stage2_alpha0,
                    stage2_rel_tol=stage2_rel_tol, relax_budget=relax_budget,
+                   no_combinatorial_moves=no_combinatorial_moves, relax_chunk=relax_chunk, status=status,
                    interval=interval,
                    dump_dir=dump_dir, **anim_kw).hist
 
@@ -1628,6 +1757,34 @@ def main():
                          "pair; the input-block residuals still anchor the "
                          "quark inputs and the singlet stays the read-out "
                          "verdict")
+    ap.add_argument("--no-combinatorial-moves", action="store_true",
+                    dest="no_combinatorial_moves",
+                    help="drive ONLY the geometric relaxation: no combinatorial "
+                         "moves of any kind — no Pachner moves (add, remove, "
+                         "flip, inverse flip), no surgical cone moves, no "
+                         "disposition flips — and no growth of the blocks' "
+                         "scoring regions. The triangulation is fixed for the "
+                         "whole run and F descends within one region of "
+                         "configuration space")
+    ap.add_argument("--degree", type=int, default=3, dest="degree",
+                    help="the register degree k the residuals target — which "
+                         "Hodge Laplacian L_k's eigenvalues r_U minimizes. "
+                         "Reaches both the objective (Proton's register "
+                         "degree) and the readout panels (Betti, holes, "
+                         "sigma, modes, Krein). Default 3 (L_3 on a "
+                         "4-manifold)")
+    ap.add_argument("--relax-chunk", type=int, default=None, dest="relax_chunk",
+                    help="stage-2 iterations one frame advances in the "
+                         "relaxation-only drive, so a descent can be watched "
+                         "instead of finishing inside a single frame. Requires "
+                         "--no-combinatorial-moves: in the interleaved drive a "
+                         "frame is one move plus its relaxation, and the amount "
+                         "of that relaxation is --relax-budget. Default: "
+                         "--relax-budget")
+    ap.add_argument("--no-status", action="store_false", dest="status",
+                    help="silence the per-frame status line (F, its change, "
+                         "the objective's two terms, cell/Betti/hole counts, "
+                         "and the stage-1/stage-2 obstruction signals)")
     ap.add_argument("--spectra-every", type=int, default=_SPECTRA_REFRESH_EVERY,
                     dest="spectra_every",
                     help="recompute the O(n^3) spectrum/mode/Krein panels at "
@@ -1667,11 +1824,17 @@ def main():
     cob.HodgeLaplacian.setDefaultWeightConvention(convention)
     ProtonAnimator._TITLE_PREFIX += (
         f"  ·  W = {'V' if args.hodge_weights == 'content' else 'V²'}")
+    if args.relax_chunk and not args.no_combinatorial_moves:
+        ap.error("--relax-chunk applies to the relaxation-only drive; pass "
+                 "--no-combinatorial-moves with it. In the interleaved drive a "
+                 "frame is one move plus its relaxation, and that relaxation is "
+                 "sized by --relax-budget.")
     nodes = build_proton_nodes(seed=args.seed, precone=args.precone,
                                precone_timelike=args.precone_timelike,
                                gamma=args.gamma,
                                balanced_edges=args.balanced_edges,
-                               singular_value_ratio=args.singular_value_ratio)
+                               singular_value_ratio=args.singular_value_ratio,
+                               degree=args.degree)
     result = run_build(nodes, visualize=args.live, save=args.save, init_steps=args.init,
                        evolve_steps=args.evolve,
                        init_chunk=args.init_chunk, evolve_chunk=args.evolve_chunk,
@@ -1681,6 +1844,8 @@ def main():
                        max_lookahead_depth=args.max_lookahead_depth,
                        max_lookahead_tries=args.max_lookahead_tries,
                        spectra_every=args.spectra_every,
+                       degree=args.degree, no_combinatorial_moves=args.no_combinatorial_moves,
+                       relax_chunk=args.relax_chunk, status=args.status,
                        dump_dir=args.dump_dir)
     if not args.live and not args.save:
         print("one-step proton build finished (visualization off by default — pass --live "
