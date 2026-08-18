@@ -1568,7 +1568,7 @@ class ProtonAnimator:
 
 def build_proton_nodes(seed=3, precone=0, precone_timelike=False, gamma=50.0,
                        balanced_edges=False, singular_value_ratio=False,
-                       degree=3):
+                       degree=3, einstein_hilbert=True):
     """The single one-step `MultiCobordism` node the animation drives, as a 1-element
     list: `Proton.direct_node` — the three bare quarks `{1}`, `{ω}`, `{ω²}` plus their
     three anti-quarks (three q-q̄ pairs) as inputs and the proton singlet as the single
@@ -1583,7 +1583,7 @@ def build_proton_nodes(seed=3, precone=0, precone_timelike=False, gamma=50.0,
     p = cob.Proton(seed=seed, precone=precone, precone_timelike=precone_timelike,
                    gamma=gamma, balanced_edges=balanced_edges,
                    singular_value_ratio=singular_value_ratio,
-                   register_degree=degree)
+                   register_degree=degree, einstein_hilbert=einstein_hilbert)
     return [
         (p.direct_node(seed), "Proton — 3 q-q̄ pairs → singlet {1, ω, ω²} (one step)"),
     ]
@@ -1863,6 +1863,17 @@ def main():
                          "frame is one move plus its relaxation, and the amount "
                          "of that relaxation is --relax-budget. Default: "
                          "--relax-budget")
+    ap.add_argument("--no-einstein-hilbert", action="store_false",
+                    dest="einstein_hilbert",
+                    help="drop the discrete Einstein-Hilbert term from the "
+                         "objective, optimizing F = gamma*r_U alone instead of "
+                         "||grad S_Regge||^2 + gamma*r_U. NOTE stage 2 builds "
+                         "its descent direction from the Regge gradient and "
+                         "Hessian only, so without that term it searches along "
+                         "a ray the objective no longer contains: the run stays "
+                         "monotone (the line search still accepts only trials "
+                         "that lower the true F) but accepts far fewer steps, "
+                         "and the combinatorial moves do most of the work")
     ap.add_argument("--checkpoint", type=int, default=0, metavar="STEPS",
                     help="every STEPS frames, write the complex's state to "
                          "state_<frame>.json: top cells in INTRINSIC vertex "
@@ -1927,7 +1938,8 @@ def main():
                                gamma=args.gamma,
                                balanced_edges=args.balanced_edges,
                                singular_value_ratio=args.singular_value_ratio,
-                               degree=args.degree)
+                               degree=args.degree,
+                               einstein_hilbert=args.einstein_hilbert)
     result = run_build(nodes, visualize=args.live, save=args.save, init_steps=args.init,
                        evolve_steps=args.evolve,
                        init_chunk=args.init_chunk, evolve_chunk=args.evolve_chunk,

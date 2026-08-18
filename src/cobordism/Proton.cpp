@@ -41,7 +41,7 @@ std::vector<std::complex<double>> Proton::singlet() {
 Proton::Proton(std::uint64_t seed, int registerDegree, double gamma,
                double inputWeight, int precone, bool shouldUseDirectedSurgery,
                bool preconeTimelike, bool preconeAlternate, bool balancedEdges,
-               bool singularValueRatio)
+               bool singularValueRatio, bool einsteinHilbert)
     : baseSeed_(seed),
       registerDegree_(registerDegree),
       gamma_(gamma),
@@ -52,6 +52,7 @@ Proton::Proton(std::uint64_t seed, int registerDegree, double gamma,
       preconeAlternate_(preconeAlternate) {
   balancedEdges_ = balancedEdges;
   singularValueRatio_ = singularValueRatio;
+  einsteinHilbert_ = einsteinHilbert;
 }
 
 std::shared_ptr<Spacetime> Proton::buildMinimalSeed(bool balancedEdges) {
@@ -98,7 +99,7 @@ std::shared_ptr<MultiCobordism> Proton::recombinationNode(std::uint64_t seed) co
       host, pairs, std::vector<std::vector<complexd>>{diquark, antidiquark},
       std::vector<int>{registerDegree_}, gamma_, seed, precone_,
       /*shouldProposeDispositions=*/true, preconeTimelike_, preconeAlternate_,
-      balancedEdges_, singularValueRatio_);
+      balancedEdges_, singularValueRatio_, einsteinHilbert_);
   node->setInputResidualWeight(inputResidualWeight_);
   node->seedInputs({seedVertexIds[0], seedVertexIds[1]});
   node->seedOutputs({seedVertexIds[2], seedVertexIds[3]});
@@ -123,7 +124,7 @@ std::shared_ptr<MultiCobordism> Proton::formationNode(std::uint64_t seed) const 
       std::vector<std::vector<complexd>>{singlet()},
       std::vector<int>{registerDegree_}, gamma_, seed, precone_,
       /*shouldProposeDispositions=*/true, preconeTimelike_, preconeAlternate_,
-      balancedEdges_, singularValueRatio_);
+      balancedEdges_, singularValueRatio_, einsteinHilbert_);
   node->setInputResidualWeight(inputResidualWeight_);
   node->seedInputs({seedVertexIds[0], seedVertexIds[1]});
   return node;
@@ -151,7 +152,7 @@ std::shared_ptr<MultiCobordism> Proton::directNode(std::uint64_t seed) const {
       host, quarksAndAntiquarks, std::vector<std::vector<complexd>>{singlet()},
       std::vector<int>{registerDegree_}, gamma_, seed, precone_,
       /*shouldProposeDispositions=*/true, preconeTimelike_, preconeAlternate_,
-      balancedEdges_, singularValueRatio_);
+      balancedEdges_, singularValueRatio_, einsteinHilbert_);
   node->setInputResidualWeight(inputResidualWeight_);
   // Six blocks on a 5-vertex Δ⁴ seed: the anchors cycle. On the bare seed every
   // block's region is the seed's full cell-neighbourhood regardless — the anchor

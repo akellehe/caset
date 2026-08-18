@@ -87,6 +87,16 @@ class MultiCobordism {
   /// cone-ins timelike/spacelike for balanced causal content at one uniform
   /// edge-length magnitude (it wins when both are set). Defaults keep the
   /// all-spacelike precone.
+  /// `einsteinHilbert` (default true) keeps the discrete Einstein-Hilbert term
+  /// `‖∇S_Regge‖²` in the objective. Set it false to optimize `F = gamma * rU`
+  /// alone. NOTE what that does to stage 2: its descent direction is built from
+  /// the Regge gradient and Hessian only, so with the term gone the direction is
+  /// no longer a descent direction for what is being minimized. The line search
+  /// still accepts only trials that lower the true F, so the drive stays
+  /// monotone, but it searches along a ray derived from a term the objective no
+  /// longer contains and will accept far fewer steps — in this mode the
+  /// combinatorial moves do most of the work.
+  ///
   /// `singularValueRatio` swaps the WHOLE-COMPLEX term of `rU` — both regimes:
   /// the single-output period residual and its `nearKernelResidual`
   /// continuation — for the scale-invariant singular-value half-sum ratio
@@ -101,7 +111,8 @@ class MultiCobordism {
       bool shouldProposeDispositions = true, bool preconeTimelike = false,
       bool preconeAlternate = false,
                  bool balancedEdgeWiring = false,
-                 bool singularValueRatio = false);
+                 bool singularValueRatio = false,
+                 bool einsteinHilbert = true);
 
   /// Move-kind names. Named rather than spelled as string literals at each site:
   /// every kind is written in the draw and compared in the apply, and a typo in
@@ -629,6 +640,12 @@ class MultiCobordism {
   /// #697: `rU`'s whole-complex term is `singularValueHalfSumRatio` instead of
   /// the period residual + `nearKernelResidual` pair (see the constructor).
   bool singularValueRatio_{false};
+  /// #724: false drops `‖∇S_Regge‖²` from every objective site (see the ctor).
+  bool einsteinHilbert_{true};
+  /// The Einstein-Hilbert term of the objective, or 0 when it is switched off.
+  /// One place, so `objective`, the stage-2 acceptance test, and `deltaF`
+  /// cannot come to disagree about what F is.
+  [[nodiscard]] double einsteinHilbertTerm(double beta = 1.0) const;
   /// Weight on the input-block residual terms in `rU` (see setInputResidualWeight).
   double inputResidualWeight_ = 1.0;
   /// An input region stops growing (growInputRegions) once its residual drops below

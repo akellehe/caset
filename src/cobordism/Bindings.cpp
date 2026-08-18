@@ -817,7 +817,7 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
                     std::vector<std::vector<std::complex<double>>>,
                     std::vector<std::vector<std::complex<double>>>,
                     std::vector<int>, double, std::uint64_t, int, bool, bool,
-                    bool, bool, bool>(),
+                    bool, bool, bool, bool>(),
            py::arg("host"), py::arg("input_targets"), py::arg("output_targets"),
            py::arg("degrees") = std::vector<int>{3}, py::arg("gamma") = 1.0,
            py::arg("seed") = 0, py::arg("precone") = 0,
@@ -825,7 +825,8 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("precone_timelike") = false,
            py::arg("precone_alternate") = false,
            py::arg("balanced_edge_wiring") = false,
-           py::arg("singular_value_ratio") = false)
+           py::arg("singular_value_ratio") = false,
+           py::arg("einstein_hilbert") = true)
       .def_static("betti", &MultiCobordism::betti, py::arg("st"))
       .def_static("emergent_holes", &MultiCobordism::emergentHoles,
                   py::arg("st"), py::arg("k"))
@@ -1063,7 +1064,7 @@ Observable readers (charge/mass/radius/spin) read OFF block() in their own
 tickets.)doc");
   protonClass
       .def(py::init<std::uint64_t, int, double, double, int, bool, bool, bool,
-                    bool, bool>(),
+                    bool, bool, bool>(),
            py::arg("seed") = 0,
            py::arg("register_degree") = 3, py::arg("gamma") = 50.0,
            py::arg("input_weight") = 20.0, py::arg("precone") = 0,
@@ -1071,7 +1072,8 @@ tickets.)doc");
            py::arg("precone_timelike") = false,
            py::arg("precone_alternate") = false,
            py::arg("balanced_edges") = false,
-           py::arg("singular_value_ratio") = false)
+           py::arg("singular_value_ratio") = false,
+           py::arg("einstein_hilbert") = true)
       .def_static("omega", &Proton::omega, "omega = exp(2*pi*i/3).")
       .def_static("singlet", &Proton::singlet,
                   "The proton color singlet {1, w, w*w}.")

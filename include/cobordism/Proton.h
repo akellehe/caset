@@ -79,6 +79,11 @@ class Proton {
   ///   * `preconeAlternate` — instead alternate the cone-ins timelike/spacelike
   ///                        for balanced causal content at one uniform
   ///                        edge-length magnitude (wins over `preconeTimelike`).
+  ///   * `einsteinHilbert` — keep the discrete Einstein-Hilbert term
+  ///                        `‖∇S_Regge‖²` in every node's objective. False
+  ///                        optimizes `gamma * r_U` alone; see the
+  ///                        `MultiCobordism` constructor for what that means
+  ///                        for stage 2's descent direction.
   ///   * `singularValueRatio` — every node scores the whole-complex term of
   ///                        `rU` with the scale-invariant singular-value
   ///                        half-sum ratio instead of the singlet period
@@ -89,7 +94,8 @@ class Proton {
                   double gamma = 50.0, double inputWeight = 20.0,
                   int precone = 0, bool shouldUseDirectedSurgery = false,
                   bool preconeTimelike = false, bool preconeAlternate = false,
-                  bool balancedEdges = false, bool singularValueRatio = false);
+                  bool balancedEdges = false, bool singularValueRatio = false,
+                  bool einsteinHilbert = true);
 
   /// Build the proton, restarting across seeds until step B's whole cobordism
   /// carries the singlet with `≥ minQuarkHoles` holes (or `maxRestarts` is
@@ -178,6 +184,7 @@ class Proton {
   double gamma_;
   bool balancedEdges_{false};
   bool singularValueRatio_{false};  // forwarded to every node (see the ctor)
+  bool einsteinHilbert_{true};      // #724: false optimizes gamma*rU alone
   double inputResidualWeight_;
   int precone_;  // gated cone-ins pre-grown into each node's seed (ctor → nodes)
   bool shouldUseDirectedSurgery_;  // build() uses the directed cone-out/cone-in probes

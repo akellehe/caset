@@ -75,7 +75,8 @@ MultiCobordism::MultiCobordism(
     const std::vector<std::vector<complexd>> &outputTargets,
     const std::vector<int> &degrees, double gamma, std::uint64_t seed,
     int precone, bool shouldProposeDispositions, bool preconeTimelike,
-    bool preconeAlternate, bool balancedEdgeWiring, bool singularValueRatio)
+    bool preconeAlternate, bool balancedEdgeWiring, bool singularValueRatio,
+    bool einsteinHilbert)
     : spacetime_(std::move(host)),
       inputTargets_(inputTargets),
       outputTargets_(outputTargets),
@@ -88,6 +89,7 @@ MultiCobordism::MultiCobordism(
       gamma_(gamma),
       balancedEdgeWiring_(balancedEdgeWiring),
       singularValueRatio_(singularValueRatio),
+      einsteinHilbert_(einsteinHilbert),
       randomNumberGenerator_(seed) {
   // The wiring mode must reach the host BEFORE any precone growth below wires
   // its first edge (#690).
@@ -533,8 +535,12 @@ double MultiCobordism::singularValueHalfSumRatio(
   return lowerHalfSum / upperHalfSum;
 }
 
+double MultiCobordism::einsteinHilbertTerm(double beta) const {
+  return einsteinHilbert_ ? beta * reggeActionGradient(spacetime_) : 0.0;
+}
+
 double MultiCobordism::objective() const {
-  return reggeActionGradient(spacetime_) + gamma_ * rU(spacetime_);
+  return einsteinHilbertTerm() + gamma_ * rU(spacetime_);
 }
 
 std::set<std::uint64_t> MultiCobordism::pinnedBoundaryVertices() const {
@@ -786,9 +792,14 @@ double MultiCobordism::deltaF(
     affectedEdgeSet.insert(edgeEndpoints);
   std::vector<std::pair<std::uint64_t, std::uint64_t>> affectedEdges(
       affectedEdgeSet.begin(), affectedEdgeSet.end());
+  // Skipped entirely when the Einstein-Hilbert term is off (#724): scoring a
+  // move by a term the objective does not contain would make stage 1 disagree
+  // with `objective()` about which moves lower F.
   const double gradientDelta =
-      candidateReggeSolver.gradientNorm2OverEdges(affectedEdges) -
-      baseReggeSolver.gradientNorm2OverEdges(affectedEdges);
+      einsteinHilbert_
+          ? candidateReggeSolver.gradientNorm2OverEdges(affectedEdges) -
+                baseReggeSolver.gradientNorm2OverEdges(affectedEdges)
+          : 0.0;
   const double residualUDelta = rU(candidateSpacetime) - baseResidualU;
   return gradientDelta + gamma_ * residualUDelta;
 }
@@ -1105,7 +1116,7 @@ void MultiCobordism::seedBlocks(
 
 std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
                                                  double alpha0, double relTol) {
-  std::vector<double> objectiveTrace = {beta * reggeActionGradient(spacetime_) +
+  std::vector<double> objectiveTrace = {einsteinHilbertTerm(beta) +
                                         gamma_ * rU(spacetime_)};
   double stepScale = alpha0;
   lastStage2Stationary_ = false;  // for maxIters == 0; each update reports its own
@@ -1190,7 +1201,7 @@ bool MultiCobordism::stage2Update(double beta, double relTol,
   const auto &edges = spacetime_->getEdgeList()->toVector();
   const std::size_t edgeCount = edges.size();
   auto fullObjective = [&]() {
-    return beta * reggeActionGradient(spacetime_) + gamma_ * rU(spacetime_);
+    return einsteinHilbertTerm(beta) + gamma_ * rU(spacetime_);
   };
   ReggeSolver reggeSolver(spacetime_, MatterConfiguration());
   const auto gradientComponents = reggeSolver.actionGradientExact();
