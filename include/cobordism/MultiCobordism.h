@@ -529,6 +529,10 @@ class MultiCobordism {
       const BoundaryBlock &boundaryBlock,
       const std::shared_ptr<Spacetime> &spacetime,
       std::set<std::vector<int>> &claimedMatchings) const;
+  /// FNV-1a over a block's sorted vertex IDs — the key for the parent-side
+  /// sub-complex Betti slots (`Spacetime::cachedSubcomplexBettiNumbers`, #705).
+  [[nodiscard]] static std::uint64_t blockVertexSetKey(
+      const std::set<std::uint64_t> &vertices);
   // Seed one boundary block per (seed, target) — region = the seed's cell-neighbourhood
   // — appended to `destinationBlocks` (shared by seedInputs/seedOutputs). The blocks are
   // grown later by growBoundaryRegions, not here.

@@ -340,10 +340,42 @@ double MultiCobordism::residualForBoundaryBlockWithDistinctMatchings(
   if (!blockSubcomplex)  // no complex to read: the target leaks in full, per degree
     return static_cast<double>(registerDegrees_.size()) *
            targetStateVector(boundaryBlock.target).squaredNorm();
+  // The sub-complex is a FRESH spacetime whose per-instance Betti slot (#681)
+  // is empty, so without help every evaluation would re-run the Smith normal
+  // form — per block, per line-search trial, per candidate (measured: 47.5%
+  // of live-run cycles). The block's topology is a pure function of the
+  // PARENT's cells and the vertex set, so the parent caches the numbers per
+  // (structural revision, vertex-set key): on a hit, pre-seed the child's
+  // slot so betti() inside the scoring below never computes; on a miss, store
+  // the child's freshly computed numbers back on the parent (#705).
+  const std::uint64_t vertexSetKey = blockVertexSetKey(boundaryBlock.vertices);
+  if (const auto *cached =
+          spacetime->cachedSubcomplexBettiNumbers(vertexSetKey))
+    blockSubcomplex->storeBettiNumbers(*cached);
   for (int registerDegree : registerDegrees_)
     residual += residualOfTargetStateAgainstHarmonicWithDistinctMatching(
         blockSubcomplex, registerDegree, boundaryBlock.target, claimedMatchings);
+  if (const auto *computed = blockSubcomplex->cachedBettiNumbers())
+    spacetime->storeSubcomplexBettiNumbers(vertexSetKey, *computed);
   return residual;
+}
+
+std::uint64_t MultiCobordism::blockVertexSetKey(
+    const std::set<std::uint64_t> &vertices) {
+  // FNV-1a over the sorted vertex IDs (std::set iterates sorted): a stable
+  // key for the parent-side sub-complex Betti slots. A collision could only
+  // serve one region's numbers for another under the SAME parent revision —
+  // negligible at 64 bits over a handful of block regions.
+  std::uint64_t hash = 1469598103934665603ull;
+  for (const std::uint64_t vertexId : vertices) {
+    std::uint64_t value = vertexId;
+    for (int byteIndex = 0; byteIndex < 8; ++byteIndex) {
+      hash ^= (value & 0xffull);
+      hash *= 1099511628211ull;
+      value >>= 8;
+    }
+  }
+  return hash;
 }
 
 double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {

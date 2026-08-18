@@ -4,6 +4,7 @@
 #ifndef TESSERA_SPACETIME_H
 #define TESSERA_SPACETIME_H
 
+#include <map>
 #include <memory>
 #include <optional>
 #include <deque>
@@ -499,6 +500,33 @@ class Spacetime {
       bettiCacheRevision_ = structuralRevision_;
     }
 
+    /// The Betti numbers of the sub-complex spanned by `vertexSetKey` (a
+    /// caller-computed hash of the region's vertex-ID set), cached at the
+    /// current structural revision — the SUB-COMPLEX analogue of
+    /// `cachedBettiNumbers`. An unchanged parent revision fixes every
+    /// sub-region's combinatorics (a sub-complex is a pure function of the
+    /// parent's cells and the vertex set), so one revision guards them all.
+    /// Consumers: the cobordism input-block residuals, whose block regions
+    /// are re-materialized as FRESH spacetimes every evaluation — without
+    /// this parent-side slot each rebuild recomputes the Smith normal form
+    /// from an empty per-instance cache (measured: 47.5% of live-run cycles).
+    [[nodiscard]] const std::vector<int> *cachedSubcomplexBettiNumbers(
+        std::uint64_t vertexSetKey) const noexcept {
+      const auto entry = subBettiCache_.find(vertexSetKey);
+      if (entry == subBettiCache_.end() ||
+          entry->second.first != structuralRevision_)
+        return nullptr;
+      return &entry->second.second;
+    }
+    /// Store a sub-complex's Betti numbers against the CURRENT structural
+    /// revision. Stale same-key entries are overwritten in place; entries for
+    /// other keys are left to age out by revision mismatch (block regions per
+    /// complex are few, so the map stays small for the object's lifetime).
+    void storeSubcomplexBettiNumbers(std::uint64_t vertexSetKey,
+                                     std::vector<int> numbers) const noexcept {
+      subBettiCache_[vertexSetKey] = {structuralRevision_, std::move(numbers)};
+    }
+
     /// Monotone METRIC revision: the structural revision plus the sum of every
     /// edge's length and phase revisions. Any combinatorial change, any
     /// ``setLength``, and any ``setPhase`` strictly increases it, so an
@@ -958,6 +986,9 @@ class Spacetime {
     /// Betti cache slot; valid iff bettiCacheRevision_ == structuralRevision_.
     mutable std::vector<int> bettiCache_{};
     mutable std::uint64_t bettiCacheRevision_{0};
+    /// Sub-complex Betti slots: vertex-set key -> (revision stamped, numbers).
+    mutable std::map<std::uint64_t, std::pair<std::uint64_t, std::vector<int>>>
+        subBettiCache_{};
     /// Spectral-cache slot; valid iff spectralSlotRevision_ == metricRevisionKey().
     mutable std::shared_ptr<void> spectralSlot_{};
     mutable std::uint64_t spectralSlotRevision_{0};
