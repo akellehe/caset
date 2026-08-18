@@ -1,6 +1,8 @@
 // Copyright (c) 2026 Twin Vector Labs LLC.
 // All rights reserved.
 
+#include <set>
+
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/options.h>
@@ -8,6 +10,7 @@
 #include <pybind11/functional.h>
 #include <pybind11/chrono.h>
 
+#include "mesh/Fingerprint.h"
 #include "spacetime/topologies/Topology.h"
 #include "spacetime/topologies/Cylinder.h"
 #include "spacetime/topologies/Sphere.h"
@@ -49,6 +52,38 @@ using namespace tessera::mesh;
 // (i.e. `tessera.mesh`). Called from src/bindings.cpp's
 // PYBIND11_MODULE entry point.
 void register_mesh(py::module_ m) {
+  // ========================================
+  // Fingerprint
+  // ========================================
+  py::class_<Fingerprint>(m, "Fingerprint",
+      R"doc(Order-independent hash of a set of object identifiers.
+
+Every object identified by its constituent vertices (a simplex, a boundary
+block's region) is named by this hash, so the name does not depend on the
+order the vertices were listed in.
+
+An INSTANCE stores at most `kMax` identifiers and drops the rest silently,
+which suits a simplex; `fingerprintOf` is the same hash without that limit,
+for sets held in the caller's own container.)doc")
+      .def_static("fingerprintOf",
+           [](const std::set<IdType> &ids) {
+             return Fingerprint::fingerprintOf(ids);
+           },
+           py::arg("ids"),
+           "The fingerprint of a set of identifiers of any size — the value "
+           "an instance holding them would report, without the instance's "
+           "kMax limit. Depends on the set, not on the order.")
+      .def_static("mix64", &Fingerprint::mix64, py::arg("x"),
+           "The avalanche mixer the fingerprint is built from: a bijection on "
+           "64-bit values in which flipping one input bit changes about half "
+           "the output bits.")
+      .def(py::init<const std::vector<IdType> &>(), py::arg("ids"),
+           "An instance holding these identifiers (duplicates filtered, and "
+           "everything past kMax dropped silently).")
+      .def("fingerprint", &Fingerprint::fingerprint,
+           "This instance's hash — the same value fingerprintOf reports for "
+           "the identifiers the instance actually kept.");
+
   // ========================================
   // Edge
   // ========================================

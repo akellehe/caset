@@ -11,6 +11,7 @@
 #include <tuple>
 #include <cassert>
 #include <array>
+#include <iterator>
 #include <vector>
 #include <string>
 #include <sstream>
@@ -254,6 +255,65 @@ class Fingerprint {
       return x ^ (x >> 31);
     }
 
+    ///
+    /// \brief Fingerprint of a set of IDs held elsewhere, at any size
+    /// \param first,last Iterator range over IDs (duplicates must already be filtered)
+    /// \return The same hash an instance holding those IDs would report
+    ///
+    /// # Purpose
+    ///
+    /// The one place this hash is computed. `fingerprint()` calls it over the
+    /// instance's own IDs, and callers whose IDs live in their own container
+    /// call it directly — so an instance's hash and a caller's hash of the
+    /// same set are equal by construction rather than by two implementations
+    /// agreeing.
+    ///
+    /// # When to call this instead of holding a Fingerprint
+    ///
+    /// An instance stores at most `kMax` IDs and `addId` discards the rest
+    /// silently, which is right for a simplex and wrong for a set that can
+    /// outgrow it — past `kMax` the instance's hash describes an arbitrary
+    /// subset, so two different sets can report the same fingerprint. This
+    /// static has no such limit: it hashes every ID in the range. Use it for
+    /// sets that are not bounded by `kMax` (`MultiCobordism`'s boundary-block
+    /// regions, which grow across the complex, are the current caller).
+    ///
+    /// # Algorithm
+    ///
+    /// \f[
+    /// h = \bigoplus_{i} \text{mix64}(\text{id}_i)
+    /// \f]
+    ///
+    /// Exclusive-or is commutative and associative, so the result depends on
+    /// the set of IDs and not the order they arrive in. Duplicates cancel in
+    /// pairs, which is why the range must already be duplicate-free — every
+    /// standard set container is.
+    ///
+    /// # Complexity
+    /// O(n) over the range, with no allocation.
+    ///
+    template <typename Iterator>
+    [[nodiscard]] static std::uint64_t fingerprintOf(Iterator first,
+                                                     Iterator last) noexcept {
+      std::uint64_t hash = 0;
+      for (; first != last; ++first) hash ^= mix64(static_cast<IdType>(*first));
+      return hash;
+    }
+
+    ///
+    /// \brief Fingerprint of a container of IDs, at any size
+    /// \param ids Container of unique IDs (e.g. a std::set<IdType>)
+    /// \return The same hash an instance holding those IDs would report
+    ///
+    /// Convenience form of the iterator-range overload; see it for the
+    /// algorithm and for when to prefer this over holding a `Fingerprint`.
+    ///
+    template <typename Container>
+    [[nodiscard]] static std::uint64_t fingerprintOf(
+        const Container &ids) noexcept {
+      return fingerprintOf(std::begin(ids), std::end(ids));
+    }
+
     // ========================================
     // ID Management
     // ========================================
@@ -370,11 +430,10 @@ class Fingerprint {
     ///
     std::uint64_t fingerprint() const noexcept {
       if (dirty_) [[unlikely]] {
-        // Recompute hash from all IDs using commutative XOR
-        h_ = 0;
-        for (std::uint8_t i = 0; i < n_; ++i) {
-          h_ ^= mix64(ids_[i]);
-        }
+        // The static is the single implementation of this hash (see
+        // fingerprintOf): an instance's value and a caller's value for the
+        // same set of IDs cannot drift apart.
+        h_ = fingerprintOf(ids_.begin(), ids_.begin() + n_);
         dirty_ = false;
       }
       return h_;

@@ -21,6 +21,7 @@
 #include "mesh/Edge.h"
 #include "mesh/EdgeKey.h"
 #include "mesh/EdgeList.h"
+#include "mesh/Fingerprint.h"
 #include "mesh/Simplex.h"
 #include "mesh/Vertex.h"
 #include "mesh/VertexList.h"
@@ -340,9 +341,29 @@ double MultiCobordism::residualForBoundaryBlockWithDistinctMatchings(
   if (!blockSubcomplex)  // no complex to read: the target leaks in full, per degree
     return static_cast<double>(registerDegrees_.size()) *
            targetStateVector(boundaryBlock.target).squaredNorm();
+  // The sub-complex is a FRESH spacetime whose per-instance Betti slot (#681)
+  // is empty, so without help every evaluation would re-run the Smith normal
+  // form — per block, per line-search trial, per candidate (measured: 47.5%
+  // of live-run cycles). The block's topology is a pure function of the
+  // PARENT's cells and the vertex set, so the parent caches the numbers per
+  // (structural revision, region fingerprint): on a hit, pre-seed the child's
+  // slot so betti() inside the scoring below never computes; on a miss, store
+  // the child's freshly computed numbers back on the parent (#705).
+  //
+  // The region is named by `Fingerprint::fingerprintOf` over its vertex
+  // identifiers — the class's own hash, called as a static because a
+  // `Fingerprint` INSTANCE holds only `kMax` identifiers and drops the rest
+  // silently, while a block region grows across the complex.
+  const std::uint64_t vertexSetKey =
+      ::tessera::mesh::Fingerprint::fingerprintOf(boundaryBlock.vertices);
+  if (const auto *cached =
+          spacetime->cachedSubcomplexBettiNumbers(vertexSetKey))
+    blockSubcomplex->storeBettiNumbers(*cached);
   for (int registerDegree : registerDegrees_)
     residual += residualOfTargetStateAgainstHarmonicWithDistinctMatching(
         blockSubcomplex, registerDegree, boundaryBlock.target, claimedMatchings);
+  if (const auto *computed = blockSubcomplex->cachedBettiNumbers())
+    spacetime->storeSubcomplexBettiNumbers(vertexSetKey, *computed);
   return residual;
 }
 
