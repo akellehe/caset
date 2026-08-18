@@ -203,11 +203,11 @@ Eigen::MatrixXcd MultiCobordism::holePeriodMatrix(
   // The row count of the flattened periods is the NUMERIC harmonic-kernel
   // dimension the synthesizer actually computed (HodgeLaplacian::harmonicMatrix
   // at its rank threshold, metric-dependent) — NOT necessarily the INTEGER
-  // Betti number: on geometrically extreme complexes (e.g. the deep-lookahead
-  // relax-scoring candidates near the null-face locus) the numeric rank can
+  // Betti number: on geometrically extreme complexes (e.g. deep-lookahead
+  // candidates near the null-face locus) the numeric rank can
   // fall below the topological one, and indexing by the Betti count then read
   // past the end of the vector — the measured #636 segfault (thread 1 in
-  // residualOfTargetStateAgainstHarmonic under relaxedObjectiveOf). Bound every
+  // residualOfTargetStateAgainstHarmonic while scoring one). Bound every
   // index by the data's own shape; fewer usable harmonics honestly means a
   // LARGER residual, never an out-of-bounds read (a zero-column matrix reads as
   // the full leak in the caller).
@@ -799,21 +799,17 @@ double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth) {
   std::set<std::vector<std::uint64_t>> baseCellSet;
   for (const auto &topSimplex : spacetime_->getTopSimplices())
     baseCellSet.insert(topSimplex->topTuple());
-  // Depth 1 keeps the fast, localized deltaF scoring — the common case. A
-  // DEEPENED search (reached only after depth 1 stalls) scores each candidate
-  // by its RELAXED exact objective instead: fresh material always carries
-  // unrelaxed edges whose gradient contributions stage 2 would largely relax
-  // away, so unrelaxed scoring makes every growth sequence look bad and the
-  // deepening could never see a way forward from a relaxed stall (measured on
-  // the bare-seed direct node: ~3000 sequences to depth 8, zero accepted).
-  // Relaxed scoring asks the honest question: is there a short sequence whose
-  // RELAXED end state beats where we are now?
-  const bool scoreRelaxed = lookaheadDepth > 1;
-  const double baseObjective = scoreRelaxed ? objective() : 0.0;
+  // ONE scoring rule at every depth: the localized, UNRELAXED deltaF (#714).
+  // The two stages have separate jobs — the combinatorial moves exist to leave
+  // a local minimum, the geometric update to descend to the minimum of the
+  // region the complex then sits in — and scoring a candidate through a
+  // relaxation mixed them, asking where a move would land after stage 2 rather
+  // than whether the move itself improves the state. Relaxation now happens
+  // only after a move is committed, bounded by the caller's relaxBudgetPerMove.
   double bestObjectiveDelta = -convergenceTolerance_;
   bool foundImprovingMove = false;
   Snapshot bestSnapshot;
-  if (!scoreRelaxed) {
+  if (lookaheadDepth <= 1) {
     // Depth 1: every candidate starts from the SAME base complex, so the specs
     // can be pre-drawn serially (identical RNG order to the serial loop — the
     // per-seed draw sequence is unchanged) and the batch scored in parallel:
@@ -883,9 +879,8 @@ double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth) {
     // each drawn against the evolving candidate complex. The sequence is scored
     // — and, if best, committed — as a WHOLE, so an F-lowering pair whose first
     // move alone raises F is still an honest descent step. This deepened path
-    // stays SERIAL: the draws interleave with the evolving candidates through
-    // the shared engine, and relaxedObjectiveOf swaps the candidate into
-    // `spacetime_` to ride stage2Update — neither is thread-safe by design.
+    // stays SERIAL: each draw is made against the candidate the previous move
+    // left, so the sequence cannot be pre-drawn the way a depth-1 batch is.
     auto candidateSpacetime = build(currentSnapshot);
     bool wholeSequenceApplied = true;
     for (int moveIndex = 0; moveIndex < lookaheadDepth; ++moveIndex) {
@@ -897,13 +892,15 @@ double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth) {
       }
     }
     if (!wholeSequenceApplied) continue;
+    // Scored exactly as a depth-1 candidate is: the finished sequence diffed
+    // against the base complex. deltaF is exact over any fixed superset of the
+    // affected edges, so a multi-move candidate needs no special treatment.
     const double objectiveDelta =
-        relaxedObjectiveOf(candidateSpacetime) - baseObjective;
+        deltaF(candidateSpacetime, baseResidualU, baseCellSet);
     if (objectiveDelta < bestObjectiveDelta) {
       bestObjectiveDelta = objectiveDelta;
-      // For a relaxed-scored candidate this snapshot CARRIES the relaxed edge
-      // lengths, so a committed sequence starts from the state that earned its
-      // score rather than re-paying the relaxation.
+      // The snapshot carries the sequence's AS-BUILT geometry: nothing was
+      // relaxed to earn the score, so nothing is being banked here either.
       bestSnapshot = snapshotOf(*candidateSpacetime);
       foundImprovingMove = true;
     }
@@ -913,29 +910,6 @@ double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth) {
     return bestObjectiveDelta;
   }
   return 0.0;
-}
-
-double MultiCobordism::relaxedObjectiveOf(
-    const std::shared_ptr<Spacetime> &candidateSpacetime) {
-  // Score a lookahead candidate as stage 2 WOULD leave it: swap the candidate
-  // in, run a few geometric relaxation iterations on it, read the exact
-  // objective, and swap the real complex back. The relaxation mutates the
-  // candidate's edge lengths in place — intentional, see the commit note in
-  // step(). beta is fixed at 1 because `objective()` (the stage-1 functional)
-  // is the beta = 1 objective.
-  constexpr int kLookaheadRelaxIters = 3;
-  const auto savedSpacetime = spacetime_;
-  const bool savedStationary = lastStage2Stationary_;  // scoring must not report
-  spacetime_ = candidateSpacetime;
-  std::vector<double> scratchTrace = {objective()};
-  double stepScale = 0.05;
-  for (int relaxIndex = 0; relaxIndex < kLookaheadRelaxIters; ++relaxIndex)
-    if (!stage2Update(/*beta=*/1.0, /*relTol=*/1e-9, scratchTrace, stepScale))
-      break;
-  const double relaxedObjectiveValue = objective();
-  spacetime_ = savedSpacetime;
-  lastStage2Stationary_ = savedStationary;
-  return relaxedObjectiveValue;
 }
 
 void MultiCobordism::preconeCells(int count, bool timelike, bool alternate) {

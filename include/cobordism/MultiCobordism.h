@@ -324,12 +324,10 @@ class MultiCobordism {
   /// `maxLookahead`: when a batch of single moves finds no improvement, the
   /// search deepens iteratively — 2-move sequences, then 3, up to this many
   /// moves — committing an F-lowering sequence as a whole. DEFAULT 1 (single
-  /// moves, the historical behaviour): deepened batches score by
-  /// `relaxedObjectiveOf`, which runs stage-2 iterations per candidate, so a
-  /// deepening default would silently multiply every existing driver's cost
-  /// (measured: the #607 agreement suite went from seconds to a timeout).
-  /// Deepening is a caller's choice — the proton animation passes its
-  /// `--max-lookahead-depth`.
+  /// moves): a deepened batch builds and scores many more candidates per
+  /// iteration, so deepening is a caller's choice rather than a default — the
+  /// proton animation passes its `--max-lookahead-depth`. Every depth scores
+  /// the same way, unrelaxed (#714).
   std::vector<double> runStage1(int maxSteps = 200, int nCandidateMoves = 12,
                                 bool growBoundaries = false,
                                 int maxLookahead = 1);
@@ -559,18 +557,16 @@ class MultiCobordism {
   /// One best-ΔF batch: `nCandidateMoves` candidates, each a sequence of
   /// `lookaheadDepth` gated random moves applied successively (each drawn against
   /// the evolving candidate), committed as a whole iff the best sequence lowers
-  /// F. Depth 1 scores by the fast localized `deltaF`; deepened batches (depth
-  /// > 1, reached only after depth 1 stalls) score by `relaxedObjectiveOf` — the
-  /// exact objective after a few relaxation iterations on the candidate — since
-  /// unrelaxed fresh material always looks bad and would hide every way forward.
-  /// Returns the committed ΔF, or 0.
+  /// F. EVERY depth scores by the same localized, UNRELAXED `deltaF` (#714):
+  /// the combinatorial moves exist to leave a local minimum and the geometric
+  /// update to descend within the region the complex then occupies, so scoring
+  /// a candidate through a relaxation would mix the two — it would ask where a
+  /// move lands after stage 2 rather than whether the move improves the state.
+  /// A committed candidate is relaxed afterwards, bounded by the caller's
+  /// `relaxBudgetPerMove`. Depth 1 pre-draws its batch and scores it in
+  /// parallel; deeper searches stay serial, since each draw is made against the
+  /// evolving candidate. Returns the committed ΔF, or 0.
   double step(int nCandidateMoves, int lookaheadDepth = 1);
-  /// The exact objective of `candidateSpacetime` after a few geometric relaxation
-  /// iterations (beta = 1, the stage-1 functional), used to score deepened
-  /// lookahead candidates as stage 2 WOULD leave them. Mutates the candidate's
-  /// edge lengths in place (a committed candidate keeps its relaxed geometry);
-  /// the node's own complex and `lastStage2Stationary_` are restored.
-  double relaxedObjectiveOf(const std::shared_ptr<Spacetime> &candidateSpacetime);
   /// One iteration of `runStage1`'s loop: optional boundary growth plus one
   /// best-ΔF candidate-move step, booked into `objectiveTrace`. A batch with no
   /// improving move is NOT a stall — the batch is a random sample, so the next
