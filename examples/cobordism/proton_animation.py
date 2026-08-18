@@ -117,8 +117,15 @@ if "OMP_NUM_THREADS" not in os.environ or "--threads" in sys.argv:
             _n = sys.argv[sys.argv.index("--threads") + 1]
         except IndexError:
             pass
-    for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
-        os.environ[_var] = _n
+    os.environ["OMP_NUM_THREADS"] = _n
+# BLAS pools serve ONLY numpy's panel-side eigensolves (the engine's Eigen
+# kernels thread through OpenMP, not BLAS), and those matrices are small: a
+# perf sample of the live drive showed the 32-thread OpenBLAS pool spinning in
+# blas_thread_server for 1.3% of all cycles while contending with the engine
+# team. One BLAS thread is the right size regardless of --threads; an explicit
+# value in the caller's environment wins.
+for _var in ("OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
 # Workers SLEEP at OpenMP barriers instead of spinning. GNU OpenMP's default
 # wait policy spins, and a perf sample of the live drive showed 55% of all
 # self-time inside libgomp doing exactly that: the engine's parallel regions
