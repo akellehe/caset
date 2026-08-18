@@ -1439,7 +1439,7 @@ class ProtonAnimator:
         return []
 
     # ---- responsive live driver: compute on a worker thread, paint on the GUI thread ----
-    def _run_live(self, plt, interval):
+    def _run_live(self, plt, interval, save=None):
         """Animate live without freezing the window. A build frame — one combined `run`
         iteration: a candidate-move batch plus a Hessian-backed relaxation step — can still
         take seconds on a grown complex, so running it inside the `FuncAnimation` callback on
@@ -1452,10 +1452,18 @@ class ProtonAnimator:
         (`paint_done`), and the GUI reads the geometry only while the worker is parked. So the
         engine's `st` is never mutated and read at once — no data race, no snapshotting, and the
         drawing code is unchanged. Responsiveness comes from the bindings releasing the GIL for
-        the duration of each compute call, so the GUI thread keeps servicing the event loop."""
+        the duration of each compute call, so the GUI thread keeps servicing the event loop.
+
+        With `save` set, the window is ALSO recorded: a writer is held open around
+        `plt.show()` and grabs the canvas right after each paint, on the GUI
+        thread. Recording has to happen here rather than in a second pass,
+        because a frame commits moves and relaxation into the complex and the
+        run cannot be replayed. Closing the window early finalizes whatever was
+        recorded, so a partial run still yields a playable file."""
         import itertools
         import queue
         import threading
+        import contextlib
         from matplotlib.animation import FuncAnimation
 
         q = queue.Queue()                 # worker -> GUI: ('announce'|'paint'|'error', frame)
@@ -1488,6 +1496,12 @@ class ProtonAnimator:
                         self._announce(frame)
                 elif kind == "paint":
                     self._paint(frame)          # worker is parked → safe to read the engine
+                    if writer is not None:
+                        # savefig-based: renders the figure itself, so the grab
+                        # reflects the paint that just happened. Before
+                        # releasing the worker, so the engine cannot advance
+                        # mid-capture.
+                        writer.grab_frame()
                     paint_done.set()            # release the worker for the next frame
                     if frame >= self._frames - 1:
                         self._anim.event_source.stop()
@@ -1496,14 +1510,30 @@ class ProtonAnimator:
                     plt.close(self.fig)
             return []
 
+        writer = None
+        if save:
+            from matplotlib.animation import FFMpegWriter, PillowWriter
+            writer_class = PillowWriter if save.endswith(".gif") else FFMpegWriter
+            # The playback rate the single-flag save path uses: `interval` is
+            # milliseconds per frame.
+            writer = writer_class(fps=max(1, round(1000 / max(interval, 1))))
+
         worker_thread = threading.Thread(target=worker, name="proton-build", daemon=True)
         # A brisk poll so a finished frame paints promptly; the compute cadence is set by the
         # engine, not this interval. cache_frame_data=False: the frame source is unbounded.
         self._anim = FuncAnimation(self.fig, on_timer, frames=itertools.count(),
                                    interval=max(20, interval // 4), repeat=False,
                                    cache_frame_data=False, blit=False)
-        worker_thread.start()
-        plt.show()
+        # `saving` must stay open for the whole show() loop, since frames are
+        # grabbed as they are painted. Without a save path this is a no-op
+        # context, so the single-flag live path runs exactly as before.
+        recording = (writer.saving(self.fig, save, 90) if writer is not None
+                     else contextlib.nullcontext())
+        with recording:
+            worker_thread.start()
+            plt.show()
+        if writer is not None:
+            print(f"saved animation -> {save}")
         if state["error"] is not None:
             raise state["error"]
 
@@ -1531,15 +1561,25 @@ def build_proton_nodes(seed=3, precone=0, precone_timelike=False, gamma=50.0,
     ]
 
 
-def animate(nodes, save=None, interval=200, dump_dir=None, **kw):
-    """Animate the proton node sequence. `save` → write a GIF/MP4 (headless, Agg) with the
-    synchronous per-frame `update`; otherwise show a live interactive window driven by
-    `_run_live` (compute on a background thread, GUI thread only paints) so the window stays
-    responsive through the multi-second surgery frames. `dump_dir` additionally writes each
-    frame's dual-curvature panels as JSON (see `ProtonAnimator._dump_frame`). Returns the
-    animator."""
+def animate(nodes, save=None, interval=200, dump_dir=None, visualize=False, **kw):
+    """Animate the proton node sequence.
+
+    Three combinations, all supported:
+
+    * `save` alone → write a GIF/MP4 headlessly (Agg) with the synchronous
+      per-frame `update`.
+    * `visualize` alone → a live interactive window driven by `_run_live`
+      (compute on a background thread, GUI thread only paints) so the window
+      stays responsive through the multi-second surgery frames.
+    * BOTH → the live window, recording each frame as it is painted. The run
+      cannot be replayed to record it afterwards: every frame commits moves and
+      relaxation into the complex, so the recording has to capture the frames
+      the window is already drawing.
+
+    `dump_dir` additionally writes each frame's dual-curvature panels as JSON
+    (see `ProtonAnimator._dump_frame`). Returns the animator."""
     import matplotlib
-    if save:
+    if save and not visualize:
         matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
@@ -1551,7 +1591,7 @@ def animate(nodes, save=None, interval=200, dump_dir=None, **kw):
         print(f"per-frame dumps -> {dump_dir}/frame_0000.json, ...")
     anim_state._setup(plt)
     anim_state.fig.suptitle(f"{anim_state._TITLE_PREFIX} — live")
-    if save:
+    if save and not visualize:
         fa = FuncAnimation(anim_state.fig, anim_state.update,
                            frames=anim_state._frames, interval=interval,
                            repeat=False, blit=False)
@@ -1560,7 +1600,8 @@ def animate(nodes, save=None, interval=200, dump_dir=None, **kw):
         print(f"saved animation -> {save}")
         anim_state._anim = fa  # keep a ref so it isn't GC'd
     else:
-        anim_state._run_live(plt, interval)   # responsive live window; keeps its own _anim ref
+        # `save` here means "record the window as it plays" (see the docstring).
+        anim_state._run_live(plt, interval, save=save)
     return anim_state
 
 
@@ -1664,7 +1705,8 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
         out.append(("verdict", {"converged": res < _COLOR_TOL and holes >= _MIN_QUARK_HOLES,
                                 "color_residual": res, "registers": holes}))
         return out
-    return animate(nodes, save=save, degree=degree, init_steps=init_steps,
+    return animate(nodes, save=save, visualize=visualize, degree=degree,
+                   init_steps=init_steps,
                    evolve_steps=evolve_steps,
                    stage1_candidates=stage1_candidates,
                    max_lookahead_depth=max_lookahead_depth,
