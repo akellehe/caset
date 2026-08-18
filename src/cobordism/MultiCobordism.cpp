@@ -21,6 +21,7 @@
 #include "mesh/Edge.h"
 #include "mesh/EdgeKey.h"
 #include "mesh/EdgeList.h"
+#include "mesh/Fingerprint.h"
 #include "mesh/Simplex.h"
 #include "mesh/Vertex.h"
 #include "mesh/VertexList.h"
@@ -362,19 +363,22 @@ double MultiCobordism::residualForBoundaryBlockWithDistinctMatchings(
 
 std::uint64_t MultiCobordism::blockVertexSetKey(
     const std::set<std::uint64_t> &vertices) {
-  // FNV-1a over the sorted vertex IDs (std::set iterates sorted): a stable
-  // key for the parent-side sub-complex Betti slots. A collision could only
-  // serve one region's numbers for another under the SAME parent revision —
-  // negligible at 64 bits over a handful of block regions.
-  std::uint64_t hash = 1469598103934665603ull;
-  for (const std::uint64_t vertexId : vertices) {
-    std::uint64_t value = vertexId;
-    for (int byteIndex = 0; byteIndex < 8; ++byteIndex) {
-      hash ^= (value & 0xffull);
-      hash *= 1099511628211ull;
-      value >>= 8;
-    }
-  }
+  // Exactly the hash `Fingerprint` computes for a set of identifiers: each
+  // identifier through `Fingerprint::mix64` (the shared avalanche mixer),
+  // combined with exclusive-or so the result does not depend on the order the
+  // identifiers arrive in. This calls that mixer rather than restating one,
+  // so both hashes stay one implementation.
+  //
+  // A `Fingerprint` OBJECT cannot hold a block region: `tessera::mesh::kMax`
+  // caps a fingerprint at 8 identifiers and `addId` discards every one past
+  // the eighth without reporting it, which is right for a simplex (at most 5
+  // vertices) and wrong here — a block region grows to cover much of the
+  // complex (measured: 21 vertices in the complex at frame 119 of a live
+  // run), so the ninth vertex onward would vanish from the key and two
+  // genuinely different regions could share one entry.
+  std::uint64_t hash = 0;
+  for (const std::uint64_t vertexId : vertices)
+    hash ^= ::tessera::mesh::Fingerprint::mix64(vertexId);
   return hash;
 }
 

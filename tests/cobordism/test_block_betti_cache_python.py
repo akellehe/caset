@@ -29,6 +29,29 @@ def _node(seed=5):
     return cob.Proton(seed=seed).direct_node(seed)
 
 
+class BlockRegionKeyTest(unittest.TestCase):
+    """The region key names a vertex set, at any region size."""
+
+    def test_distinguishes_regions_beyond_the_fingerprint_capacity(self):
+        # A Fingerprint object holds at most tessera::mesh::kMax = 8
+        # identifiers and discards every one past the eighth without
+        # reporting it, so regions agreeing on their first eight vertices
+        # would share an entry. Block regions routinely exceed that (a
+        # live-run complex carried 21 vertices), so the key must separate
+        # sets that differ only past the eighth member.
+        key = cob.MultiCobordism.blockVertexSetKey
+        base = set(range(1, 9))
+        keys = {key(base | {tail}) for tail in range(9, 20)}
+        self.assertEqual(len(keys), 11)
+        self.assertNotIn(key(base), keys)
+
+    def test_distinct_sets_differ(self):
+        key = cob.MultiCobordism.blockVertexSetKey
+        self.assertNotEqual(key({1, 2, 3}), key({1, 2, 4}))
+        self.assertNotEqual(key({1, 2, 3}), key({1, 2}))
+        self.assertEqual(key({1, 2, 3}), key({3, 2, 1}))
+
+
 class BlockBettiCacheTest(unittest.TestCase):
 
     def test_warm_repeat_is_bitwise_identical(self):

@@ -500,16 +500,50 @@ class Spacetime {
       bettiCacheRevision_ = structuralRevision_;
     }
 
-    /// The Betti numbers of the sub-complex spanned by `vertexSetKey` (a
-    /// caller-computed hash of the region's vertex-ID set), cached at the
-    /// current structural revision — the SUB-COMPLEX analogue of
-    /// `cachedBettiNumbers`. An unchanged parent revision fixes every
-    /// sub-region's combinatorics (a sub-complex is a pure function of the
-    /// parent's cells and the vertex set), so one revision guards them all.
-    /// Consumers: the cobordism input-block residuals, whose block regions
-    /// are re-materialized as FRESH spacetimes every evaluation — without
-    /// this parent-side slot each rebuild recomputes the Smith normal form
-    /// from an empty per-instance cache (measured: 47.5% of live-run cycles).
+    /// The Betti numbers of the sub-complex spanned by the vertex set that
+    /// `vertexSetKey` names — the SUB-COMPLEX analogue of
+    /// `cachedBettiNumbers`. `vertexSetKey` is the caller's hash of the
+    /// region's vertex identifiers (see
+    /// `MultiCobordism::blockVertexSetKey`).
+    ///
+    /// Consumers: the cobordism input-block residuals. Each block region is
+    /// re-materialized as a FRESH spacetime on every objective evaluation, so
+    /// its own `cachedBettiNumbers` slot is always empty and the Smith normal
+    /// form recomputed every time (measured: 47.5% of the cycles in a live
+    /// run). The parent outlives those temporaries and holds the answers for
+    /// them.
+    ///
+    /// **When an entry stops being served.** Nothing marks entries dirty.
+    /// Each entry records the `structuralRevision()` it was computed at and
+    /// is returned only while that number still matches the parent's current
+    /// one. `structuralRevision()` rises on every cell registration, cell
+    /// removal, and edge creation, so one topology change retires every entry
+    /// at once, whether or not it touched that particular region.
+    ///
+    /// **Why an entry cannot answer for the wrong sub-complex.** A
+    /// sub-complex is determined by two things and no others: the parent's
+    /// cells, and the vertex set (`subcomplexWithinVertexSet` takes the
+    /// parent's top cells whose vertices all lie in the set). Serving an
+    /// entry requires both to agree — the revision match fixes the parent's
+    /// cells, and the key match fixes the vertex set — so a served answer was
+    /// computed for a sub-complex identical to the one being asked about.
+    /// Vertex identifiers are the right key because they ARE the region's
+    /// definition; and although identifiers can be retired and reissued, any
+    /// such change registers or removes cells and therefore moves the
+    /// revision, retiring the entry before it could be mismatched.
+    ///
+    /// **Lifetime.** The store is a member, so it is created and destroyed
+    /// with the spacetime and never outlives one; there is no registry and no
+    /// clearing step between runs. A spacetime rebuilt from a snapshot is a
+    /// new object that starts empty. A COPIED spacetime carries the entries
+    /// and the revision they were stamped at together, and is combinatorially
+    /// identical to its source at that moment, so they answer for it
+    /// correctly.
+    ///
+    /// **Threading.** Not synchronized, on the same grounds as
+    /// `cachedBettiNumbers`: the parallel candidate loop gives every thread
+    /// its own rebuilt spacetime and reads and writes only that one, and the
+    /// shared complex is scored serially.
     [[nodiscard]] const std::vector<int> *cachedSubcomplexBettiNumbers(
         std::uint64_t vertexSetKey) const noexcept {
       const auto entry = subBettiCache_.find(vertexSetKey);
@@ -519,9 +553,11 @@ class Spacetime {
       return &entry->second.second;
     }
     /// Store a sub-complex's Betti numbers against the CURRENT structural
-    /// revision. Stale same-key entries are overwritten in place; entries for
-    /// other keys are left to age out by revision mismatch (block regions per
-    /// complex are few, so the map stays small for the object's lifetime).
+    /// revision. An entry under the same key is overwritten; entries under
+    /// other keys stay until a revision mismatch retires them, which costs
+    /// only their memory — a complex carries a handful of block regions, so
+    /// the store holds a handful of entries for as long as the spacetime
+    /// lives.
     void storeSubcomplexBettiNumbers(std::uint64_t vertexSetKey,
                                      std::vector<int> numbers) const noexcept {
       subBettiCache_[vertexSetKey] = {structuralRevision_, std::move(numbers)};

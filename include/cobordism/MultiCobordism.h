@@ -204,6 +204,14 @@ class MultiCobordism {
   [[nodiscard]] static std::vector<std::vector<std::uint64_t>> emergentHoles(
       const Spacetime &st, int k);
   /// `Σ_e |actionGradientExact_e|²` — the full-complex Regge extremization term.
+  /// The identity of a boundary block's REGION as one 64-bit number: the
+  /// hash `Fingerprint` computes for a set of identifiers, applied to the
+  /// block's vertex identifiers. It names the region for the parent
+  /// spacetime's sub-complex Betti store
+  /// (`Spacetime::cachedSubcomplexBettiNumbers`). The implementation says why
+  /// a `Fingerprint` object cannot hold a region of this size.
+  [[nodiscard]] static std::uint64_t blockVertexSetKey(
+      const std::set<std::uint64_t> &vertices);
   [[nodiscard]] static double reggeActionGradient(const std::shared_ptr<Spacetime> &st);
   /// The relabeling-invariant, zero-filled residual of `targetState` against the
   /// `L_k` harmonic of `spacetime` over its emergent holes (`r_state` in the
@@ -529,10 +537,6 @@ class MultiCobordism {
       const BoundaryBlock &boundaryBlock,
       const std::shared_ptr<Spacetime> &spacetime,
       std::set<std::vector<int>> &claimedMatchings) const;
-  /// FNV-1a over a block's sorted vertex IDs — the key for the parent-side
-  /// sub-complex Betti slots (`Spacetime::cachedSubcomplexBettiNumbers`, #705).
-  [[nodiscard]] static std::uint64_t blockVertexSetKey(
-      const std::set<std::uint64_t> &vertices);
   // Seed one boundary block per (seed, target) — region = the seed's cell-neighbourhood
   // — appended to `destinationBlocks` (shared by seedInputs/seedOutputs). The blocks are
   // grown later by growBoundaryRegions, not here.
