@@ -313,13 +313,13 @@ class MultiCobordism {
 
   // ---- the two stages + boundary-block construction ----
   /// Seed one INPUT block per seed vertex (region = the seed's cell-neighbourhood,
-  /// tagged with its target). NOT grown here — runStage1's growBoundaryRegions grows
+  /// tagged with its target). NOT grown here — runStage1's growBlockRegions grows
   /// it emergently under the objective.
   void seedInputs(const std::vector<std::uint64_t> &seeds);
   /// Seed one OUTPUT block per seed vertex (see seedInputs).
   void seedOutputs(const std::vector<std::uint64_t> &seeds);
   /// `growBoundaries` is the INITIALIZATION pass: while true the boundary regions
-  /// grow to track the bulk until they carry their states (growBoundaryRegions);
+  /// grow to track the bulk until they carry their states (growBlockRegions);
   /// run the bulk EVOLUTION with it false, so ∂W stays frozen.
   /// `maxLookahead`: when a batch of single moves finds no improvement, the
   /// search deepens iteratively — 2-move sequences, then 3, up to this many
@@ -529,7 +529,7 @@ class MultiCobordism {
       std::set<std::vector<int>> &claimedMatchings) const;
   // Seed one boundary block per (seed, target) — region = the seed's cell-neighbourhood
   // — appended to `destinationBlocks` (shared by seedInputs/seedOutputs). The blocks are
-  // grown later by growBoundaryRegions, not here.
+  // grown later by growBlockRegions, not here.
   void seedBlocks(const std::vector<std::uint64_t> &seeds,
                   const std::vector<std::vector<std::complex<double>>> &targets,
                   std::vector<BoundaryBlock> &destinationBlocks);
@@ -592,7 +592,14 @@ class MultiCobordism {
   /// represents its state. GATED per block: a shell that would RAISE the block's
   /// own r_U term is reverted (Δ <= 0 passes — the full-leak plateau of a region
   /// with no full cell yet is Δ == 0), so region growth can never raise F.
-  void growBoundaryRegions();
+  /// Expand each not-yet-carrying block's SCORING REGION by one shell (the
+  /// vertices of every top cell touching it), so the window a block's residual
+  /// is read over tracks the bulk and gains room for the holes that carry its
+  /// state. Gated on the block's own residual — a shell that raises it is
+  /// reverted, so this can never raise F — and skipped entirely once a block
+  /// carries. Creates no cells, edges, or vertices and never moves the
+  /// cobordism's boundary: the only write is each block's vertex set.
+  void growBlockRegions();
   /// Pre-grow the seed by `count` **gated cone-in moves** before any optimization
   /// (the constructor calls this once when `precone > 0`): each cones a fresh apex
   /// onto a random codim-1 facet of a random top cell and is committed only through

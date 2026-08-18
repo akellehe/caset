@@ -8,7 +8,7 @@ shrink, never grow. These tests pin coneIn's contract and the connectivity invar
 it must preserve (no vertices left unconnected by edges), and show that repeated
 cone-in genuinely grows a connected complex from a single simplex. coneIn is one of
 runStage1's gated surgical candidate moves; the input/output blocks are now seeded
-without it (growBoundaryRegions grows them emergently).
+without it (growBlockRegions grows them emergently).
 """
 import collections
 import unittest
