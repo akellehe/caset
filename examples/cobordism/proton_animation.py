@@ -377,7 +377,7 @@ class ProtonAnimator:
                  max_lookahead_depth=_MAX_LOOKAHEAD_DEPTH,
                  max_lookahead_tries=_MAX_LOOKAHEAD_TRIES,
                  stage2_alpha0=0.05, stage2_rel_tol=10e-9, relax_budget=10,
-                 spectra_every=_SPECTRA_REFRESH_EVERY, no_surgery=False,
+                 spectra_every=_SPECTRA_REFRESH_EVERY, no_combinatorial_moves=False,
                  relax_chunk=None, status=True):
         self._common_init(nodes, degree)
         self.s1c, self.s2_beta = stage1_candidates, stage2_beta
@@ -385,12 +385,13 @@ class ProtonAnimator:
         self.lookahead_tries = max_lookahead_tries
         self.s2_alpha0, self.s2_rel_tol = stage2_alpha0, stage2_rel_tol
         self.relax_budget = relax_budget
-        # Relaxation-only drive (#716): no Pachner moves, no surgical cones, no
-        # boundary growth — the topology is fixed and F descends within one
-        # region. `relax_chunk` is how much relaxation ONE frame advances, so a
+        # Relaxation-only drive (#716): no combinatorial moves of any kind —
+        # no Pachner moves, no surgical cones, no disposition flips — and no
+        # growth of the blocks' scoring regions, so the triangulation is fixed
+        # and F descends within one region. `relax_chunk` is how much relaxation ONE frame advances, so a
         # descent can be watched instead of finishing inside a single frame;
         # defaulting it to relax_budget reproduces the existing cadence.
-        self.no_surgery = bool(no_surgery)
+        self.no_combinatorial_moves = bool(no_combinatorial_moves)
         self.relax_chunk = int(relax_chunk) if relax_chunk else int(relax_budget)
         self.status = bool(status)
         self._t0 = time.time()
@@ -461,7 +462,7 @@ class ProtonAnimator:
         # default of 1 try is exactly the historical single-draw behaviour and
         # the retries cost nothing on frames that succeed immediately.
         tries = 0
-        if self.no_surgery:
+        if self.no_combinatorial_moves:
             # Stage 2 alone. `run_stage2` returns its objective trace, so the
             # number of ACCEPTED relaxation steps this frame is len(trace) - 1.
             trace = node.run_stage2(beta=self.s2_beta, max_iters=self.relax_chunk,
@@ -505,8 +506,8 @@ class ProtonAnimator:
         gradient_norm_squared = history["gradN2"][-1]
         bare_residual = history["rU"][-1]
         cell_count = len(node.st.getTopSimplices())
-        if self.no_surgery:
-            stage1_note = "stage1 off (--no-surgery)"
+        if self.no_combinatorial_moves:
+            stage1_note = "stage1 off (--no-combinatorial-moves)"
         elif int(node.last_stage1_lookahead) > 0:
             stage1_note = (f"stage1 committed at depth "
                            f"{int(node.last_stage1_lookahead)}"
@@ -1558,7 +1559,7 @@ def animate(nodes, save=None, interval=200, dump_dir=None, **kw):
 
 
 def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEPS,
-              no_surgery=False, relax_chunk=None, status=True,
+              no_combinatorial_moves=False, relax_chunk=None, status=True,
               evolve_steps=_EVOLVE_STEPS,
               stage1_candidates=_STAGE1_CANDIDATES,
               max_lookahead_depth=_MAX_LOOKAHEAD_DEPTH,
@@ -1579,10 +1580,10 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
     (GIF/MP4) to animate it step-by-step (slower); that returns the per-step history."""
     if not visualize and not save:
         out = []
-        chunked = bool(no_surgery or relax_chunk)
+        chunked = bool(no_combinatorial_moves or relax_chunk)
         for node, label in nodes:
             if chunked:
-                # A chunked headless drive, so `--no-surgery` and
+                # A chunked headless drive, so `--no-combinatorial-moves` and
                 # `--relax-chunk` mean the same thing with and without a
                 # window, and the status line is available either way. The
                 # DEFAULT headless path below is left exactly as it was.
@@ -1590,7 +1591,7 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                 started = time.time()
                 for phase, steps in (("init", init_steps), ("evolve", evolve_steps)):
                     for step_index in range(steps):
-                        if no_surgery:
+                        if no_combinatorial_moves:
                             trace = node.run_stage2(
                                 beta=stage2_beta, max_iters=chunk,
                                 alpha0=stage2_alpha0, rel_tol=stage2_rel_tol)
@@ -1605,7 +1606,7 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                             accepted = None
                         if status:
                             st_now = node.st
-                            stage1_note = ("stage1 off (--no-surgery)" if no_surgery
+                            stage1_note = ("stage1 off (--no-combinatorial-moves)" if no_combinatorial_moves
                                            else (f"stage1 committed at depth "
                                                  f"{int(node.last_stage1_lookahead)}"
                                                  if int(node.last_stage1_lookahead) > 0
@@ -1620,7 +1621,7 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                                   f"cells {len(st_now.getTopSimplices())} | "
                                   f"{stage1_note} | {stage2_note} | "
                                   f"{time.time() - started:.0f}s", flush=True)
-                        if no_surgery and node.last_stage2_stationary:
+                        if no_combinatorial_moves and node.last_stage2_stationary:
                             break   # nothing left to relax and nothing to reopen it
                 st = node.st
                 out.append((label, {
@@ -1664,7 +1665,7 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                    max_lookahead_tries=max_lookahead_tries,
                    stage2_beta=stage2_beta, stage2_alpha0=stage2_alpha0,
                    stage2_rel_tol=stage2_rel_tol, relax_budget=relax_budget,
-                   no_surgery=no_surgery, relax_chunk=relax_chunk, status=status,
+                   no_combinatorial_moves=no_combinatorial_moves, relax_chunk=relax_chunk, status=status,
                    interval=interval,
                    dump_dir=dump_dir, **anim_kw).hist
 
@@ -1750,11 +1751,15 @@ def main():
                          "pair; the input-block residuals still anchor the "
                          "quark inputs and the singlet stays the read-out "
                          "verdict")
-    ap.add_argument("--no-surgery", action="store_true", dest="no_surgery",
-                    help="drive ONLY the geometric relaxation: no Pachner "
-                         "moves, no surgical cone moves, no boundary-region "
-                         "growth. The topology is fixed for the whole run and "
-                         "F descends within one region of configuration space")
+    ap.add_argument("--no-combinatorial-moves", action="store_true",
+                    dest="no_combinatorial_moves",
+                    help="drive ONLY the geometric relaxation: no combinatorial "
+                         "moves of any kind — no Pachner moves (add, remove, "
+                         "flip, inverse flip), no surgical cone moves, no "
+                         "disposition flips — and no growth of the blocks' "
+                         "scoring regions. The triangulation is fixed for the "
+                         "whole run and F descends within one region of "
+                         "configuration space")
     ap.add_argument("--degree", type=int, default=3, dest="degree",
                     help="the register degree k the residuals target — which "
                          "Hodge Laplacian L_k's eigenvalues r_U minimizes. "
@@ -1765,9 +1770,9 @@ def main():
     ap.add_argument("--relax-chunk", type=int, default=None, dest="relax_chunk",
                     help="geometric-relaxation iterations advanced per frame, "
                          "so a descent can be watched instead of finishing "
-                         "inside one frame. Under --no-surgery this is the "
-                         "stage-2 iterations per frame; otherwise it caps the "
-                         "per-frame relaxation. Default: --relax-budget "
+                         "inside one frame. Under --no-combinatorial-moves this "
+                         "is the stage-2 iterations per frame; otherwise it caps "
+                         "the per-frame relaxation. Default: --relax-budget "
                          "(today's cadence)")
     ap.add_argument("--no-status", action="store_false", dest="status",
                     help="silence the per-frame status line (F, its change, "
@@ -1827,7 +1832,7 @@ def main():
                        max_lookahead_depth=args.max_lookahead_depth,
                        max_lookahead_tries=args.max_lookahead_tries,
                        spectra_every=args.spectra_every,
-                       degree=args.degree, no_surgery=args.no_surgery,
+                       degree=args.degree, no_combinatorial_moves=args.no_combinatorial_moves,
                        relax_chunk=args.relax_chunk, status=args.status,
                        dump_dir=args.dump_dir)
     if not args.live and not args.save:
