@@ -143,6 +143,7 @@ import tessera
 
 cob = tessera.cobordism
 
+from geometry_state import GeometryState
 from krein_modes import KreinModes
 
 # Two combined-`run` passes on the one node — init (grow_boundaries=True) then evolution
@@ -378,7 +379,7 @@ class ProtonAnimator:
                  max_lookahead_tries=_MAX_LOOKAHEAD_TRIES,
                  stage2_alpha0=0.05, stage2_rel_tol=10e-9, relax_budget=10,
                  spectra_every=_SPECTRA_REFRESH_EVERY, no_combinatorial_moves=False,
-                 relax_chunk=None, status=True):
+                 relax_chunk=None, status=True, checkpoint=0, checkpoint_dir=None):
         self._common_init(nodes, degree)
         self.s1c, self.s2_beta = stage1_candidates, stage2_beta
         self.lookahead_depth = max_lookahead_depth
@@ -400,6 +401,11 @@ class ProtonAnimator:
         self.no_combinatorial_moves = bool(no_combinatorial_moves)
         self.relax_chunk = int(relax_chunk) if relax_chunk else int(relax_budget)
         self.status = bool(status)
+        # Every `checkpoint` frames, write the state (#722). This is the
+        # orientation-faithful record — cells in intrinsic vertex order — not
+        # the panel dump, whose cells are sorted for drawing.
+        self.checkpoint = max(0, int(checkpoint))
+        self.checkpoint_dir = checkpoint_dir
         self._t0 = time.time()
         self.spectra_every = max(1, int(spectra_every))
         self._schedule = self._make_schedule(len(nodes), init_steps, init_chunk,
@@ -486,8 +492,30 @@ class ProtonAnimator:
                     break
             self._last_relax_steps = None   # `run` does not report its trace
         self._record(node, node_index, phase, tries)
+        if self.checkpoint and (frame + 1) % self.checkpoint == 0:
+            self._write_checkpoint(node, frame, phase)
         if self.status:
             self._print_status(node, frame, phase, tries)
+
+    def _write_checkpoint(self, node, frame, phase):
+        """Write this frame's state through `GeometryState` — top cells in
+        INTRINSIC vertex order, so the orientation is recoverable from the file
+        (`inspect_state.py` reads it back). The panel dump written by
+        `_dump_frame` cannot serve here: it sorts each cell's vertices for
+        drawing, which discards exactly that order."""
+        directory = self.checkpoint_dir or self._dump_dir or "."
+        os.makedirs(directory, exist_ok=True)
+        path = os.path.join(directory, f"state_{frame + 1:04d}.json")
+        GeometryState.write(node.st, path, meta={
+            "frame": frame + 1,
+            "phase": phase,
+            "F": float(self.hist["F"][-1]) if self.hist["F"] else None,
+            "gradN2": float(self.hist["gradN2"][-1]) if self.hist["gradN2"] else None,
+            "rU": float(self.hist["rU"][-1]) if self.hist["rU"] else None,
+            "degree": self.k,
+        })
+        if self.status:
+            print(f"  checkpoint -> {path}", flush=True)
 
     def _print_status(self, node, frame, phase, tries):
         """One line per frame on stdout: where the drive is, and what is
@@ -1607,6 +1635,7 @@ def animate(nodes, save=None, interval=200, dump_dir=None, visualize=False, **kw
 
 def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEPS,
               no_combinatorial_moves=False, relax_chunk=None, status=True,
+              checkpoint=0, checkpoint_dir=None,
               evolve_steps=_EVOLVE_STEPS,
               stage1_candidates=_STAGE1_CANDIDATES,
               max_lookahead_depth=_MAX_LOOKAHEAD_DEPTH,
@@ -1668,6 +1697,16 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                                   f"cells {len(st_now.getTopSimplices())} | "
                                   f"{stage1_note} | {stage2_note} | "
                                   f"{time.time() - started:.0f}s", flush=True)
+                        if checkpoint and (step_index + 1) % checkpoint == 0:
+                            directory = checkpoint_dir or dump_dir or "."
+                            os.makedirs(directory, exist_ok=True)
+                            path = os.path.join(
+                                directory, f"state_{phase}_{step_index + 1:04d}.json")
+                            GeometryState.write(node.st, path, meta={
+                                "frame": step_index + 1, "phase": phase,
+                                "F": float(node.objective()), "degree": degree})
+                            if status:
+                                print(f"  checkpoint -> {path}", flush=True)
                         if no_combinatorial_moves and node.last_stage2_stationary:
                             break   # nothing left to relax and nothing to reopen it
                 st = node.st
@@ -1714,6 +1753,7 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                    stage2_beta=stage2_beta, stage2_alpha0=stage2_alpha0,
                    stage2_rel_tol=stage2_rel_tol, relax_budget=relax_budget,
                    no_combinatorial_moves=no_combinatorial_moves, relax_chunk=relax_chunk, status=status,
+                   checkpoint=checkpoint, checkpoint_dir=checkpoint_dir,
                    interval=interval,
                    dump_dir=dump_dir, **anim_kw).hist
 
@@ -1823,6 +1863,17 @@ def main():
                          "frame is one move plus its relaxation, and the amount "
                          "of that relaxation is --relax-budget. Default: "
                          "--relax-budget")
+    ap.add_argument("--checkpoint", type=int, default=0, metavar="STEPS",
+                    help="every STEPS frames, write the complex's state to "
+                         "state_<frame>.json: top cells in INTRINSIC vertex "
+                         "order plus every edge interval and vertex time, which "
+                         "is enough to rebuild the exact state and to read its "
+                         "orientation back (inspect_state.py). 0 (default) "
+                         "writes none. The per-frame --dump-dir record cannot "
+                         "serve this: it sorts each cell's vertices for drawing")
+    ap.add_argument("--checkpoint-dir", default=None, dest="checkpoint_dir",
+                    help="where to write state files (default: --dump-dir, "
+                         "else the working directory)")
     ap.add_argument("--no-status", action="store_false", dest="status",
                     help="silence the per-frame status line (F, its change, "
                          "the objective's two terms, cell/Betti/hole counts, "
@@ -1886,7 +1937,9 @@ def main():
                        max_lookahead_depth=args.max_lookahead_depth,
                        max_lookahead_tries=args.max_lookahead_tries,
                        spectra_every=args.spectra_every,
-                       degree=args.degree, no_combinatorial_moves=args.no_combinatorial_moves,
+                       degree=args.degree, checkpoint=args.checkpoint,
+                       checkpoint_dir=args.checkpoint_dir,
+                       no_combinatorial_moves=args.no_combinatorial_moves,
                        relax_chunk=args.relax_chunk, status=args.status,
                        dump_dir=args.dump_dir)
     if not args.live and not args.save:
