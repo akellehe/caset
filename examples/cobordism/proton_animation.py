@@ -853,18 +853,72 @@ class ProtonAnimator:
         # hole showed as 5 disconnected red dots and couldn't be counted.
         holes = cob.MultiCobordism.emergent_holes(st, self.k)
         hole_vsets = [set(h) for h in holes]
-        for e in st.getEdgeList().toVector():
+        # NULL edges (#730). An interval is null when l^2 vanishes, so the test is
+        # on |l^2| against the complex's OWN scale rather than an absolute number.
+        # Two bands, because they mean different things: at-tolerance is a
+        # genuinely degenerate edge, while merely NEAR null is where a
+        # balanced-edge run starts every edge by construction (Re l^2 = 0) and is
+        # not yet a degeneracy.
+        edges = st.getEdgeList().toVector()
+        squared = {}
+        for e in edges:
+            a, b = e.getSource().getId(), e.getTarget().getId()
+            squared[(a, b)] = e.getLength() ** 2
+        scale = max((abs(z) for z in squared.values()), default=1.0) or 1.0
+        null_edges, near_null_edges = set(), set()
+        census = {"spacelike": 0, "timelike": 0, "null": 0, "undecided": 0}
+        for key, z in squared.items():
+            if abs(z) <= 1e-9 * scale:
+                null_edges.add(key)
+            elif abs(z) <= 1e-3 * scale:
+                near_null_edges.add(key)
+            # Causal character. NULL means l^2 itself vanishes; that is a
+            # different condition from Re l^2 = 0, which is where a
+            # balanced-edge run starts EVERY edge (l^2 = i*m has |l^2| = m, so
+            # it is causally UNDECIDED, not lightlike). Counting them apart
+            # keeps a run full of undecided edges from reading as degenerate.
+            real, imaginary = z.real, z.imag
+            if abs(z) <= 1e-9 * scale:
+                census["null"] += 1
+            elif abs(real) <= 1e-9 * abs(z):
+                census["undecided"] += 1
+            elif abs(imaginary) > 1e-9 * abs(z):
+                census["undecided"] += 1
+            elif real > 0:
+                census["spacelike"] += 1
+            else:
+                census["timelike"] += 1
+        for e in edges:
             a, b = e.getSource().getId(), e.getTarget().getId()
             if a not in coords or b not in coords:
                 continue
             p, q = coords[a], coords[b]
             if any(a in vs and b in vs for vs in hole_vsets):     # a register-cell edge
                 ax.plot([p[0], q[0]], [p[1], q[1]], color="C3", lw=1.8, zorder=3)
+            elif (a, b) in null_edges:
+                ax.plot([p[0], q[0]], [p[1], q[1]], color="C1", lw=1.6, zorder=3)
+            elif (a, b) in near_null_edges:
+                ax.plot([p[0], q[0]], [p[1], q[1]], color="C1", lw=0.9, alpha=0.55,
+                        ls=(0, (2, 2)), zorder=2)
             else:
                 ax.plot([p[0], q[0]], [p[1], q[1]], color="0.85", lw=0.5, zorder=1)
         if coords:
             pts = np.array(list(coords.values()))
             ax.scatter(pts[:, 0], pts[:, 1], c="0.4", s=8, zorder=2)
+            # The boundary STATES (#730). Nothing structurally protects these
+            # regions — pinnedBoundaryVertices() is empty by design and the
+            # states are held only by their r_U terms — so seeing where they
+            # sit is the only way to watch whether the objective is holding
+            # them. Rings, not fills, so the register outlines stay readable.
+            for block_set, colour, name in (
+                    (getattr(node, "inputs", []), "C0", "input state ∂W⁻"),
+                    (getattr(node, "outputs", []), "C4", "output state ∂W⁺")):
+                marked = {v for block in block_set for v in block.vertices}
+                here = np.array([coords[v] for v in marked if v in coords])
+                if len(here):
+                    ax.scatter(here[:, 0], here[:, 1], s=70, facecolors="none",
+                               edgecolors=colour, linewidths=1.3, zorder=5,
+                               label=f"{name} ({len(marked)} vertices)")
             for i, h in enumerate(holes):                          # number each register
                 hp = np.array([coords[v] for v in h if v in coords])
                 if len(hp):
@@ -879,8 +933,16 @@ class ProtonAnimator:
                 ax.set_ylim(view[2], view[3])
         n_holes = len(holes)
         ax.set_aspect("equal")
-        ax.set_title(f"{title}  —  {n_holes} register{'s' if n_holes != 1 else ''}",
-                     fontsize=9)
+        census_tag = "  ".join(f"{count} {name}"
+                               for name, count in census.items() if count)
+        if near_null_edges:
+            census_tag += f"  ({len(near_null_edges)} near-null)"
+        ax.set_title(f"{title}  —  {n_holes} register{'s' if n_holes != 1 else ''}"
+                     f"  ·  {len(edges)} edges: {census_tag}", fontsize=9)
+        handles, _labels = ax.get_legend_handles_labels()
+        if handles:
+            ax.legend(loc="upper right", fontsize=6, framealpha=0.7,
+                      handletextpad=0.3, borderpad=0.3)
         ax.set_xticks([]); ax.set_yticks([])
 
     # ---- dual complex + curvature heat ----
