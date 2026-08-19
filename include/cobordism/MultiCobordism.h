@@ -605,11 +605,19 @@ class MultiCobordism {
   /// with no full cell yet is Δ == 0), so region growth can never raise F.
   /// Expand each not-yet-carrying block's SCORING REGION by one shell (the
   /// vertices of every top cell touching it), so the window a block's residual
-  /// is read over tracks the bulk and gains room for the holes that carry its
-  /// state. Gated on the block's own residual — a shell that raises it is
-  /// reverted, so this can never raise F — and skipped entirely once a block
-  /// carries. Creates no cells, edges, or vertices and never moves the
-  /// cobordism's boundary: the only write is each block's vertex set.
+  /// is read over gains room for the holes that carry its state.
+  ///
+  /// Two conditions bound it (#737). A shell is kept only when it STRICTLY
+  /// lowers that block's residual, and growth happens only BEFORE the first
+  /// committed combinatorial move — once the bulk is being linked, the states'
+  /// read windows are settled. Without both, growth had no stopping point: a
+  /// block that is not carrying scores the same constant full leak at any
+  /// region size, so every shell was an exact tie, ties were kept, and the
+  /// regions grew until they covered the whole complex and all blocks read one
+  /// identical sub-complex.
+  ///
+  /// Creates no cells, edges, or vertices and never moves the cobordism's
+  /// boundary: the only write is each block's vertex set.
   void growBlockRegions();
   /// Pre-grow the seed by `count` **gated cone-in moves** before any optimization
   /// (the constructor calls this once when `precone > 0`): each cones a fresh apex
@@ -642,6 +650,10 @@ class MultiCobordism {
   bool singularValueRatio_{false};
   /// #724: false drops `‖∇S_Regge‖²` from every objective site (see the ctor).
   bool einsteinHilbert_{true};
+  /// #737: latched by the first committed combinatorial move. Block regions
+  /// grow only BEFORE the bulk is connected, so once a move has linked the
+  /// complex up the boundary states' read windows are settled.
+  bool bulkConnected_{false};
   /// The Einstein-Hilbert term of the objective, or 0 when it is switched off.
   /// One place, so `objective`, the stage-2 acceptance test, and `deltaF`
   /// cannot come to disagree about what F is.

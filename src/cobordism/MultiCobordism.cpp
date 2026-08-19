@@ -918,6 +918,9 @@ double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth) {
   }
   if (foundImprovingMove) {
     spacetime_ = build(bestSnapshot);
+    // The first committed move is what starts linking the bulk, so block
+    // regions are settled from here on (#737).
+    bulkConnected_ = true;
     return bestObjectiveDelta;
   }
   return 0.0;
@@ -966,10 +969,22 @@ void MultiCobordism::preconeCells(int count, bool timelike, bool alternate) {
 }
 
 void MultiCobordism::growBlockRegions() {
+  // Growth is a SETUP step: it runs only before the bulk is connected, and
+  // only when a shell strictly LOWERS the block's residual (#737).
+  //
+  // Both conditions exist because the old rule had no stopping point. The gate
+  // was "keep the shell unless the residual rises", and a block that is not
+  // carrying sits at exactly the constant full-leak residual for ANY region
+  // size — so every shell scored a change of exactly zero, was always kept,
+  // and the region grew until it ran out of complex. Measured on a six-block
+  // node: regions [21, 13, 15, 5, 13, 21] became [25, 25, 25, 25, 25, 25], the
+  // whole complex, so all six blocks were reading one identical sub-complex and
+  // differed only in their target vectors.
+  if (bulkConnected_) return;   // the bulk is linked; the states stay as they are
   // Expand one block's READ WINDOW by a shell — the vertices of every top cell
-  // touching it — so it tracks the bulk's growth and gets room to open the holes
-  // that carry it. A block already carrying (residual < tolerance) is left alone,
-  // so it stops growing once it represents its state.
+  // touching it — so it gets room to open the holes that carry it. A block
+  // already carrying (residual < tolerance) is left alone, so it stops growing
+  // once it represents its state.
   //
   // This grows a SCORING REGION, never the cobordism's boundary: a block is a
   // vertex set plus a target, and that set selects the sub-complex the block's
@@ -977,11 +992,11 @@ void MultiCobordism::growBlockRegions() {
   // the only write is to `block.vertices`, and every `spacetime_` access below
   // is a read.
   //
-  // GATED on the block's own residual: the shell is kept only when it does not
-  // RAISE the block's r_U term, so region growth can never raise F. The gate is
-  // Δ <= 0, not Δ < 0: a region too small to hold a full cell scores the constant
-  // full-leak residual, so its early shells are exactly Δ == 0 and must pass —
-  // a strict gate would starve initialization at the seed.
+  // GATED on the block's own residual: a shell is kept only when it STRICTLY
+  // lowers the block's r_U term, so region growth can never raise F and never
+  // buys nothing. The earlier Δ <= 0 gate was chosen so a region too small to
+  // hold a full cell (whose shells are exact ties) could still get started, but
+  // that same allowance is what let a permanently-leaking block grow forever.
   const auto growOneShell = [this](BoundaryBlock &block) {
     const double residualBefore = residualForBoundaryBlock(block, spacetime_);
     if (residualBefore < inputCarriedTolerance_) return;
@@ -999,8 +1014,11 @@ void MultiCobordism::growBlockRegions() {
     }
     std::set<std::uint64_t> original = std::move(block.vertices);
     block.vertices = std::move(expanded);
-    if (residualForBoundaryBlock(block, spacetime_) > residualBefore)
-      block.vertices = std::move(original);  // the shell hurt the carry: revert it
+    // STRICT: a shell is kept only if it actually improves the carry. A shell
+    // that leaves the residual unchanged buys nothing and is what let the
+    // regions sprawl, so it is reverted like a harmful one.
+    if (residualForBoundaryBlock(block, spacetime_) >= residualBefore)
+      block.vertices = std::move(original);
   };
   for (auto &inputBlock : inputBlocks_) growOneShell(inputBlock);
   // Localized OUTPUT blocks (a 2→2 recombination's diquark ⊔ antidiquark) grow the
