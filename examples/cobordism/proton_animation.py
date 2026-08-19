@@ -1490,6 +1490,8 @@ class ProtonAnimator:
         recorded, so a partial run still yields a playable file."""
         import itertools
         import queue
+        import signal
+        import subprocess
         import threading
         import contextlib
         from matplotlib.animation import FuncAnimation
@@ -1497,7 +1499,7 @@ class ProtonAnimator:
         q = queue.Queue()                 # worker -> GUI: ('announce'|'paint'|'error', frame)
         paint_done = threading.Event()    # GUI -> worker: safe to mutate the engine again
         paint_done.set()                  # frame 0 may start immediately
-        state = {"error": None}
+        state = {"error": None, "interrupted": False}
 
         def worker():
             frame = -1
@@ -1557,11 +1559,61 @@ class ProtonAnimator:
         # context, so the single-flag live path runs exactly as before.
         recording = (writer.saving(self.fig, save, 90) if writer is not None
                      else contextlib.nullcontext())
-        with recording:
-            worker_thread.start()
-            plt.show()
+
+        # An interrupt has to CLOSE THE FIGURE rather than raise. Qt's event
+        # loop is C++ and does not return to Python when the signal lands, so a
+        # KeyboardInterrupt is never delivered and the run would simply carry on
+        # (measured: SIGINT left a live run going, and killing it then left an
+        # unplayable 48-byte MP4 with no trailer, or no GIF at all). Closing the
+        # figure makes plt.show() return through its ordinary path, so the
+        # writer finalizes exactly as it does when the window is closed. The
+        # animation timer re-enters Python every few tens of milliseconds, so
+        # the handler runs promptly.
+        def on_interrupt(_signal_number, _frame):
+            state["interrupted"] = True
+            try:
+                self._anim.event_source.stop()
+            finally:
+                plt.close(self.fig)
+
+        # A Python signal handler only runs between bytecodes in the main
+        # thread, and while Qt's loop is in C++ nothing there executes. The
+        # animation's own timer is not enough to rely on: it STOPS on the last
+        # frame, after which a finished run would sit in show() with no Python
+        # running and ignore the interrupt entirely (measured). This timer does
+        # nothing except return to Python a few times a second, for as long as
+        # the window is open, so a pending signal is always delivered promptly.
+        signal_pump = self.fig.canvas.new_timer(interval=200)
+        signal_pump.add_callback(lambda: None)
+
+        previous_handler = signal.signal(signal.SIGINT, on_interrupt)
+        interrupted_encoder = False
+        try:
+            with recording:
+                signal_pump.start()
+                worker_thread.start()
+                plt.show()
+        except subprocess.CalledProcessError:
+            # An interrupt reaches the whole process group, so ffmpeg takes it
+            # too. It finalizes the file on its way out but exits non-zero, and
+            # the writer reports that as a failure over a recording that is
+            # actually playable (measured: 17 frames written). Only tolerated
+            # when WE were interrupted; any other encoder failure still raises.
+            if not state.get("interrupted"):
+                raise
+            interrupted_encoder = True
+        finally:
+            signal_pump.stop()
+            signal.signal(signal.SIGINT, previous_handler)
+        if state.get("interrupted"):
+            print("interrupted — stopped after "
+                  f"{len(self.hist['F'])} frames", flush=True)
         if writer is not None:
-            print(f"saved animation -> {save}")
+            written = os.path.getsize(save) if os.path.exists(save) else 0
+            if interrupted_encoder and not written:
+                print(f"interrupted before anything could be written to {save}")
+            else:
+                print(f"saved animation -> {save} ({written} bytes)")
         if state["error"] is not None:
             raise state["error"]
 
