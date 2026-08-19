@@ -4,6 +4,7 @@
 #ifndef TESSERA_SPACETIME_H
 #define TESSERA_SPACETIME_H
 
+#include <cmath>
 #include <map>
 #include <memory>
 #include <optional>
@@ -604,10 +605,18 @@ class Spacetime {
     }
     /// The balanced length of a given squared magnitude m: ℓ = √(m/2)·(1+i),
     /// so |ℓ|² = m and ℓ² = i·m.
+    /// `timelikeBranch` selects the OTHER square root: `c(1 - i)` instead of
+    /// `c(1 + i)`, i.e. `l^2 = -i|m|` instead of `+i|m|`. Both sit on the
+    /// balanced convention (`Re l^2 = 0`, causally undecided at birth) and both
+    /// carry the same magnitude, so the branch is what keeps a timelike
+    /// disposition distinguishable from a spacelike one under balanced wiring
+    /// — without it the two coincide and the disposition is silently erased
+    /// (#741). `squaredMagnitude` is a MAGNITUDE: pass |m|, since `std::sqrt`
+    /// of a negative double is NaN.
     [[nodiscard]] static std::complex<double> balancedLength(
-        double squaredMagnitude) noexcept {
-      const double c = std::sqrt(squaredMagnitude * 0.5);
-      return {c, c};
+        double squaredMagnitude, bool timelikeBranch = false) noexcept {
+      const double c = std::sqrt(std::abs(squaredMagnitude) * 0.5);
+      return {c, timelikeBranch ? -c : c};
     }
     /// Absorb a departing edge's revision counters into the structural
     /// revision, called immediately BEFORE removing it from the edge list.
