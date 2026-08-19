@@ -2086,6 +2086,24 @@ def main():
     cob.HodgeLaplacian.setDefaultWeightConvention(convention)
     ProtonAnimator._TITLE_PREFIX += (
         f"  ·  W = {'V' if args.hodge_weights == 'content' else 'V²'}")
+    # Every iteration count below reaches a C++ `int` in the engine, so a value
+    # above INT_MAX has no valid conversion and pybind11 rejects the call — and
+    # it does so in the worker thread several frames in, after the host has been
+    # built and preconed, rather than at startup (#735). Asking for an uncapped
+    # relaxation is a reasonable thing to want, and INT_MAX iterations is
+    # uncapped for any run that will ever finish, so clamp and say so instead of
+    # failing.
+    _INT_MAX = 2 ** 31 - 1
+    for _flag in ("relax_budget", "relax_chunk", "init", "evolve", "candidates",
+                  "precone", "max_lookahead", "max_lookahead_depth",
+                  "spectra_every", "checkpoint"):
+        _value = getattr(args, _flag, None)
+        if isinstance(_value, int) and _value > _INT_MAX:
+            setattr(args, _flag, _INT_MAX)
+            print(f"--{_flag.replace('_', '-')} {_value} exceeds the engine's "
+                  f"iteration limit; using {_INT_MAX} (effectively uncapped)",
+                  flush=True)
+
     if args.relax_chunk and not args.no_combinatorial_moves:
         ap.error("--relax-chunk applies to the relaxation-only drive; pass "
                  "--no-combinatorial-moves with it. In the interleaved drive a "
