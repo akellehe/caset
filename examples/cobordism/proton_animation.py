@@ -1052,8 +1052,48 @@ class ProtonAnimator:
                         transform=ax.transAxes, ha="center", va="center", fontsize=9,
                         color="0.45")
         ax.set_aspect("equal")
-        ax.set_title(f"{title}  ({n} cells)", fontsize=9)
+        # "top cells", not "cells": these panels draw the 4-simplices, while the
+        # mode and sigma panels below count k-cells at the register degree. The
+        # two differ by construction — one pentatope is 1 top cell and 5
+        # tetrahedra, two sharing a facet are 2 and 9 — and labelling both
+        # "cells" read as a contradiction (#728).
+        ax.set_title(f"{title}  ({n} top cells)", fontsize=9)
         ax.set_xticks([]); ax.set_yticks([])
+
+    def _set_spectra_title(self, ax, base):
+        """Title a spectra panel, remembering the untagged text. These panels
+        are NOT redrawn on frames where the spectrum is reused, so the age tag
+        cannot be applied at draw time alone — `_refresh_spectra_titles`
+        re-applies it every frame from the remembered base."""
+        ax._tessera_base_title = base
+        ax.set_title(base + self._spectra_age_tag(), fontsize=9)
+
+    def _refresh_spectra_titles(self):
+        """Re-apply the age tag to every spectra panel, including the frames on
+        which they were skipped — otherwise a stale row keeps the title it was
+        drawn with and gives no sign it is a frame behind (#728)."""
+        for ax in (getattr(self, "ax_spec", None), getattr(self, "ax_mode", None),
+                   getattr(self, "ax_mode_head", None), getattr(self, "ax_pair", None)):
+            base = getattr(ax, "_tessera_base_title", None) if ax is not None else None
+            if base is not None:
+                ax.set_title(base + self._spectra_age_tag(), fontsize=9)
+
+    def _spectra_age_tag(self):
+        """" (frame N)" when the spectra panels are showing an older frame than
+        the one just drawn, else "". The O(n^3) spectrum is recomputed only every
+        `spectra_every` frames (#671), so on the frames in between these panels
+        hold the last computed state while the complex panels are live. On a
+        complex whose cell count moves frame to frame that reads as the two rows
+        contradicting each other, which is what it looked like in #728."""
+        spec_frames = self.hist.get("spec_frame") or []
+        if not spec_frames or spec_frames[-1] is None:
+            return ""
+        # `spec_frame` holds the 0-based index of the frame a row was computed
+        # on; the frame just drawn is at index len(hist["F"]) - 1. Titles count
+        # from 1, as the window title does.
+        computed_on = spec_frames[-1]
+        current = len(self.hist["F"]) - 1
+        return "" if computed_on >= current else f"  (frame {computed_on + 1})"
 
     def _draw_mode_heat(self, ax, node_index, coords, weights, sm, cmap,
                         which=None, title=None, empty_note="no k-cells yet"):
@@ -1130,8 +1170,8 @@ class ProtonAnimator:
         # annihilation heat with zero broken pairs), where PR reads 0.
         participation = 1.0 / weight_power if weight_power > 0 else 0.0
         ax.set_aspect("equal")
-        ax.set_title(f"{title}, PR {participation:.1f}/{len(weights)} cells",
-                     fontsize=9)
+        self._set_spectra_title(
+            ax, f"{title}, PR {participation:.1f}/{len(weights)} {self.k}-cells")
         ax.set_xticks([]); ax.set_yticks([])
 
     def _redraw(self):
@@ -1325,8 +1365,9 @@ class ProtonAnimator:
                           if n_cancelled else "")
             if n_forming:
                 cancel_tag += f"; dotted: {n_forming} forming"
-            ax.set_title(f"σ(L{self.k}) descending — red: {m}-smallest "
-                         f"(near-kernel tail){cancel_tag}", fontsize=9)
+            self._set_spectra_title(
+                ax, f"σ(L{self.k}) descending, {sigma.size} {self.k}-cells "
+                    f"— red: {m}-smallest (near-kernel tail){cancel_tag}")
             ax.set_xlabel("rank (descending)")
             ax.set_ylabel("σ")
             self.ax_null.legend(loc="lower right", fontsize=7)
@@ -1396,6 +1437,10 @@ class ProtonAnimator:
                     ta["leak"].set_data(list(xs), self.hist["im_leak"])
                     axl.relim()
                     axl.autoscale_view()
+        # Last, so it covers the spectra panels this frame SKIPPED as well as
+        # the ones it drew — a skipped panel keeps the title it was drawn with,
+        # and would otherwise give no sign that it is a frame behind (#728).
+        self._refresh_spectra_titles()
 
     # ---- per-frame text hooks ----
     def _frame_label(self, frame):
@@ -1408,7 +1453,6 @@ class ProtonAnimator:
         return (f"CONVERGED ✓ — proton {{1,ω,ω²}} carried (r_state={res:.2g}, "
                 f"{holes} registers)" if ok else
                 f"did NOT converge (r_state={res:.2g}, {holes} registers)")
-
     def _draw_extras(self):
         """Hook for per-frame figure annotations drawn after `_redraw`; none by default."""
 
