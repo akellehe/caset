@@ -1290,6 +1290,7 @@ bool MultiCobordism::stage2Update(double beta, double relTol,
         currentObjective = trialObjective;
         break;
       }
+      CLOG(INFO_LEVEL, (currentObjective - trialObjective), ">", improvementThreshold);
       CLOG(INFO_LEVEL, "Did not improve.");
       trialStepScale *= 0.5;
     }
