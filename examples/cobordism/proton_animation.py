@@ -866,28 +866,39 @@ class ProtonAnimator:
             squared[(a, b)] = e.getLength() ** 2
         scale = max((abs(z) for z in squared.values()), default=1.0) or 1.0
         null_edges, near_null_edges = set(), set()
-        census = {"spacelike": 0, "timelike": 0, "null": 0, "undecided": 0}
+        # Five categories, kept apart because they are different physical
+        # states and reading them as one hides what a run is doing (#739):
+        #   null       l^2 itself vanishes — genuinely lightlike
+        #   undecided  Re l^2 = 0 with Im != 0 — where a balanced-edge run
+        #              STARTS every edge; causally undecided, not lightlike
+        #   complex    both parts nonzero — off the real-l^2 locus entirely,
+        #              which is neither of the above
+        #   spacelike / timelike  real l^2, by sign
+        census = {"null": 0, "undecided": 0, "complex": 0,
+                  "spacelike": 0, "timelike": 0}
         for key, z in squared.items():
             if abs(z) <= 1e-9 * scale:
                 null_edges.add(key)
             elif abs(z) <= 1e-3 * scale:
                 near_null_edges.add(key)
-            # Causal character. NULL means l^2 itself vanishes; that is a
-            # different condition from Re l^2 = 0, which is where a
-            # balanced-edge run starts EVERY edge (l^2 = i*m has |l^2| = m, so
-            # it is causally UNDECIDED, not lightlike). Counting them apart
-            # keeps a run full of undecided edges from reading as degenerate.
             real, imaginary = z.real, z.imag
             if abs(z) <= 1e-9 * scale:
                 census["null"] += 1
             elif abs(real) <= 1e-9 * abs(z):
                 census["undecided"] += 1
             elif abs(imaginary) > 1e-9 * abs(z):
-                census["undecided"] += 1
+                census["complex"] += 1
             elif real > 0:
                 census["spacelike"] += 1
             else:
                 census["timelike"] += 1
+        # With nothing exactly null there is nothing to draw, and a viewer
+        # looking for the marking cannot tell that from a broken indicator.
+        # Mark the few edges CLOSEST to null instead — labelled as proximity,
+        # never as nullness.
+        if not null_edges and squared:
+            nearest = sorted(squared, key=lambda k: abs(squared[k]))[:3]
+            near_null_edges.update(nearest)
         for e in edges:
             a, b = e.getSource().getId(), e.getTarget().getId()
             if a not in coords or b not in coords:
@@ -933,10 +944,17 @@ class ProtonAnimator:
                 ax.set_ylim(view[2], view[3])
         n_holes = len(holes)
         ax.set_aspect("equal")
-        census_tag = "  ".join(f"{count} {name}"
-                               for name, count in census.items() if count)
+        # The null count is ALWAYS shown, including zero: it is the number a
+        # viewer goes looking for, and omitting it when empty is what made the
+        # indicator look broken (#739).
+        census_tag = f"{census['null']} null"
+        census_tag += "".join(f"  {count} {name}"
+                              for name, count in census.items()
+                              if count and name != "null")
         if near_null_edges:
-            census_tag += f"  ({len(near_null_edges)} near-null)"
+            census_tag += (f"  ({len(near_null_edges)} nearest null marked)"
+                           if not census["null"]
+                           else f"  ({len(near_null_edges)} near-null)")
         ax.set_title(f"{title}  —  {n_holes} register{'s' if n_holes != 1 else ''}"
                      f"  ·  {len(edges)} edges: {census_tag}", fontsize=9)
         handles, _labels = ax.get_legend_handles_labels()
