@@ -235,12 +235,6 @@ void Simplex::initialize(Simplex* simplex) {
   // We have to register AFTER the fingerprint is set:
   registerToVertices(simplex);
   initialized = true;
-
-  if (ti != tf) {
-    CLOG(INFO_LEVEL, "ti != tf: ", std::to_string(ti), " != ", std::to_string(tf), " for ", toString());
-  } else {
-    CLOG(INFO_LEVEL, "ti == tf: ", std::to_string(ti), " == ", std::to_string(tf), " for ", toString());
-  }
 }
 
 // getTi(), getTf() inlined in Simplex.h

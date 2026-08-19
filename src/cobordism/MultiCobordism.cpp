@@ -1231,13 +1231,12 @@ bool MultiCobordism::stage2Update(double beta, double relTol,
   // gate; in a standalone `runStage2` the two values coincide (every trace
   // entry there is an exactly recomputed objective).
 
-  const double currentObjective = fullObjective();
+  double currentObjective = fullObjective();
   // Relative stationarity: accept a step only when it lowers F by more than relTol
   // scaled by the current magnitude (an absolute floor of relTol when |F| < 1). The
   // old absolute convergenceTolerance_ accepted ~1e-11 *relative* steps for F ~ 100
   // — the rounding floor; this scales the threshold with the objective instead.
-  const double improvementThreshold =
-      relTol * std::max(std::abs(currentObjective), 1.0);
+  const double improvementThreshold = relTol;
   auto trialStepScale = complexd(stepScale, stepScale);
   // Put the geometry back the way this call found it. Both early exits use it: the
   // line search that never beat the threshold, and an objective evaluation that threw
@@ -1255,22 +1254,25 @@ bool MultiCobordism::stage2Update(double beta, double relTol,
         // Spacelike, timelike, and lightlike trials are all admissible, and
         // every trial is constructed EXACTLY real, so Im l^2 == 0 holds for
         // all time by construction — no backoff, no projection (#589).
-        // TODO: setSquaredLength takes a complex number. the SQUARED length can only be real. We need to fix this to use
-        //   imaginary length; we're losing detail on the real/imaginary split.
-        // edges[edgeIndex]->setLength(std::sqrt(complexd(
-            // squaredLengths(edgeIndex) - trialStepScale * descentDirection(edgeIndex),
-            // 0.0)));
         edges[edgeIndex]->setLength(complexd(lengths(edgeIndex) - trialStepScale * descentDirection(edgeIndex)));
       }
-      // The objective is total on the real signed-l^2 manifold, so a trial
-      // cannot fail to evaluate; a genuine error propagates loudly (#589).
       const double trialObjective = fullObjective();
-      if (trialObjective < currentObjective - improvementThreshold) {
+      CLOG(INFO_LEVEL, "-----------------------------------");
+      CLOG(INFO_LEVEL, "Trial objective: ", trialObjective);
+      CLOG(INFO_LEVEL, "Current objective: ", currentObjective);
+      CLOG(INFO_LEVEL, "Improvement threshold: ", improvementThreshold);
+      CLOG(INFO_LEVEL, "Improvement: ", currentObjective - trialObjective);
+      CLOG(INFO_LEVEL, "-----------------------------------");
+      if ((currentObjective - trialObjective) >= improvementThreshold) {
+        CLOG(INFO_LEVEL, (currentObjective - trialObjective), "<=", improvementThreshold);
+        CLOG(INFO_LEVEL, "Improved.");
         objectiveTrace.push_back(trialObjective);
         stepScale = std::min(stepScale * 1.3, 1.0);
         objectiveImproved = true;
+        currentObjective = trialObjective;
         break;
       }
+      CLOG(INFO_LEVEL, "Did not improve.");
       trialStepScale *= 0.5;
     }
   } catch (...) {
