@@ -249,9 +249,14 @@ std::pair<bool, std::string> SurgicalCone::coneIn(
           e->getTarget() != nullptr &&
           (e->getSource()->getId() == apexId ||
            e->getTarget()->getId() == apexId))
+        // Under balanced wiring the timelike class takes the OTHER root, so
+        // l^2 = -i|m| rather than +i|m| (#741). Passing -kTimelikeSquaredLength
+        // to the unbranched form landed on +1 — kTimelikeSquaredLength is
+        // already negative — which is exactly the spacelike auto-wiring value,
+        // so a timelike cone-in produced edges identical to a spacelike one.
         e->setLength(st_->balancedEdgeWiring()
                          ? ::tessera::spacetime::Spacetime::balancedLength(
-                               -kTimelikeSquaredLength)
+                               kTimelikeSquaredLength, /*timelikeBranch=*/true)
                          : std::sqrt(std::complex<double>(
                                kTimelikeSquaredLength, 0.0)));
   }
