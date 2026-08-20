@@ -74,6 +74,25 @@ class ObjectiveSelectionTest(unittest.TestCase):
             node.set_objective_mode(
                 cob.CobordismObjectiveMode.JointStationarity)
 
+    def test_zero_weights_disable_both_joint_terms(self):
+        node = _node(_complex_sphere4())
+        node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
+        node.set_hodge_entropy_weight(0.0)
+        node.set_regge_weight(0.0)
+        original_lengths = [complex(edge.getLength())
+                            for edge in node.st.getEdgeList().toVector()]
+
+        self.assertEqual(node.objective(), 0.0)
+        trace = node.run_stage2(beta=0.0, max_iters=1, alpha0=0.05,
+                                tolerance=1e-14)
+
+        self.assertEqual(trace, [0.0])
+        self.assertTrue(node.last_stage2_stationary)
+        self.assertEqual(
+            [complex(edge.getLength())
+             for edge in node.st.getEdgeList().toVector()],
+            original_lengths)
+
     def test_entropy_only_stage_two_is_variational(self):
         node = _node(_complex_sphere4())
         node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)

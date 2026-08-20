@@ -605,9 +605,10 @@ class MultiCobordism {
   [[nodiscard]] bool applyMoveSpecification(
       const std::shared_ptr<Spacetime> &spacetime,
       const MoveSpec &moveSpecification);
-  [[nodiscard]] double deltaF(
-      const std::shared_ptr<Spacetime> &candidateSpacetime, double baseResidualU,
-      const std::set<std::vector<std::uint64_t>> &baseCellSet) const;
+  [[nodiscard]] double
+  deltaF(const std::shared_ptr<Spacetime> &candidateSpacetime,
+         double baseObjective, double baseResidualU,
+         const std::set<std::vector<std::uint64_t>> &baseCellSet) const;
   /// One best-ΔF batch: `nCandidateMoves` candidates, each a sequence of
   /// `lookaheadDepth` gated random moves applied successively (each drawn against
   /// the evolving candidate), committed as a whole iff the best sequence lowers
@@ -620,7 +621,7 @@ class MultiCobordism {
   /// `relaxBudgetPerMove`. Depth 1 pre-draws its batch and scores it in
   /// parallel; deeper searches stay serial, since each draw is made against the
   /// evolving candidate. Returns the committed ΔF, or 0.
-  double step(int nCandidateMoves, int lookaheadDepth = 1);
+  double step(int nCandidateMoves, int lookaheadDepth, double baseObjective);
   /// One iteration of `runStage1`'s loop: optional boundary growth plus one
   /// best-ΔF candidate-move step, booked into `objectiveTrace`. A batch with no
   /// improving move is NOT a stall — the batch is a random sample, so the next
