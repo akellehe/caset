@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <stdexcept>
 #include <string>
@@ -242,6 +243,88 @@ Eigen::MatrixXcd laplacianMatrix(const Spacetime &K, int k, bool metric,
   return L;
 }
 
+struct SpectralEntropyData {
+  Eigen::MatrixXcd laplacian{};
+  Eigen::MatrixXcd entropyOperator{};
+  Eigen::MatrixXcd entropyDerivative{};
+  double entropy{0.0};
+  bool zeroOperator{true};
+};
+
+SpectralEntropyData spectralEntropyData(
+    const std::vector<cd> &flat,
+    HodgeLaplacian::EntropyPhaseMode phaseMode) {
+  SpectralEntropyData data;
+  if (flat.empty()) return data;
+  const auto n = static_cast<std::size_t>(
+      std::llround(std::sqrt(static_cast<double>(flat.size()))));
+  if (n * n != flat.size())
+    throw std::runtime_error(
+        "HodgeLaplacian::spectralEntropy: Laplacian is not square");
+
+  data.laplacian.resize(static_cast<Eigen::Index>(n),
+                        static_cast<Eigen::Index>(n));
+  for (std::size_t row = 0; row < n; ++row)
+    for (std::size_t column = 0; column < n; ++column)
+      data.laplacian(static_cast<Eigen::Index>(row),
+                     static_cast<Eigen::Index>(column)) =
+          flat[row * n + column];
+  if (!data.laplacian.allFinite())
+    throw std::runtime_error(
+        "HodgeLaplacian::spectralEntropy: non-finite Laplacian");
+
+  data.entropyOperator = data.laplacian;
+  if (phaseMode == HodgeLaplacian::EntropyPhaseMode::IgnoreComplexPhase)
+    data.entropyOperator = data.laplacian.cwiseAbs().cast<cd>();
+
+  Eigen::MatrixXcd positive =
+      data.entropyOperator.adjoint() * data.entropyOperator;
+  // Remove only roundoff-level anti-Hermitian noise before the self-adjoint solve.
+  positive = 0.5 * (positive + positive.adjoint());
+  const double trace = positive.trace().real();
+  if (!std::isfinite(trace))
+    throw std::runtime_error(
+        "HodgeLaplacian::spectralEntropy: non-finite positive-operator trace");
+  if (trace <= 0.0) {
+    data.entropyDerivative = Eigen::MatrixXcd::Zero(
+        static_cast<Eigen::Index>(n), static_cast<Eigen::Index>(n));
+    return data;
+  }
+
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> solver(positive);
+  if (solver.info() != Eigen::Success)
+    throw std::runtime_error(
+        "HodgeLaplacian::spectralEntropy: eigendecomposition failed");
+
+  const Eigen::VectorXd eigenvalues = solver.eigenvalues();
+  const double supportTolerance =
+      std::numeric_limits<double>::epsilon() *
+      static_cast<double>(std::max<std::size_t>(n, 1)) *
+      std::max(trace, 1.0) * 64.0;
+  Eigen::VectorXd coefficients = Eigen::VectorXd::Zero(
+      static_cast<Eigen::Index>(n));
+  for (std::size_t index = 0; index < n; ++index) {
+    const double eigenvalue =
+        std::max(eigenvalues[static_cast<Eigen::Index>(index)], 0.0);
+    if (eigenvalue <= supportTolerance) continue;
+    const double probability = eigenvalue / trace;
+    data.entropy -= probability * std::log(probability);
+  }
+  for (std::size_t index = 0; index < n; ++index) {
+    const double eigenvalue =
+        std::max(eigenvalues[static_cast<Eigen::Index>(index)], 0.0);
+    if (eigenvalue <= supportTolerance) continue;
+    const double probability = eigenvalue / trace;
+    coefficients[static_cast<Eigen::Index>(index)] =
+        -(std::log(probability) + data.entropy) / trace;
+  }
+  data.entropyDerivative =
+      solver.eigenvectors() * coefficients.asDiagonal() *
+      solver.eigenvectors().adjoint();
+  data.zeroOperator = false;
+  return data;
+}
+
 }  // namespace
 
 HodgeLaplacian::WeightConvention HodgeLaplacian::defaultWeightConvention_ =
@@ -425,6 +508,86 @@ std::vector<std::complex<double>> HodgeLaplacian::laplacianGradient(
     for (int j = 0; j < nk; ++j)
       out[static_cast<std::size_t>(i) * nk + j] = dL(i, j);
   return out;
+}
+
+double HodgeLaplacian::spectralEntropy(int k,
+                                      EntropyPhaseMode phaseMode) const {
+  requireNonNegativeDegree(k);
+  return spectralEntropyData(laplacian(k, /*metric=*/true), phaseMode).entropy;
+}
+
+std::vector<std::complex<double>> HodgeLaplacian::spectralEntropyGradient(
+    int k, EntropyPhaseMode phaseMode) const {
+  requireNonNegativeDegree(k);
+  if (k == 0)
+    throw std::runtime_error(
+        "HodgeLaplacian::spectralEntropyGradient: degree zero has no "
+        "complex squared-length Laplacian gradient; use k >= 1");
+  const auto edges = st_ && st_->getEdgeList()
+                         ? st_->getEdgeList()->toVector()
+                         : std::vector<EdgePtr>{};
+  std::vector<cd> gradient(edges.size(), cd{0.0, 0.0});
+  const SpectralEntropyData data =
+      spectralEntropyData(laplacian(k, /*metric=*/true), phaseMode);
+  if (data.laplacian.size() == 0 || data.zeroOperator) return gradient;
+  const Eigen::Index n = data.laplacian.rows();
+
+  Eigen::MatrixXcd fullPhaseLeft;
+  Eigen::MatrixXd magnitudeDerivative;
+  if (phaseMode == EntropyPhaseMode::IncludeComplexPhase) {
+    fullPhaseLeft = data.entropyDerivative * data.laplacian.adjoint();
+  } else {
+    // M=|L| is real entrywise. For A=M^T M, dS/dM=2 M C.
+    magnitudeDerivative =
+        2.0 * data.entropyOperator.real() * data.entropyDerivative.real();
+  }
+
+  for (std::size_t edgeIndex = 0; edgeIndex < edges.size(); ++edgeIndex) {
+    const auto *edge = edges[edgeIndex];
+    if (edge == nullptr || edge->getSource() == nullptr ||
+        edge->getTarget() == nullptr)
+      continue;
+    const std::vector<cd> derivativeFlat = laplacianGradient(
+        k, edge->getSource()->getId(), edge->getTarget()->getId());
+    if (derivativeFlat.size() != static_cast<std::size_t>(n * n))
+      throw std::runtime_error(
+          "HodgeLaplacian::spectralEntropyGradient: Laplacian-gradient shape "
+          "does not match the operator");
+    Eigen::MatrixXcd derivative(n, n);
+    for (Eigen::Index row = 0; row < n; ++row)
+      for (Eigen::Index column = 0; column < n; ++column)
+        derivative(row, column) =
+            derivativeFlat[static_cast<std::size_t>(row * n + column)];
+
+    if (phaseMode == EntropyPhaseMode::IncludeComplexPhase) {
+      // dS = 2 Re Tr(C L^dagger dL). In the documented convention
+      // h=S_x-iS_y this is h=2 Tr(C L^dagger dL/dz).
+      gradient[edgeIndex] = 2.0 * (fullPhaseLeft * derivative).trace();
+    } else {
+      // d|L_ij| = Re(conj(L_ij)/|L_ij| dL_ij). Contract that chain rule with
+      // dS/dM; a zero entry contributes zero on this fixed support stratum.
+      cd component{0.0, 0.0};
+      for (Eigen::Index row = 0; row < n; ++row)
+        for (Eigen::Index column = 0; column < n; ++column) {
+          const cd value = data.laplacian(row, column);
+          const double magnitude = std::abs(value);
+          if (magnitude <= 0.0) continue;
+          component += magnitudeDerivative(row, column) *
+                       (std::conj(value) / magnitude) *
+                       derivative(row, column);
+        }
+      gradient[edgeIndex] = component;
+    }
+  }
+  return gradient;
+}
+
+double HodgeLaplacian::spectralEntropyGradientNorm(
+    int k, EntropyPhaseMode phaseMode) const {
+  double normSquared = 0.0;
+  for (const cd component : spectralEntropyGradient(k, phaseMode))
+    normSquared += std::norm(component);
+  return normSquared;
 }
 
 const HodgeLaplacian::SpectrumCache &HodgeLaplacian::ensureSpectrum(

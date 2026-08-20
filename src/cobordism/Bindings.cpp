@@ -234,6 +234,18 @@ not of signature; neither reintroduces a Euclidean path.)doc")
              "weight and genuine null kernel directions survive.")
       .export_values();
 
+  py::enum_<HodgeLaplacian::EntropyPhaseMode>(m, "HodgeEntropyPhaseMode",
+      "Whether Hodge spectral entropy retains complex operator entries or "
+      "uses the entrywise-magnitude phase-blind ablation.")
+      .value("IncludeComplexPhase",
+             HodgeLaplacian::EntropyPhaseMode::IncludeComplexPhase,
+             "Use M=L_k, retaining every complex phase.")
+      .value("IgnoreComplexPhase",
+             HodgeLaplacian::EntropyPhaseMode::IgnoreComplexPhase,
+             "Use M_ij=|L_k,ij| for this entropy observable only; live complex "
+             "edge lengths and z=l^2 are unchanged.")
+      .export_values();
+
   py::class_<HodgeLaplacian>(m, "HodgeLaplacian",
       R"doc(Hodge Laplacian on a Spacetime, degree-parameterized by int k.
 
@@ -316,6 +328,24 @@ Euclidean spectrum/kernel.)doc")
            "the weights W_j=|vol| depend on l^2; built via dB_k = diag(a_{k-1})B_k + "
            "B_k diag(b_k), a_j=dW_j/(2W_j), dW_j = Simplex.volumeGradient. Empty for "
            "k<1 or an absent edge.")
+      .def("spectralEntropy", &HodgeLaplacian::spectralEntropy, py::arg("k"),
+           py::arg("phase_mode") =
+               HodgeLaplacian::EntropyPhaseMode::IncludeComplexPhase,
+           "Von Neumann entropy of rho=A/Tr(A), A=M^dagger M. M=L_k when "
+           "complex phase is included and M_ij=|L_k,ij| in the phase-blind "
+           "ablation. Empty/zero operators return zero.")
+      .def("spectralEntropyGradient",
+           &HodgeLaplacian::spectralEntropyGradient, py::arg("k"),
+           py::arg("phase_mode") =
+               HodgeLaplacian::EntropyPhaseMode::IncludeComplexPhase,
+           "Complex-z gradient h=dS/dRe(z)-i*dS/dIm(z), in EdgeList order, "
+           "for z=l^2. conj(h) is the steepest-ascent displacement. Requires "
+           "k>=1.")
+      .def("spectralEntropyGradientNorm",
+           &HodgeLaplacian::spectralEntropyGradientNorm, py::arg("k"),
+           py::arg("phase_mode") =
+               HodgeLaplacian::EntropyPhaseMode::IncludeComplexPhase,
+           "Entropy-stationarity residual sum_e |dS/dz_e|^2.")
       .def("isHermitian", &HodgeLaplacian::isHermitian, py::arg("tol") = 1e-12,
            "True iff ||L - L^dagger|| <= tol (Frobenius) for the k=0 Laplacian.")
       .def("unitarityResidual", &HodgeLaplacian::unitarityResidual,

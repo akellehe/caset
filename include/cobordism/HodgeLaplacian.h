@@ -117,6 +117,15 @@ class HodgeLaplacian {
     /// `SquaredContent` keeps the weights real-signed and restores one.
     enum class WeightConvention { Content, SquaredContent };
 
+    /// Whether spectral-entropy diagnostics retain the complex entries of
+    /// \f$L_k\f$ or perform a phase-blind ablation first.
+    ///
+    /// `IncludeComplexPhase` uses \f$M=L_k\f$. `IgnoreComplexPhase` uses the
+    /// entrywise magnitude \f$M_{ij}=|(L_k)_{ij}|\f$. The latter does NOT replace
+    /// an edge length or squared edge length by its magnitude; it changes only
+    /// the operator used by this entropy observable.
+    enum class EntropyPhaseMode { IncludeComplexPhase, IgnoreComplexPhase };
+
     /// Construct the operator over a triangulation. Edge weights/phases are read
     /// lazily (at the first matrix/spectrum query), so the spacetime must
     /// outlive the operator; the held `shared_ptr` keeps it alive.
@@ -187,6 +196,39 @@ class HodgeLaplacian {
     /// Empty for \f$ k < 1 \f$ or an absent edge.
     [[nodiscard]] std::vector<std::complex<double>> laplacianGradient(
         int k, std::uint64_t edgeA, std::uint64_t edgeB) const;
+
+    /// Von Neumann entropy of the normalized positive Hodge operator
+    /// \f[ A_k=M_k^\dagger M_k,\qquad
+    ///     \rho_k=A_k/\operatorname{Tr}A_k,\qquad
+    ///     S_k=-\operatorname{Tr}(\rho_k\log\rho_k). \f]
+    ///
+    /// `phaseMode` selects \f$M_k=L_k\f$ or the phase-blind entrywise
+    /// \f$|L_k|\f$ ablation. Empty and identically-zero operators have entropy
+    /// zero. Exact zero modes are omitted from \f$0\log 0\f$ and from the
+    /// derivative, which is the derivative on the fixed-rank stratum selected
+    /// by the current topology.
+    [[nodiscard]] double spectralEntropy(
+        int k, EntropyPhaseMode phaseMode =
+                   EntropyPhaseMode::IncludeComplexPhase) const;
+
+    /// Gradient of `spectralEntropy` with respect to the COMPLEX squared edge
+    /// coordinates \f$z_e=\ell_e^2\f$, in `EdgeList` order. The returned
+    /// convention is
+    /// \f$h_e=\partial S/\partial\operatorname{Re}z_e
+    ///       -i\,\partial S/\partial\operatorname{Im}z_e\f$, so
+    /// \f$\overline h\f$ is the steepest-ascent displacement in the complex
+    /// \f$z\f$ plane. Available for the metric operators \f$k\ge1\f$; degree
+    /// zero throws because its magnitude-weighted diagonal is non-holomorphic
+    /// and has no `laplacianGradient` implementation.
+    [[nodiscard]] std::vector<std::complex<double>> spectralEntropyGradient(
+        int k, EntropyPhaseMode phaseMode =
+                   EntropyPhaseMode::IncludeComplexPhase) const;
+
+    /// \f$\sum_e |\partial S/\partial z_e|^2\f$, the entropy-stationarity
+    /// residual used by the joint Regge-Hodge objective.
+    [[nodiscard]] double spectralEntropyGradientNorm(
+        int k, EntropyPhaseMode phaseMode =
+                   EntropyPhaseMode::IncludeComplexPhase) const;
 
     /// Whether \f$ \| L - L^\dagger \| \le \text{tol} \f$ (Frobenius norm) for
     /// the \f$ k = 0 \f$ Laplacian. True by construction.
