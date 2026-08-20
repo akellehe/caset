@@ -9,9 +9,10 @@ elementwise conjugates — three neutral q-q̄ pairs, as pair production demands
 single output is the colorless proton singlet `{1, ω, ω²}`, read off the WHOLE cobordism
 — the anti-baryon partner is left to emerge unpinned. No diquark intermediate, no
 recombination/formation split — the canonical two-step reference build is animated by
-`multicobordism_animation.py`. Because the singlet is an output target in the objective,
-this example tests whether a one-step constrained node can grow topology that carries that
-target; it is not a post-hoc demonstration that an unpinned proton emerged spontaneously.
+`multicobordism_animation.py`. In the default joint-stationarity mode the singlet is an
+unscored readout: the simulation searches for simultaneous stationary points of the Regge
+action and Hodge entropy, then asks whether the resulting topology carries the singlet.
+The legacy and mediated modes retain target-conditioned objectives for comparison.
 
 The node is driven with the COMBINED `run` drive: an **init pass** (`grow_boundaries=True`)
 that grows the color register, then an **evolution pass** (`grow_boundaries=False`) with the
@@ -27,8 +28,8 @@ mode rather than an exact replay of the instrumented animation.
 The figure is one panel row for the single node: traces, the primal complex, then the dual
 split into real- and imaginary-curvature channels:
 
-  * **metrics** — the objective `F`, the Regge stationarity term `‖∇S‖²`, and the
-    realizability residual `r_U` vs optimization frame;
+  * **metrics** — the objective `F`, the Regge and Hodge-entropy stationarity
+    residuals, and the realizability residual `r_U` vs optimization frame;
   * **color register** — the color-register (hole = quark) count and, separately, the Betti
     number `b_k` vs optimization frame (the proton's three registers appear as the node grows);
   * **complex** — a 2-D classical-MDS projection of the node's relaxing 1-skeleton; each
@@ -69,8 +70,7 @@ It drives only the **public** `Proton` (`direct_node`),
 `regge_action_gradient`, `r_state`, `r_u`, `objective`, `st`), and the geometry readers
 (`Spacetime.getTopSimplices`/`getDualAdjacency`/`getSimplices`,
 `Simplex.deficitAngle`/`dualVolume`) APIs — the *same* node setup
-and drive `Proton.build_direct()` uses, so the animation shows the real class. The C++
-engine is untouched.
+and drive `Proton.build_direct()` uses, so the animation shows the real class.
 
 **Visualization is off by default** — `run_build(...)` takes the fast batched path with no
 per-frame plotting overhead. Opt in with `visualize=True` (or `--live`/`--save`) to animate,
@@ -241,8 +241,8 @@ def face_gram_determinants(cells, squared_length):
     the analytic degeneracy diagnostic; discarding Im ℓ² would incorrectly call
     every purely imaginary balanced-edge face null.
 
-    `squared_length(u, v)` returns the edge's full ℓ²; every vertex pair inside
-    a top cell is an edge of the complex, so lookups never miss (the Gram
+    `squared_length(u, v)` returns the edge's full complex ℓ²; every vertex pair
+    inside a top cell is an edge of the complex, so lookups never miss (the Gram
     diagonal's ℓ²(v,v) = 0 is supplied here, not looked up).
 
     Vectorized: faces are deduplicated once, their Gram matrices stacked, and
@@ -250,7 +250,7 @@ def face_gram_determinants(cells, squared_length):
     routine the old per-face calls ran, so the values are unchanged; only the
     per-face Python/numpy call overhead is gone (#671)."""
     def interval(u, v):
-        return 0.0 if u == v else squared_length(u, v)
+        return 0.0j if u == v else squared_length(u, v)
     faces = {2: set(), 3: set()}
     for cell in cells:
         ordered = sorted(cell)
@@ -515,7 +515,8 @@ class ProtonAnimator:
         self.einstein_hilbert = bool(einstein_hilbert)
         self._last_relax_steps = None       # accepted stage-2 steps this frame
         self._run_index = None              # per-run filename marker (#752)
-        self.hist = {"F": [], "gradN2": [], "rU": [], "b3": [], "holes": [],
+        self.hist = {"F": [], "gradN2": [], "hodgeS": [], "hodgeGradN2": [],
+                     "rU": [], "b3": [], "holes": [],
                      "phase": [], "node": [], "lookahead": [], "tries": [],
                      "min_det2": [], "min_det3": [], "sigma": [],
                      "mode_w": [], "mode_w_head": [], "mode_cells": [],
@@ -625,6 +626,9 @@ class ProtonAnimator:
             "phase": phase,
             "F": float(self.hist["F"][-1]) if self.hist["F"] else None,
             "gradN2": float(self.hist["gradN2"][-1]) if self.hist["gradN2"] else None,
+            "hodgeS": float(self.hist["hodgeS"][-1]) if self.hist["hodgeS"] else None,
+            "hodgeGradN2": (float(self.hist["hodgeGradN2"][-1])
+                              if self.hist["hodgeGradN2"] else None),
             "rU": float(self.hist["rU"][-1]) if self.hist["rU"] else None,
             "degree": self.k,
         })
@@ -652,9 +656,8 @@ class ProtonAnimator:
         objective = history["F"][-1]
         change = (objective - history["F"][-2]) if len(history["F"]) > 1 else 0.0
         gradient_norm_squared = history["gradN2"][-1]
+        hodge_gradient_norm_squared = history["hodgeGradN2"][-1]
         bare_residual = history["rU"][-1]
-        residual_term = (objective - gradient_norm_squared
-                         if self.einstein_hilbert else objective)
         cell_count = len(node.st.getTopSimplices())
         if self.no_combinatorial_moves:
             stage1_note = "stage1 off (--no-combinatorial-moves)"
@@ -673,7 +676,8 @@ class ProtonAnimator:
             stage2_note = "stage2 descending"
         print(f"f{frame + 1:04d} {phase:<6} | F {objective:.6e} "
               f"dF {change:+.3e} | grad2 {gradient_norm_squared:.3e} "
-              f"G*rU {residual_term:.3e} rU {bare_residual:.3e} | "
+              f"hodge-grad2 {hodge_gradient_norm_squared:.3e} "
+              f"rU {bare_residual:.3e} | "
               f"cells {cell_count} b{self.k} {history['b3'][-1]} "
               f"holes {history['holes'][-1]} | {stage1_note} | {stage2_note} | "
               f"{time.time() - self._t0:.0f}s", flush=True)
@@ -682,6 +686,10 @@ class ProtonAnimator:
         st = node.st
         self.hist["F"].append(float(node.objective()))
         self.hist["gradN2"].append(float(cob.MultiCobordism.regge_action_gradient(st)))
+        self.hist["hodgeS"].append(float(node.hodge_entropy()))
+        self.hist["hodgeGradN2"].append(
+            float(node.hodge_entropy_stationarity()) if self.k >= 1
+            else float("nan"))
         self.hist["rU"].append(float(node.r_u(st)))
         # Betti is TOPOLOGY: it can only change when stage 1 commits a move, so
         # relaxation-only frames reuse the last value exactly (#671). A commit,
@@ -1182,7 +1190,8 @@ class ProtonAnimator:
                 {int(v): t for v, t in n["vertex_times"].items()}, 4)
         """
         payload = {"frame": frame, "dimensions": 4, "nodes": []}
-        for key in ("F", "gradN2", "rU", "b3", "holes", "phase", "node",
+        for key in ("F", "gradN2", "hodgeS", "hodgeGradN2", "rU",
+                    "b3", "holes", "phase", "node",
                     "lookahead", "tries", "min_det2", "min_det3", "spec_frame"):
             series = self.hist.get(key) or []
             payload[key] = series[-1] if series else None
@@ -1405,21 +1414,12 @@ class ProtonAnimator:
         xs = range(len(self.hist["F"]))
         self.axm.clear()
         self.axm.plot(xs, self.hist["F"], label="F (objective)", color="C0")
-        self.axm.plot(xs, self.hist["gradN2"], label="‖∇S‖²", color="C1")
-        # The residual AS IT ENTERS F. With the Einstein-Hilbert term enabled,
-        # Γ·r_U = F − ‖∇S‖²; with it disabled, F = Γ·r_U. At large Γ this
-        # trace visually hugs F — which is the point: the bare r_U line below
-        # (kept, dashed, pre-prefactor) is orders of magnitude away from the
-        # term the objective actually trades against ‖∇S‖², and plotting only
-        # the bare residual made every committed move look F-increasing (the
-        # two big lines render flat at their scale while ‖∇S‖² visibly rises).
-        gamma_ru = ([f - g for f, g in zip(self.hist["F"], self.hist["gradN2"])]
-                    if self.einstein_hilbert else list(self.hist["F"]))
-        residual_label = ("Γ·r_U (= F − ‖∇S‖²)" if self.einstein_hilbert
-                          else "Γ·r_U (= F; Einstein-Hilbert term off)")
-        self.axm.plot(xs, gamma_ru, label=residual_label, color="C4",
+        self.axm.plot(xs, self.hist["gradN2"],
+                      label="‖∇S_Regge‖² (bare)", color="C1")
+        self.axm.plot(xs, self.hist["hodgeGradN2"],
+                      label="‖∇S_Hodge‖² (bare)", color="C4",
                       lw=1.0, alpha=0.9)
-        self.axm.plot(xs, self.hist["rU"], label="r_U (bare, pre-Γ)", color="C2",
+        self.axm.plot(xs, self.hist["rU"], label="r_U (diagnostic)", color="C2",
                       ls="--", alpha=0.6)
         # Per-frame ΔF, signed, on the same symlog axis: descent shows as a
         # NEGATIVE trace regardless of F's absolute scale, so "is the
@@ -1922,7 +1922,9 @@ class ProtonAnimator:
 
 def build_proton_nodes(seed=3, precone=0, precone_timelike=False, gamma=50.0,
                        balanced_edges=False, singular_value_ratio=False,
-                       degree=3, einstein_hilbert=True):
+                       degree=3, einstein_hilbert=True,
+                       objective_mode="joint-stationarity",
+                       entropy_weight=1.0, ignore_complex_phase=False):
     """The single one-step `MultiCobordism` node the animation drives, as a 1-element
     list: `Proton.direct_node` — the three bare quarks `{1}`, `{ω}`, `{ω²}` plus their
     three anti-quarks (three q-q̄ pairs) as inputs and the proton singlet as the single
@@ -1938,8 +1940,19 @@ def build_proton_nodes(seed=3, precone=0, precone_timelike=False, gamma=50.0,
                    gamma=gamma, balanced_edges=balanced_edges,
                    singular_value_ratio=singular_value_ratio,
                    register_degree=degree, einstein_hilbert=einstein_hilbert)
+    node = p.direct_node(seed)
+    node.set_objective_mode({
+        "joint-stationarity": cob.CobordismObjectiveMode.JointStationarity,
+        "mediated-correspondence": cob.CobordismObjectiveMode.MediatedCorrespondence,
+        "legacy": cob.CobordismObjectiveMode.Legacy,
+    }[objective_mode])
+    node.set_hodge_entropy_weight(entropy_weight)
+    node.set_hodge_entropy_phase_mode(
+        cob.HodgeEntropyPhaseMode.IgnoreComplexPhase
+        if ignore_complex_phase
+        else cob.HodgeEntropyPhaseMode.IncludeComplexPhase)
     return [
-        (p.direct_node(seed), "Proton — 3 q-q̄ pairs → singlet {1, ω, ω²} (one step)"),
+        (node, "Proton — 3 q-q̄ pairs → singlet {1, ω, ω²} (one step)"),
     ]
 
 
@@ -2036,6 +2049,12 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
         raise ValueError("relax_chunk must be positive when provided")
     if relax_chunk is not None and not no_combinatorial_moves:
         raise ValueError("relax_chunk requires no_combinatorial_moves")
+    if stage2_beta < 0.0 or not math.isfinite(stage2_beta):
+        raise ValueError("stage2_beta must be finite and non-negative")
+    # Keep objective(), stage 1, stage 2, and the first recorded frame on one beta.
+    # run()/run_stage2 also set this, but a display/read can precede the first call.
+    for node, _label in nodes:
+        node.set_regge_weight(stage2_beta)
     if not visualize and not save:
         out = []
         chunked = bool(no_combinatorial_moves)
@@ -2102,6 +2121,9 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                 out.append((label, {
                     "F": float(node.objective()),
                     "gradN2": float(cob.MultiCobordism.regge_action_gradient(st)),
+                    "hodgeS": float(node.hodge_entropy()),
+                    "hodgeGradN2": (float(node.hodge_entropy_stationarity())
+                                     if degree >= 1 else float("nan")),
                     "rU": float(node.r_u(st)),
                     "b3": int(cob.MultiCobordism.betti(st)[degree]),
                     "holes": len(cob.MultiCobordism.emergent_holes(st, degree))}))
@@ -2124,6 +2146,9 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
             out.append((label, {
                 "F": float(node.objective()),
                 "gradN2": float(cob.MultiCobordism.regge_action_gradient(st)),
+                "hodgeS": float(node.hodge_entropy()),
+                "hodgeGradN2": (float(node.hodge_entropy_stationarity())
+                                 if degree >= 1 else float("nan")),
                 "rU": float(node.r_u(st)),
                 "b3": int(cob.MultiCobordism.betti(st)[degree]),
                 "holes": len(cob.MultiCobordism.emergent_holes(st, degree))}))
@@ -2198,8 +2223,18 @@ def main():
     ap.add_argument("--precone-timelike", action="store_true", dest="precone_timelike",
                     help="draw every precone cone-in as the TIMELIKE disposition, so "
                          "the pre-grown material carries causal content")
+    ap.add_argument("--objective",
+                    choices=("joint-stationarity", "mediated-correspondence", "legacy"),
+                    default="joint-stationarity",
+                    help="objective scored by both surgery and relaxation: "
+                         "'joint-stationarity' (default) finds simultaneous stationary "
+                         "points of the Regge action and Hodge entropy; "
+                         "'mediated-correspondence' reproduces the documented "
+                         "r_U + beta*|S_Regge| experiment; 'legacy' retains "
+                         "||grad S_Regge||^2 + gamma*r_U")
     ap.add_argument("--gamma", type=float, default=50.0,
-                    help="weight on r_U in F (engine default 50). The r_U VALUE "
+                    help="weight on r_U in the legacy objective (ignored by the "
+                         "joint and mediated objectives). The r_U VALUE "
                          "is dominated by flat step residuals; the movable "
                          "register-seeking signal is the near-kernel term, "
                          "measured ~5e-4 on ~90-tet hosts — so at 50 it loses "
@@ -2214,8 +2249,12 @@ def main():
                          "--threads workers, so breadth is nearly free up to "
                          "the worker count)")
     ap.add_argument("--beta", type=float, default=1.0,
-                    help="stage-2 weight on ||grad S||^2 (beta != 1 mixes the "
-                         "two halves' scales in the shared F trace)")
+                    help="Regge weight beta: multiplies ||grad S_Regge||^2 in "
+                         "joint/legacy mode and |S_Regge| in mediated mode")
+    ap.add_argument("--entropy-weight", type=float, default=1.0,
+                    dest="entropy_weight",
+                    help="eta multiplying ||grad S_Hodge||^2 in the joint "
+                         "stationarity objective")
     ap.add_argument("--alpha0", type=float, default=0.05,
                     help="stage-2 initial line-search step scale")
     ap.add_argument("--tolerance", type=float, default=10e-9, dest="tolerance",
@@ -2281,15 +2320,11 @@ def main():
                          "--relax-budget")
     ap.add_argument("--no-einstein-hilbert", action="store_false",
                     dest="einstein_hilbert",
-                    help="drop the discrete Einstein-Hilbert term from the "
-                         "objective, optimizing F = gamma*r_U alone instead of "
-                         "||grad S_Regge||^2 + gamma*r_U. NOTE stage 2 builds "
-                         "its descent direction from the Regge gradient and "
-                         "Hessian only, so without that term it searches along "
-                         "a ray the objective no longer contains: the run stays "
-                         "monotone (the line search still accepts only trials "
-                         "that lower the true F) but accepts far fewer steps, "
-                         "and the combinatorial moves do most of the work")
+                    help="drop the Regge term from the selected objective: "
+                         "joint mode becomes entropy-stationarity only, "
+                         "mediated mode becomes r_U only, and legacy becomes "
+                         "gamma*r_U. Stage 2 differentiates the remaining "
+                         "objective")
     ap.add_argument("--checkpoint", type=_nonnegative_int, default=0, metavar="STEPS",
                     help="every STEPS frames, write the complex's state to "
                          "state_<frame>.json: top cells in INTRINSIC vertex "
@@ -2337,6 +2372,12 @@ def main():
                          "Lorentzian; this example defaults to 'squared' (the "
                          "engine default; multicobordism_animation.py defaults "
                          "to 'content')")
+    ap.add_argument("--ignore-complex-phase", action="store_true",
+                    dest="ignore_complex_phase",
+                    help="phase-blind Hodge-entropy ablation: form entropy from "
+                         "entrywise |L_ij| before A=M^dagger M. This is NOT "
+                         "(a+bi)^2 and does not replace live complex l or z=l^2 "
+                         "by a magnitude")
     args = ap.parse_args()
     # One flip, process-wide, BEFORE any node is built (flipping mid-run would
     # mix conventions across cached spectra).
@@ -2345,6 +2386,9 @@ def main():
     cob.HodgeLaplacian.setDefaultWeightConvention(convention)
     ProtonAnimator._TITLE_PREFIX += (
         f"  ·  W = {'V' if args.hodge_weights == 'content' else 'V²'}")
+    ProtonAnimator._TITLE_PREFIX += (
+        f"  ·  objective={args.objective}"
+        f"  ·  Hodge phase={'ignored' if args.ignore_complex_phase else 'included'}")
     # Every iteration count below reaches a C++ `int` in the engine, so a value
     # above INT_MAX has no valid conversion and pybind11 rejects the call — and
     # it does so in the worker thread several frames in, after the host has been
@@ -2378,13 +2422,23 @@ def main():
         if chunked_retry:
             ap.error("--max-lookahead greater than 1 requires --init-chunk 1 "
                      "and --evolve-chunk 1 for every nonempty phase")
+    if args.degree < 1 and args.objective == "joint-stationarity":
+        ap.error("--objective joint-stationarity requires --degree >= 1 because "
+                 "the metric Hodge Laplacian gradient is defined for k >= 1")
+    if args.beta < 0.0 or not math.isfinite(args.beta):
+        ap.error("--beta must be finite and non-negative")
+    if args.entropy_weight < 0.0 or not math.isfinite(args.entropy_weight):
+        ap.error("--entropy-weight must be finite and non-negative")
     nodes = build_proton_nodes(seed=args.seed, precone=args.precone,
                                precone_timelike=args.precone_timelike,
                                gamma=args.gamma,
                                balanced_edges=args.balanced_edges,
                                singular_value_ratio=args.singular_value_ratio,
                                degree=args.degree,
-                               einstein_hilbert=args.einstein_hilbert)
+                               einstein_hilbert=args.einstein_hilbert,
+                               objective_mode=args.objective,
+                               entropy_weight=args.entropy_weight,
+                               ignore_complex_phase=args.ignore_complex_phase)
     result = run_build(nodes, visualize=args.live, save=args.save, init_steps=args.init,
                        evolve_steps=args.evolve,
                        init_chunk=args.init_chunk, evolve_chunk=args.evolve_chunk,
