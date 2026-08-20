@@ -351,8 +351,8 @@ class MultiCobordism {
   /// constructed exactly real, so **`Im ℓ² ≡ 0` holds for all time by construction**
   /// — no writer of `Im ℓ²` exists anywhere in the dynamics, nothing is enforced at
   /// runtime, and the invariant is proven by the suite tests. The line search accepts
-  /// a step only when it lowers `F` by more than `relTol·max(|F|,1)` — a RELATIVE
-  /// stationarity test (an absolute floor of `relTol` for `|F| < 1`), so the
+  /// a step only when it lowers `F` by more than `tolerance·max(|F|,1)` — a RELATIVE
+  /// stationarity test (an absolute floor of `tolerance` for `|F| < 1`), so the
   /// criterion scales with the objective rather than the absolute `convergenceTolerance_`
   /// the surgery stages use (for `F ≈ 100` that absolute `1e-9` accepted ~`1e-11` relative
   /// steps — the rounding floor). "No line-search step beats the threshold" is the
@@ -367,15 +367,15 @@ class MultiCobordism {
   /// Epic #559's rule still holds — nothing here seeds causal content; the whole
   /// timelike/lightlike range is merely admissible, so causal content may EMERGE from
   /// the dynamics (its absence is equally a finding).
-  /// Default `relTol` 1e-12: `runStage2` is the FINAL, precise relaxation of a
+  /// Default `tolerance` 1e-12: `runStage2` is the FINAL, precise relaxation of a
   /// drive (the combined `run` iterates its in-loop relaxations at the looser
   /// 10e-9 diminishing-returns cut and applies the same 1e-12 on its exit path).
   std::vector<double> runStage2(double beta = 1.0, int maxIters = 200,
-                                  double alpha0 = 0.05, double relTol = 1e-12);
+                                  double alpha0 = 0.05, double tolerance = 1e-12);
   /// The combined drive. Each iteration takes ONE combinatorial stage-1 update —
   /// a best-ΔF move, deepening to `maxLookahead`-move sequences on a stall — and
   /// then relaxes the geometry FULLY: stage-2 updates repeat until the relative
-  /// stationarity test at `relTol` (default 10e-9) reports diminishing returns,
+  /// stationarity test at `tolerance` (default 10e-9) reports diminishing returns,
   /// so every move is proposed from, and leaves behind, relaxed geometry.
   ///
   /// Exit protocol: the loop wants to exit once the register is carried with the
@@ -388,7 +388,7 @@ class MultiCobordism {
   /// `maxIters` remains the hard budget cap.
   ///
   /// `nCandidateMoves`/`growBoundaries`/`maxLookahead` parameterize the
-  /// combinatorial half exactly as in `runStage1`; `beta`/`alpha0`/`relTol` the
+  /// combinatorial half exactly as in `runStage1`; `beta`/`alpha0`/`tolerance` the
   /// geometric half exactly as in `runStage2`. NOTE with `beta != 1` the two
   /// halves weight `‖∇S‖²` differently (stage 1 books deltas of `objective()`,
   /// stage 2 descends `β‖∇S‖² + Γ·r_U`), so the shared trace mixes the two
@@ -402,7 +402,7 @@ class MultiCobordism {
   std::vector<double> run(int maxIters = 200, int nCandidateMoves = 12,
                           bool growBoundaries = false,
                           double beta = 1.0, double alpha0 = 0.05,
-                          double relTol = 10e-9, int maxLookahead = 1,
+                          double tolerance = 10e-9, int maxLookahead = 1,
                           int relaxBudgetPerMove = 10);
 
   /// One canonical solve action on THIS node, the unit a search policy (Proton's build
@@ -451,7 +451,7 @@ class MultiCobordism {
     return outputBlocks_;
   }
   /// Whether the last `runStage2` ended on the relative-tolerance stationarity test (no
-  /// line-search step lowered `F` by more than `relTol·max(|F|,1)`) — `true` — versus
+  /// line-search step lowered `F` by more than `tolerance·max(|F|,1)`) — `true` — versus
   /// hitting the `maxIters` budget cap — `false`. `true` means **real-manifold
   /// stationarity, `δF = 0` along real signed-ℓ² perturbations**: the exact
   /// on-manifold gradient direction `Re(2β·H̄·g)` buys no further descent (#589).
@@ -591,7 +591,7 @@ class MultiCobordism {
   /// accepted objective to `objectiveTrace` and adapts `stepScale`. Returns `false`
   /// on the stationary stop (no line-search step beat the relative threshold —
   /// lengths restored and `lastStage2Stationary_` set), `true` to keep iterating.
-  bool stage2Update(double beta, double relTol,
+  bool stage2Update(double beta, double tolerance,
                     std::vector<double> &objectiveTrace, double &stepScale);
   /// Grow each localized boundary block's region to track the bulk's growth: expand
   /// its vertex set by one shell (every top cell touching the current region), so the

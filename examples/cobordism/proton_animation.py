@@ -377,14 +377,14 @@ class ProtonAnimator:
                  stage1_candidates=_STAGE1_CANDIDATES, stage2_beta=1.0,
                  max_lookahead_depth=_MAX_LOOKAHEAD_DEPTH,
                  max_lookahead_tries=_MAX_LOOKAHEAD_TRIES,
-                 stage2_alpha0=0.05, stage2_rel_tol=10e-9, relax_budget=10,
+                 stage2_alpha0=0.05, stage2_tolerance=10e-9, relax_budget=10,
                  spectra_every=_SPECTRA_REFRESH_EVERY, no_combinatorial_moves=False,
                  relax_chunk=None, status=True, checkpoint=0, checkpoint_dir=None):
         self._common_init(nodes, degree)
         self.s1c, self.s2_beta = stage1_candidates, stage2_beta
         self.lookahead_depth = max_lookahead_depth
         self.lookahead_tries = max_lookahead_tries
-        self.s2_alpha0, self.s2_rel_tol = stage2_alpha0, stage2_rel_tol
+        self.s2_alpha0, self.s2_tolerance = stage2_alpha0, stage2_tolerance
         self.relax_budget = relax_budget
         # Relaxation-only drive (#716): no combinatorial moves of any kind —
         # no Pachner moves, no surgical cones, no disposition flips — and no
@@ -478,14 +478,14 @@ class ProtonAnimator:
             # Stage 2 alone. `run_stage2` returns its objective trace, so the
             # number of ACCEPTED relaxation steps this frame is len(trace) - 1.
             trace = node.run_stage2(beta=self.s2_beta, max_iters=self.relax_chunk,
-                                    alpha0=self.s2_alpha0, rel_tol=self.s2_rel_tol)
+                                    alpha0=self.s2_alpha0, tolerance=self.s2_tolerance)
             self._last_relax_steps = max(len(trace) - 1, 0)
             tries = 1
         else:
             for tries in range(1, max(self.lookahead_tries, 1) + 1):
                 node.run(max_iters=count, n_candidate_moves=self.s1c,
                          grow_boundaries=(phase == "init"), beta=self.s2_beta,
-                         alpha0=self.s2_alpha0, rel_tol=self.s2_rel_tol,
+                         alpha0=self.s2_alpha0, tolerance=self.s2_tolerance,
                          max_lookahead=self.lookahead_depth,
                          relax_budget_per_move=self.relax_budget)
                 if int(node.last_stage1_lookahead) > 0:
@@ -532,7 +532,7 @@ class ProtonAnimator:
         * `stage2` — `last_stage2_stationary` is true when the line search
           halved its step all the way down without finding a descending trial.
           That is the geometric relaxation reporting it has reached the bottom
-          of this region (to `--rel-tol`), not a failure.
+          of this region (to `--tolerance`), not a failure.
         """
         history = self.hist
         objective = history["F"][-1]
@@ -1816,7 +1816,7 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
               stage1_candidates=_STAGE1_CANDIDATES,
               max_lookahead_depth=_MAX_LOOKAHEAD_DEPTH,
               max_lookahead_tries=_MAX_LOOKAHEAD_TRIES,
-              stage2_alpha0=0.05, stage2_rel_tol=10e-9,
+              stage2_alpha0=0.05, stage2_tolerance=10e-9,
               stage2_beta=1.0, interval=200,  # interval: ms/frame; GIF/MP4 fps = 1000/interval
               relax_budget=10,
               dump_dir=None, **anim_kw):
@@ -1846,13 +1846,13 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                         if no_combinatorial_moves:
                             trace = node.run_stage2(
                                 beta=stage2_beta, max_iters=chunk,
-                                alpha0=stage2_alpha0, rel_tol=stage2_rel_tol)
+                                alpha0=stage2_alpha0, tolerance=stage2_tolerance)
                             accepted = max(len(trace) - 1, 0)
                         else:
                             node.run(max_iters=1, n_candidate_moves=stage1_candidates,
                                      grow_boundaries=(phase == "init"),
                                      beta=stage2_beta, alpha0=stage2_alpha0,
-                                     rel_tol=stage2_rel_tol,
+                                     tolerance=stage2_tolerance,
                                      max_lookahead=max_lookahead_depth,
                                      relax_budget_per_move=relax_budget)
                             accepted = None
@@ -1899,12 +1899,12 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
             # deliberately not applied.
             node.run(max_iters=init_steps, n_candidate_moves=stage1_candidates,
                      grow_boundaries=True, beta=stage2_beta,
-                     alpha0=stage2_alpha0, rel_tol=stage2_rel_tol,
+                     alpha0=stage2_alpha0, tolerance=stage2_tolerance,
                      max_lookahead=max_lookahead_depth,
                      relax_budget_per_move=relax_budget)
             node.run(max_iters=evolve_steps, n_candidate_moves=stage1_candidates,
                      grow_boundaries=False, beta=stage2_beta,
-                     alpha0=stage2_alpha0, rel_tol=stage2_rel_tol,
+                     alpha0=stage2_alpha0, tolerance=stage2_tolerance,
                      max_lookahead=max_lookahead_depth,
                      relax_budget_per_move=relax_budget)
             st = node.st
@@ -1927,7 +1927,7 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                    max_lookahead_depth=max_lookahead_depth,
                    max_lookahead_tries=max_lookahead_tries,
                    stage2_beta=stage2_beta, stage2_alpha0=stage2_alpha0,
-                   stage2_rel_tol=stage2_rel_tol, relax_budget=relax_budget,
+                   stage2_tolerance=stage2_tolerance, relax_budget=relax_budget,
                    no_combinatorial_moves=no_combinatorial_moves, relax_chunk=relax_chunk, status=status,
                    checkpoint=checkpoint, checkpoint_dir=checkpoint_dir,
                    interval=interval,
@@ -1984,15 +1984,18 @@ def main():
                          "two halves' scales in the shared F trace)")
     ap.add_argument("--alpha0", type=float, default=0.05,
                     help="stage-2 initial line-search step scale")
-    ap.add_argument("--rel-tol", type=float, default=10e-9, dest="rel_tol",
-                    help="stage-2 in-loop diminishing-returns cut (the exit "
-                         "path re-checks at 1e-12 regardless): larger = less "
-                         "geometric work per committed move, more moves per "
-                         "second")
+    ap.add_argument("--tolerance", type=float, default=10e-9, dest="tolerance",
+                    help="stage-2 in-loop diminishing-returns cut, as an "
+                         "ABSOLUTE improvement in F (not scaled by F's "
+                         "magnitude, so the same value means the same thing at "
+                         "F = 1 and F = 1e6). A trial is accepted only when it "
+                         "lowers F by more than this; the exit path re-checks "
+                         "at 1e-12 regardless. Larger = less geometric work per "
+                         "committed move, more moves per second")
     ap.add_argument("--relax-budget", type=int, default=10, dest="relax_budget",
                     help="cap on stage-2 relaxation updates after each "
                          "committed move (and on the tight exit re-check). The "
-                         "stationarity test at --rel-tol is the real "
+                         "stationarity test at --tolerance is the real "
                          "terminator; this only bounds slow descent tails of "
                          "threshold-sized line-search micro-steps")
     ap.add_argument("--init-chunk", type=int, default=_INIT_CHUNK, dest="init_chunk",
@@ -2138,7 +2141,7 @@ def main():
                        evolve_steps=args.evolve,
                        init_chunk=args.init_chunk, evolve_chunk=args.evolve_chunk,
                        stage1_candidates=args.candidates, stage2_beta=args.beta,
-                       stage2_alpha0=args.alpha0, stage2_rel_tol=args.rel_tol,
+                       stage2_alpha0=args.alpha0, stage2_tolerance=args.tolerance,
                        relax_budget=args.relax_budget,
                        max_lookahead_depth=args.max_lookahead_depth,
                        max_lookahead_tries=args.max_lookahead_tries,

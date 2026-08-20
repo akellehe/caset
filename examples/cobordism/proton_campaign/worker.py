@@ -9,7 +9,7 @@
 # recorded attempt).
 #
 # Machine-precision semantics: stage 2 is chunked, and a chunk that stops early on
-# runStage2's built-in relTol=1e-9 stationarity test IS the stationarity verdict.
+# runStage2's built-in tolerance=1e-9 stationarity test IS the stationarity verdict.
 # Persistence: up to 3 continued evolve+relax passes; the last must leave holes, b_k,
 # and F stable to 1e-9 relative. Nothing here steers toward any target — the register
 # count is observed, never optimized for.

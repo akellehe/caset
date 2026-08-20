@@ -883,7 +883,7 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "(1 = single moves only).")
       .def("run_stage2", &MultiCobordism::runStage2, py::arg("beta") = 1.0,
            py::arg("max_iters") = 200, py::arg("alpha0") = 0.05,
-           py::arg("rel_tol") = 1e-12,
+           py::arg("tolerance") = 1e-12,
            py::call_guard<py::gil_scoped_release>(),
            "Stage 2 (geometric): relax every edge l^2 along the REAL signed-l^2 "
            "manifold (ordinary Lorentzian Regge) toward a stationary point of "
@@ -891,20 +891,20 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "on-manifold gradient Re(2*beta*conj(H)*g) and every trial is "
            "constructed exactly real, so Im l^2 == 0 by construction (#589); "
            "backtracking line search. Stops on the RELATIVE stationarity test -- "
-           "no line-search step lowers F by more than rel_tol*max(|F|,1) -- or "
+           "no line-search step lowers F by more than tolerance*max(|F|,1) -- or "
            "the max_iters budget cap. Read last_stage2_stationary for which one "
            "ended the run. Returns the F trace.")
       .def("run", &MultiCobordism::run, py::arg("max_iters") = 200,
            py::arg("n_candidate_moves") = 12,
            py::arg("grow_boundaries") = false, py::arg("beta") = 1.0,
-           py::arg("alpha0") = 0.05, py::arg("rel_tol") = 10e-9,
+           py::arg("alpha0") = 0.05, py::arg("tolerance") = 10e-9,
            py::arg("max_lookahead") = 1,
            py::arg("relax_budget_per_move") = 10,
            py::call_guard<py::gil_scoped_release>(),
            "The combined drive: each iteration takes ONE combinatorial stage-1 "
            "update (a best-dF move, deepening to max_lookahead-move sequences "
            "on a stall) then relaxes the geometry FULLY -- stage-2 updates "
-           "repeat until the relative-stationarity test at rel_tol (default "
+           "repeat until the relative-stationarity test at tolerance (default "
            "10e-9) reports diminishing returns -- so every move is proposed "
            "from, and leaves behind, relaxed geometry. Exit: once the register "
            "is carried + stationary, or the moves have had no effect for a few "
@@ -913,7 +913,7 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "loop continues -- only a state stationary at 1e-12 exits. max_iters "
            "is the hard budget cap. n_candidate_moves/grow_boundaries/"
            "max_lookahead parameterize the combinatorial half exactly as in "
-           "run_stage1; beta/alpha0/rel_tol the geometric half exactly as in "
+           "run_stage1; beta/alpha0/tolerance the geometric half exactly as in "
            "run_stage2 (keep beta=1 for one coherent F trace). "
            "relax_budget_per_move caps the stage-2 updates after each "
            "committed move (and the tight exit re-check); the stationarity "
@@ -979,7 +979,7 @@ Right -- re-read after each drive call:
       .def_property_readonly("last_stage2_stationary",
                              &MultiCobordism::lastStage2Stationary,
                              "True iff the last run_stage2 stopped on the relative-"
-                             "tolerance stationarity test (delta_rel < rel_tol) -- "
+                             "tolerance stationarity test (delta_rel < tolerance) -- "
                              "real-manifold stationarity, dF = 0 along real signed-"
                              "l^2 perturbations (#589); False if it hit the "
                              "max_iters budget cap.");
@@ -1150,7 +1150,7 @@ a diagnostic for comparing against the canonical build's carried level.)doc")
            py::arg("init_steps") = 180, py::arg("evolve_steps") = 60,
            py::arg("stage1_candidate_moves") = 8,
            py::arg("stage2_beta") = 1.0, py::arg("stage2_max_iters") = 10,
-           py::arg("persist_rel_tol") = 0.05,
+           py::arg("persist_tolerance") = 0.05,
            "Restart across seeds until an attempt is stationary AND persistent (no "
            "color tolerance, no minimum hole count); otherwise keep the lowest-F "
            "attempt. Same drive per node as Proton.build().")
