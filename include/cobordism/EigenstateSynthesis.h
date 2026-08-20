@@ -735,6 +735,25 @@ class EigenstateSynthesis {
     // per-edge analytic dL_k/dl^2). The k = 0 and k >= 2 path of
     // residualForPeriodsGradient (k = 0 dispatches to periodGradientDegreeZero);
     // value-identical to periodGradientOverLoops at k = 1.
+    /// Degree-generic exact `∂r_ψ/∂ℓ²` for the period GAP
+    /// `r_ψ = ‖A c − t‖²` (`A = Q·U_n`, `c` the least-squares fit), in
+    /// ChainComplex 1-cell order — the `k ≥ 2` sibling of the edge-loop core
+    /// `periodGapForLoopsGradient`, which `periodGapForPeriodsGradient` routes
+    /// to at `k = 1`.
+    ///
+    /// Least-squares optimality (`Aᴴr = 0`) drops the `∂c` term by the envelope
+    /// theorem, leaving `2 Re(rᴴ (Q ∂U_n) c)`. The fit is the SVD pseudo-inverse,
+    /// matching the value's `lstsqOverReadout` and staying defined when `A` is
+    /// rank-deficient. The null tolerance is `harmonicMatrix`'s `1e-9`, so the
+    /// harmonic set differentiated is the one the value reads.
+    ///
+    /// Certified by the degree-0 Euler identity `Σ ℓ²·∂r_ψ/∂ℓ² = 0`: `L_k` is
+    /// homogeneous of degree −1, so a uniform rescale leaves the kernel — and
+    /// therefore `A`, `c` and the gap — unchanged. Throws at `k = 0`.
+    [[nodiscard]] std::vector<double> periodGapGradientOverHoles(
+        const std::vector<std::vector<std::uint64_t>> &holes,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
     [[nodiscard]] std::vector<double> periodGradientGeneral(
         const std::vector<std::vector<std::uint64_t>> &holes,
         const std::vector<std::complex<double>> &targetPeriods) const;
