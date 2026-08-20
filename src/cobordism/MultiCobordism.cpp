@@ -1543,6 +1543,14 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
     }
 
     restoreEdgeLengths();
+    // No coordinate can move, so every backtracking trial would evaluate the
+    // unchanged global objective and fail the strict-improvement gate. This is
+    // common at exact stationary points and when every selected term is
+    // disabled.
+    if (descentDirection.squaredNorm() == 0.0) {
+      lastStage2Stationary_ = true;
+      return false;
+    }
     // Joint mode already computed both stationarity residuals while assembling
     // their exact descent directions. Reuse them instead of evaluating the same
     // Regge and Hodge gradients again at the unchanged base geometry.
