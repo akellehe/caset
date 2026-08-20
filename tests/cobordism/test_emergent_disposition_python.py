@@ -3,16 +3,11 @@
 
 """Causal disposition proposed as a gated move (#613).
 
-Timelike-versus-spacelike is a DISCRETE choice. A continuous descent cannot carry
-`l^2` across zero -- that is a null, degenerate configuration where the deficit
-angles and circumcentric dual volumes are singular -- so `run_stage2` cannot leave
-the Euclidean orthant no matter how long it runs. Measured on canonical hosts:
-every edge stays spacelike and `Im S = 0` through 110+ relaxation iterations.
-
-So the disposition belongs in stage 1's move draw, beside add / remove / flip /
-iflip / cone_out / cone_in: proposed at random, scored by `deltaF`, committed only
-when it lowers `F`. Nothing prescribes causal structure; the objective decides
-whether it wants any.
+The disposition belongs in stage 1's move draw beside add / remove / flip /
+iflip / cone_out / cone_in: proposed at random, scored by `deltaF`, and committed
+only when it lowers `F`. These moves propose a direct discrete jump between
+causal sectors; the complex-z Stage 2 can also rotate continuously around z=0.
+Nothing prescribes causal structure—the objective decides whether it wants any.
 
 These tests pin two things: that the causal moves are ON by default (#632 -- they
 are the seed's ONLY descent directions, so a draw without them hides the physics

@@ -78,11 +78,10 @@ class MultiCobordismCxxTest(unittest.TestCase):
                 break
         self.assertTrue(grew, "no b₃ register emerged across surgery seeds 3..10")
 
-    def test_run_stage2_stops_on_relative_stationarity(self):
-        # run_stage2 stops on a RELATIVE stationarity test — no line-search step lowers F
-        # by more than tolerance·max(|F|,1) — and last_stage2_stationary reports whether the
-        # run ended that way (True) or hit the max_iters budget cap (False). Only this
-        # geometric tail is relative; the surgery stages keep the absolute tolerance.
+    def test_run_stage2_stops_on_absolute_stationarity(self):
+        # run_stage2 stops when no line-search step lowers F by the absolute
+        # tolerance, and last_stage2_stationary distinguishes that result (True)
+        # from the max_iters budget cap (False).
         CXX, w = self.CXX, self.w
         host = _closed_s4(n_refine=12, seed=3)
         opt = CXX(host, [[1, w, w * w], [1, w * w, w]], [[1, w, w * w]],
@@ -96,11 +95,9 @@ class MultiCobordismCxxTest(unittest.TestCase):
         self.assertFalse(opt.last_stage2_stationary)         # stopped: budget
         self.assertLess(t_budget[-1], t_budget[0])           # the step strictly lowered F
 
-        # Stationary stop: with the relative threshold wider than any achievable decrease
-        # (F = ||grad S||^2 + gamma*r_U >= 0, so no edge step can lower F by 10*max(|F|,1)),
-        # the first line search accepts nothing and run_stage2 stops on the stationarity
-        # test — reported by the accessor — before exhausting max_iters. This exercises the
-        # exact "no step beats tolerance*max(|F|,1)" branch the relative criterion introduced.
+        # Stationary stop: with an absolute threshold wider than any achievable
+        # decrease, the first line search accepts nothing and reports stationarity
+        # before exhausting max_iters.
         t_stat = opt.run_stage2(beta=1.0, max_iters=50, alpha0=0.05, tolerance=10.0)
         self.assertTrue(opt.last_stage2_stationary)          # stopped: stationary
         self.assertLess(len(t_stat), 51)                     # broke before the budget cap

@@ -254,12 +254,9 @@ class Simplex {
 
     // ==================== Geometry ====================
     //
-    // Ordinary-Lorentzian convention (#580/#589): the geometry stack reads
-    // REAL, SIGNED squared lengths (spacelike l^2 > 0, timelike l^2 < 0,
-    // null 0) — the non-Wick entry points below consume Re l^2, the
-    // Wick-rotated paths |l^2|. The complexified (Picard-Lefschetz) theory
-    // is unbuilt, and there is no runtime enforcement: the dynamics keeps
-    // l^2 on the real axis by construction (MultiCobordism::runStage2).
+    // Complexified geometry: every entry point below consumes the full complex
+    // squared interval l^2. No Wick/magnitude path and no Re(l^2) projection are
+    // applied; MultiCobordism::runStage2 optimizes these same complex coordinates.
 
     /// Gram matrix of this simplex from its edge lengths.
     /// Returns a flat (d x d) row-major matrix where d = size() - 1.
