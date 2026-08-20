@@ -16,6 +16,10 @@
 #include <utility>
 #include <vector>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include "cobordism/ChainComplex.h"
 #include "cobordism/Cochain.h"
 #include "cobordism/Spectrum.h"
@@ -33,6 +37,7 @@ using cd = std::complex<double>;
 namespace {
 
 using Face = std::vector<std::uint64_t>;  // sorted vertex ids
+using EdgeKey = std::pair<std::uint64_t, std::uint64_t>;
 
 // Sorted vertex ids of a simplex — the homological reference ordering, identical
 // to ChainComplex's. Distinct simplices have distinct tuples, so sorting by it is
@@ -99,89 +104,184 @@ std::vector<std::complex<double>> simplexWeights(
   return w;
 }
 
-// Symmetric (W_k-orthonormal) metric Hodge Laplacian for k >= 1:
-//   L_k^sym = B_k^T B_k + B_{k+1} B_{k+1}^T,  B_k = W_{k-1}^{1/2} d_k W_k^{-1/2}.
-// With metric == false all W = I, giving the combinatorial d_k^T d_k +
-// d_{k+1} d_{k+1}^T. Returns a |C_k| x |C_k| real SPD matrix (0 x 0 if no k-cells).
 // Exact d(L_k)/d(l^2_(ea,eb)) for the signed-weight Laplacian
 //   L_k = W_k^-1 d_k^T W_{k-1} d_k + d_{k+1} W_{k+1}^-1 d_{k+1}^T W_k,
-// so with every W diagonal and linear-free in l^2 only through the cell contents,
+// so with every W diagonal and linear-free in l^2 only through the cell
+// contents,
 //   dL = -W_k^-1 dW_k W_k^-1 d_k^T W_{k-1} d_k + W_k^-1 d_k^T dW_{k-1} d_k
 //        -d_{k+1} W_{k+1}^-1 dW_{k+1} W_{k+1}^-1 d_{k+1}^T W_k
 //        +d_{k+1} W_{k+1}^-1 d_{k+1}^T dW_k.
-// dW is the SIGNED volumeGradient verbatim -- no modulus chain rule, because the
-// weights are no longer moduli (#641).
-Eigen::MatrixXcd laplacianGradientMatrix(const Spacetime &K, int k,
-                                         std::uint64_t ea, std::uint64_t eb,
-                                         HodgeLaplacian::WeightConvention conv) {
-  const ChainComplex cc = ChainComplex::fromSpacetime(K);
-  const int n = cc.dimension();
-  const int nk = static_cast<int>(cc.numSimplices(k));
-  Eigen::MatrixXcd dL = Eigen::MatrixXcd::Zero(nk, nk);
-  if (k < 1 || nk == 0) return dL;
-  const std::vector<std::vector<SimplexPtr>> faces = orderedFaces(K);
-  const std::uint64_t lo = std::min(ea, eb), hi = std::max(ea, eb);
+// dW is the SIGNED volumeGradient verbatim -- no modulus chain rule, because
+// the weights are no longer moduli (#641). One exact derivative workspace for a
+// fixed (spacetime revision, degree, weight convention). The old
+// entropy-gradient path rebuilt ChainComplex, the complete face closure, every
+// weight diagonal, and both boundary matrices for EVERY edge coordinate. It
+// also re-ran every simplex volumeGradient while looking for that one edge.
+// Here those immutable ingredients are assembled once; simplex derivatives are
+// indexed sparsely by edge, and each dL_e is a sum of local row/column scalings
+// and rank-one updates.
+class LaplacianDerivativeWorkspace {
+public:
+  LaplacianDerivativeWorkspace(const Spacetime &spacetime, int degree,
+                               HodgeLaplacian::WeightConvention convention)
+      : chainComplex_(ChainComplex::fromSpacetime(spacetime)),
+        faces_(orderedFaces(spacetime)), degree_(degree),
+        dimension_(chainComplex_.dimension()),
+        degreeSize_(static_cast<int>(chainComplex_.numSimplices(degree))),
+        convention_(convention),
+        lowerBase_(Eigen::MatrixXcd::Zero(degreeSize_, degreeSize_)),
+        upperBase_(Eigen::MatrixXcd::Zero(degreeSize_, degreeSize_)) {
+    lowerWeights_ = buildWeightData(degree_ - 1);
+    degreeWeights_ = buildWeightData(degree_);
+    upperWeights_ = buildWeightData(degree_ + 1);
 
-  const auto weightArr = [&](int kk) {
-    const std::vector<std::complex<double>> wv =
-        simplexWeights(faces, kk, static_cast<int>(cc.numSimplices(kk)), /*metric=*/true, conv);
-    Eigen::ArrayXcd a(static_cast<Eigen::Index>(wv.size()));
-    for (std::size_t i = 0; i < wv.size(); ++i) a[static_cast<Eigen::Index>(i)] = wv[i];
-    return a;
-  };
-  const auto dWeightArr = [&](int kk) {
-    const int cnt = static_cast<int>(cc.numSimplices(kk));
-    Eigen::ArrayXcd dw = Eigen::ArrayXcd::Zero(std::max(cnt, 0));
-    if (kk < 1 || kk >= static_cast<int>(faces.size())) return dw;  // W_0 = I
-    const auto &fk = faces[static_cast<std::size_t>(kk)];
-    for (int i = 0; i < cnt && i < static_cast<int>(fk.size()); ++i) {
-      const std::complex<double> vol = fk[static_cast<std::size_t>(i)]->volume();
-      if (std::abs(vol) <= 0.0) continue;  // degenerate weight pinned to 1 (const)
-      const auto g = fk[static_cast<std::size_t>(i)]->volumeGradient();
-      const auto it = g.find({lo, hi});
-      // Convention-aware: W = V  =>  dW = dV;  W = V^2  =>  dW = 2 V dV.
-      if (it != g.end())
-        dw[i] = (conv == HodgeLaplacian::WeightConvention::SquaredContent)
-                    ? 2.0 * vol * it->second
-                    : it->second;
+    lowerSize_ = degree_ >= 1
+                     ? static_cast<int>(chainComplex_.numSimplices(degree_ - 1))
+                     : 0;
+    if (lowerSize_ > 0 && degreeSize_ > 0) {
+      lowerBoundary_ = boundaryMatrix(degree_, lowerSize_, degreeSize_);
+      lowerBase_.noalias() = lowerBoundary_.transpose() *
+                             lowerWeights_.weights.matrix().asDiagonal() *
+                             lowerBoundary_;
+      lowerLeft_ = degreeWeights_.inverseWeights.matrix().asDiagonal() *
+                   lowerBoundary_.transpose();
     }
-    return dw;
-  };
-  const auto boundary = [&](int kk, int rows, int cols) {
-    const std::vector<long> &flat = cc.boundaryMatrix(kk);
-    Eigen::MatrixXcd d(rows, cols);
-    for (int r = 0; r < rows; ++r)
-      for (int c = 0; c < cols; ++c)
-        d(r, c) = static_cast<double>(flat[static_cast<std::size_t>(r) * cols + c]);
-    return d;
+
+    upperSize_ = degree_ + 1 <= dimension_
+                     ? static_cast<int>(chainComplex_.numSimplices(degree_ + 1))
+                     : 0;
+    if (upperSize_ > 0 && degreeSize_ > 0) {
+      upperBoundary_ = boundaryMatrix(degree_ + 1, degreeSize_, upperSize_);
+      upperBase_.noalias() =
+          upperBoundary_ * upperWeights_.inverseWeights.matrix().asDiagonal() *
+          upperBoundary_.transpose();
+      upperRight_ = upperBoundary_.transpose() *
+                    degreeWeights_.weights.matrix().asDiagonal();
+    }
+  }
+
+  [[nodiscard]] Eigen::MatrixXcd laplacian() const {
+    Eigen::MatrixXcd result = Eigen::MatrixXcd::Zero(degreeSize_, degreeSize_);
+    if (degreeSize_ == 0)
+      return result;
+    result.noalias() =
+        degreeWeights_.inverseWeights.matrix().asDiagonal() * lowerBase_;
+    result.noalias() +=
+        upperBase_ * degreeWeights_.weights.matrix().asDiagonal();
+    return result;
+  }
+
+  [[nodiscard]] Eigen::MatrixXcd gradient(std::uint64_t edgeA,
+                                          std::uint64_t edgeB) const {
+    Eigen::MatrixXcd result = Eigen::MatrixXcd::Zero(degreeSize_, degreeSize_);
+    if (degree_ < 1 || degreeSize_ == 0)
+      return result;
+    const EdgeKey edge{std::min(edgeA, edgeB), std::max(edgeA, edgeB)};
+
+    if (const auto *entries = derivativesFor(degreeWeights_, edge)) {
+      for (const auto &[index, derivative] : *entries) {
+        const cd inverse = degreeWeights_.inverseWeights[index];
+        result.row(index).noalias() +=
+            (-inverse * inverse * derivative) * lowerBase_.row(index);
+        result.col(index).noalias() += derivative * upperBase_.col(index);
+      }
+    }
+    if (const auto *entries = derivativesFor(lowerWeights_, edge)) {
+      for (const auto &[index, derivative] : *entries)
+        result.noalias() +=
+            derivative * lowerLeft_.col(index) * lowerBoundary_.row(index);
+    }
+    if (const auto *entries = derivativesFor(upperWeights_, edge)) {
+      for (const auto &[index, derivative] : *entries) {
+        const cd inverse = upperWeights_.inverseWeights[index];
+        result.noalias() += (-inverse * inverse * derivative) *
+                            upperBoundary_.col(index) * upperRight_.row(index);
+      }
+    }
+    return result;
+  }
+
+private:
+  using IndexedDerivative = std::pair<int, cd>;
+
+  struct WeightData {
+    Eigen::ArrayXcd weights{};
+    Eigen::ArrayXcd inverseWeights{};
+    std::map<EdgeKey, std::vector<IndexedDerivative>> derivativesByEdge{};
   };
 
-  const Eigen::ArrayXcd Wk = weightArr(k), dWk = dWeightArr(k);
-  const Eigen::ArrayXcd invWk = Wk.inverse();
+  [[nodiscard]] WeightData buildWeightData(int degree) const {
+    WeightData data;
+    const int count = degree >= 0 && degree <= dimension_
+                          ? static_cast<int>(chainComplex_.numSimplices(degree))
+                          : 0;
+    data.weights = Eigen::ArrayXcd::Ones(std::max(count, 0));
+    if (degree < 1 || degree >= static_cast<int>(faces_.size())) {
+      data.inverseWeights = data.weights.inverse();
+      return data;
+    }
 
-  const int rows = static_cast<int>(cc.numSimplices(k - 1));
-  if (rows > 0) {
-    const Eigen::MatrixXcd dk = boundary(k, rows, nk);
-    const Eigen::ArrayXcd Wm = weightArr(k - 1), dWm = dWeightArr(k - 1);
-    const Eigen::ArrayXcd t = -(invWk * dWk * invWk);
-    dL.noalias() += t.matrix().asDiagonal() * dk.transpose() *
-                    Wm.matrix().asDiagonal() * dk;
-    dL.noalias() += invWk.matrix().asDiagonal() * dk.transpose() *
-                    dWm.matrix().asDiagonal() * dk;
+    const auto &degreeFaces = faces_[static_cast<std::size_t>(degree)];
+    for (int index = 0;
+         index < count && index < static_cast<int>(degreeFaces.size());
+         ++index) {
+      const auto &simplex = degreeFaces[static_cast<std::size_t>(index)];
+      const cd volume = simplex->volume();
+      const cd weight =
+          convention_ == HodgeLaplacian::WeightConvention::SquaredContent
+              ? volume * volume
+              : volume;
+      if (std::abs(weight) <= 0.0)
+        continue; // pinned to the constant fallback 1
+      data.weights[index] = weight;
+      for (const auto &[edge, volumeDerivative] : simplex->volumeGradient()) {
+        const cd weightDerivative =
+            convention_ == HodgeLaplacian::WeightConvention::SquaredContent
+                ? 2.0 * volume * volumeDerivative
+                : volumeDerivative;
+        if (std::abs(weightDerivative) > 0.0)
+          data.derivativesByEdge[edge].emplace_back(index, weightDerivative);
+      }
+    }
+    data.inverseWeights = data.weights.inverse();
+    return data;
   }
-  const int cols = (k + 1 <= n) ? static_cast<int>(cc.numSimplices(k + 1)) : 0;
-  if (cols > 0) {
-    const Eigen::MatrixXcd dkp1 = boundary(k + 1, nk, cols);
-    const Eigen::ArrayXcd Wp = weightArr(k + 1), dWp = dWeightArr(k + 1);
-    const Eigen::ArrayXcd invWp = Wp.inverse();
-    const Eigen::ArrayXcd u = -(invWp * dWp * invWp);
-    dL.noalias() += dkp1 * u.matrix().asDiagonal() * dkp1.transpose() *
-                    Wk.matrix().asDiagonal();
-    dL.noalias() += dkp1 * invWp.matrix().asDiagonal() * dkp1.transpose() *
-                    dWk.matrix().asDiagonal();
+
+  [[nodiscard]] Eigen::MatrixXcd boundaryMatrix(int degree, int rows,
+                                                int columns) const {
+    const std::vector<long> &flat = chainComplex_.boundaryMatrix(degree);
+    Eigen::MatrixXcd boundary(rows, columns);
+    for (int row = 0; row < rows; ++row)
+      for (int column = 0; column < columns; ++column)
+        boundary(row, column) = static_cast<double>(
+            flat[static_cast<std::size_t>(row) * columns + column]);
+    return boundary;
   }
-  return dL;
-}
+
+  [[nodiscard]] static const std::vector<IndexedDerivative> *
+  derivativesFor(const WeightData &data, const EdgeKey &edge) {
+    const auto found = data.derivativesByEdge.find(edge);
+    return found == data.derivativesByEdge.end() ? nullptr : &found->second;
+  }
+
+  ChainComplex chainComplex_;
+  std::vector<std::vector<SimplexPtr>> faces_;
+  int degree_{0};
+  int dimension_{0};
+  int degreeSize_{0};
+  int lowerSize_{0};
+  int upperSize_{0};
+  HodgeLaplacian::WeightConvention convention_;
+  WeightData lowerWeights_{};
+  WeightData degreeWeights_{};
+  WeightData upperWeights_{};
+  Eigen::MatrixXcd lowerBoundary_{};
+  Eigen::MatrixXcd upperBoundary_{};
+  Eigen::MatrixXcd lowerBase_{};
+  Eigen::MatrixXcd upperBase_{};
+  Eigen::MatrixXcd lowerLeft_{};
+  Eigen::MatrixXcd upperRight_{};
+};
 
 // Signed-weight (Lorentzian) metric Hodge Laplacian for k >= 0 — the discrete
 // d'Alembertian. With W indefinite the symmetric W^{1/2} similarity breaks, so the
@@ -251,24 +351,17 @@ struct SpectralEntropyData {
   bool zeroOperator{true};
 };
 
-SpectralEntropyData spectralEntropyData(
-    const std::vector<cd> &flat,
-    HodgeLaplacian::EntropyPhaseMode phaseMode) {
+SpectralEntropyData
+spectralEntropyData(Eigen::MatrixXcd laplacian,
+                    HodgeLaplacian::EntropyPhaseMode phaseMode) {
   SpectralEntropyData data;
-  if (flat.empty()) return data;
-  const auto n = static_cast<std::size_t>(
-      std::llround(std::sqrt(static_cast<double>(flat.size()))));
-  if (n * n != flat.size())
+  data.laplacian = std::move(laplacian);
+  if (data.laplacian.size() == 0)
+    return data;
+  if (data.laplacian.rows() != data.laplacian.cols())
     throw std::runtime_error(
         "HodgeLaplacian::spectralEntropy: Laplacian is not square");
-
-  data.laplacian.resize(static_cast<Eigen::Index>(n),
-                        static_cast<Eigen::Index>(n));
-  for (std::size_t row = 0; row < n; ++row)
-    for (std::size_t column = 0; column < n; ++column)
-      data.laplacian(static_cast<Eigen::Index>(row),
-                     static_cast<Eigen::Index>(column)) =
-          flat[row * n + column];
+  const auto n = static_cast<std::size_t>(data.laplacian.rows());
   if (!data.laplacian.allFinite())
     throw std::runtime_error(
         "HodgeLaplacian::spectralEntropy: non-finite Laplacian");
@@ -323,6 +416,26 @@ SpectralEntropyData spectralEntropyData(
       solver.eigenvectors().adjoint();
   data.zeroOperator = false;
   return data;
+}
+
+SpectralEntropyData
+spectralEntropyData(const std::vector<cd> &flat,
+                    HodgeLaplacian::EntropyPhaseMode phaseMode) {
+  if (flat.empty())
+    return {};
+  const auto n = static_cast<std::size_t>(
+      std::llround(std::sqrt(static_cast<double>(flat.size()))));
+  if (n * n != flat.size())
+    throw std::runtime_error(
+        "HodgeLaplacian::spectralEntropy: Laplacian is not square");
+
+  Eigen::MatrixXcd laplacian(static_cast<Eigen::Index>(n),
+                             static_cast<Eigen::Index>(n));
+  for (std::size_t row = 0; row < n; ++row)
+    for (std::size_t column = 0; column < n; ++column)
+      laplacian(static_cast<Eigen::Index>(row),
+                static_cast<Eigen::Index>(column)) = flat[row * n + column];
+  return spectralEntropyData(std::move(laplacian), phaseMode);
 }
 
 }  // namespace
@@ -500,7 +613,8 @@ std::vector<std::complex<double>> HodgeLaplacian::weights(int k) const {
 std::vector<std::complex<double>> HodgeLaplacian::laplacianGradient(
     int k, std::uint64_t ea, std::uint64_t eb) const {
   if (k < 1 || !st_) return {};
-  const Eigen::MatrixXcd dL = laplacianGradientMatrix(*st_, k, ea, eb, weightConvention_);
+  const LaplacianDerivativeWorkspace workspace(*st_, k, weightConvention_);
+  const Eigen::MatrixXcd dL = workspace.gradient(ea, eb);
   const int nk = static_cast<int>(dL.rows());
   std::vector<std::complex<double>> out(static_cast<std::size_t>(nk) * nk,
                                         std::complex<double>{0.0, 0.0});
@@ -527,8 +641,11 @@ std::vector<std::complex<double>> HodgeLaplacian::spectralEntropyGradient(
                          ? st_->getEdgeList()->toVector()
                          : std::vector<EdgePtr>{};
   std::vector<cd> gradient(edges.size(), cd{0.0, 0.0});
+  if (!st_)
+    return gradient;
+  const LaplacianDerivativeWorkspace workspace(*st_, k, weightConvention_);
   const SpectralEntropyData data =
-      spectralEntropyData(laplacian(k, /*metric=*/true), phaseMode);
+      spectralEntropyData(workspace.laplacian(), phaseMode);
   if (data.laplacian.size() == 0 || data.zeroOperator) return gradient;
   const Eigen::Index n = data.laplacian.rows();
 
@@ -542,27 +659,23 @@ std::vector<std::complex<double>> HodgeLaplacian::spectralEntropyGradient(
         2.0 * data.entropyOperator.real() * data.entropyDerivative.real();
   }
 
-  for (std::size_t edgeIndex = 0; edgeIndex < edges.size(); ++edgeIndex) {
-    const auto *edge = edges[edgeIndex];
+#ifdef _OPENMP
+#pragma omp parallel for schedule(dynamic) if (!omp_in_parallel())
+#endif
+  for (std::int64_t edgeIndex = 0;
+       edgeIndex < static_cast<std::int64_t>(edges.size()); ++edgeIndex) {
+    const auto *edge = edges[static_cast<std::size_t>(edgeIndex)];
     if (edge == nullptr || edge->getSource() == nullptr ||
         edge->getTarget() == nullptr)
       continue;
-    const std::vector<cd> derivativeFlat = laplacianGradient(
-        k, edge->getSource()->getId(), edge->getTarget()->getId());
-    if (derivativeFlat.size() != static_cast<std::size_t>(n * n))
-      throw std::runtime_error(
-          "HodgeLaplacian::spectralEntropyGradient: Laplacian-gradient shape "
-          "does not match the operator");
-    Eigen::MatrixXcd derivative(n, n);
-    for (Eigen::Index row = 0; row < n; ++row)
-      for (Eigen::Index column = 0; column < n; ++column)
-        derivative(row, column) =
-            derivativeFlat[static_cast<std::size_t>(row * n + column)];
+    const Eigen::MatrixXcd derivative = workspace.gradient(
+        edge->getSource()->getId(), edge->getTarget()->getId());
 
     if (phaseMode == EntropyPhaseMode::IncludeComplexPhase) {
       // dS = 2 Re Tr(C L^dagger dL). In the documented convention
       // h=S_x-iS_y this is h=2 Tr(C L^dagger dL/dz).
-      gradient[edgeIndex] = 2.0 * (fullPhaseLeft * derivative).trace();
+      gradient[static_cast<std::size_t>(edgeIndex)] =
+          2.0 * (fullPhaseLeft.array() * derivative.transpose().array()).sum();
     } else {
       // d|L_ij| = Re(conj(L_ij)/|L_ij| dL_ij). Contract that chain rule with
       // dS/dM; a zero entry contributes zero on this fixed support stratum.
@@ -576,7 +689,7 @@ std::vector<std::complex<double>> HodgeLaplacian::spectralEntropyGradient(
                        (std::conj(value) / magnitude) *
                        derivative(row, column);
         }
-      gradient[edgeIndex] = component;
+      gradient[static_cast<std::size_t>(edgeIndex)] = component;
     }
   }
   return gradient;

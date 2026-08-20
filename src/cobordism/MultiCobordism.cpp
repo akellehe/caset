@@ -674,7 +674,7 @@ double MultiCobordism::objectiveFor(
   if (!spacetime) return std::numeric_limits<double>::infinity();
   if (objectiveMode_ == ObjectiveMode::MediatedCorrespondence) {
     const double actionMagnitude =
-        einsteinHilbert_
+        einsteinHilbert_ && reggeWeight_ != 0.0
             ? std::abs(ReggeSolver(spacetime, MatterConfiguration())
                            .dualReggeAction())
             : 0.0;
@@ -682,14 +682,18 @@ double MultiCobordism::objectiveFor(
   }
 
   const double reggeStationarity =
-      einsteinHilbert_ ? reggeWeight_ * reggeActionGradient(spacetime) : 0.0;
+      einsteinHilbert_ && reggeWeight_ != 0.0
+          ? reggeWeight_ * reggeActionGradient(spacetime)
+          : 0.0;
   if (objectiveMode_ == ObjectiveMode::Legacy)
     return reggeStationarity + gamma_ * rU(spacetime);
 
   double entropyStationarity = 0.0;
-  for (int degree : registerDegrees_)
-    entropyStationarity += HodgeLaplacian(spacetime).spectralEntropyGradientNorm(
-        degree, hodgeEntropyPhaseMode_);
+  if (hodgeEntropyWeight_ != 0.0)
+    for (int degree : registerDegrees_)
+      entropyStationarity +=
+          HodgeLaplacian(spacetime).spectralEntropyGradientNorm(
+              degree, hodgeEntropyPhaseMode_);
   return reggeStationarity +
          hodgeEntropyWeight_ * entropyStationarity;
 }
@@ -865,14 +869,15 @@ bool MultiCobordism::applyMoveSpecification(
 }
 
 double MultiCobordism::deltaF(
-    const std::shared_ptr<Spacetime> &candidateSpacetime, double baseResidualU,
+    const std::shared_ptr<Spacetime> &candidateSpacetime, double baseObjective,
+    double baseResidualU,
     const std::set<std::vector<std::uint64_t>> &baseCellSet) const {
   // The legacy objective has a localized exact Regge delta below. The new
   // objectives depend on global spectra/action magnitudes, so score their true
   // scalar difference. It is more expensive, but it prevents stage 1 from
   // optimizing a surrogate different from the objective it reports.
   if (objectiveMode_ != ObjectiveMode::Legacy)
-    return objectiveFor(candidateSpacetime) - objectiveFor(spacetime_);
+    return objectiveFor(candidateSpacetime) - baseObjective;
 
   std::set<std::vector<std::uint64_t>> candidateCellSet;
   for (const auto &topSimplex : candidateSpacetime->getTopSimplices())
@@ -958,7 +963,8 @@ double MultiCobordism::deltaF(
   return reggeWeight_ * gradientDelta + gamma_ * residualUDelta;
 }
 
-double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth) {
+double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth,
+                            double baseObjective) {
   const auto currentSnapshot = snapshot();
   const double baseResidualU =
       objectiveMode_ == ObjectiveMode::Legacy ? rU(spacetime_) : 0.0;
@@ -1022,7 +1028,7 @@ double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth) {
               specifications[static_cast<std::size_t>(candidateIndex)]))
         continue;  // failed the gate: stays at +inf
       const double objectiveDelta =
-          deltaF(candidateSpacetime, baseResidualU, baseCellSet);
+          deltaF(candidateSpacetime, baseObjective, baseResidualU, baseCellSet);
       deltas[static_cast<std::size_t>(candidateIndex)] = objectiveDelta;
       if (objectiveDelta < -convergenceTolerance_)
         snapshots[static_cast<std::size_t>(candidateIndex)] =
@@ -1062,7 +1068,7 @@ double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth) {
     // against the base complex. deltaF is exact over any fixed superset of the
     // affected edges, so a multi-move candidate needs no special treatment.
     const double objectiveDelta =
-        deltaF(candidateSpacetime, baseResidualU, baseCellSet);
+        deltaF(candidateSpacetime, baseObjective, baseResidualU, baseCellSet);
     if (objectiveDelta < bestObjectiveDelta) {
       bestObjectiveDelta = objectiveDelta;
       // The snapshot carries the sequence's AS-BUILT geometry: nothing was
@@ -1235,12 +1241,18 @@ bool MultiCobordism::stage1Update(int nCandidateMoves, bool growBoundaries,
   // handful of draws would badly under-sample it. The budget is only spent
   // when depth 1 already failed, i.e. exactly when it is worth it.
   constexpr int kDeepLookaheadCandidates = 128;
+  // Non-legacy candidates use an exact global objective. Score the unchanged
+  // base geometry once for the entire iterative-deepening pass instead of once
+  // per candidate endpoint (up to 524 redundant evaluations at depth five).
+  const double baseObjective =
+      objectiveMode_ == ObjectiveMode::Legacy ? 0.0 : objectiveFor(spacetime_);
   for (int lookaheadDepth = 1; lookaheadDepth <= std::max(1, maxLookahead);
        ++lookaheadDepth) {
     const int batchSize =
         lookaheadDepth == 1 ? nCandidateMoves
                             : std::max(nCandidateMoves, kDeepLookaheadCandidates);
-    const double objectiveDelta = step(batchSize, lookaheadDepth);
+    const double objectiveDelta =
+        step(batchSize, lookaheadDepth, baseObjective);
     if (objectiveDelta < -convergenceTolerance_) {
       // An F-lowering surgery sequence: progress.
       objectiveTrace.push_back(objectiveTrace.back() + objectiveDelta);
@@ -1425,13 +1437,12 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
   };
 
   Eigen::VectorXcd descentDirection = Eigen::VectorXcd::Zero(edgeCount);
-  // Exact acceptance baseline: recompute F at the CURRENT state rather than
-  // reading objectiveTrace.back(). In the combined drive (`run`) the trace is
-  // accumulated from stage-1 deltas and can drift from the true objective; a
-  // drifted-HIGH baseline would let the line search accept a trial that RAISES
-  // the true F. One extra objective evaluation per iteration buys an exact
-  // gate; in a standalone `runStage2` the two values coincide (every trace
-  // entry there is an exactly recomputed objective).
+  // Exact acceptance baseline at the CURRENT state rather than
+  // objectiveTrace.back(). Joint mode assembles it from the exact gradients
+  // already needed for its direction; the other modes recompute their scalar.
+  // In the combined drive (`run`) the trace is accumulated from stage-1 deltas
+  // and can drift from the true objective, so it is not a safe line-search
+  // gate.
 
   double currentObjective = 0.0;
   double trialStepScale = stepScale;
@@ -1439,62 +1450,74 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
   try {
     if ((objectiveMode_ == ObjectiveMode::Legacy ||
          objectiveMode_ == ObjectiveMode::JointStationarity) &&
-        einsteinHilbert_) {
+        einsteinHilbert_ && reggeWeight_ != 0.0) {
       ReggeSolver reggeSolver(spacetime_, MatterConfiguration());
       const auto gradientComponents = reggeSolver.actionGradientExact();
       const auto hessianRows = reggeSolver.actionHessianExact();
       Eigen::VectorXcd gradientVector(edgeCount);
       Eigen::MatrixXcd hessianMatrix(edgeCount, edgeCount);
-      for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+      double reggeGradientNormSquared = 0.0;
+      for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
         gradientVector(edgeIndex) = gradientComponents[edgeIndex];
+        reggeGradientNormSquared += std::norm(gradientComponents[edgeIndex]);
+      }
       for (std::size_t rowIndex = 0; rowIndex < edgeCount; ++rowIndex)
         for (std::size_t columnIndex = 0; columnIndex < edgeCount; ++columnIndex)
           hessianMatrix(rowIndex, columnIndex) =
               hessianRows[rowIndex][columnIndex];
       descentDirection += reggeWeight_ * 2.0 *
                           (hessianMatrix.conjugate() * gradientVector);
+      if (objectiveMode_ == ObjectiveMode::JointStationarity)
+        currentObjective += reggeWeight_ * reggeGradientNormSquared;
     }
 
     if (objectiveMode_ == ObjectiveMode::JointStationarity) {
-      // For each entropy S_k, h is its exact complex-z gradient. The real
-      // Hessian-vector product needed by grad ||h||^2 is the directional
-      // derivative of h along conj(h); a central difference costs two extra
-      // analytic-gradient evaluations without constructing a dense entropy
-      // Hessian. The resulting ascent displacement is 2 conj(dh).
-      for (int degree : registerDegrees_) {
-        const auto baseComponents =
-            HodgeLaplacian(spacetime_).spectralEntropyGradient(
-                degree, hodgeEntropyPhaseMode_);
-        Eigen::VectorXcd entropyGradient(edgeCount);
-        for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
-          entropyGradient(edgeIndex) = baseComponents[edgeIndex];
-        const Eigen::VectorXcd entropyAscent = entropyGradient.conjugate();
-        const double ascentNorm = entropyAscent.norm();
-        if (ascentNorm <= std::numeric_limits<double>::epsilon()) continue;
-        const double hvpStep =
-            std::cbrt(std::numeric_limits<double>::epsilon()) *
-            std::max(squaredLengths.norm(), 1.0) / ascentNorm;
+      if (hodgeEntropyWeight_ != 0.0) {
+        // For each entropy S_k, h is its exact complex-z gradient. The real
+        // Hessian-vector product needed by grad ||h||^2 is the directional
+        // derivative of h along conj(h); a central difference costs two extra
+        // analytic-gradient evaluations without constructing a dense entropy
+        // Hessian. The resulting ascent displacement is 2 conj(dh).
+        for (int degree : registerDegrees_) {
+          const auto baseComponents =
+              HodgeLaplacian(spacetime_)
+                  .spectralEntropyGradient(degree, hodgeEntropyPhaseMode_);
+          Eigen::VectorXcd entropyGradient(edgeCount);
+          double entropyGradientNormSquared = 0.0;
+          for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
+            entropyGradient(edgeIndex) = baseComponents[edgeIndex];
+            entropyGradientNormSquared += std::norm(baseComponents[edgeIndex]);
+          }
+          currentObjective += hodgeEntropyWeight_ * entropyGradientNormSquared;
+          const Eigen::VectorXcd entropyAscent = entropyGradient.conjugate();
+          const double ascentNorm = entropyAscent.norm();
+          if (ascentNorm <= std::numeric_limits<double>::epsilon())
+            continue;
+          const double hvpStep =
+              std::cbrt(std::numeric_limits<double>::epsilon()) *
+              std::max(squaredLengths.norm(), 1.0) / ascentNorm;
 
-        setSquaredLengths(squaredLengths + hvpStep * entropyAscent);
-        const auto plusComponents =
-            HodgeLaplacian(spacetime_).spectralEntropyGradient(
-                degree, hodgeEntropyPhaseMode_);
-        setSquaredLengths(squaredLengths - hvpStep * entropyAscent);
-        const auto minusComponents =
-            HodgeLaplacian(spacetime_).spectralEntropyGradient(
-                degree, hodgeEntropyPhaseMode_);
-        restoreEdgeLengths();
+          setSquaredLengths(squaredLengths + hvpStep * entropyAscent);
+          const auto plusComponents =
+              HodgeLaplacian(spacetime_)
+                  .spectralEntropyGradient(degree, hodgeEntropyPhaseMode_);
+          setSquaredLengths(squaredLengths - hvpStep * entropyAscent);
+          const auto minusComponents =
+              HodgeLaplacian(spacetime_)
+                  .spectralEntropyGradient(degree, hodgeEntropyPhaseMode_);
+          restoreEdgeLengths();
 
-        Eigen::VectorXcd directionalDerivative(edgeCount);
-        for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
-          directionalDerivative(edgeIndex) =
-              (plusComponents[edgeIndex] - minusComponents[edgeIndex]) /
-              (2.0 * hvpStep);
-        descentDirection += hodgeEntropyWeight_ * 2.0 *
-                            directionalDerivative.conjugate();
+          Eigen::VectorXcd directionalDerivative(edgeCount);
+          for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+            directionalDerivative(edgeIndex) =
+                (plusComponents[edgeIndex] - minusComponents[edgeIndex]) /
+                (2.0 * hvpStep);
+          descentDirection +=
+              hodgeEntropyWeight_ * 2.0 * directionalDerivative.conjugate();
+        }
       }
     } else if (objectiveMode_ == ObjectiveMode::MediatedCorrespondence) {
-      if (einsteinHilbert_) {
+      if (einsteinHilbert_ && reggeWeight_ != 0.0) {
         ReggeSolver reggeSolver(spacetime_, MatterConfiguration());
         const complexd action = reggeSolver.dualReggeAction();
         if (std::abs(action) > 0.0) {
@@ -1507,7 +1530,7 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
       }
       descentDirection +=
           scalarAscentDirection([&]() { return rU(spacetime_); });
-    } else if (gamma_ != 0.0 && !einsteinHilbert_) {
+    } else if (gamma_ != 0.0 && (!einsteinHilbert_ || reggeWeight_ == 0.0)) {
       // In residual-only legacy mode there is no Regge ray to search, so use
       // the complete r_U finite-difference gradient. When both historical
       // terms are enabled, Legacy intentionally preserves its former analytic
@@ -1520,7 +1543,11 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
     }
 
     restoreEdgeLengths();
-    currentObjective = fullObjective();
+    // Joint mode already computed both stationarity residuals while assembling
+    // their exact descent directions. Reuse them instead of evaluating the same
+    // Regge and Hodge gradients again at the unchanged base geometry.
+    if (objectiveMode_ != ObjectiveMode::JointStationarity)
+      currentObjective = fullObjective();
     // Absolute improvement threshold: the same tolerance has the same meaning
     // at every objective scale.
     const double improvementThreshold = tolerance;
