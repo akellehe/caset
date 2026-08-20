@@ -1,17 +1,14 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
-"""run_stage2's trials are UNBOUNDED on the real axis — fully Lorentzian, no clamp,
-no causal guard (#565, #589) — + signature-change verification of every reader the
-objective is built from.
+"""run_stage2's trials are unbounded in complex z=l² — no clamp or causal guard
+(#565, #589) — plus signature-change verification of every objective reader.
 
 Semantics: `runStage2` in MultiCobordism.h is THE authoritative statement. The
-configuration space is real signed ℓ²; every trial is constructed exactly real
-(descent along `Re(2β·H̄·g)`, the exact on-manifold gradient), and a trial `Re ℓ²`
-may land spacelike, timelike, or lightlike (any `(-ε, ε)` band admissible). The
-only rejection is the line search's own variational acceptance — the objective is
-total on the real manifold, so no trial can fail to evaluate and there is no
-backoff. Nothing projects a trial onto a floor, a cap, or a cone side, so the old
-clamp pins (`0.05`, `20`) must never reappear on an edge.
+configuration space is the full complex squared interval z=l². A trial may land
+spacelike, timelike, lightlike, or off the real Lorentzian locus. The line search
+backs off its real step scale but never projects a coordinate onto a floor, cap,
+real axis, or cone side, so the old clamp pins (`0.05`, `20`) must never reappear
+on an edge.
 
 Epic #559's rule: NO timelike initialization — causal content may only EMERGE. The
 timelike edge hand-set below is a verification of the READERS (the complex Sorkin
@@ -159,8 +156,8 @@ class Stage2UnclampedTest(unittest.TestCase):
     def test_unclamped_step_with_timelike_edge_no_nan(self):
         # A stage-2 run on a host carrying one hand-set timelike edge neither NaNs
         # nor collapses: finite F trace, every edge finite. Cone-side changes and
-        # magnitudes are dynamics — every trial is exactly real and evaluable, and
-        # only the line search's variational acceptance decides (#589).
+        # magnitudes and complex phases are dynamics; only the line search's
+        # variational acceptance decides (#589).
         host = _closed_s4(n_refine=8, seed=3)
         host.getEdgeList().toVector()[5].setLength(cmath.sqrt(complex(complex(-0.8, 0.0))))
         opt = self._node(host)

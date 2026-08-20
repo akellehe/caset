@@ -697,13 +697,9 @@ double MultiCobordism::objectiveFor(
 double MultiCobordism::objective() const { return objectiveFor(spacetime_); }
 
 std::set<std::uint64_t> MultiCobordism::pinnedBoundaryVertices() const {
-  // NOTHING is pinned. The boundary states are held representable by their r_U
-  // terms — each input by its OWN residual r(input_i), and the single output by
-  // the WHOLE cobordism's residual r(whole) (with the inputs as its boundary) —
-  // NOT by freezing vertices. The particular input structures are free to change;
-  // they must each merely continue to minimize their residual (keep representing
-  // their state). With the Regge and residual terms on the same order (Gamma), the
-  // optimizer cannot trade a boundary state away just to smooth the geometry.
+  // NOTHING is pinned. Target-conditioned modes hold boundary states through
+  // r_U rather than frozen vertices; JointStationarity treats the same target
+  // data as readout metadata. Boundary structures remain free to change.
   return {};
 }
 
@@ -744,11 +740,9 @@ MultiCobordism::MoveSpec MultiCobordism::drawRandomMoveSpecification(
   // proposed at random, scored by deltaF, committed only if they lower F. Nothing
   // prescribes causal structure -- the objective decides whether it wants any.
   //
-  // The disposition is drawn as a DISCRETE move rather than left to stage 2 because
-  // a continuous descent cannot carry l^2 across zero: that is a null, degenerate
-  // configuration where the deficit angles and dual volumes are singular, so the
-  // Euclidean orthant is a trap. Measured: every edge stays spacelike and Im S = 0
-  // through 110+ relaxation iterations.
+  // These discrete proposals remain useful for jumping directly between causal
+  // sectors. Complex-z stage 2 can also rotate continuously around z=0; neither
+  // path prescribes which causal structure the objective should prefer.
   static const char *baseMoveKinds[] = {kAddMove,  kRemoveMove, kFlipMove,
                                         kIFlipMove, kConeOut,   kConeIn};
   static const char *dispositionMoveKinds[] = {
@@ -1202,7 +1196,8 @@ std::vector<double> MultiCobordism::runStage1(int maxSteps, int nCandidateMoves,
 bool MultiCobordism::stage1Update(int nCandidateMoves, bool growBoundaries,
                                   std::vector<double> &objectiveTrace,
                                   int maxLookahead) {
-  // The register is "carried" (converged) once the summed r_U is essentially zero.
+  // In target-conditioned modes the register is "carried" once summed r_U is
+  // essentially zero. JointStationarity never consults this target diagnostic.
   constexpr double kRegisterCarriedTolerance = 1e-3;
   // INITIALIZATION ONLY: while establishing the boundary states, let each
   // not-yet-carrying block expand its scoring region by a shell so it can develop
@@ -1253,11 +1248,10 @@ bool MultiCobordism::stage1Update(int nCandidateMoves, bool growBoundaries,
       return true;
     }
   }
-  // No sequence up to maxLookahead moves lowered the objective. If the register
-  // is already carried, that IS convergence — halt. Otherwise keep drawing: the
-  // batches are random samples, so one miss is not proof no improving sequence
-  // exists, and the next iteration redraws fresh candidates. `maxSteps` bounds
-  // the retries.
+  // JointStationarity is target-free: with no improving sequence, its
+  // combinatorial stage is done. Target-conditioned modes halt when the register
+  // is carried; otherwise they keep drawing because a random miss is not proof
+  // that no target-improving sequence exists. `maxSteps` bounds those retries.
   if (objectiveMode_ == ObjectiveMode::JointStationarity) return false;
   return rU(spacetime_) >= kRegisterCarriedTolerance;
 }
@@ -1325,7 +1319,7 @@ std::vector<double> MultiCobordism::run(int maxIters, int nCandidateMoves,
     // reports diminishing returns. Every committed move is therefore scored
     // from — and leaves behind — relaxed geometry (stage2Update re-reads the
     // edge list each call, picking up whatever the move just created).
-    const bool registerNotCarried = stage1Update(
+    const bool stage1WantsAnotherIteration = stage1Update(
         nCandidateMoves, growBoundaries, objectiveTrace, maxLookahead);
     const bool moveCommitted = lastStage1LookaheadDepth_ > 0;
     // "Full" relaxation still needs a safety budget (as runStage2's maxIters):
@@ -1346,7 +1340,7 @@ std::vector<double> MultiCobordism::run(int maxIters, int nCandidateMoves,
     else
       consecutiveNoEffect = 0;
     const bool wantsExit =
-        (!registerNotCarried && !geometryRelaxed) ||  // carried + stationary
+        (!stage1WantsAnotherIteration && !geometryRelaxed) ||
         consecutiveNoEffect >= kConsecutiveNoEffectLimit;
     if (wantsExit) {
       // The LAST geometric relaxation before exit runs at a much tighter

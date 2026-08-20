@@ -43,6 +43,20 @@ class ObjectiveSelectionTest(unittest.TestCase):
         self.assertAlmostEqual(node.objective(), expected, places=10)
         self.assertTrue(math.isfinite(node.hodge_entropy()))
 
+    def test_joint_objective_is_independent_of_target_and_gamma(self):
+        first = cob.MultiCobordism(
+            _complex_sphere4(), [], [[1.0]], degrees=[3], gamma=2.0, seed=7)
+        second = cob.MultiCobordism(
+            _complex_sphere4(), [], [[1.0, -1.0, 1j]], degrees=[3],
+            gamma=9000.0, seed=7)
+        for node in (first, second):
+            node.set_objective_mode(
+                cob.CobordismObjectiveMode.JointStationarity)
+            node.set_regge_weight(0.7)
+            node.set_hodge_entropy_weight(1.9)
+        self.assertNotAlmostEqual(first.r_u(first.st), second.r_u(second.st))
+        self.assertAlmostEqual(first.objective(), second.objective(), places=10)
+
     def test_mediated_objective_matches_documented_experiment(self):
         st = _complex_sphere4()
         node = _node(st)

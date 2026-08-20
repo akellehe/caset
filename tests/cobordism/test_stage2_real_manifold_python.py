@@ -184,10 +184,9 @@ class ComplexStageTwoContractTest(unittest.TestCase):
 
 
 class CausalSpecimenContinuationTest(unittest.TestCase):
-    """A rebuilt #562 causal specimen continues under the real-axis dynamics:
-    finite F, exactly-real geometry, no exception. (The full re-verification
-    of all three causal specimens is reported on PR #590 — this pins the
-    rebuild path and the invariant on the smallest one.)"""
+    """A rebuilt #562 causal specimen continues under complex-z dynamics with
+    finite F and geometry. (The full re-verification of all three causal
+    specimens is reported on PR #590; this pins the smallest rebuild path.)"""
 
     def test_specimen_11001000_stage2_continuation(self):
         dump = load_dump(11001000)

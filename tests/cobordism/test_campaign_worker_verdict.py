@@ -2,12 +2,10 @@
 # All rights reserved.
 """The campaign worker's verdict-record extremes (#597).
 
-Stage 2 constructs every trial exactly real (Im l^2 == 0 by construction,
-#589), so the worker's final-state reads can never surface a transient Im
-produced upstream — the verdict must carry the TRAJECTORY extremes instead:
-max_im_seen (a nonzero value flags an upstream Im producer) and min_re_min
-(how close the drive ever came to the causal sector Re l^2 < 0), accumulated
-over every pass/chunk snapshot.
+Stage 2 now explores full complex z=l², so a final-state read can hide complex
+or timelike regions visited earlier in the trajectory. The verdict therefore
+carries the TRAJECTORY extremes: max_im_seen and min_re_min, accumulated over
+every pass/chunk snapshot.
 """
 import importlib.util
 import os

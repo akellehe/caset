@@ -45,8 +45,9 @@ using ::tessera::spacetime::Spacetime;
 ///     `{add,remove,flip,iflip,cone_out,cone_in,cone_in_timelike,flip_disposition}`
 ///     (the last two are the causal dispositions — see `shouldProposeDispositions`),
 ///     each gated by `dualComplexValid` and "no input vertex removed", committed
-///     only if ΔF < 0; a batch with no improving move simply redraws (halting
-///     only once the register is carried).
+///     only if ΔF < 0. Target-conditioned modes may redraw a stalled batch while
+///     the register is not carried; target-free `JointStationarity` stops that
+///     stage when no improving sequence is found.
 ///   * **Stage 2 (geometric):** relax the full complex squared edge coordinates
 ///     \f$z_e=\ell_e^2\f$ along the selected objective's gradient, then map each
 ///     accepted \f$z_e\f$ back to the continuous square-root branch of the stored
@@ -81,13 +82,15 @@ class MultiCobordism {
   /// `outputTargets` is a LIST of output boundary blocks (the full cobordism
   /// `∂W = inputs ⊔ outputs`, #491): a merge has one, a 2→2 recombination has two
   /// (diquark ⊔ antidiquark). Each output — like each input — is an emergent
-  /// boundary sub-complex carrying its target, scored by its own `r_U`; the bulk
-  /// routes the connectivity (which input constituent reaches which output).
+  /// boundary sub-complex carrying its target. Target-conditioned modes score it
+  /// through `r_U`; JointStationarity retains it only as readout metadata. The
+  /// bulk routes the connectivity (which input constituent reaches which output).
   ///
   /// An **empty** `outputTargets` is a supported shape (#555): nothing is pinned
-  /// downstream, `rU` sums only the input blocks (the objective is
-  /// `‖∇S‖² + Γ·Σᵢ r_U(inputᵢ)`), and whatever the whole comes to carry is read
-  /// after the fact — the emergent arm `ProtonIngredients` builds on this.
+  /// downstream. In target-conditioned modes `rU` then sums only the input
+  /// blocks; JointStationarity contains no `rU` term. Whatever the whole comes
+  /// to carry is read after the fact—the emergent arm `ProtonIngredients` builds
+  /// on this.
   ///
   /// `precone` (default 0) pre-grows the host by that many **gated cone-in moves**
   /// before any optimization — the emergent way to give surgery room to act, in
@@ -161,12 +164,9 @@ class MultiCobordism {
   /// only when they lower `F`. Nothing prescribes causal structure; the objective
   /// decides whether it wants any.
   ///
-  /// Drawn as DISCRETE moves rather than left to `runStage2` because a continuous
-  /// descent cannot carry `ℓ²` across zero — a null, degenerate configuration
-  /// where deficit angles and circumcentric dual volumes are singular — so the
-  /// Euclidean orthant is a trap. Measured on canonical hosts: every edge stays
-  /// spacelike and `Im S = 0` through 110+ relaxation iterations, with
-  /// `‖∇S‖² = 9.46` still far from stationary.
+  /// They remain useful discrete proposals across causal sectors. The complex-z
+  /// Stage 2 can also rotate continuously around `z=0`; it does not project the
+  /// imaginary component away.
   ///
   /// Default **`true`** (#632): the causal moves are the seed's ONLY descent
   /// directions, so a draw without them is not a neutral default — it hides the
@@ -209,8 +209,8 @@ class MultiCobordism {
   /// locus, not a clamp in the dynamics: generic edge lengths essentially never hit
   /// `det G = 0`.
   ///
-  /// Pass `false` to recover the spacelike-only six-move draw — every edge stays
-  /// spacelike, `Im S` is identically `0`, and the objective is well-behaved.
+  /// Pass `false` to recover the six-move draw without explicit causal-disposition
+  /// proposals. Stage 2 can still explore complex squared intervals.
   [[nodiscard]] bool shouldProposeDispositions() const {
     return shouldProposeDispositions_;
   }
@@ -424,10 +424,11 @@ class MultiCobordism {
   /// improvement test at `tolerance` (default 10e-9) reports diminishing returns,
   /// so every move is proposed from, and leaves behind, relaxed geometry.
   ///
-  /// Exit protocol: the loop wants to exit once the register is carried with the
-  /// geometry stationary, or once the combinatorial moves have had no effect
-  /// (nothing committed at any lookahead depth AND nothing left to relax) for a
-  /// few consecutive iterations (one stalled batch is draw noise, not proof).
+  /// Exit protocol: target-conditioned modes can exit once the register is carried
+  /// with the geometry stationary. Every mode can also exit once combinatorial
+  /// moves have had no effect (nothing committed at any lookahead depth AND
+  /// nothing left to relax) for a few consecutive iterations (one stalled batch
+  /// is draw noise, not proof).
   /// The LAST geometric relaxation before exit then runs at the tight 1e-12: if
   /// it still finds descent, the exit was premature and the loop continues on
   /// the freshly relaxed geometry; only a state stationary at 1e-12 exits.
@@ -519,10 +520,9 @@ class MultiCobordism {
                          std::complex<double>>>;
   using MoveSpec = std::pair<std::string, std::vector<std::uint64_t>>;
 
-  /// The pinned boundary (input + output) vertices — none may be removed by a move. The move
-  /// gate (`applyMoveSpecification`) and the directed cone-out probe consult it to avoid
-  /// stranding a pinned vertex. (Currently empty — the boundary states are held by their `r_U`
-  /// terms, not by freezing vertices.)
+  /// Vertices explicitly pinned against removal. Currently empty: target-conditioned
+  /// modes hold boundary states through `r_U`, while JointStationarity treats the
+  /// same data as readout metadata. This remains the policy hook for future anchors.
   [[nodiscard]] std::set<std::uint64_t> pinnedBoundaryVertices() const;
 
   // ---- the pieces of residualOfTargetStateAgainstHarmonic ----
@@ -624,9 +624,9 @@ class MultiCobordism {
   /// One iteration of `runStage1`'s loop: optional boundary growth plus one
   /// best-ΔF candidate-move step, booked into `objectiveTrace`. A batch with no
   /// improving move is NOT a stall — the batch is a random sample, so the next
-  /// iteration simply redraws. Returns `false` only when the run should halt: no
-  /// improving move AND the register already carried (converged); `true` to keep
-  /// iterating.
+  /// iteration simply redraws. Returns whether the caller should keep iterating:
+  /// target-conditioned modes continue until the register is carried, while
+  /// target-free `JointStationarity` stops after the stalled batch.
   bool stage1Update(int nCandidateMoves, bool growBoundaries,
                     std::vector<double> &objectiveTrace, int maxLookahead = 1);
   /// One iteration of `runStage2`: assemble the selected objective's complex-z

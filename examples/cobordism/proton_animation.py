@@ -436,7 +436,7 @@ class ProtonAnimator:
     animation this example was copied from.)"""
 
     _PHASE_NAMES = {"init": "growing register", "evolve": "evolving (∂W frozen)"}
-    _TITLE_PREFIX = "Experimental constrained singlet build (one-step, 3 quarks)"
+    _TITLE_PREFIX = "Experimental singlet readout (one-step, 3 quarks)"
 
     def __init__(self, nodes, degree=3, init_steps=_INIT_STEPS, init_chunk=_INIT_CHUNK,
                  evolve_steps=_EVOLVE_STEPS, evolve_chunk=_EVOLVE_CHUNK,
@@ -513,6 +513,9 @@ class ProtonAnimator:
         self.nodes = nodes                  # [(MultiCobordism, label), ...] in order
         self.k = degree
         self.einstein_hilbert = bool(einstein_hilbert)
+        self.target_scored = (
+            nodes[0][0].objective_mode !=
+            cob.CobordismObjectiveMode.JointStationarity)
         self._last_relax_steps = None       # accepted stage-2 steps this frame
         self._run_index = None              # per-run filename marker (#752)
         self.hist = {"F": [], "gradN2": [], "hodgeS": [], "hodgeGradN2": [],
@@ -674,10 +677,11 @@ class ProtonAnimator:
             stage2_note = f"stage2 {self._last_relax_steps} steps accepted"
         else:
             stage2_note = "stage2 descending"
+        residual_name = "rU" if self.target_scored else "rU(diagnostic)"
         print(f"f{frame + 1:04d} {phase:<6} | F {objective:.6e} "
               f"dF {change:+.3e} | grad2 {gradient_norm_squared:.3e} "
               f"hodge-grad2 {hodge_gradient_norm_squared:.3e} "
-              f"rU {bare_residual:.3e} | "
+              f"{residual_name} {bare_residual:.3e} | "
               f"cells {cell_count} b{self.k} {history['b3'][-1]} "
               f"holes {history['holes'][-1]} | {stage1_note} | {stage2_note} | "
               f"{time.time() - self._t0:.0f}s", flush=True)
@@ -1419,7 +1423,9 @@ class ProtonAnimator:
         self.axm.plot(xs, self.hist["hodgeGradN2"],
                       label="‖∇S_Hodge‖² (bare)", color="C4",
                       lw=1.0, alpha=0.9)
-        self.axm.plot(xs, self.hist["rU"], label="r_U (diagnostic)", color="C2",
+        residual_label = ("r_U (bare)" if self.target_scored
+                          else "r_U (diagnostic; unscored)")
+        self.axm.plot(xs, self.hist["rU"], label=residual_label, color="C2",
                       ls="--", alpha=0.6)
         # Per-frame ΔF, signed, on the same symlog axis: descent shows as a
         # NEGATIVE trace regardless of F's absolute scale, so "is the
