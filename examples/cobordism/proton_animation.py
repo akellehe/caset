@@ -104,6 +104,7 @@ import itertools
 import json
 import math
 import os
+import re
 import sys
 import time
 
@@ -292,6 +293,30 @@ def _mds_layout(st):
     return {vids[i]: coords[i] for i in range(n)}
 
 
+def _next_run_index(*directories):
+    """The run index for THIS run: one more than the highest already present.
+
+    Frame and checkpoint numbering restarts every run, so without a per-run
+    marker a second run into the same directory overwrites the first one frame
+    by frame and the directory stops being a time series. One index is chosen
+    for the whole run and shared by both writers, so a frame and the checkpoint
+    beside it can be told to belong together.
+
+    Directories with no suffixed files — empty, or holding only output from
+    before this existed — start at 1; those older files stay ambiguous, since
+    which run produced them is not recoverable.
+    """
+    highest = 0
+    for directory in directories:
+        if not directory or not os.path.isdir(directory):
+            continue
+        for name in os.listdir(directory):
+            match = re.search(r"_run(\d+)\.json$", name)
+            if match:
+                highest = max(highest, int(match.group(1)))
+    return highest + 1
+
+
 class _StableLayout:
     """Per-panel jitter-free layout state: the normalized MDS embedding, rigidly aligned to
     the previous frame (rotation/reflection only — the scale is already fixed by
@@ -418,6 +443,7 @@ class ProtonAnimator:
         self.nodes = nodes                  # [(MultiCobordism, label), ...] in order
         self.k = degree
         self._last_relax_steps = None       # accepted stage-2 steps this frame
+        self._run_index = None              # per-run filename marker (#752)
         self.hist = {"F": [], "gradN2": [], "rU": [], "b3": [], "holes": [],
                      "phase": [], "node": [], "lookahead": [], "tries": [],
                      "min_det2": [], "min_det3": [], "sigma": [],
@@ -497,6 +523,12 @@ class ProtonAnimator:
         if self.status:
             self._print_status(node, frame, phase, tries)
 
+    def _runSuffix(self):
+        """`_runNNN`, chosen once per run and shared by both writers (#752)."""
+        if self._run_index is None:
+            self._run_index = _next_run_index(self._dump_dir, self.checkpoint_dir)
+        return f"_run{self._run_index:03d}"
+
     def _write_checkpoint(self, node, frame, phase):
         """Write this frame's state through `GeometryState` — top cells in
         INTRINSIC vertex order, so the orientation is recoverable from the file
@@ -505,7 +537,8 @@ class ProtonAnimator:
         drawing, which discards exactly that order."""
         directory = self.checkpoint_dir or self._dump_dir or "."
         os.makedirs(directory, exist_ok=True)
-        path = os.path.join(directory, f"state_{frame + 1:04d}.json")
+        path = os.path.join(
+            directory, f"state_{frame + 1:04d}{self._runSuffix()}.json")
         GeometryState.write(node.st, path, meta={
             "frame": frame + 1,
             "phase": phase,
@@ -1075,7 +1108,8 @@ class ProtonAnimator:
                 "dual_adjacency": [list(map(int, rows)), list(map(int, cols))],
                 "heat_frame": heat_frame,  # frame the heat was computed on
             })
-        path = os.path.join(self._dump_dir, f"frame_{frame:04d}.json")
+        path = os.path.join(
+            self._dump_dir, f"frame_{frame:04d}{self._runSuffix()}.json")
         with open(path, "w") as f:
             json.dump(payload, f)
 
@@ -1833,6 +1867,7 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
     if not visualize and not save:
         out = []
         chunked = bool(no_combinatorial_moves)
+        headless_run_index = None      # chosen once for the run (#752)
         for node, label in nodes:
             if chunked:
                 # A chunked headless drive, so `--no-combinatorial-moves` and
@@ -1876,8 +1911,13 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                         if checkpoint and (step_index + 1) % checkpoint == 0:
                             directory = checkpoint_dir or dump_dir or "."
                             os.makedirs(directory, exist_ok=True)
+                            if headless_run_index is None:
+                                headless_run_index = _next_run_index(
+                                    dump_dir, checkpoint_dir)
                             path = os.path.join(
-                                directory, f"state_{phase}_{step_index + 1:04d}.json")
+                                directory,
+                                f"state_{phase}_{step_index + 1:04d}"
+                                f"_run{headless_run_index:03d}.json")
                             GeometryState.write(node.st, path, meta={
                                 "frame": step_index + 1, "phase": phase,
                                 "F": float(node.objective()), "degree": degree})
