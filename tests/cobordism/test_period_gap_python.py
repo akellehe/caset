@@ -93,7 +93,11 @@ class PeriodGapGradientTest(unittest.TestCase):
         target = [complex(z) for z in P[0]]
         _perturb(st, cells1, every=7, factor=1.3)  # r_psi > 0 off the carrier
 
-        g = np.asarray(es.periodGapForPeriodsGradient(holes, target), float)
+        # The gradient is COMPLEX now (#746); Re is exactly the real-locus
+        # derivative this test certified before, and these fixtures sit on
+        # the real-l^2 locus, so the assertions below are unchanged.
+        g = np.asarray(es.periodGapForPeriodsGradient(holes, target),
+                       complex).real
         self.assertEqual(len(g), len(cells1))
         self.assertTrue(np.all(np.isfinite(g)))
         self.assertGreater(float(np.linalg.norm(g)), 1e-6)  # non-trivial
@@ -123,7 +127,11 @@ class PeriodGapGradientTest(unittest.TestCase):
         # asserts norm(g) > 1e-6 at a perturbed point.)
         _st, es, holes, P, cells1 = _substrate()
         target = [complex(z) for z in P[0]]
-        g = np.asarray(es.periodGapForPeriodsGradient(holes, target), float)
+        # The gradient is COMPLEX now (#746); Re is exactly the real-locus
+        # derivative this test certified before, and these fixtures sit on
+        # the real-l^2 locus, so the assertions below are unchanged.
+        g = np.asarray(es.periodGapForPeriodsGradient(holes, target),
+                       complex).real
         self.assertLess(float(np.max(np.abs(g))), 1e-5)
 
 
