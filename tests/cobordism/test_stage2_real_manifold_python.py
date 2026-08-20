@@ -142,7 +142,7 @@ class ComplexStageTwoContractTest(unittest.TestCase):
         opt.run_stage1(max_steps=4, n_candidate_moves=4,
                        grow_boundaries=True)
         trace = opt.run_stage2(beta=1.0, max_iters=3, alpha0=0.05,
-                               rel_tol=1e-9)
+                               tolerance=1e-9)
         self.assertTrue(all(math.isfinite(f) for f in trace))
         if len(trace) == 1:
             # No accepted step is legitimate ONLY as the variational verdict,
@@ -162,7 +162,7 @@ class ComplexStageTwoContractTest(unittest.TestCase):
         host.getEdgeList().toVector()[5].setLength(cmath.sqrt(complex(complex(-0.8, 0.0))))
         opt = self._node(host)
         trace = opt.run_stage2(beta=1.0, max_iters=6, alpha0=0.05,
-                               rel_tol=1e-9)
+                               tolerance=1e-9)
         self.assertTrue(all(math.isfinite(f) for f in trace))
         if len(trace) >= 2:
             self.assertLess(trace[-1], trace[0])
@@ -189,7 +189,7 @@ class CausalSpecimenContinuationTest(unittest.TestCase):
         self.assertLess(re_min, 0.0)
         self.assertEqual(_max_abs_im(st), 0.0)  # dumps carry Im == 0
         trace = node.run_stage2(beta=1.0, max_iters=3, alpha0=0.05,
-                                rel_tol=1e-9)
+                                tolerance=1e-9)
         self.assertTrue(all(math.isfinite(f) for f in trace))
         # The complex-step stage 2 may rotate lengths off the real axis; the
         # specimen must stay finite (classifiability asserted below).

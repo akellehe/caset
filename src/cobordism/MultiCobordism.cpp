@@ -1133,19 +1133,19 @@ void MultiCobordism::seedBlocks(
 }
 
 std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
-                                                 double alpha0, double relTol) {
+                                                 double alpha0, double tolerance) {
   std::vector<double> objectiveTrace = {einsteinHilbertTerm(beta) +
                                         gamma_ * rU(spacetime_)};
   double stepScale = alpha0;
   lastStage2Stationary_ = false;  // for maxIters == 0; each update reports its own
   for (int iterationIndex = 0; iterationIndex < maxIters; ++iterationIndex)
-    if (!stage2Update(beta, relTol, objectiveTrace, stepScale)) break;
+    if (!stage2Update(beta, tolerance, objectiveTrace, stepScale)) break;
   return objectiveTrace;
 }
 
 std::vector<double> MultiCobordism::run(int maxIters, int nCandidateMoves,
                                         bool growBoundaries, double beta,
-                                        double alpha0, double relTol,
+                                        double alpha0, double tolerance,
                                         int maxLookahead,
                                         int relaxBudgetPerMove) {
   std::vector<double> objectiveTrace = {objective()};
@@ -1173,7 +1173,7 @@ std::vector<double> MultiCobordism::run(int maxIters, int nCandidateMoves,
     // stationarity test remains the real terminator.
     bool geometryRelaxed = false;
     for (int relaxIndex = 0; relaxIndex < relaxBudgetPerMove; ++relaxIndex) {
-      if (!stage2Update(beta, relTol, objectiveTrace, stepScale)) break;
+      if (!stage2Update(beta, tolerance, objectiveTrace, stepScale)) break;
       geometryRelaxed = true;
     }
     // "The combinatorial moves have no effect": nothing committed at any
@@ -1205,7 +1205,7 @@ std::vector<double> MultiCobordism::run(int maxIters, int nCandidateMoves,
   return objectiveTrace;
 }
 
-bool MultiCobordism::stage2Update(double beta, double relTol,
+bool MultiCobordism::stage2Update(double beta, double tolerance,
                                   std::vector<double> &objectiveTrace,
                                   double &stepScale) {
   // Reset-then-set: the flag reports THIS call's outcome, so in the combined
@@ -1250,11 +1250,11 @@ bool MultiCobordism::stage2Update(double beta, double relTol,
   // entry there is an exactly recomputed objective).
 
   double currentObjective = fullObjective();
-  // Relative stationarity: accept a step only when it lowers F by more than relTol
-  // scaled by the current magnitude (an absolute floor of relTol when |F| < 1). The
-  // old absolute convergenceTolerance_ accepted ~1e-11 *relative* steps for F ~ 100
-  // — the rounding floor; this scales the threshold with the objective instead.
-  const double improvementThreshold = relTol;
+  // Stationarity: accept a step only when it lowers F by more than `tolerance`,
+  // as an ABSOLUTE amount. The threshold is not scaled by the objective's
+  // magnitude, so the same tolerance means the same thing whether F is 1 or
+  // 1e6 — which is why the parameter is no longer called a relative one.
+  const double improvementThreshold = tolerance;
   auto trialStepScale = complexd(stepScale, stepScale);
   // Put the geometry back the way this call found it. Both early exits use it: the
   // line search that never beat the threshold, and an objective evaluation that threw

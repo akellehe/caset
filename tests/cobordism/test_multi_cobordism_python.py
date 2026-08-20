@@ -80,7 +80,7 @@ class MultiCobordismCxxTest(unittest.TestCase):
 
     def test_run_stage2_stops_on_relative_stationarity(self):
         # run_stage2 stops on a RELATIVE stationarity test — no line-search step lowers F
-        # by more than rel_tol·max(|F|,1) — and last_stage2_stationary reports whether the
+        # by more than tolerance·max(|F|,1) — and last_stage2_stationary reports whether the
         # run ended that way (True) or hit the max_iters budget cap (False). Only this
         # geometric tail is relative; the surgery stages keep the absolute tolerance.
         CXX, w = self.CXX, self.w
@@ -92,7 +92,7 @@ class MultiCobordismCxxTest(unittest.TestCase):
         # Budget cap: one iteration under a tight tol on the fresh, jittered (non-
         # stationary) geometry takes a single improving step and stops on the iteration
         # budget — NOT the stationarity test. last_stage2_stationary is False.
-        t_budget = opt.run_stage2(beta=1.0, max_iters=1, alpha0=0.05, rel_tol=1e-13)
+        t_budget = opt.run_stage2(beta=1.0, max_iters=1, alpha0=0.05, tolerance=1e-13)
         self.assertFalse(opt.last_stage2_stationary)         # stopped: budget
         self.assertLess(t_budget[-1], t_budget[0])           # the step strictly lowered F
 
@@ -100,8 +100,8 @@ class MultiCobordismCxxTest(unittest.TestCase):
         # (F = ||grad S||^2 + gamma*r_U >= 0, so no edge step can lower F by 10*max(|F|,1)),
         # the first line search accepts nothing and run_stage2 stops on the stationarity
         # test — reported by the accessor — before exhausting max_iters. This exercises the
-        # exact "no step beats relTol*max(|F|,1)" branch the relative criterion introduced.
-        t_stat = opt.run_stage2(beta=1.0, max_iters=50, alpha0=0.05, rel_tol=10.0)
+        # exact "no step beats tolerance*max(|F|,1)" branch the relative criterion introduced.
+        t_stat = opt.run_stage2(beta=1.0, max_iters=50, alpha0=0.05, tolerance=10.0)
         self.assertTrue(opt.last_stage2_stationary)          # stopped: stationary
         self.assertLess(len(t_stat), 51)                     # broke before the budget cap
         self.assertTrue(all(t_stat[i + 1] <= t_stat[i]       # never increases

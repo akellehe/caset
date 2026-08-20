@@ -110,7 +110,7 @@ class BlockBettiCacheTest(unittest.TestCase):
         node = _node()
         node.r_u(node.st)
         node.run(max_iters=1, n_candidate_moves=4, grow_boundaries=True,
-                 beta=1.0, alpha0=0.05, rel_tol=1e-6, max_lookahead=1,
+                 beta=1.0, alpha0=0.05, tolerance=1e-6, max_lookahead=1,
                  relax_budget_per_move=2)
         after = node.r_u(node.st)
         self.assertTrue(math.isfinite(after))
