@@ -831,6 +831,15 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def_static("emergent_holes", &MultiCobordism::emergentHoles,
                   py::arg("st"), py::arg("k"))
       .def_static("regge_action_gradient", &MultiCobordism::reggeActionGradient, py::arg("st"))
+      .def_static("nearKernelResidualGradient",
+           &MultiCobordism::nearKernelResidualGradient,
+           py::arg("st"), py::arg("register_degree"),
+           py::arg("expected_register_count"),
+           "Exact COMPLEX gradient of nearKernelResidual per edge, in "
+           "ChainComplex 1-cell order: g = dr/d(Re l^2) - i dr/d(Im l^2), so "
+           "Re(g) and -Im(g) are the two directional derivatives and conj(g) is "
+           "the steepest-ascent direction. Certified by the scale-invariance "
+           "Euler identity sum l^2 g = 0 in both parts.")
       .def_static("nearKernelResidual", &MultiCobordism::nearKernelResidual,
            py::arg("st"), py::arg("register_degree"),
            py::arg("expected_register_count"),

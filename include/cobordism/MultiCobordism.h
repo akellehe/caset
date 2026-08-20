@@ -292,6 +292,33 @@ class MultiCobordism {
       const std::shared_ptr<Spacetime> &st, int registerDegree,
       std::size_t expectedRegisterCount);
 
+  /// Exact COMPLEX gradient of `nearKernelResidual` with respect to each edge's
+  /// `ℓ²`, in ChainComplex 1-cell order — the register residual's derivative,
+  /// and the only part of `r_U` that has one before a register exists (the
+  /// period-gap terms sit at their constant full leak until holes open, and a
+  /// constant cannot move the geometry).
+  ///
+  /// Returns the #746 convention, `g = ∂r/∂(Re ℓ²) − i·∂r/∂(Im ℓ²)`, so the
+  /// directional derivatives are `Re(g)` and `−Im(g)` and `conj(g)` is the
+  /// steepest-ascent direction.
+  ///
+  /// With `H = L_k† L_k`, whose eigenvalues are the `σ²`:
+  ///   `∂σᵢ² = wᵢᴴ(∂L† L + L† ∂L)wᵢ` for the normalized eigenvector `wᵢ`, and
+  ///   `∂(Σσ²) = ∂ tr(H)`, combined by the quotient rule and scaled by `n`.
+  ///
+  /// Certified by the Euler identity `Σ ℓ²·g = 0` in both parts — the term is
+  /// deliberately scale-invariant (degree 0), which is why it is a ratio rather
+  /// than a raw spectral sum — verified on and off the real locus.
+  ///
+  /// Exactly zero where the value is constant (no `k`-cells, or an
+  /// identically-zero operator). Where two singular values coincide at the
+  /// `m`-th place the SELECTION is discontinuous and the functional genuinely
+  /// non-smooth; this is the true derivative away from such a tie, and the
+  /// line search arbitrates at one.
+  [[nodiscard]] static std::vector<std::complex<double>> nearKernelResidualGradient(
+      const std::shared_ptr<Spacetime> &st, int registerDegree,
+      std::size_t expectedRegisterCount);
+
   /// The scale-invariant spectral-shape term the `singularValueRatio` mode uses
   /// as the whole-complex contribution to `rU`, in place of BOTH the
   /// single-output period residual and `nearKernelResidual`: the ratio of the

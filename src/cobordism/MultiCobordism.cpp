@@ -496,6 +496,89 @@ double MultiCobordism::nearKernelResidual(
          static_cast<double>(expectedRegisterCount - m);
 }
 
+std::vector<std::complex<double>> MultiCobordism::nearKernelResidualGradient(
+    const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
+    std::size_t expectedRegisterCount) {
+  // d/dl^2 of  r = n * (sum of the m smallest sigma^2) / (sum of all sigma^2).
+  //
+  // The sigma^2 are the eigenvalues of the Hermitian H = L^dagger L, so first-order
+  // perturbation gives d(sigma_i^2) = w_i^dagger (dL^dagger L + L^dagger dL) w_i for the
+  // normalized eigenvector w_i — no singular-vector pair needed, and the
+  // expression stays valid for the non-normal signed operator. The denominator
+  // is tr(H), whose derivative is the trace of the same perturbation. Quotient
+  // rule over the two, times n.
+  //
+  // COMPLEX throughout (#746): laplacianGradient is already complex, and the
+  // return follows the same convention as the period-gap family,
+  //   g = dr/d(Re l^2) - i dr/d(Im l^2),
+  // so Re(g) and -Im(g) are the two directional derivatives.
+  using Eigen::Index;
+  using Eigen::MatrixXcd;
+  const ChainComplex chain = ChainComplex::fromSpacetime(*spacetime);
+  const std::vector<std::vector<std::uint64_t>> oneCells = chain.kSimplexVertices(1);
+  std::vector<complexd> gradient(oneCells.size(), complexd(0.0, 0.0));
+  if (expectedRegisterCount == 0) return gradient;   // value is the constant 0
+
+  cobordism::HodgeLaplacian laplacian(spacetime);
+  const std::vector<complexd> flat =
+      laplacian.laplacian(registerDegree, /*metric=*/true);
+  const std::size_t n = static_cast<std::size_t>(
+      std::llround(std::sqrt(static_cast<double>(flat.size()))));
+  if (n == 0) return gradient;      // value is the constant expectedRegisterCount
+  const Index N = static_cast<Index>(n);
+  MatrixXcd L(N, N);
+  for (std::size_t i = 0; i < n; ++i)
+    for (std::size_t j = 0; j < n; ++j)
+      L(static_cast<Index>(i), static_cast<Index>(j)) = flat[i * n + j];
+  if (!L.allFinite()) return gradient;   // the value is +inf here (#699); no slope
+
+  // H = L^dagger L is Hermitian positive semi-definite; its eigenvalues ARE the
+  // sigma^2 the value reads, ascending here, and its eigenvectors give the exact
+  // first-order response of each one.
+  const MatrixXcd H = L.adjoint() * L;
+  Eigen::SelfAdjointEigenSolver<MatrixXcd> solver(H);
+  const Eigen::VectorXd eigenvalues = solver.eigenvalues();      // ascending
+  const MatrixXcd eigenvectors = solver.eigenvectors();
+  double total = 0.0;
+  for (Index i = 0; i < eigenvalues.size(); ++i) total += eigenvalues[i];
+  if (total <= 0.0) return gradient;    // L identically zero: value is 0, flat
+  const std::size_t m = std::min(expectedRegisterCount, n);
+  double smallest = 0.0;
+  for (std::size_t i = 0; i < m; ++i)
+    smallest += eigenvalues[static_cast<Index>(i)];              // m smallest
+
+  for (std::size_t edgeIndex = 0; edgeIndex < oneCells.size(); ++edgeIndex) {
+    const std::vector<complexd> derivativeFlat = laplacian.laplacianGradient(
+        registerDegree, oneCells[edgeIndex][0], oneCells[edgeIndex][1]);
+    if (derivativeFlat.empty()) continue;
+    MatrixXcd dL(N, N);
+    for (std::size_t i = 0; i < n; ++i)
+      for (std::size_t j = 0; j < n; ++j)
+        dL(static_cast<Index>(i), static_cast<Index>(j)) =
+            derivativeFlat[i * n + j];
+    // L is HOLOMORPHIC in l^2 (the weights are polynomial in it), so the
+    // complex derivative of H = L^dagger L is 2 L^dagger dL — NOT
+    // dL^dagger L + L^dagger dL, which is the Hermitian combination and
+    // therefore the REAL-direction derivative alone. Using the Hermitian form
+    // makes w^dagger dH w real by construction and the gradient's imaginary
+    // part identically zero, which is the whole thing this was meant to fix
+    // (#746/#748). Re(2 L^dagger dL) reproduces the Hermitian value exactly, so
+    // the real direction is unchanged.
+    const MatrixXcd dH = 2.0 * (L.adjoint() * dL);
+    // d(sum of the m smallest) and d(trace) from the same perturbation.
+    complexd dSmallest(0.0, 0.0);
+    for (std::size_t i = 0; i < m; ++i) {
+      const auto w = eigenvectors.col(static_cast<Index>(i));
+      dSmallest += w.dot(dH * w);      // w^dagger dH w, as a scalar
+    }
+    const complexd dTotal = dH.trace();
+    gradient[edgeIndex] = static_cast<double>(n) *
+                          (dSmallest * total - smallest * dTotal) /
+                          (total * total);
+  }
+  return gradient;
+}
+
 double MultiCobordism::singularValueHalfSumRatio(
     const std::shared_ptr<Spacetime> &spacetime, int registerDegree) {
   cobordism::HodgeLaplacian laplacian(spacetime);
