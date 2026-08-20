@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
-"""Real-time animation of the ONE-STEP **Proton** build: three q-q̄ pairs → the proton.
+"""Interactive animation of an experimental one-step constrained singlet build.
 
 Drives the actual `tessera.cobordism.Proton` class through its experimental single-merge
 arm: ONE `MultiCobordism` node (`Proton.direct_node`) whose inputs are the three bare
@@ -9,38 +9,41 @@ elementwise conjugates — three neutral q-q̄ pairs, as pair production demands
 single output is the colorless proton singlet `{1, ω, ω²}`, read off the WHOLE cobordism
 — the anti-baryon partner is left to emerge unpinned. No diquark intermediate, no
 recombination/formation split — the canonical two-step reference build is animated by
-`multicobordism_animation.py`; this example asks whether the proton can emerge in one go,
-growing its whole topology from a single Δ⁴ simplex through stage 1's F-lowering
-candidate draw.
+`multicobordism_animation.py`. Because the singlet is an output target in the objective,
+this example tests whether a one-step constrained node can grow topology that carries that
+target; it is not a post-hoc demonstration that an unpinned proton emerged spontaneously.
 
 The node is driven with the COMBINED `run` drive: an **init pass** (`grow_boundaries=True`)
 that grows the color register, then an **evolution pass** (`grow_boundaries=False`) with the
 boundary frozen. Every `run` iteration interleaves the stage-1 combinatorial update with the
 stage-2 geometric relaxation, so the optimizer makes whichever kind of progress helps at each
-point — no separate relaxation pass. The animation advances ONE `run` iteration per frame:
-stage 1 keeps no state across iterations (the trap-door burst machinery is gone), so
-splitting a pass into per-frame calls is exact — every accepted move and relaxation step
-gets its own frame.
+point — no separate relaxation pass. By default the animation makes ONE `run(max_iters=1)`
+call per optimization frame. A frame is not a physical-time step and is not one indivisible
+engine event: lookahead can commit a sequence of moves, the relaxation budget can accept
+several geometric steps, and retries can make several fresh candidate draws. The fast batched
+path keeps engine-local search state across its iterations, so it is a different execution
+mode rather than an exact replay of the instrumented animation.
 
 The figure is one panel row for the single node: traces, the primal complex, then the dual
-split into spatial- and temporal-curvature panels:
+split into real- and imaginary-curvature channels:
 
   * **metrics** — the objective `F`, the Regge stationarity term `‖∇S‖²`, and the
-    realizability residual `r_U` vs step;
+    realizability residual `r_U` vs optimization frame;
   * **color register** — the color-register (hole = quark) count and, separately, the Betti
-    number `b_k` vs step (the proton's three registers appear as the node grows);
+    number `b_k` vs optimization frame (the proton's three registers appear as the node grows);
   * **complex** — a 2-D classical-MDS projection of the node's relaxing 1-skeleton; each
     emergent color hole (register) is outlined in red as a cell and numbered.
     Each frame is normalized to a fixed scale, Procrustes-aligned (rotation/reflection only)
     to the previous frame, and eased, with the view auto-fit — so the structure stays legible
     instead of collapsing into a dot.
-  * **dual — spatial / temporal curvature** — the circumcentric dual graph
+  * **dual — Re / Im curvature channels** — the circumcentric dual graph
     (one node per top cell, edges across shared facets) at the primal cell centroids, colored
     by the local Regge curvature. The Lorentzian deficit ε is COMPLEX, so it splits into two
-    panels: **spatial** = `Re ε·|★|` (the rotation angle-defect, from timelike hinges) and
-    **temporal** = `Im ε·|★|` (the boost / light-cone content, from spacelike hinges — those
-    whose normal plane is timelike). Both use a signed diverging colormap centered at 0.
-  * **spare rows (single-node runs only)** — the null-face proximity trace, the descending
+    algebraic panels: `Re ε·|★|` and `Im ε·|★|`. On the real Lorentzian locus these read as
+    the spatial rotation-angle and temporal boost channels respectively; off that locus the
+    neutral Re/Im labels avoid assigning a causal interpretation to a genuinely complex
+    interval geometry. Both use a signed diverging colormap centered at 0.
+  * **spare rows (single-node runs only)** — the Gram-degeneracy proximity trace, the descending
     singular-value spectrum of the register operator `L_k`, and TWO **mode-localization**
     panels painting the primal skeleton by the summed weight `|ψᵢ|²` of right singular
     vectors of `L_k`: the **near-kernel** panel uses the m smallest-σ modes (the spectrum
@@ -57,9 +60,9 @@ split into spatial- and temporal-curvature panels:
     count by ±1), and the **annihilation heat**: the skeleton painted by Σ|ψ|² over the
     broken pairs — where the annihilated content lives (see `krein_modes.py`).
 
-The figure title reports the live **convergence verdict**: whether the whole cobordism
-carries the singlet `{1, ω, ω²}` (color residual `r_state` ≈ 0) on its ≥ 3 emergent color
-holes.
+The figure title reports the live **target-carry verdict**: whether the whole cobordism
+carries the imposed singlet `{1, ω, ω²}` (color residual `r_state` ≈ 0) on its ≥ 3 emergent
+color holes. This is distinct from numerical stationarity, which is reported separately.
 
 It drives only the **public** `Proton` (`direct_node`),
 `MultiCobordism` (the combined `run`, plus `betti`, `emergent_holes`,
@@ -70,7 +73,7 @@ and drive `Proton.build_direct()` uses, so the animation shows the real class. T
 engine is untouched.
 
 **Visualization is off by default** — `run_build(...)` takes the fast batched path with no
-per-step plotting overhead. Opt in with `visualize=True` (or `--live`/`--save`) to animate,
+per-frame plotting overhead. Opt in with `visualize=True` (or `--live`/`--save`) to animate,
 which is slower.
 
     # default: run the one-step build fast, no visualization
@@ -107,18 +110,49 @@ import os
 import sys
 import time
 
+
+def _preimport_option(argv, name):
+    """Read ``--name value`` or ``--name=value`` before heavy imports.
+
+    ``argparse`` performs the authoritative validation later. This small reader
+    exists only for settings, such as OpenMP's thread count, that the native
+    runtime consumes while :mod:`tessera` imports.
+    """
+    flag = f"--{name}"
+    for index, argument in enumerate(argv):
+        if argument == flag:
+            return argv[index + 1] if index + 1 < len(argv) else None
+        if argument.startswith(flag + "="):
+            return argument[len(flag) + 1:]
+    return None
+
+
+def _configure_preimport_threads(argv, environ, default="16"):
+    """Apply an explicit positive ``--threads`` before OpenMP initializes.
+
+    Invalid values are left for argparse to reject after imports; until then the
+    caller's existing environment, or the documented default, remains intact.
+    Returns the effective environment string for focused tests and diagnostics.
+    """
+    requested = _preimport_option(argv, "threads")
+    try:
+        parsed = int(requested) if requested is not None else 0
+        valid = parsed > 0
+    except ValueError:
+        parsed = 0
+        valid = False
+    if valid:
+        environ["OMP_NUM_THREADS"] = str(min(parsed, 2 ** 31 - 1))
+    else:
+        environ.setdefault("OMP_NUM_THREADS", default)
+    return environ["OMP_NUM_THREADS"]
+
+
 # --threads must take effect BEFORE tessera loads: OpenMP reads OMP_NUM_THREADS
 # at library initialization, so a post-import setting is silently ignored. The
 # standing compute authorization for this box is 16 of its 32 cores; pass
-# --threads 32 to use all of them for a run.
-if "OMP_NUM_THREADS" not in os.environ or "--threads" in sys.argv:
-    _n = "16"
-    if "--threads" in sys.argv:
-        try:
-            _n = sys.argv[sys.argv.index("--threads") + 1]
-        except IndexError:
-            pass
-    os.environ["OMP_NUM_THREADS"] = _n
+# --threads 32 to use all of them for a run. Both argparse spellings work.
+_configure_preimport_threads(sys.argv, os.environ)
 # BLAS pools serve ONLY numpy's panel-side eigensolves (the engine's Eigen
 # kernels thread through OpenMP, not BLAS), and those matrices are small: a
 # perf sample of the live drive showed the 32-thread OpenBLAS pool spinning in
@@ -149,10 +183,10 @@ from krein_modes import KreinModes
 # Two combined-`run` passes on the one node — init (grow_boundaries=True) then evolution
 # (grow_boundaries=False) — each interleaving the stage-1 surgery update with the stage-2
 # geometric relaxation every iteration, so the optimizer makes whichever kind of progress
-# helps at each point. The animation runs ONE iteration per frame (`_*_CHUNK = 1`): stage 1
-# keeps no state across iterations, so per-frame chunking is exact and every accepted move
-# and relaxation step is visible. (The batched no-visualization path still runs each pass
-# as one call — same result, no per-frame overhead.)
+# helps at each point. The animation normally makes ONE one-iteration `run` call per frame
+# (`_*_CHUNK = 1`). It exposes the state between calls; it does not expose every internal
+# lookahead move or relaxation update, and it is not trajectory-identical to one batched call.
+# The no-visualization path deliberately retains the faster engine-batched execution mode.
 _INIT_STEPS = 180          # init-pass (grow_boundaries=True) iterations per node
 _EVOLVE_STEPS = 60         # evolution-pass (grow_boundaries=False) iterations per node
 _INIT_CHUNK = 1            # init iterations per frame (1 = smoothest animation)
@@ -177,8 +211,8 @@ _MIN_QUARK_HOLES = 3       # a proton is three quarks ⇒ three color registers
 # `Simplex.deficitAngle` is expensive, so the heat is recomputed only
 # every `_HEAT_REFRESH_EVERY` frames on the active node (the frozen node's geometry doesn't
 # change, so its heat is cached) — the cheap dual *graph* still redraws every frame.
-_HEAT_CMAP = "coolwarm"    # spatial (Re): diverging, blue = negative, white ≈ 0, red = positive
-_HEAT_CMAP_IM = "PuOr"     # temporal (Im): distinct diverging map for the boost/rapidity part
+_HEAT_CMAP = "coolwarm"    # Re channel: blue = negative, white ≈ 0, red = positive
+_HEAT_CMAP_IM = "PuOr"     # Im channel: distinct diverging map so the panels read apart
 _HEAT_REFRESH_EVERY = 4
 # The O(n³) spectrum/mode/Krein recording refreshes at least this often (in
 # frames); commits and node switches always refresh, so only pure-relaxation
@@ -198,17 +232,16 @@ _MODE_CMAP_PAIR = "viridis"
 
 def face_gram_determinants(cells, squared_length):
     """Gram determinant of every distinct triangle (2-face) and tetrahedron
-    (3-face) of the given top cells, from the signed edge intervals alone via
+    (3-face) of the given top cells, from the complex signed edge intervals via
     the polarization identity  G_ij = ½(ℓ²(v0,vi) + ℓ²(v0,vj) − ℓ²(vi,vj)).
 
-    det G = 0 ⇔ the face is NULL — its span tangent to the light cone — the
-    degenerate configurations of #632 where circumcentric dual volumes and
-    deficit angles are singular and gradients blow up. |det G| is therefore a
-    direct "distance from degeneracy" for each face; the per-frame minimum is
-    the complex's closest approach to the null locus.
+    On the real signed-ℓ² Lorentzian locus, det G = 0 exactly when the face's
+    induced metric is degenerate. Off that locus the complex determinant remains
+    the analytic degeneracy diagnostic; discarding Im ℓ² would incorrectly call
+    every purely imaginary balanced-edge face null.
 
-    `squared_length(u, v)` returns the edge's Re ℓ²; every vertex pair inside a
-    top cell is an edge of the complex, so lookups never miss (the Gram
+    `squared_length(u, v)` returns the edge's full ℓ²; every vertex pair inside
+    a top cell is an edge of the complex, so lookups never miss (the Gram
     diagonal's ℓ²(v,v) = 0 is supplied here, not looked up).
 
     Vectorized: faces are deduplicated once, their Gram matrices stacked, and
@@ -228,7 +261,7 @@ def face_gram_determinants(cells, squared_length):
         if not ordered_faces:
             out[k] = np.array([])
             continue
-        grams = np.empty((len(ordered_faces), k, k))
+        grams = np.empty((len(ordered_faces), k, k), dtype=complex)
         for f, face in enumerate(ordered_faces):
             v0, rest = face[0], face[1:]
             for i, a in enumerate(rest):
@@ -240,25 +273,33 @@ def face_gram_determinants(cells, squared_length):
 
 
 def _min_abs_gram_dets(st):
-    """(min |det G| over triangles, over tets) of the live complex — the
-    null-face proximity scalars the animation traces per frame."""
+    """Minimum dimensionless ``|det(G / s)|`` over triangles and tetrahedra.
+
+    ``s = max_e |ℓ²_e|`` removes the conformal scale: a uniform rescaling of all
+    intervals cannot make a nondegenerate face appear closer to the null locus.
+    The full complex intervals are retained, so the diagnostic also remains
+    meaningful while the optimizer is off the real signed-ℓ² locus.
+    """
     cells = [tuple(sorted(v.getId() for v in c.getVertices()))
              for c in st.getTopSimplices()]
     lengths = {}
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
-        lengths[(min(a, b), max(a, b))] = (e.getLength() ** 2).real
+        lengths[(min(a, b), max(a, b))] = complex(e.getLength() ** 2)
     if not cells:
         return float("nan"), float("nan")
+    scale = max((abs(value) for value in lengths.values()), default=1.0) or 1.0
     dets = face_gram_determinants(
-        cells, lambda u, v: lengths[(min(u, v), max(u, v))])
+        cells, lambda u, v: lengths[(min(u, v), max(u, v))] / scale)
     return (float(np.abs(dets[2]).min()) if len(dets[2]) else float("nan"),
             float(np.abs(dets[3]).min()) if len(dets[3]) else float("nan"))
 
 
 def _mds_layout(st):
     """2-D classical-MDS coordinates per vertex id, from graph shortest-path distances
-    weighted by the relaxed edge lengths `sqrt(|Re ℓ²|)`, **normalized to unit RMS radius**.
+    weighted by the relaxed edge magnitudes ``sqrt(|ℓ²|)``, **normalized to unit RMS
+    radius**. Keeping the full complex magnitude prevents a balanced edge with
+    ``Re ℓ² = 0`` and ``Im ℓ² != 0`` from collapsing to the numerical floor.
 
     The normalization is the fix for the old "everything pulls into a dot" bug: the raw MDS
     scale tracks the absolute (conformal) edge lengths, which shrink under relaxation, so a
@@ -275,7 +316,7 @@ def _mds_layout(st):
     np.fill_diagonal(W, 0.0)
     for e in edges:
         a, b = idx[e.getSource().getId()], idx[e.getTarget().getId()]
-        w = math.sqrt(max(abs((e.getLength() ** 2).real), 1e-6))
+        w = math.sqrt(max(abs(complex(e.getLength() ** 2)), 1e-6))
         W[a, b] = W[b, a] = min(W[a, b], w)
     D = shortest_path(W, method="D", directed=False)
     finite = np.isfinite(D)
@@ -370,7 +411,7 @@ class ProtonAnimator:
     animation this example was copied from.)"""
 
     _PHASE_NAMES = {"init": "growing register", "evolve": "evolving (∂W frozen)"}
-    _TITLE_PREFIX = "Proton build (one-step, 3 quarks)"
+    _TITLE_PREFIX = "Experimental constrained singlet build (one-step, 3 quarks)"
 
     def __init__(self, nodes, degree=3, init_steps=_INIT_STEPS, init_chunk=_INIT_CHUNK,
                  evolve_steps=_EVOLVE_STEPS, evolve_chunk=_EVOLVE_CHUNK,
@@ -379,8 +420,34 @@ class ProtonAnimator:
                  max_lookahead_tries=_MAX_LOOKAHEAD_TRIES,
                  stage2_alpha0=0.05, stage2_tolerance=10e-9, relax_budget=10,
                  spectra_every=_SPECTRA_REFRESH_EVERY, no_combinatorial_moves=False,
-                 relax_chunk=None, status=True, checkpoint=0, checkpoint_dir=None):
-        self._common_init(nodes, degree)
+                 relax_chunk=None, status=True, checkpoint=0, checkpoint_dir=None,
+                 einstein_hilbert=True):
+        if not nodes:
+            raise ValueError("nodes must contain at least one cobordism")
+        if degree < 0:
+            raise ValueError("degree must be non-negative")
+        for name, value in (("stage1_candidates", stage1_candidates),
+                            ("max_lookahead_depth", max_lookahead_depth),
+                            ("max_lookahead_tries", max_lookahead_tries),
+                            ("relax_budget", relax_budget),
+                            ("spectra_every", spectra_every)):
+            if value <= 0:
+                raise ValueError(f"{name} must be positive")
+        if stage2_alpha0 <= 0:
+            raise ValueError("stage2_alpha0 must be positive")
+        if stage2_tolerance < 0:
+            raise ValueError("stage2_tolerance must be non-negative")
+        if checkpoint < 0:
+            raise ValueError("checkpoint must be non-negative")
+        if relax_chunk is not None and relax_chunk <= 0:
+            raise ValueError("relax_chunk must be positive when provided")
+        if relax_chunk is not None and not no_combinatorial_moves:
+            raise ValueError("relax_chunk requires no_combinatorial_moves")
+        if (not no_combinatorial_moves and max_lookahead_tries > 1 and (
+                (init_steps and init_chunk != 1)
+                or (evolve_steps and evolve_chunk != 1))):
+            raise ValueError("max_lookahead_tries > 1 requires one run iteration per frame")
+        self._common_init(nodes, degree, einstein_hilbert)
         self.s1c, self.s2_beta = stage1_candidates, stage2_beta
         self.lookahead_depth = max_lookahead_depth
         self.lookahead_tries = max_lookahead_tries
@@ -399,24 +466,28 @@ class ProtonAnimator:
         # to budget against; it defaults to relax_budget so the two agree when
         # unset.
         self.no_combinatorial_moves = bool(no_combinatorial_moves)
-        self.relax_chunk = int(relax_chunk) if relax_chunk else int(relax_budget)
+        self.relax_chunk = (int(relax_chunk) if relax_chunk is not None
+                            else int(relax_budget))
         self.status = bool(status)
         # Every `checkpoint` frames, write the state (#722). This is the
         # orientation-faithful record — cells in intrinsic vertex order — not
         # the panel dump, whose cells are sorted for drawing.
-        self.checkpoint = max(0, int(checkpoint))
+        self.checkpoint = int(checkpoint)
         self.checkpoint_dir = checkpoint_dir
         self._t0 = time.time()
-        self.spectra_every = max(1, int(spectra_every))
+        self.spectra_every = int(spectra_every)
         self._schedule = self._make_schedule(len(nodes), init_steps, init_chunk,
                                              evolve_steps, evolve_chunk)
         self._frames = len(self._schedule)
+        if not self._schedule:
+            raise ValueError("the animation requires at least one init or evolve iteration")
 
-    def _common_init(self, nodes, degree):
+    def _common_init(self, nodes, degree, einstein_hilbert=True):
         """Shared drawing/recording state: the node list, history buffers, per-panel
         layouts, and curvature cache — everything `_redraw`/`_draw_*`/`verdict` read."""
         self.nodes = nodes                  # [(MultiCobordism, label), ...] in order
         self.k = degree
+        self.einstein_hilbert = bool(einstein_hilbert)
         self._last_relax_steps = None       # accepted stage-2 steps this frame
         self.hist = {"F": [], "gradN2": [], "rU": [], "b3": [], "holes": [],
                      "phase": [], "node": [], "lookahead": [], "tries": [],
@@ -429,7 +500,8 @@ class ProtonAnimator:
         self._layouts = [_StableLayout() for _ in nodes]   # one per complex panel
         self._active = 0            # index of the node currently being driven
         self._done = False          # so the verdict is announced exactly once
-        self._curv_cache = {}       # node_index -> (frame_computed, {cell_tuple: curvature})
+        # node_index -> (frame_computed, curvature map, sorted top-cell signature)
+        self._curv_cache = {}
         self._dump_dir = None       # set by run_build(dump_dir=...); None = no dumping
         # Persistent-artist state (#670): trace Line2D handles updated via
         # set_data instead of clear-and-replot; the spec_frame the spectra
@@ -448,6 +520,15 @@ class ProtonAnimator:
         pass (in `init_chunk`-sized bites), then its evolution pass (in `evolve_chunk`
         bites). Each op is one combined `run` call, so the geometric relaxation is
         interleaved into every iteration rather than scheduled as its own phase."""
+        if n_nodes < 1:
+            raise ValueError("n_nodes must be positive")
+        for name, total in (("init_steps", init_steps), ("evolve_steps", evolve_steps)):
+            if total < 0:
+                raise ValueError(f"{name} must be non-negative")
+        for name, size in (("init_chunk", init_chunk), ("evolve_chunk", evolve_chunk)):
+            if size <= 0:
+                raise ValueError(f"{name} must be positive")
+
         def chunks(total, size):
             done = 0
             while done < total:
@@ -539,6 +620,8 @@ class ProtonAnimator:
         change = (objective - history["F"][-2]) if len(history["F"]) > 1 else 0.0
         gradient_norm_squared = history["gradN2"][-1]
         bare_residual = history["rU"][-1]
+        residual_term = (objective - gradient_norm_squared
+                         if self.einstein_hilbert else objective)
         cell_count = len(node.st.getTopSimplices())
         if self.no_combinatorial_moves:
             stage1_note = "stage1 off (--no-combinatorial-moves)"
@@ -557,7 +640,7 @@ class ProtonAnimator:
             stage2_note = "stage2 descending"
         print(f"f{frame + 1:04d} {phase:<6} | F {objective:.6e} "
               f"dF {change:+.3e} | grad2 {gradient_norm_squared:.3e} "
-              f"G*rU {objective - gradient_norm_squared:.3e} rU {bare_residual:.3e} | "
+              f"G*rU {residual_term:.3e} rU {bare_residual:.3e} | "
               f"cells {cell_count} b{self.k} {history['b3'][-1]} "
               f"holes {history['holes'][-1]} | {stage1_note} | {stage2_note} | "
               f"{time.time() - self._t0:.0f}s", flush=True)
@@ -570,7 +653,8 @@ class ProtonAnimator:
         # Betti is TOPOLOGY: it can only change when stage 1 commits a move, so
         # relaxation-only frames reuse the last value exactly (#671). A commit,
         # a node switch, or the first frame always recomputes.
-        committed = int(node.last_stage1_lookahead) > 0
+        committed = (not self.no_combinatorial_moves
+                     and int(node.last_stage1_lookahead) > 0)
         same_node = bool(self.hist["node"]) and self.hist["node"][-1] == node_index
         if committed or not same_node or not self.hist["b3"]:
             b3_now = int(cob.MultiCobordism.betti(st)[self.k])
@@ -582,8 +666,11 @@ class ProtonAnimator:
         self.hist["node"].append(node_index)
         # Lookahead depth of the frame's committed stage-1 sequence: 1 = ordinary
         # single move, >1 = the search had to look several moves ahead, 0 = stage-1
-        # stall (nothing committed at any depth this frame).
-        self.hist["lookahead"].append(int(node.last_stage1_lookahead))
+        # stall (nothing committed at any depth this frame), and None = stage 1
+        # was disabled. Do not reuse the engine's last combinatorial result during
+        # a relaxation-only continuation.
+        self.hist["lookahead"].append(
+            None if self.no_combinatorial_moves else int(node.last_stage1_lookahead))
         # How many candidate draws this frame needed; > 1 means earlier draws
         # stalled and were retried (see `_advance`).
         self.hist["tries"].append(int(tries))
@@ -749,11 +836,14 @@ class ProtonAnimator:
             self.hist["pair_src"].append("none")
             self.hist["mode_cells"].append([])
 
-    # ---- convergence ----
+    # ---- target-carry verdict ----
     def verdict(self):
-        """The honest, live convergence verdict read off the node's *current* whole cobordism:
-        the singlet `r_state` and the emergent color-hole count, and whether both clear the
-        proton thresholds (residual < tol, holes ≥ 3)."""
+        """The live target-carry verdict on the node's current whole cobordism.
+
+        This tests the imposed singlet's ``r_state`` and emergent color-hole
+        count. It deliberately does not call that result numerical convergence;
+        optimizer stationarity is an independent engine signal.
+        """
         st = self.nodes[-1][0].st
         res = float(cob.MultiCobordism.r_state(st, self.k, cob.Proton.singlet()))
         holes = len(cob.MultiCobordism.emergent_holes(st, self.k))
@@ -763,13 +853,12 @@ class ProtonAnimator:
     def _setup(self, plt):
         from matplotlib.cm import ScalarMappable
         from matplotlib.colors import Normalize
-        # One node per row: [traces | primal complex | spatial-curvature dual | temporal-
-        # curvature dual]. The two dual panels split the COMPLEX Lorentzian deficit: the
-        # spatial one shows its real part (Re ε, the rotation angle-defect, from timelike
-        # hinges), the temporal one its imaginary part (Im ε, the boost/light-cone content,
-        # from spacelike hinges — those whose normal plane is timelike). The grid is
-        # node-count-generic (the joint single-node drive gets one panel row; the two-step
-        # keeps its two) with the metrics/register traces always on rows 0/1 of column 0.
+        # One node per row: [traces | primal complex | Re-curvature dual | Im-curvature
+        # dual]. The two dual panels split the COMPLEX Lorentzian deficit into neutral
+        # algebraic channels. A spatial/temporal interpretation is only valid after the
+        # intervals lie on the real Lorentzian locus. The grid is node-count-generic (the
+        # joint single-node drive gets one panel row; the two-step keeps its two) with the
+        # metrics/register traces always on rows 0/1 of column 0.
         n_nodes = len(self.nodes)
         # Single-node runs get a THIRD row so the two mode-localization panels
         # stack in one column (near-kernel tail above, near-null head below);
@@ -810,12 +899,12 @@ class ProtonAnimator:
                     continue
                 axes[row][column].axis("off")
         # Persistent colorbars (created ONCE — recreating per frame piles them up). Each dual
-        # panel self-normalizes per frame; we just update the mappable's clim. Re (spatial) and
-        # Im (temporal) use distinct diverging colormaps so the two channels read apart.
+        # panel self-normalizes per frame; we just update the mappable's clim. Re and Im use
+        # distinct diverging colormaps so the two algebraic channels read apart.
         self._re_sms, self._im_sms = [], []
         for axset, sms, cmap, label in (
-                (self._re_axes, self._re_sms, _HEAT_CMAP, "spatial curvature  Re ε·|★|"),
-                (self._im_axes, self._im_sms, _HEAT_CMAP_IM, "temporal curvature  Im ε·|★|")):
+                (self._re_axes, self._re_sms, _HEAT_CMAP, "Re curvature channel  Re ε·|★|"),
+                (self._im_axes, self._im_sms, _HEAT_CMAP_IM, "Im curvature channel  Im ε·|★|")):
             for ax in axset:
                 sm = ScalarMappable(cmap=cmap, norm=Normalize(-1.0, 1.0))
                 cbar = self.fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
@@ -966,12 +1055,13 @@ class ProtonAnimator:
     # ---- dual complex + curvature heat ----
     @staticmethod
     def _cell_curvature(st):
-        """Per-top-cell curvature, BOTH channels of the COMPLEX Lorentzian deficit, from the one
-        `deficitAngle` per hinge: `Re(deficit)·|★|` — the spatial angle-defect
-        (rotation) curvature, carried by timelike hinges — and `Im(deficit)·|★|` — the temporal
-        boost / light-cone content, carried by spacelike hinges (those whose normal plane is
-        timelike). Both SIGNED (ε<0 = saddle; Im sign = boost direction). Returns
-        {cell-tuple: (re_sum, im_sum)}."""
+        """Per-top-cell Re and Im channels of the complex Lorentzian deficit.
+
+        On the real Lorentzian locus these are the spatial rotation-angle and
+        temporal boost channels. Off it they remain the honest algebraic Re/Im
+        parts rather than being assigned a definite causal interpretation. Both
+        are signed. Returns ``{cell_tuple: (re_sum, im_sum)}``.
+        """
         hinge_re, hinge_im = {}, {}
         for s in st.getSimplices():
             vs = s.getVertices()
@@ -1000,15 +1090,38 @@ class ProtonAnimator:
 
     def _cell_curvature_cached(self, node_index, st):
         """`_cell_curvature` is expensive, so recompute it only every `_HEAT_REFRESH_EVERY`
-        frames on the active (changing) node, and always on the final frame; the frozen
-        node's geometry doesn't change, so its last value is reused."""
+        frames on the active (changing) node, on every committed combinatorial
+        update or topology-signature change, and always on the final frame. The
+        frozen node's geometry does not change, so its last value is reused.
+
+        A topology refresh is mandatory: painting a cached map from the previous
+        complex onto newly created top cells would assign those cells a fabricated
+        zero curvature until the ordinary metric refresh cadence elapsed.
+        """
         frame = len(self.hist["F"])
+        signature = tuple(sorted(tuple(sorted(v.getId() for v in cell.getVertices()))
+                                 for cell in st.getTopSimplices()))
         cached = self._curv_cache.get(node_index)
-        stale = (node_index == self._active
-                 and frame - cached[0] >= _HEAT_REFRESH_EVERY) if cached else True
-        if cached is None or stale or frame >= self._frames:
-            self._curv_cache[node_index] = (frame, self._cell_curvature(st))
+        lookahead = self.hist["lookahead"][-1] if self.hist["lookahead"] else None
+        committed_now = (node_index == self._active and lookahead not in (None, 0)
+                         and (cached is None or cached[0] != frame))
+        topology_changed = cached is not None and cached[2] != signature
+        cadence_stale = (cached is not None and node_index == self._active
+                         and frame - cached[0] >= _HEAT_REFRESH_EVERY)
+        final_refresh = (frame >= self._frames
+                         and (cached is None or cached[0] != frame))
+        if (cached is None or committed_now or topology_changed or cadence_stale
+                or final_refresh):
+            self._curv_cache[node_index] = (frame, self._cell_curvature(st), signature)
         return self._curv_cache[node_index][1]
+
+    def _curvature_age_tag(self, node_index):
+        """Disclose which optimization frame supplied a cached heat field."""
+        cached = self._curv_cache.get(node_index)
+        current = len(self.hist["F"])
+        if cached is None or cached[0] >= current:
+            return ""
+        return f"  (heat frame {cached[0]})"
 
     def _dump_frame(self, frame, coords_by_node):
         """Write this frame's dual-curvature panels as data, so a claim about the
@@ -1043,7 +1156,8 @@ class ProtonAnimator:
         for ni, (cobordism, label) in enumerate(self.nodes):
             st = cobordism.st
             coords = coords_by_node.get(ni, {})
-            heat_frame, curv_map = self._curv_cache.get(ni, (None, {}))
+            heat_frame, curv_map, _signature = self._curv_cache.get(
+                ni, (None, {}, ()))
             cells, re_heat, im_heat, dual_pos = [], [], [], []
             for c in st.getTopSimplices():
                 cell = sorted(v.getId() for v in c.getVertices())
@@ -1069,8 +1183,8 @@ class ProtonAnimator:
                                  for v in st.getVertexList().toVector()},
                 # the two panels, as data: index i of each array is the dual node
                 # drawn at dual_positions[i], i.e. getTopSimplices()[i] / cells[i]
-                "re_heat": re_heat,       # spatial curvature  Re(ε)·|★|
-                "im_heat": im_heat,       # temporal curvature Im(ε)·|★|
+                "re_heat": re_heat,       # Re curvature channel Re(ε)·|★|
+                "im_heat": im_heat,       # Im curvature channel Im(ε)·|★|
                 "dual_positions": dual_pos,
                 "dual_adjacency": [list(map(int, rows)), list(map(int, cols))],
                 "heat_frame": heat_frame,  # frame the heat was computed on
@@ -1082,8 +1196,9 @@ class ProtonAnimator:
     def _draw_dual(self, ax, sm, node_index, coords, channel, cmap, title):
         """One dual-complex curvature panel (nodes = top cells at their primal centroids, edges
         = shared-facet adjacency), heat-colored by `channel` of the signed per-cell curvature:
-        0 = spatial (Re ε, angle-defect), 1 = temporal (Im ε, boost/rapidity). Symmetric
-        diverging range centered at 0."""
+        0 = Re ε and 1 = Im ε. On the real Lorentzian locus these recover the spatial
+        rotation-angle and temporal boost channels. Symmetric diverging range centered at 0.
+        """
         st = self.nodes[node_index][0].st
         ax.clear()
         top = st.getTopSimplices()
@@ -1120,13 +1235,10 @@ class ProtonAnimator:
             ax.scatter(pos[finite, 0], pos[finite, 1], c=shown, cmap=cmap,
                        vmin=-vmax, vmax=vmax, s=14, zorder=2, edgecolors="0.3", linewidths=0.2)
             if mag.max() <= 1e-9:                         # channel is identically zero
-                # The temporal (Im) channel is ≡0 whenever the geometry is all-spacelike
-                # (no timelike hinges → no boost content), so the panel would read as blank;
-                # say why instead of showing an empty box. Only the Im channel gets the
-                # all-spacelike explanation — and only because compute failures now
-                # PROPAGATE out of _cell_curvature (a type failure can no longer zero the
-                # channel and masquerade as all-spacelike, #581).
-                label = ("≡ 0\n(all-spacelike: no timelike hinges)"
+                # An all-zero panel would otherwise read as missing data. Keep
+                # this algebraic off-locus: zero Im curvature alone does not
+                # establish a causal classification of the complex intervals.
+                label = ("≡ 0\n(no imaginary-curvature signal)"
                          if channel == 1 else "≡ 0")
                 ax.text(0.5, 0.5, label,
                         transform=ax.transAxes, ha="center", va="center", fontsize=9,
@@ -1137,7 +1249,8 @@ class ProtonAnimator:
         # two differ by construction — one pentatope is 1 top cell and 5
         # tetrahedra, two sharing a facet are 2 and 9 — and labelling both
         # "cells" read as a contradiction (#728).
-        ax.set_title(f"{title}  ({n} top cells)", fontsize=9)
+        ax.set_title(f"{title}  ({n} top cells){self._curvature_age_tag(node_index)}",
+                     fontsize=9)
         ax.set_xticks([]); ax.set_yticks([])
 
     def _set_spectra_title(self, ax, base):
@@ -1259,15 +1372,18 @@ class ProtonAnimator:
         self.axm.clear()
         self.axm.plot(xs, self.hist["F"], label="F (objective)", color="C0")
         self.axm.plot(xs, self.hist["gradN2"], label="‖∇S‖²", color="C1")
-        # The residual AS IT ENTERS F: Γ·r_U = F − ‖∇S‖² by definition, so no
-        # engine getter is needed and the identity is exact. At large Γ this
+        # The residual AS IT ENTERS F. With the Einstein-Hilbert term enabled,
+        # Γ·r_U = F − ‖∇S‖²; with it disabled, F = Γ·r_U. At large Γ this
         # trace visually hugs F — which is the point: the bare r_U line below
         # (kept, dashed, pre-prefactor) is orders of magnitude away from the
         # term the objective actually trades against ‖∇S‖², and plotting only
         # the bare residual made every committed move look F-increasing (the
         # two big lines render flat at their scale while ‖∇S‖² visibly rises).
-        gamma_ru = [f - g for f, g in zip(self.hist["F"], self.hist["gradN2"])]
-        self.axm.plot(xs, gamma_ru, label="Γ·r_U (= F − ‖∇S‖²)", color="C4",
+        gamma_ru = ([f - g for f, g in zip(self.hist["F"], self.hist["gradN2"])]
+                    if self.einstein_hilbert else list(self.hist["F"]))
+        residual_label = ("Γ·r_U (= F − ‖∇S‖²)" if self.einstein_hilbert
+                          else "Γ·r_U (= F; Einstein-Hilbert term off)")
+        self.axm.plot(xs, gamma_ru, label=residual_label, color="C4",
                       lw=1.0, alpha=0.9)
         self.axm.plot(xs, self.hist["rU"], label="r_U (bare, pre-Γ)", color="C2",
                       ls="--", alpha=0.6)
@@ -1285,7 +1401,7 @@ class ProtonAnimator:
         # needed more than one move of lookahead (numbered with its depth), and mark
         # a grey x where stage 1 stalled outright (no F-lowering sequence found).
         lookahead = self.hist["lookahead"]
-        deep = [i for i, d in enumerate(lookahead) if d > 1]
+        deep = [i for i, d in enumerate(lookahead) if d is not None and d > 1]
         if deep:
             self.axm.scatter(deep, [self.hist["F"][i] for i in deep], marker="o",
                              s=48, facecolors="none", edgecolors="C3", linewidths=1.4,
@@ -1301,7 +1417,7 @@ class ProtonAnimator:
                              label="stage-1 stalled (no sequence found)")
         self.axm.set_yscale("symlog")
         self.axm.set_title("metrics")
-        self.axm.set_xlabel("frame")
+        self.axm.set_xlabel("optimization frame")
         self.axm.legend(loc="upper right", fontsize=8)
 
         self.axr.clear()
@@ -1318,13 +1434,13 @@ class ProtonAnimator:
         self.axr.axhline(_MIN_QUARK_HOLES, color="0.6", ls=":", lw=0.8,
                          label=f"proton = {_MIN_QUARK_HOLES}")
         self.axr.set_title("color register")
-        self.axr.set_xlabel("frame")
+        self.axr.set_xlabel("optimization frame")
         self.axr.legend(loc="upper left", fontsize=8)
 
-        # One node per row: primal complex, then its dual split into spatial-curvature (Re ε)
-        # and temporal-curvature (Im ε) panels. The active node animates; any other holds its
-        # current complex — every node on screen at one time. Each node's layout is computed
-        # once and shared by its primal + both dual panels.
+        # One node per row: primal complex, then its dual split into Re- and Im-curvature
+        # channels. The active node animates; any other holds its current complex — every
+        # node on screen at one time. Each node's layout is computed once and shared by its
+        # primal + both dual panels.
         coords_by_node = {}
         for ni in range(len(self.nodes)):
             if ni != self._active and ni in self._drawn_nodes:
@@ -1339,9 +1455,9 @@ class ProtonAnimator:
             self._drawn_nodes.add(ni)
             self._draw_complex(self._primal_axes[ni], ni, coords, self.nodes[ni][1])
             self._draw_dual(self._re_axes[ni], self._re_sms[ni], ni, coords,
-                            0, _HEAT_CMAP, "dual — spatial curvature (Re ε)")
+                            0, _HEAT_CMAP, "dual — Re curvature channel")
             self._draw_dual(self._im_axes[ni], self._im_sms[ni], ni, coords,
-                            1, _HEAT_CMAP_IM, "dual — temporal curvature (Im ε)")
+                            1, _HEAT_CMAP_IM, "dual — Im curvature channel")
         # Dumped AFTER the panels draw, so the cached curvature is exactly what
         # was rendered. A dump failure must not kill a multi-hour run.
         if self._dump_dir:
@@ -1359,16 +1475,16 @@ class ProtonAnimator:
                 self.ax_null.clear()
                 (ta["null2"],) = self.ax_null.semilogy(
                     xs, self.hist["min_det2"], color="C0",
-                    marker=".", label="min |det G| — triangles")
+                    marker=".", label="min |det(G/s)| — triangles")
                 (ta["null3"],) = self.ax_null.semilogy(
                     xs, self.hist["min_det3"], color="C3",
-                    marker=".", label="min |det G| — tets")
+                    marker=".", label="min |det(G/s)| — tets")
                 self.ax_null.axhline(1e-6, color="0.6", ls=":", lw=0.8,
-                                     label="1e-6 (danger: near-degenerate)")
-                self.ax_null.set_title("null-face proximity (det G = 0 ⇔ face "
-                                       "tangent to the light cone)", fontsize=9)
-                self.ax_null.set_xlabel("frame")
-                self.ax_null.set_ylabel("min |det G|")
+                                     label="1e-6 (dimensionless danger threshold)")
+                self.ax_null.set_title("Gram-degeneracy proximity "
+                                       "(null on the real Lorentzian locus)", fontsize=9)
+                self.ax_null.set_xlabel("optimization frame")
+                self.ax_null.set_ylabel("min |det(G/s)|")
             else:                                      # later frames: data only
                 ta["null2"].set_data(list(xs), self.hist["min_det2"])
                 ta["null3"].set_data(list(xs), self.hist["min_det3"])
@@ -1491,8 +1607,8 @@ class ProtonAnimator:
                 ax.clear()
                 (ta["pairs"],) = ax.plot(xs, self.hist["pair_count"],
                                          color="C4", marker=".")
-                ax.set_title("broken pairs (Re-projected off-locus) + real-ℓ² "
-                             "locus distance", fontsize=9)
+                ax.set_title("broken/de-rotated pairs + real-ℓ² locus distance",
+                             fontsize=9)
                 ax.set_xlabel("frame")
                 ax.set_ylabel("pairs", color="C4")
                 ta["pairs_boundaries"] = 0
@@ -1527,12 +1643,16 @@ class ProtonAnimator:
         """The short 'what's running' label for a frame — the node label plus the
         current phase name."""
         node_index, phase, _count = self._schedule[frame]
+        if self.no_combinatorial_moves:
+            return f"{self.nodes[node_index][1]} · relaxing fixed topology"
         return f"{self.nodes[node_index][1]} · {self._PHASE_NAMES[phase]}"
 
     def _verdict_tag(self, ok, res, holes):
-        return (f"CONVERGED ✓ — proton {{1,ω,ω²}} carried (r_state={res:.2g}, "
-                f"{holes} registers)" if ok else
-                f"did NOT converge (r_state={res:.2g}, {holes} registers)")
+        stationary = bool(self.nodes[-1][0].last_stage2_stationary)
+        carry = (f"TARGET CARRIED ✓ — {{1,ω,ω²}} (r_state={res:.2g}, "
+                 f"{holes} registers)" if ok else
+                 f"target not carried (r_state={res:.2g}, {holes} registers)")
+        return f"{carry} · optimizer stationary={'yes' if stationary else 'no'}"
     def _draw_extras(self):
         """Hook for per-frame figure annotations drawn after `_redraw`; none by default."""
 
@@ -1548,18 +1668,20 @@ class ProtonAnimator:
 
     def _paint(self, frame):
         """Redraw the whole figure from the current geometry (GUI thread). On the last frame,
-        also read and announce the live convergence verdict. Never touches the engine — safe to
+        also read and announce the live target-carry verdict. Never touches the engine — safe to
         call while the compute worker is parked waiting for this paint to finish."""
         self._redraw()
         self._draw_extras()
         # Post-compute lookahead tag: the announce title says what's about to run;
         # this rewrites it with what the frame actually did whenever that is
-        # noteworthy — a multi-move sequence or a stage-1 stall.
+        # noteworthy — disabled stage 1, a multi-move sequence, or a stall.
         if not self._done and self.hist["lookahead"]:
             depth = self.hist["lookahead"][-1]
             used = self.hist["tries"][-1] if self.hist["tries"] else 1
             retried = f", {used} tries" if used > 1 else ""
-            tag = (f"  ·  LOOKAHEAD: committed a {depth}-move sequence{retried}"
+            tag = ("  ·  stage-1 disabled; fixed-topology relaxation"
+                   if depth is None else
+                   f"  ·  LOOKAHEAD: committed a {depth}-move sequence{retried}"
                    if depth > 1
                    else (f"  ·  stage-1 stalled (searched depths 1–"
                          f"{self.lookahead_depth} on {used} "
@@ -1623,6 +1745,7 @@ class ProtonAnimator:
         q = queue.Queue()                 # worker -> GUI: ('announce'|'paint'|'error', frame)
         paint_done = threading.Event()    # GUI -> worker: safe to mutate the engine again
         paint_done.set()                  # frame 0 may start immediately
+        stop_requested = threading.Event()
         state = {"error": None, "interrupted": False}
 
         def worker():
@@ -1630,6 +1753,8 @@ class ProtonAnimator:
             try:
                 for frame in range(self._frames):
                     paint_done.wait()          # previous frame fully painted → engine idle
+                    if stop_requested.is_set():
+                        break
                     paint_done.clear()
                     q.put(("announce", frame))
                     self._advance(frame)        # heavy compute; GIL released inside the engine
@@ -1672,7 +1797,10 @@ class ProtonAnimator:
             # milliseconds per frame.
             writer = writer_class(fps=max(1, round(1000 / max(interval, 1))))
 
-        worker_thread = threading.Thread(target=worker, name="proton-build", daemon=True)
+        # This is deliberately non-daemon and joined below. Closing a window must
+        # never return an animator whose native engine is still mutating in an
+        # abandoned background thread.
+        worker_thread = threading.Thread(target=worker, name="proton-build")
         # A brisk poll so a finished frame paints promptly; the compute cadence is set by the
         # engine, not this interval. cache_frame_data=False: the frame source is unbounded.
         self._anim = FuncAnimation(self.fig, on_timer, frames=itertools.count(),
@@ -1693,12 +1821,23 @@ class ProtonAnimator:
         # writer finalizes exactly as it does when the window is closed. The
         # animation timer re-enters Python every few tens of milliseconds, so
         # the handler runs promptly.
+        def request_stop():
+            stop_requested.set()
+            paint_done.set()  # release a worker parked between frames
+
         def on_interrupt(_signal_number, _frame):
             state["interrupted"] = True
+            request_stop()
             try:
                 self._anim.event_source.stop()
             finally:
                 plt.close(self.fig)
+
+        # A normal window close follows the same worker lifecycle as SIGINT. A
+        # native compute already in progress cannot be cancelled safely; joining
+        # waits for that one call to finish, then guarantees no later frame starts.
+        close_connection = self.fig.canvas.mpl_connect(
+            "close_event", lambda _event: request_stop())
 
         # A Python signal handler only runs between bytecodes in the main
         # thread, and while Qt's loop is in C++ nothing there executes. The
@@ -1716,7 +1855,11 @@ class ProtonAnimator:
             with recording:
                 signal_pump.start()
                 worker_thread.start()
-                plt.show()
+                try:
+                    plt.show()
+                finally:
+                    request_stop()
+                    worker_thread.join()
         except subprocess.CalledProcessError:
             # An interrupt reaches the whole process group, so ffmpeg takes it
             # too. It finalizes the file on its way out but exits non-zero, and
@@ -1728,6 +1871,7 @@ class ProtonAnimator:
             interrupted_encoder = True
         finally:
             signal_pump.stop()
+            self.fig.canvas.mpl_disconnect(close_connection)
             signal.signal(signal.SIGINT, previous_handler)
         if state.get("interrupted"):
             print("interrupted — stopped after "
@@ -1798,7 +1942,10 @@ def animate(nodes, save=None, interval=200, dump_dir=None, visualize=False, **kw
     if save and not visualize:
         fa = FuncAnimation(anim_state.fig, anim_state.update,
                            frames=anim_state._frames, interval=interval,
-                           repeat=False, blit=False)
+                           # FuncAnimation otherwise calls update(0) once to
+                           # initialize and again while saving. `update` advances
+                           # the optimizer, so initialization must be draw-only.
+                           init_func=lambda: [], repeat=False, blit=False)
         writer = "pillow" if save.endswith(".gif") else "ffmpeg"
         fa.save(save, writer=writer, dpi=90)
         print(f"saved animation -> {save}")
@@ -1819,7 +1966,7 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
               stage2_alpha0=0.05, stage2_tolerance=10e-9,
               stage2_beta=1.0, interval=200,  # interval: ms/frame; GIF/MP4 fps = 1000/interval
               relax_budget=10,
-              dump_dir=None, **anim_kw):
+              dump_dir=None, einstein_hilbert=True, **anim_kw):
     """Run the one-step proton build over `nodes` with the combined `run` drive: an init
     pass (`grow_boundaries=True`) then an evolution pass (`grow_boundaries=False`), each
     interleaving the stage-1 surgery update with the stage-2 geometric relaxation every
@@ -1827,9 +1974,34 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
 
     Visualization is **off by default**: with ``visualize=False`` (and no ``save``) this
     takes the fast **batched** path — each node's passes run to completion in one call each,
-    no per-step layout/redraw overhead — and returns each node's final metrics plus the
-    convergence verdict. Opt in with ``visualize=True`` (live window) or ``save=...``
-    (GIF/MP4) to animate it step-by-step (slower); that returns the per-step history."""
+    no per-frame layout/redraw overhead — and returns each node's final metrics plus the
+    target-carry verdict. Opt in with ``visualize=True`` (live window) or ``save=...``
+    (GIF/MP4) to run the instrumented per-frame mode (slower); that returns its
+    history. Because the engine retains adaptive search state only within one
+    ``run`` call, the batched and instrumented modes are not trajectory-identical.
+    """
+    if not nodes:
+        raise ValueError("nodes must contain at least one cobordism")
+    if degree < 0:
+        raise ValueError("degree must be non-negative")
+    for name, value in (("init_steps", init_steps), ("evolve_steps", evolve_steps),
+                        ("checkpoint", checkpoint)):
+        if value < 0:
+            raise ValueError(f"{name} must be non-negative")
+    for name, value in (("stage1_candidates", stage1_candidates),
+                        ("max_lookahead_depth", max_lookahead_depth),
+                        ("max_lookahead_tries", max_lookahead_tries),
+                        ("relax_budget", relax_budget)):
+        if value <= 0:
+            raise ValueError(f"{name} must be positive")
+    if stage2_alpha0 <= 0:
+        raise ValueError("stage2_alpha0 must be positive")
+    if stage2_tolerance < 0:
+        raise ValueError("stage2_tolerance must be non-negative")
+    if relax_chunk is not None and relax_chunk <= 0:
+        raise ValueError("relax_chunk must be positive when provided")
+    if relax_chunk is not None and not no_combinatorial_moves:
+        raise ValueError("relax_chunk requires no_combinatorial_moves")
     if not visualize and not save:
         out = []
         chunked = bool(no_combinatorial_moves)
@@ -1839,7 +2011,8 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                 # `--relax-chunk` mean the same thing with and without a
                 # window, and the status line is available either way. The
                 # DEFAULT headless path below is left exactly as it was.
-                chunk = int(relax_chunk) if relax_chunk else int(relax_budget)
+                chunk = (int(relax_chunk) if relax_chunk is not None
+                         else int(relax_budget))
                 started = time.time()
                 for phase, steps in (("init", init_steps), ("evolve", evolve_steps)):
                     for step_index in range(steps):
@@ -1917,8 +2090,12 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
         st = nodes[-1][0].st
         res = float(cob.MultiCobordism.r_state(st, degree, cob.Proton.singlet()))
         holes = len(cob.MultiCobordism.emergent_holes(st, degree))
-        out.append(("verdict", {"converged": res < _COLOR_TOL and holes >= _MIN_QUARK_HOLES,
-                                "color_residual": res, "registers": holes}))
+        out.append(("verdict", {
+            "target_carried": res < _COLOR_TOL and holes >= _MIN_QUARK_HOLES,
+            "stationary": bool(nodes[-1][0].last_stage2_stationary),
+            "color_residual": res,
+            "registers": holes,
+        }))
         return out
     return animate(nodes, save=save, visualize=visualize, degree=degree,
                    init_steps=init_steps,
@@ -1930,8 +2107,25 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                    stage2_tolerance=stage2_tolerance, relax_budget=relax_budget,
                    no_combinatorial_moves=no_combinatorial_moves, relax_chunk=relax_chunk, status=status,
                    checkpoint=checkpoint, checkpoint_dir=checkpoint_dir,
+                   einstein_hilbert=einstein_hilbert,
                    interval=interval,
                    dump_dir=dump_dir, **anim_kw).hist
+
+
+def _positive_int(value):
+    """An argparse integer constrained to values greater than zero."""
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
+def _nonnegative_int(value):
+    """An argparse integer constrained to values greater than or equal to zero."""
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be a non-negative integer")
+    return parsed
 
 
 def main():
@@ -1940,25 +2134,25 @@ def main():
     ap.add_argument("--live", action="store_true",
                     help="show the live animation window (slower than the default)")
     ap.add_argument("--save", help="write a GIF/MP4 of the animation (slower)")
-    ap.add_argument("--seed", type=int, default=3)
-    ap.add_argument("--init", type=int, default=_INIT_STEPS,
+    ap.add_argument("--seed", type=_nonnegative_int, default=3)
+    ap.add_argument("--init", type=_nonnegative_int, default=_INIT_STEPS,
                     help="init-pass (grow_boundaries=True) combined-run iterations")
-    ap.add_argument("--evolve", type=int, default=_EVOLVE_STEPS,
+    ap.add_argument("--evolve", type=_nonnegative_int, default=_EVOLVE_STEPS,
                     help="evolution-pass (grow_boundaries=False) combined-run iterations")
-    ap.add_argument("--max-lookahead-depth", type=int,
+    ap.add_argument("--max-lookahead-depth", type=_positive_int,
                     default=_MAX_LOOKAHEAD_DEPTH, dest="max_lookahead_depth",
                     help="on a stall, deepen the stage-1 search to sequences of up "
                          "to this many moves (1 = single moves only). This was "
                          "called --max-lookahead before the retry flag took that "
                          "name")
-    ap.add_argument("--max-lookahead", type=int, default=_MAX_LOOKAHEAD_TRIES,
+    ap.add_argument("--max-lookahead", type=_positive_int, default=_MAX_LOOKAHEAD_TRIES,
                     dest="max_lookahead_tries",
                     help="how many times to redraw stage-1 candidates within one "
                          "frame before giving up and advancing (1 = one draw, the "
                          "historical behaviour). Candidates are drawn at random, so "
                          "a stalled frame is usually a bad draw rather than a dead "
                          "end; only stalled frames cost extra tries")
-    ap.add_argument("--precone", type=int, default=0,
+    ap.add_argument("--precone", type=_nonnegative_int, default=0,
                     help="pre-grow the single-Δ⁴ seed by this many gated "
                          "cone-in moves before optimization (0 = bare seed)")
     ap.add_argument("--precone-timelike", action="store_true", dest="precone_timelike",
@@ -1974,7 +2168,7 @@ def main():
                          "that scale; the term is O(1) at the bare seed, so "
                          "large gamma also makes early growth strongly "
                          "register-driven")
-    ap.add_argument("--candidates", type=int, default=_STAGE1_CANDIDATES,
+    ap.add_argument("--candidates", type=_positive_int, default=_STAGE1_CANDIDATES,
                     help="stage-1 candidate moves per batch (the search BREADTH; "
                          "the depth-1 batch is scored in parallel across "
                          "--threads workers, so breadth is nearly free up to "
@@ -1992,22 +2186,24 @@ def main():
                          "lowers F by more than this; the exit path re-checks "
                          "at 1e-12 regardless. Larger = less geometric work per "
                          "committed move, more moves per second")
-    ap.add_argument("--relax-budget", type=int, default=10, dest="relax_budget",
+    ap.add_argument("--relax-budget", type=_positive_int, default=10,
+                    dest="relax_budget",
                     help="cap on stage-2 relaxation updates after each "
                          "committed move (and on the tight exit re-check). The "
                          "stationarity test at --tolerance is the real "
                          "terminator; this only bounds slow descent tails of "
                          "threshold-sized line-search micro-steps")
-    ap.add_argument("--init-chunk", type=int, default=_INIT_CHUNK, dest="init_chunk",
+    ap.add_argument("--init-chunk", type=_positive_int, default=_INIT_CHUNK,
+                    dest="init_chunk",
                     help="init-pass run iterations per animation frame")
     ap.add_argument("--balanced-edges", action="store_true", dest="balanced_edges",
                     help="wire EVERY new edge (seed, precone, and combinatorial "
                          "moves) with equal real and imaginary length components "
                          "at the same per-class magnitude — l = sqrt(a/2)*(1+i) "
                          "same-time, sqrt(alpha*a/2)*(1+i) cross-slice, so "
-                         "Re l^2 = 0 exactly: every edge is born causally "
-                         "undecided ON the null locus and stage 2 must choose "
-                         "its character")
+                         "Re l^2 = 0 exactly while |l^2| remains nonzero: every "
+                         "edge is born causally undecided, not lightlike, and "
+                         "stage 2 must choose its real signed character")
     ap.add_argument("--singular-value-ratio", action="store_true",
                     dest="singular_value_ratio",
                     help="score r_U's whole-complex term as the scale-invariant "
@@ -2027,14 +2223,15 @@ def main():
                          "scoring regions. The triangulation is fixed for the "
                          "whole run and F descends within one region of "
                          "configuration space")
-    ap.add_argument("--degree", type=int, default=3, dest="degree",
+    ap.add_argument("--degree", type=_nonnegative_int, default=3, dest="degree",
                     help="the register degree k the residuals target — which "
                          "Hodge Laplacian L_k's eigenvalues r_U minimizes. "
                          "Reaches both the objective (Proton's register "
                          "degree) and the readout panels (Betti, holes, "
                          "sigma, modes, Krein). Default 3 (L_3 on a "
                          "4-manifold)")
-    ap.add_argument("--relax-chunk", type=int, default=None, dest="relax_chunk",
+    ap.add_argument("--relax-chunk", type=_positive_int, default=None,
+                    dest="relax_chunk",
                     help="stage-2 iterations one frame advances in the "
                          "relaxation-only drive, so a descent can be watched "
                          "instead of finishing inside a single frame. Requires "
@@ -2053,7 +2250,7 @@ def main():
                          "monotone (the line search still accepts only trials "
                          "that lower the true F) but accepts far fewer steps, "
                          "and the combinatorial moves do most of the work")
-    ap.add_argument("--checkpoint", type=int, default=0, metavar="STEPS",
+    ap.add_argument("--checkpoint", type=_nonnegative_int, default=0, metavar="STEPS",
                     help="every STEPS frames, write the complex's state to "
                          "state_<frame>.json: top cells in INTRINSIC vertex "
                          "order plus every edge interval and vertex time, which "
@@ -2068,16 +2265,17 @@ def main():
                     help="silence the per-frame status line (F, its change, "
                          "the objective's two terms, cell/Betti/hole counts, "
                          "and the stage-1/stage-2 obstruction signals)")
-    ap.add_argument("--spectra-every", type=int, default=_SPECTRA_REFRESH_EVERY,
+    ap.add_argument("--spectra-every", type=_positive_int,
+                    default=_SPECTRA_REFRESH_EVERY,
                     dest="spectra_every",
                     help="recompute the O(n^3) spectrum/mode/Krein panels at "
                          "least every N frames (commits and node switches "
                          "always refresh; 1 = the historical every-frame "
                          "behaviour)")
-    ap.add_argument("--evolve-chunk", type=int, default=_EVOLVE_CHUNK,
+    ap.add_argument("--evolve-chunk", type=_positive_int, default=_EVOLVE_CHUNK,
                     dest="evolve_chunk",
                     help="evolution-pass run iterations per animation frame")
-    ap.add_argument("--threads", type=int, default=16,
+    ap.add_argument("--threads", type=_positive_int, default=16,
                     help="OpenMP worker count for the engine (candidate batch, "
                          "action gradient/Hessian). The box authorization is "
                          "16 of 32 cores; pass 32 explicitly to use all")
@@ -2115,9 +2313,10 @@ def main():
     # uncapped for any run that will ever finish, so clamp and say so instead of
     # failing.
     _INT_MAX = 2 ** 31 - 1
-    for _flag in ("relax_budget", "relax_chunk", "init", "evolve", "candidates",
-                  "precone", "max_lookahead", "max_lookahead_depth",
-                  "spectra_every", "checkpoint"):
+    for _flag in ("relax_budget", "relax_chunk", "init", "evolve",
+                  "init_chunk", "evolve_chunk", "candidates", "precone",
+                  "max_lookahead_tries", "max_lookahead_depth",
+                  "spectra_every", "checkpoint", "degree", "threads"):
         _value = getattr(args, _flag, None)
         if isinstance(_value, int) and _value > _INT_MAX:
             setattr(args, _flag, _INT_MAX)
@@ -2130,6 +2329,15 @@ def main():
                  "--no-combinatorial-moves with it. In the interleaved drive a "
                  "frame is one move plus its relaxation, and that relaxation is "
                  "sized by --relax-budget.")
+    if (args.live or args.save) and args.init == 0 and args.evolve == 0:
+        ap.error("an animation requires at least one --init or --evolve iteration")
+    if (args.live or args.save) and not args.no_combinatorial_moves:
+        chunked_retry = (args.max_lookahead_tries > 1
+                         and ((args.init and args.init_chunk != 1)
+                              or (args.evolve and args.evolve_chunk != 1)))
+        if chunked_retry:
+            ap.error("--max-lookahead greater than 1 requires --init-chunk 1 "
+                     "and --evolve-chunk 1 for every nonempty phase")
     nodes = build_proton_nodes(seed=args.seed, precone=args.precone,
                                precone_timelike=args.precone_timelike,
                                gamma=args.gamma,
@@ -2150,6 +2358,7 @@ def main():
                        checkpoint_dir=args.checkpoint_dir,
                        no_combinatorial_moves=args.no_combinatorial_moves,
                        relax_chunk=args.relax_chunk, status=args.status,
+                       einstein_hilbert=args.einstein_hilbert,
                        dump_dir=args.dump_dir)
     if not args.live and not args.save:
         print("one-step proton build finished (visualization off by default — pass --live "
