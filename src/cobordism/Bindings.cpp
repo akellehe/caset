@@ -817,6 +817,20 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
 
   // === MultiCobordism (#491): the C++ source-of-truth fully-emergent merge
   // optimizer — emergent topology at a user-defined degree k. ===
+  py::enum_<MultiCobordism::ObjectiveMode>(m, "CobordismObjectiveMode",
+      "Scalar functional scored by MultiCobordism topology and geometry updates.")
+      .value("Legacy", MultiCobordism::ObjectiveMode::Legacy,
+             "Compatibility objective ||grad S_Regge||^2 + gamma r_U; mixed-term "
+             "Stage 2 preserves its historical Regge search ray while exact F "
+             "gates acceptance.")
+      .value("JointStationarity",
+             MultiCobordism::ObjectiveMode::JointStationarity,
+             "beta ||grad S_Regge||^2 + eta ||grad S_Hodge||^2.")
+      .value("MediatedCorrespondence",
+             MultiCobordism::ObjectiveMode::MediatedCorrespondence,
+             "Historical r_U + beta |S_Regge(W*)| objective.")
+      .export_values();
+
   py::class_<MultiCobordism::BoundaryBlock>(m, "MultiCobordismBlock",
       "An emergent boundary block of a MultiCobordism (an input or output): the "
       "vertex set whose own sub-complex carries the block, and its target period "
@@ -836,8 +850,9 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       py::class_<MultiCobordism, std::shared_ptr<MultiCobordism>>(m, "MultiCobordism",
       "The fully-emergent MultiCobordism merge optimizer (#491): merge as a "
       "fully emergent optimization. From a bare host it grows the register by "
-      "gated surgical moves under F = ||grad S||^2 + gamma*(r_U(output) + "
-      "sum_i r_U(input_i)) at a USER-DEFINED degree k (degrees), reading holes "
+      "gated surgical moves under an explicitly selected Legacy, joint "
+      "Regge-Hodge-stationarity, or mediated-correspondence objective at a "
+      "USER-DEFINED degree k (degrees), reading holes "
       "dynamically off getBoundary. Two stages: run_stage1 (combinatorial), "
       "run_stage2 (geometric) -- or run(), which interleaves both updates in one "
       "loop. An EMPTY output_targets list is supported (#555): "
@@ -905,6 +920,30 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
                   py::arg("st"), py::arg("k"), py::arg("target"))
       .def("r_u", &MultiCobordism::rU, py::arg("st"))
       .def("objective", &MultiCobordism::objective)
+      .def("hodge_entropy", &MultiCobordism::hodgeEntropy,
+           "Sum of normalized positive-operator Hodge entropies over the "
+           "configured degrees. Observed but not directly minimized by the "
+           "joint objective.")
+      .def("hodge_entropy_stationarity",
+           &MultiCobordism::hodgeEntropyStationarity,
+           "Sum_k ||grad_z S_Hodge,k||^2, the entropy half of the joint "
+           "stationarity objective.")
+      .def("set_objective_mode", &MultiCobordism::setObjectiveMode,
+           py::arg("mode"))
+      .def_property_readonly("objective_mode", &MultiCobordism::objectiveMode)
+      .def("set_hodge_entropy_phase_mode",
+           &MultiCobordism::setHodgeEntropyPhaseMode, py::arg("mode"),
+           "Choose full complex L or entrywise |L| for entropy only; this never "
+           "projects the live complex edge geometry.")
+      .def_property_readonly("hodge_entropy_phase_mode",
+                             &MultiCobordism::hodgeEntropyPhaseMode)
+      .def("set_hodge_entropy_weight", &MultiCobordism::setHodgeEntropyWeight,
+           py::arg("weight"))
+      .def_property_readonly("hodge_entropy_weight",
+                             &MultiCobordism::hodgeEntropyWeight)
+      .def("set_regge_weight", &MultiCobordism::setReggeWeight,
+           py::arg("weight"))
+      .def_property_readonly("regge_weight", &MultiCobordism::reggeWeight)
       .def("set_input_residual_weight", &MultiCobordism::setInputResidualWeight,
            py::arg("weight"))
       .def("seed_inputs", &MultiCobordism::seedInputs, py::arg("seeds"))
@@ -924,15 +963,13 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("max_iters") = 200, py::arg("alpha0") = 0.05,
            py::arg("tolerance") = 1e-12,
            py::call_guard<py::gil_scoped_release>(),
-           "Stage 2 (geometric): relax every edge l^2 along the REAL signed-l^2 "
-           "manifold (ordinary Lorentzian Regge) toward a stationary point of "
-           "beta*||grad S||^2 + gamma*r_U. The descent direction is the exact "
-           "on-manifold gradient Re(2*beta*conj(H)*g) and every trial is "
-           "constructed exactly real, so Im l^2 == 0 by construction (#589); "
-           "backtracking line search. Stops on the RELATIVE stationarity test -- "
-           "no line-search step lowers F by more than tolerance*max(|F|,1) -- or "
-           "the max_iters budget cap. Read last_stage2_stationary for which one "
-           "ended the run. Returns the F trace.")
+           "Stage 2 (geometric): relax the full complex squared edge coordinates "
+           "z=l^2 under the selected objective. Derivatives are subtracted from "
+           "z itself, then written to Edge's stored l on the nearest square-root "
+           "branch; no imaginary component or phase is projected away. A real "
+           "backtracking scale accepts only exact objective decreases of at least "
+           "the absolute tolerance. Read last_stage2_stationary to distinguish "
+           "line-search stationarity from the max_iters budget. Returns F trace.")
       .def("run", &MultiCobordism::run, py::arg("max_iters") = 200,
            py::arg("n_candidate_moves") = 12,
            py::arg("grow_boundaries") = false, py::arg("beta") = 1.0,
@@ -943,7 +980,7 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "The combined drive: each iteration takes ONE combinatorial stage-1 "
            "update (a best-dF move, deepening to max_lookahead-move sequences "
            "on a stall) then relaxes the geometry FULLY -- stage-2 updates "
-           "repeat until the relative-stationarity test at tolerance (default "
+           "repeat until the absolute-improvement test at tolerance (default "
            "10e-9) reports diminishing returns -- so every move is proposed "
            "from, and leaves behind, relaxed geometry. Exit: once the register "
            "is carried + stationary, or the moves have had no effect for a few "
@@ -953,7 +990,8 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "is the hard budget cap. n_candidate_moves/grow_boundaries/"
            "max_lookahead parameterize the combinatorial half exactly as in "
            "run_stage1; beta/alpha0/tolerance the geometric half exactly as in "
-           "run_stage2 (keep beta=1 for one coherent F trace). "
+           "run_stage2. beta is stored before either half, so the F trace is "
+           "coherent at every non-negative value. "
            "relax_budget_per_move caps the stage-2 updates after each "
            "committed move (and the tight exit re-check); the stationarity "
            "test is the real terminator, the cap only bounds slow descent "
@@ -967,13 +1005,10 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "edge. Both are ordinary candidate moves: drawn at random, scored by "
            "deltaF, committed only when they lower F. Nothing prescribes causal "
            "structure; the objective decides whether it wants any.\n\n"
-           "They are DISCRETE moves rather than left to run_stage2 because a "
-           "continuous descent cannot carry l^2 across zero -- a null, "
-           "degenerate configuration where deficit angles and dual volumes are "
-           "singular -- so the Euclidean orthant is a trap. Measured: every edge "
-           "stays spacelike and Im S = 0 through 110+ relaxation iterations.\n\n"
-           "Default False, leaving the six-move draw and every existing path "
-           "byte-identical.")
+           "They remain useful discrete proposals across causal sectors. The "
+           "complex-z Stage 2 may also rotate around z=0 continuously; it does "
+           "not project the imaginary component away.\n\n"
+           "Enabled by default in the constructor.")
       .def_property_readonly("st", &MultiCobordism::spacetime,
           R"doc(The node's CURRENT complex. Re-read it after every drive call.
 
@@ -1017,11 +1052,9 @@ Right -- re-read after each drive call:
                              "to max_lookahead (a stage-1 stall).")
       .def_property_readonly("last_stage2_stationary",
                              &MultiCobordism::lastStage2Stationary,
-                             "True iff the last run_stage2 stopped on the relative-"
-                             "tolerance stationarity test (delta_rel < tolerance) -- "
-                             "real-manifold stationarity, dF = 0 along real signed-"
-                             "l^2 perturbations (#589); False if it hit the "
-                             "max_iters budget cap.");
+                             "True iff no complex-z line-search trial lowered the "
+                             "selected objective by the absolute tolerance; False "
+                             "if run_stage2 hit its max_iters budget.");
   py::enum_<MultiCobordism::BuildAction>(multiCobordismClass, "BuildAction",
       "One canonical solve action a search policy (Proton's build restart loop, a greedy "
       "driver, or the RL agent) composes, so the solve runs through the engine rather than "

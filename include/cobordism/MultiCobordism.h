@@ -8,6 +8,7 @@
 
 #include <Eigen/Core>
 
+#include "cobordism/HodgeLaplacian.h"
 #include "spacetime/pachner/AddMove.h"
 #include "spacetime/pachner/FlipMove.h"
 #include "spacetime/pachner/IFlipMove.h"
@@ -33,13 +34,11 @@ using ::tessera::spacetime::Spacetime;
 /// register by **gated surgical moves** under the objective and reads the register
 /// **dynamically** off `getBoundary` at a **user-defined degree k**.
 ///
-/// Objective (the four-term `F`, extremize δS=0 — never minimize |S|):
-/// \f[ F = \lVert\nabla S_{\text{Regge}}\rVert^2
-///        + \Gamma\,\big( r_U(\text{output}) + \textstyle\sum_i r_U(\text{input}_i) \big) \f]
-/// summed over the register `degrees`. `‖∇S‖²` is the **full complex**
-/// `Σ_e |actionGradientExact_e|²`; each `r_U` is the relabeling-invariant,
-/// zero-filled `residualForPeriods` over the emergent holes (the whole's holes for
-/// the output; each input sub-complex's own holes for the inputs).
+/// The scalar objective is selected explicitly. `Legacy` preserves
+/// \f$\|\nabla S_{\rm Regge}\|^2+\Gamma r_U\f$; `JointStationarity` uses
+/// \f$\beta\|\nabla_zS_{\rm Regge}\|^2+
+/// \eta\|\nabla_zS_{\rm Hodge}\|^2\f$; and `MediatedCorrespondence` reproduces
+/// the documented \f$r_U+\beta|S_{\rm Regge}(W^*)|\f$ experiment.
 ///
 /// Two stages, exactly as the reference:
 ///   * **Stage 1 (combinatorial):** greedy best-ΔF single random moves
@@ -48,12 +47,26 @@ using ::tessera::spacetime::Spacetime;
 ///     each gated by `dualComplexValid` and "no input vertex removed", committed
 ///     only if ΔF < 0; a batch with no improving move simply redraws (halting
 ///     only once the register is carried).
-///   * **Stage 2 (geometric):** relax every edge `ℓ²` along the **real signed-ℓ²
-///     manifold** toward a stationary point of `β‖∇S‖² + Γ·r_U` (steepest descent
-///     on `Re(2β·H̄·g)` — the exact restriction of the Wirtinger gradient to the
-///     real axis — with a backtracking line search), re-opening the scale DOF.
+///   * **Stage 2 (geometric):** relax the full complex squared edge coordinates
+///     \f$z_e=\ell_e^2\f$ along the selected objective's gradient, then map each
+///     accepted \f$z_e\f$ back to the continuous square-root branch of the stored
+///     edge length \f$\ell_e\f$.
 class MultiCobordism {
  public:
+  /// Scalar functional used to score topology and geometry.
+  enum class ObjectiveMode {
+    /// Compatibility objective: ||grad S_Regge||^2 + gamma r_U. With both terms
+    /// enabled, Stage 2 preserves the historical analytic Regge search ray while
+    /// the exact composite scalar gates acceptance; r_U-only mode differentiates r_U.
+    Legacy,
+    /// Both the Regge action and Hodge entropy are stationary:
+    /// beta ||grad S_Regge||^2 + eta ||grad S_Hodge||^2.
+    JointStationarity,
+    /// Historical operator-cobordism experiment:
+    /// r_U + beta |S_Regge(W*)|.
+    MediatedCorrespondence
+  };
+
   /// An emergent boundary block of the cobordism — an input OR an output. A block is
   /// NOT itself a complex: it stores the vertex SET it occupies plus the target period
   /// vector its own `L_k` sub-complex must carry. The sub-complex is recovered on
@@ -87,15 +100,10 @@ class MultiCobordism {
   /// cone-ins timelike/spacelike for balanced causal content at one uniform
   /// edge-length magnitude (it wins when both are set). Defaults keep the
   /// all-spacelike precone.
-  /// `einsteinHilbert` (default true) keeps the discrete Einstein-Hilbert term
-  /// `‖∇S_Regge‖²` in the objective. Set it false to optimize `F = gamma * rU`
-  /// alone. NOTE what that does to stage 2: its descent direction is built from
-  /// the Regge gradient and Hessian only, so with the term gone the direction is
-  /// no longer a descent direction for what is being minimized. The line search
-  /// still accepts only trials that lower the true F, so the drive stays
-  /// monotone, but it searches along a ray derived from a term the objective no
-  /// longer contains and will accept far fewer steps — in this mode the
-  /// combinatorial moves do most of the work.
+  /// `einsteinHilbert` (default true) keeps the Regge term selected by the
+  /// objective mode. False removes that term: JointStationarity becomes Hodge
+  /// entropy stationarity alone, MediatedCorrespondence becomes `rU`, and Legacy
+  /// becomes `gamma*rU`. Stage 2 differentiates the remaining scalar objective.
   ///
   /// `singularValueRatio` swaps the WHOLE-COMPLEX term of `rU` — both regimes:
   /// the single-output period residual and its `nearKernelResidual`
@@ -342,8 +350,32 @@ class MultiCobordism {
   /// over every input and output target vector (each component is carried by
   /// one register/hole, so a `[1, omega, omega^2]` target needs three).
   [[nodiscard]] std::size_t expectedRegisterCount() const;
-  /// `F = reggeActionGradient (Regge extremization) + gamma * rU`.
+  /// The scalar selected by `setObjectiveMode`, using the configured Regge and
+  /// Hodge-entropy weights.
   [[nodiscard]] double objective() const;
+  /// Sum of the normalized positive-operator Hodge entropies over the configured
+  /// register degrees. This is an observation; the joint objective minimizes its
+  /// gradient norm, not the entropy value itself.
+  [[nodiscard]] double hodgeEntropy() const;
+  /// Sum_k ||grad_z S_Hodge,k||^2, the entropy half of JointStationarity.
+  [[nodiscard]] double hodgeEntropyStationarity() const;
+  void setObjectiveMode(ObjectiveMode mode);
+  [[nodiscard]] ObjectiveMode objectiveMode() const noexcept {
+    return objectiveMode_;
+  }
+  void setHodgeEntropyPhaseMode(HodgeLaplacian::EntropyPhaseMode mode) noexcept {
+    hodgeEntropyPhaseMode_ = mode;
+  }
+  [[nodiscard]] HodgeLaplacian::EntropyPhaseMode hodgeEntropyPhaseMode() const
+      noexcept {
+    return hodgeEntropyPhaseMode_;
+  }
+  void setHodgeEntropyWeight(double weight);
+  [[nodiscard]] double hodgeEntropyWeight() const noexcept {
+    return hodgeEntropyWeight_;
+  }
+  void setReggeWeight(double weight);
+  [[nodiscard]] double reggeWeight() const noexcept { return reggeWeight_; }
   /// Weight on each INPUT block's residual in `rU` (the output/whole term keeps
   /// weight 1). Raising it makes the optimizer prioritize keeping the input states
   /// represented, rather than only driving the whole to the output. Default 1.
@@ -369,31 +401,18 @@ class MultiCobordism {
   std::vector<double> runStage1(int maxSteps = 200, int nCandidateMoves = 12,
                                 bool growBoundaries = false,
                                 int maxLookahead = 1);
-  /// Stage 2 (geometric): relax every edge `ℓ²` along the **real signed-ℓ² manifold**
-  /// toward a stationary point of `β‖∇S‖² + Γ·r_U`. The configuration space is real
-  /// signed `ℓ²` (ordinary Lorentzian Regge; the complexified theory is unbuilt), so
-  /// the descent direction is the exact gradient of `F` restricted to that manifold:
-  /// for real `F` of a complex variable on the real axis `dF/dx = 2·Re(∂F/∂z̄)`, i.e.
-  /// `Re(2β·H̄·g)` — the real part of the Wirtinger direction. Every trial is
-  /// constructed exactly real, so **`Im ℓ² ≡ 0` holds for all time by construction**
-  /// — no writer of `Im ℓ²` exists anywhere in the dynamics, nothing is enforced at
-  /// runtime, and the invariant is proven by the suite tests. The line search accepts
-  /// a step only when it lowers `F` by more than `tolerance·max(|F|,1)` — a RELATIVE
-  /// stationarity test (an absolute floor of `tolerance` for `|F| < 1`), so the
-  /// criterion scales with the objective rather than the absolute `convergenceTolerance_`
-  /// the surgery stages use (for `F ≈ 100` that absolute `1e-9` accepted ~`1e-11` relative
-  /// steps — the rounding floor). "No line-search step beats the threshold" is the
-  /// stationary stop; `maxIters` is the safety budget cap. `lastStage2Stationary()` reports
-  /// which of the two ended the run. Returns the `F` trace.
-  ///
-  /// Trials are UNBOUNDED on the real axis — fully Lorentzian, no clamp, no causal
-  /// guard (#565): a trial `Re ℓ²` may land spacelike, timelike, or lightlike (either
-  /// sign or inside any `(-ε, ε)` band). The objective is total on the real manifold,
-  /// so no trial can fail to evaluate — there is no backoff and no rejection beyond
-  /// the line search's own variational acceptance; a genuine error propagates loudly.
-  /// Epic #559's rule still holds — nothing here seeds causal content; the whole
-  /// timelike/lightlike range is merely admissible, so causal content may EMERGE from
-  /// the dynamics (its absence is equally a finding).
+  /// Stage 2 (geometric): relax every full complex squared edge coordinate
+  /// \f$z_e=\ell_e^2\f$ toward a stationary point/minimum of the selected scalar
+  /// objective. Derivatives are taken with respect to \f$z\f$ and subtracted from
+  /// \f$z\f$ itself; `Edge` stores \f$\ell\f$, so a trial is written with the square
+  /// root closest to the resident branch. Neither the imaginary component nor the
+  /// complex phase is projected away. The real line-search scale is backed off until
+  /// a trial lowers the exact selected objective by at least `tolerance` (an absolute
+  /// threshold); otherwise the original lengths are restored verbatim and the call
+  /// reports stationarity. A genuine evaluation error also restores and propagates.
+  /// `JointStationarity` and `MediatedCorrespondence` differentiate every scalar
+  /// term. Mixed-term `Legacy` preserves its historical Regge search direction
+  /// (with exact full-objective acceptance) for compatibility/performance.
   /// Default `tolerance` 1e-12: `runStage2` is the FINAL, precise relaxation of a
   /// drive (the combined `run` iterates its in-loop relaxations at the looser
   /// 10e-9 diminishing-returns cut and applies the same 1e-12 on its exit path).
@@ -401,8 +420,8 @@ class MultiCobordism {
                                   double alpha0 = 0.05, double tolerance = 1e-12);
   /// The combined drive. Each iteration takes ONE combinatorial stage-1 update —
   /// a best-ΔF move, deepening to `maxLookahead`-move sequences on a stall — and
-  /// then relaxes the geometry FULLY: stage-2 updates repeat until the relative
-  /// stationarity test at `tolerance` (default 10e-9) reports diminishing returns,
+  /// then relaxes the geometry FULLY: stage-2 updates repeat until the absolute
+  /// improvement test at `tolerance` (default 10e-9) reports diminishing returns,
   /// so every move is proposed from, and leaves behind, relaxed geometry.
   ///
   /// Exit protocol: the loop wants to exit once the register is carried with the
@@ -416,10 +435,9 @@ class MultiCobordism {
   ///
   /// `nCandidateMoves`/`growBoundaries`/`maxLookahead` parameterize the
   /// combinatorial half exactly as in `runStage1`; `beta`/`alpha0`/`tolerance` the
-  /// geometric half exactly as in `runStage2`. NOTE with `beta != 1` the two
-  /// halves weight `‖∇S‖²` differently (stage 1 books deltas of `objective()`,
-  /// stage 2 descends `β‖∇S‖² + Γ·r_U`), so the shared trace mixes the two
-  /// scales — the default `beta = 1` keeps one coherent `F`.
+  /// geometric half exactly as in `runStage2`. `run` stores `beta` as the node's
+  /// Regge weight before either half runs, so stage 1, stage 2, `objective()`, and
+  /// the shared trace all score one coherent functional.
   /// `lastStage2Stationary()` reports the LAST geometric update's outcome.
   /// `relaxBudgetPerMove` caps the stage-2 updates that follow each committed
   /// move (and the tight exit re-check): the stationarity test is the real
@@ -477,11 +495,9 @@ class MultiCobordism {
   [[nodiscard]] const std::vector<BoundaryBlock> &outputs() const {
     return outputBlocks_;
   }
-  /// Whether the last `runStage2` ended on the relative-tolerance stationarity test (no
-  /// line-search step lowered `F` by more than `tolerance·max(|F|,1)`) — `true` — versus
-  /// hitting the `maxIters` budget cap — `false`. `true` means **real-manifold
-  /// stationarity, `δF = 0` along real signed-ℓ² perturbations**: the exact
-  /// on-manifold gradient direction `Re(2β·H̄·g)` buys no further descent (#589).
+  /// Whether the last `runStage2` ended because no complex-z line-search trial
+  /// lowered `F` by the absolute `tolerance` threshold (`true`) versus hitting
+  /// `maxIters` (`false`).
   /// Lets a caller report "stopped: stationary" vs "stopped: budget". `false` before
   /// the first `runStage2`/`run`; after `run`, reports the LAST geometric update's
   /// outcome (each update resets the flag, so an earlier stationary point that a
@@ -613,11 +629,10 @@ class MultiCobordism {
   /// iterating.
   bool stage1Update(int nCandidateMoves, bool growBoundaries,
                     std::vector<double> &objectiveTrace, int maxLookahead = 1);
-  /// One iteration of `runStage2`'s loop: exact gradient/Hessian, the on-manifold
-  /// descent direction `Re(2β·H̄·g)`, and the backtracking line search. Appends the
-  /// accepted objective to `objectiveTrace` and adapts `stepScale`. Returns `false`
-  /// on the stationary stop (no line-search step beat the relative threshold —
-  /// lengths restored and `lastStage2Stationary_` set), `true` to keep iterating.
+  /// One iteration of `runStage2`: assemble the selected objective's complex-z
+  /// ascent direction, subtract it from z, and run the backtracking line search.
+  /// Appends an accepted objective and adapts `stepScale`; otherwise restores the
+  /// original length branches and reports stationarity.
   bool stage2Update(double beta, double tolerance,
                     std::vector<double> &objectiveTrace, double &stepScale);
   /// Grow each localized boundary block's region to track the bulk's growth: expand
@@ -677,6 +692,11 @@ class MultiCobordism {
   bool singularValueRatio_{false};
   /// #724: false drops `‖∇S_Regge‖²` from every objective site (see the ctor).
   bool einsteinHilbert_{true};
+  ObjectiveMode objectiveMode_{ObjectiveMode::Legacy};
+  HodgeLaplacian::EntropyPhaseMode hodgeEntropyPhaseMode_{
+      HodgeLaplacian::EntropyPhaseMode::IncludeComplexPhase};
+  double hodgeEntropyWeight_{1.0};
+  double reggeWeight_{1.0};
   /// #737: latched by the first committed combinatorial move. Block regions
   /// grow only BEFORE the bulk is connected, so once a move has linked the
   /// complex up the boundary states' read windows are settled.
@@ -684,7 +704,8 @@ class MultiCobordism {
   /// The Einstein-Hilbert term of the objective, or 0 when it is switched off.
   /// One place, so `objective`, the stage-2 acceptance test, and `deltaF`
   /// cannot come to disagree about what F is.
-  [[nodiscard]] double einsteinHilbertTerm(double beta = 1.0) const;
+  [[nodiscard]] double objectiveFor(
+      const std::shared_ptr<Spacetime> &spacetime) const;
   /// Weight on the input-block residual terms in `rU` (see setInputResidualWeight).
   double inputResidualWeight_ = 1.0;
   /// An input region stops growing (growInputRegions) once its residual drops below
@@ -695,7 +716,7 @@ class MultiCobordism {
   /// #613: whether the move draw offers the disposition moves. See the accessor.
   bool shouldProposeDispositions_{true};
   double convergenceTolerance_ = 1e-9;
-  /// Set by `runStage2`: `true` iff its last call stopped on the relative-tolerance
+  /// Set by `runStage2`: `true` iff its last call stopped on the absolute-tolerance
   /// stationarity test, `false` iff it hit the `maxIters` budget. See lastStage2Stationary.
   bool lastStage2Stationary_ = false;
   /// Set by `stage1Update`: the committed sequence's lookahead depth (see

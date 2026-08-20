@@ -4,10 +4,10 @@
 
 The #589 contract (trials constructed exactly real; resident Im l^2 == 0 for
 all time) belonged to the ordinary-Lorentzian convention with the complexified
-theory unbuilt. That theory is built now: stage 2 steps the complex LENGTHS
-with a complex step scale, so causal dispositions can rotate continuously
-instead of only through discrete stage-1 moves — an edge's trial may leave the
-real-l^2 axis by design. The invariants that survive, and live here:
+theory unbuilt. Stage 2 now steps the full complex SQUARED coordinates z=l^2
+with a real line-search scale, then chooses the continuous square-root branch
+for Edge's stored l. Causal dispositions can rotate continuously instead of
+only through discrete stage-1 moves. The invariants that survive, and live here:
 
 * every objective value in a stage-2 trace is finite — no trial the optimizer
   can construct surfaces an exception or a NaN;
@@ -72,17 +72,23 @@ def _max_abs_im(st):
                for e in st.getEdgeList().toVector())
 
 
-class RealAxisDirectionTest(unittest.TestCase):
-    """The stage-2 descent direction equals the FD gradient of the objective
-    along real perturbations — the item-1 physics, tested directly."""
+class ComplexSquaredDirectionTest(unittest.TestCase):
+    """The stage-2 ascent vector matches both real axes of complex z=l^2."""
 
     def test_direction_matches_fd_on_mixed_hinge_host(self):
         beta = 1.0
         st = _sphere4()
+        # Move off the Sorkin-angle branch cut before checking a TWO-axis
+        # derivative. A centered imaginary difference taken exactly on the real
+        # Lorentzian sheet measures the discontinuity between continuations,
+        # not the local derivative returned by the analytic formulas.
+        for index, edge in enumerate(st.getEdgeList().toVector()):
+            z = complex(edge.getLength() ** 2) + 1j * (0.03 + 0.002 * index)
+            edge.setLength(cmath.sqrt(z))
         # Hand-set one edge timelike: every base triangle wedge against it has
         # a cofactor pair straddling zero — the m=1 crossing branch (#582) —
         # so the action gradient/Hessian are genuinely complex here.
-        st.getEdgeList().toVector()[3].setLength(cmath.sqrt(complex(complex(-0.8, 0.0))))
+        st.getEdgeList().toVector()[3].setLength(cmath.sqrt(complex(-0.8, 0.07)))
         rs = T.ReggeSolver(st, T.MatterConfiguration())
         _assert_mixed_hinge_regime(self, st)
 
@@ -90,9 +96,8 @@ class RealAxisDirectionTest(unittest.TestCase):
         H = np.asarray(rs.actionHessianExact(), dtype=complex)
         self.assertGreater(np.max(np.abs(g.imag)), 1e-9,
                            "gradient must be genuinely complex here")
-        # The engine's direction (runStage2): Re(2*beta*conj(H)@g) — the exact
-        # restriction of the Wirtinger direction to the real axis.
-        direction = (2.0 * beta * (np.conj(H) @ g)).real
+        # The engine subtracts this full complex ascent displacement from z.
+        direction = 2.0 * beta * (np.conj(H) @ g)
 
         edges = st.getEdgeList().toVector()
 
@@ -102,25 +107,30 @@ class RealAxisDirectionTest(unittest.TestCase):
                               for c in solver.actionGradientExact())
 
         h = 1e-6
-        fd = np.zeros(len(edges))
+        fd = np.zeros(len(edges), dtype=complex)
         for i, e in enumerate(edges):
-            re0 = complex(e.getLength()**2).real
-            e.setLength(cmath.sqrt(complex(complex(re0 + h, 0.0))))
+            original = complex(e.getLength())
+            z0 = original * original
+            e.setLength(cmath.sqrt(z0 + h))
             fp = objective()
-            e.setLength(cmath.sqrt(complex(complex(re0 - h, 0.0))))
+            e.setLength(cmath.sqrt(z0 - h))
             fm = objective()
-            e.setLength(cmath.sqrt(complex(complex(re0, 0.0))))
-            fd[i] = (fp - fm) / (2 * h)
+            e.setLength(cmath.sqrt(z0 + 1j * h))
+            fip = objective()
+            e.setLength(cmath.sqrt(z0 - 1j * h))
+            fim = objective()
+            e.setLength(original)
+            fd[i] = ((fp - fm) / (2 * h)
+                     + 1j * (fip - fim) / (2 * h))
 
         scale = np.max(np.abs(fd))
         self.assertGreater(scale, 0.0)
         self.assertLess(np.max(np.abs(direction - fd)) / scale, 1e-5,
-                        f"direction != dF/dx:\n{direction}\nvs FD\n{fd}")
+                        f"complex direction != grad F:\n{direction}\nvs FD\n{fd}")
 
 
 class ComplexStageTwoContractTest(unittest.TestCase):
-    """max |Im l^2| == 0.0 EXACTLY after any stage-1 + stage-2 sequence: the
-    by-construction invariant the deleted #582 guard used to police."""
+    """Stage 2 stays finite/classifiable while exploring complex z."""
 
     def _node(self, host, seed=3):
         w = cmath.exp(2j * math.pi / 3)
