@@ -443,7 +443,9 @@ class EigenstateSynthesis {
     /// (no leak, no \f$ \partial\psi \f$ chain). Same first-order eigenvector
     /// perturbation machinery as `residualForLoopsGradient`. \f$ O(n_1^3) \f$.
     /// @throws std::runtime_error if `targetPeriods.size() != loops.size()`.
-    [[nodiscard]] std::vector<double> periodGapForLoopsGradient(
+    /// Complex gradient of the period gap (see the convention note above):
+    /// `Re` is the old real-locus derivative, `−Im` the imaginary-direction one.
+    [[nodiscard]] std::vector<std::complex<double>> periodGapForLoopsGradient(
         const std::vector<EdgeLoop> &loops,
         const std::vector<std::complex<double>> &targetPeriods) const;
 
@@ -461,7 +463,8 @@ class EigenstateSynthesis {
     /// `periodGapForLoopsGradient`), in `cellSimplices()` order.
     /// @throws std::runtime_error if `targetPeriods.size() != holes.size()` or a
     ///   hole has \f$ \ne 3 \f$ vertices.
-    [[nodiscard]] std::vector<double> periodGapForPeriodsGradient(
+    /// Complex gradient of the period gap, routed by degree.
+    [[nodiscard]] std::vector<std::complex<double>> periodGapForPeriodsGradient(
         const std::vector<std::vector<std::uint64_t>> &holes,
         const std::vector<std::complex<double>> &targetPeriods) const;
 
@@ -735,6 +738,25 @@ class EigenstateSynthesis {
     // per-edge analytic dL_k/dl^2). The k = 0 and k >= 2 path of
     // residualForPeriodsGradient (k = 0 dispatches to periodGradientDegreeZero);
     // value-identical to periodGradientOverLoops at k = 1.
+    /// **Complex-gradient convention (#746).** `r_ψ` is a real scalar built
+    /// from complex data, and `ℓ²` is genuinely complex off the real locus (a
+    /// balanced-edge run starts every interval at `±i·m`), so a real-valued
+    /// derivative describes only one direction of the plane the objective
+    /// moves in. These return, per edge,
+    ///
+    ///     g = ∂r/∂(Re ℓ²) − i·∂r/∂(Im ℓ²)   ( = 2·∂r/∂ℓ² in Wirtinger form )
+    ///
+    /// so the two directional derivatives are read off as `Re(g)` and `−Im(g)`,
+    /// and `conj(g)` is the steepest-ASCENT direction in the complex plane
+    /// (descent is `−conj(g)`). The factor of two against the bare Wirtinger
+    /// derivative is deliberate and load-bearing: it makes `Re(g)` exactly the
+    /// real-locus derivative these functions returned before, so on the real
+    /// locus nothing changed and the existing certifications still apply.
+    ///
+    /// Certified by the Euler identity in COMPLEX form — for the degree-0
+    /// period gap, `Σ ℓ²·g = 0` in both real and imaginary parts, verified with
+    /// `|Im ℓ²|` up to 0.35 (#746), which a real-valued gradient cannot express.
+    ///
     /// Degree-generic exact `∂r_ψ/∂ℓ²` for the period GAP
     /// `r_ψ = ‖A c − t‖²` (`A = Q·U_n`, `c` the least-squares fit), in
     /// ChainComplex 1-cell order — the `k ≥ 2` sibling of the edge-loop core
@@ -750,7 +772,7 @@ class EigenstateSynthesis {
     /// Certified by the degree-0 Euler identity `Σ ℓ²·∂r_ψ/∂ℓ² = 0`: `L_k` is
     /// homogeneous of degree −1, so a uniform rescale leaves the kernel — and
     /// therefore `A`, `c` and the gap — unchanged. Throws at `k = 0`.
-    [[nodiscard]] std::vector<double> periodGapGradientOverHoles(
+    [[nodiscard]] std::vector<std::complex<double>> periodGapGradientOverHoles(
         const std::vector<std::vector<std::uint64_t>> &holes,
         const std::vector<std::complex<double>> &targetPeriods) const;
 

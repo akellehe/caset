@@ -76,8 +76,12 @@ class PeriodGapGradientDegreeTwoTest(unittest.TestCase):
         cls.degree = 2
         cls.target = [complex(1.0, 0.0), complex(0.3, 0.6)][:len(cls.holes)]
         cls.synthesis = cobordism.EigenstateSynthesis(cls.spacetime, cls.degree)
-        cls.gradient = np.array(cls.synthesis.periodGapForPeriodsGradient(
-            cls.holes, cls.target))
+        # COMPLEX now (#746): Re is the real-locus derivative these tests
+        # certified before, so they keep asserting exactly what they did.
+        cls.gradientComplex = np.array(
+            cls.synthesis.periodGapForPeriodsGradient(cls.holes, cls.target),
+            complex)
+        cls.gradient = cls.gradientComplex.real
 
     def test_the_fixture_is_not_degenerate(self):
         # The trap this fixture exists to avoid: holes that BOUND have periods
@@ -121,6 +125,77 @@ class PeriodGapGradientDegreeTwoTest(unittest.TestCase):
                 msg=f"edge {pairs[index]}")
 
 
+class ComplexGradientOffTheRealLocusTest(unittest.TestCase):
+    """The reason the family is complex (#746).
+
+    A balanced-edge run starts every interval at `l^2 = +-i*m`, so the states
+    these gradients are read on are NOT on the real-`l^2` locus. A real-valued
+    derivative describes one direction of a plane the objective moves in; the
+    complex one describes both, and the degree-0 Euler identity has to hold in
+    BOTH parts off the locus, which is a check a real gradient cannot even
+    state.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cobordism.HodgeLaplacian.setDefaultWeightConvention(
+            cobordism.HodgeWeightConvention.SquaredContent)
+        cls.spacetime, cls.holes = B2Register.build()
+        cls.degree = 2
+        cls.target = [complex(1.0, 0.0), complex(0.3, 0.6)][:len(cls.holes)]
+        pairs, byPair, _squared = _edgeSquaredLengths(cls.spacetime)
+        for index, pair in enumerate(pairs):          # push l^2 off the locus
+            edge = byPair[pair]
+            squared = edge.getLength() ** 2
+            edge.setLength(cmath.sqrt(
+                squared * complex(1.0, 0.35 * (1 + index % 3) / 3)))
+        cls.spacetime.materializeFacets()
+        cls.pairs, cls.byPair = pairs, byPair
+        cls.gradient = np.array(
+            cobordism.EigenstateSynthesis(cls.spacetime, cls.degree)
+            .periodGapForPeriodsGradient(cls.holes, cls.target), complex)
+
+    def test_the_state_is_actually_off_the_locus(self):
+        imaginary = max(abs((self.byPair[p].getLength() ** 2).imag)
+                        for p in self.pairs)
+        self.assertGreater(imaginary, 1e-2)
+
+    def test_the_gradient_has_a_nonzero_imaginary_part(self):
+        self.assertGreater(np.abs(self.gradient.imag).max(), 1e-6)
+
+    def test_euler_identity_holds_in_both_parts(self):
+        squared = np.array([self.byPair[p].getLength() ** 2
+                            for p in self.pairs], complex)
+        euler = complex(np.dot(squared, self.gradient))
+        self.assertLess(abs(euler.real), 1e-9)
+        self.assertLess(abs(euler.imag), 1e-9)
+
+    def test_both_directional_derivatives_match_finite_differences(self):
+        """Re(g) is d/d(Re l^2) and -Im(g) is d/d(Im l^2)."""
+        moving = [i for i in range(len(self.pairs))
+                  if abs(self.gradient[i]) > 1e-9][:3]
+        self.assertTrue(moving)
+        for index in moving:
+            edge = self.byPair[self.pairs[index]]
+            base = edge.getLength() ** 2
+            step = 1e-6
+            for shift, expected in ((step, self.gradient[index].real),
+                                    (1j * step, -self.gradient[index].imag)):
+                edge.setLength(cmath.sqrt(base + shift))
+                self.spacetime.materializeFacets()
+                up = _gapValue(self.spacetime, self.degree, self.holes, self.target)
+                edge.setLength(cmath.sqrt(base - shift))
+                self.spacetime.materializeFacets()
+                down = _gapValue(self.spacetime, self.degree, self.holes, self.target)
+                edge.setLength(cmath.sqrt(base))
+                self.spacetime.materializeFacets()
+                finiteDifference = (up - down) / (2 * step)
+                self.assertAlmostEqual(
+                    finiteDifference, expected,
+                    delta=1e-4 * max(abs(finiteDifference), 1.0),
+                    msg=f"edge {self.pairs[index]}, shift {shift}")
+
+
 class PeriodGapGradientRoutingTest(unittest.TestCase):
     """Degree routing, including the contract at k = 0."""
 
@@ -130,7 +205,7 @@ class PeriodGapGradientRoutingTest(unittest.TestCase):
         spacetime, synthesis, holes, _periods = _hs.holed_surface(degree=1)
         target = [complex(1.0, 0.0)] * len(holes)
         gradient = np.array(
-            synthesis.periodGapForPeriodsGradient(holes, target))
+            synthesis.periodGapForPeriodsGradient(holes, target), complex).real
         _pairs, _byPair, squared = _edgeSquaredLengths(spacetime)
         self.assertLess(abs(float(np.dot(squared, gradient))), 1e-9)
 

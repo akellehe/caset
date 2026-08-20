@@ -1940,7 +1940,7 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
   return periodGradientGeneral(holes, targetPeriods);
 }
 
-std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
+std::vector<cd> EigenstateSynthesis::periodGapForLoopsGradient(
     const std::vector<EdgeLoop> &loops,
     const std::vector<cd> &targetPeriods) const {
   // Contract: degree-1 machinery, exactly as periodGradientOverLoops (and as
@@ -1966,7 +1966,7 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
   using Eigen::MatrixXcd;
   using Eigen::VectorXcd;
   const std::size_t n1 = order_;
-  std::vector<double> grad(n1, 0.0);
+  std::vector<cd> grad(n1, cd(0.0, 0.0));
   const std::size_t m = loops.size();
   if (n1 == 0 || m == 0) return grad;
   if (targetPeriods.size() != m)
@@ -2142,12 +2142,18 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
     const MatrixXcd core = (Vnn * fa) * (fb.transpose() * Un);  // nnd x nd
     const MatrixXcd dUn = Unn * (invlam.asDiagonal() * core);               // n1 x nd
     const MatrixXcd dA = Q * dUn;                                           // m x nd
-    grad[je] = 2.0 * (r.dot(dA.cast<cd>() * c)).real();
+    // Complex gradient (#746): r is holomorphic in l^2, so no .real()
+    // projection belongs here. The value is
+    //   g = dr/d(Re l^2) - i dr/d(Im l^2),
+    // whose real part is exactly what this line used to return — discarding
+    // the imaginary half is what left the register term unable to move in the
+    // plane the descent direction actually steps in.
+    grad[je] = 2.0 * r.dot(dA.cast<cd>() * c);
   }
   return grad;
 }
 
-std::vector<double> EigenstateSynthesis::periodGapForPeriodsGradient(
+std::vector<cd> EigenstateSynthesis::periodGapForPeriodsGradient(
     const std::vector<std::vector<std::uint64_t>> &holes,
     const std::vector<cd> &targetPeriods) const {
   // Route by degree, exactly as residualForPeriodsGradient does (#630): the
@@ -2168,7 +2174,7 @@ std::vector<double> EigenstateSynthesis::periodGapForPeriodsGradient(
   return periodGapGradientOverHoles(holes, targetPeriods);
 }
 
-std::vector<double> EigenstateSynthesis::periodGapGradientOverHoles(
+std::vector<cd> EigenstateSynthesis::periodGapGradientOverHoles(
     const std::vector<std::vector<std::uint64_t>> &holes,
     const std::vector<cd> &targetPeriods) const {
   // Arbitrary-degree exact d r_psi / d l^2 for the period GAP
@@ -2199,7 +2205,7 @@ std::vector<double> EigenstateSynthesis::periodGapGradientOverHoles(
   const std::size_t nk = order_;
   const ChainComplex cc = ChainComplex::fromSpacetime(*st_);
   const std::vector<std::vector<std::uint64_t>> edges1 = cc.kSimplexVertices(1);
-  std::vector<double> grad(edges1.size(), 0.0);
+  std::vector<cd> grad(edges1.size(), cd(0.0, 0.0));
   const std::size_t m = holes.size();
   if (nk == 0 || m == 0) return grad;
   if (targetPeriods.size() != m)
@@ -2291,7 +2297,8 @@ std::vector<double> EigenstateSynthesis::periodGapGradientOverHoles(
     const MatrixXcd core = (Vnn * dM) * Un;                     // nnd x nd
     const MatrixXcd dUn = Unn * (invlam.asDiagonal() * core);   // N x nd
     const MatrixXcd dA = Q * dUn;                               // m x nd
-    grad[je] = 2.0 * (r.dot(dA * c)).real();                    // envelope theorem
+    // Envelope theorem, kept COMPLEX (#746) — see the k = 1 core.
+    grad[je] = 2.0 * r.dot(dA * c);
   }
   return grad;
 }
