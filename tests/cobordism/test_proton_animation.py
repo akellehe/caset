@@ -137,7 +137,7 @@ class ProtonAnimationCorrectnessTest(unittest.TestCase):
         self.assertGreater(first[1], 0.0)
         np.testing.assert_allclose(first, scaled, rtol=1e-12, atol=1e-12)
 
-    def test_curvature_cache_refreshes_on_topology_change_once_per_frame(self):
+    def test_curvature_cache_refreshes_on_commits_and_topology_change_once_per_frame(self):
         animator = self.pa.ProtonAnimator.__new__(self.pa.ProtonAnimator)
         animator.hist = {"F": [1.0], "lookahead": [0]}
         animator._active = 0
@@ -158,8 +158,14 @@ class ProtonAnimationCorrectnessTest(unittest.TestCase):
         self.assertEqual(animator._cell_curvature.call_count, 2)
 
         animator.hist["F"].append(0.8)
+        animator.hist["lookahead"].append(1)
+        animator._cell_curvature_cached(0, spacetime)
+        animator._cell_curvature_cached(0, spacetime)
+        self.assertEqual(animator._cell_curvature.call_count, 3)
+
+        animator.hist["F"].append(0.7)
         animator.hist["lookahead"].append(0)
-        self.assertEqual(animator._curvature_age_tag(0), "  (heat frame 2)")
+        self.assertEqual(animator._curvature_age_tag(0), "  (heat frame 3)")
 
     def test_relaxation_only_paint_does_not_report_a_stage1_stall(self):
         animator = self.pa.ProtonAnimator.__new__(self.pa.ProtonAnimator)
