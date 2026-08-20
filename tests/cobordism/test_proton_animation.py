@@ -137,6 +137,80 @@ class ProtonAnimationCorrectnessTest(unittest.TestCase):
         self.assertGreater(first[1], 0.0)
         np.testing.assert_allclose(first, scaled, rtol=1e-12, atol=1e-12)
 
+    def test_wick_fit_recovers_a_common_interval_axis(self):
+        intervals = {(0, 1): 1.0j, (0, 2): 2.0j, (1, 2): 3.0j}
+        phase, projected, off_axis = self.pa._fit_real_interval_axis(intervals)
+        self.assertAlmostEqual(phase, np.pi / 2.0, places=12)
+        self.assertAlmostEqual(off_axis, 0.0, places=12)
+        np.testing.assert_allclose([value.real for value in projected.values()],
+                                   [1.0, 2.0, 3.0], atol=1e-12)
+        np.testing.assert_allclose([value.imag for value in projected.values()],
+                                   0.0, atol=1e-12)
+
+    def test_projected_gram_signature_distinguishes_euclidean_and_lorentzian(self):
+        cell = (0, 1, 2, 3, 4)
+
+        def intervals(points, metric):
+            result = {}
+            for first in range(len(points)):
+                for second in range(first + 1, len(points)):
+                    delta = points[first] - points[second]
+                    result[(first, second)] = delta @ metric @ delta
+            return result
+
+        origin = np.zeros(4)
+        euclidean_points = np.vstack((origin, np.eye(4)))
+        lorentzian_points = np.vstack((origin, np.diag([2.0, 1.0, 1.0, 1.0])))
+        euclidean = intervals(euclidean_points, np.eye(4))
+        lorentzian = intervals(lorentzian_points, np.diag([-1.0, 1.0, 1.0, 1.0]))
+        self.assertEqual(
+            self.pa._gram_signature(self.pa._simplex_gram(cell, euclidean)),
+            ((0, 0, 4), "euclidean"))
+        self.assertEqual(
+            self.pa._gram_signature(self.pa._simplex_gram(cell, lorentzian)),
+            ((1, 0, 3), "lorentzian"))
+
+    def test_spacetime_development_glues_two_simplex_charts_exactly(self):
+        points = np.asarray([
+            [0.0, 0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+            [0.0, 0.0, 0.0, -1.0],
+        ])
+        intervals = {}
+        for first in range(len(points)):
+            for second in range(first + 1, len(points)):
+                delta = points[first] - points[second]
+                intervals[(first, second)] = np.dot(delta, delta)
+        cells = [(0, 1, 2, 3, 4), (0, 1, 2, 3, 5)]
+        developed = self.pa._develop_spacetime_data(cells, intervals, [(0, 1)])
+        self.assertEqual(developed["signature_names"], ["euclidean", "euclidean"])
+        self.assertEqual(developed["physical"].shape, (2, 4))
+        self.assertLess(developed["local_residual"], 1e-10)
+        self.assertLess(developed["closure_residual"], 1e-10)
+        self.assertTrue(np.all(np.isfinite(developed["physical"])))
+
+    def test_spacetime_layout_removes_observer_axis_flips(self):
+        cells = [(index,) for index in range(5)]
+        physical = np.asarray([
+            [-1.0, -1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [1.0, 1.0, 0.0, 0.0],
+            [0.5, 0.0, 0.0, 1.0],
+            [-0.5, 0.5, 0.5, 0.5],
+        ])
+        rotation = np.asarray([[0.0, -1.0, 0.0],
+                               [1.0, 0.0, 0.0],
+                               [0.0, 0.0, 1.0]])
+        changed = np.column_stack((-physical[:, 0], physical[:, 1:] @ rotation))
+        layout = self.pa._StableSpacetimeLayout(ease=1.0)
+        expected = layout.coords(cells, physical)
+        actual = layout.coords(cells, changed)
+        for cell in cells:
+            np.testing.assert_allclose(actual[cell], expected[cell], atol=1e-12)
+
     def test_curvature_cache_refreshes_on_commits_and_topology_change_once_per_frame(self):
         animator = self.pa.ProtonAnimator.__new__(self.pa.ProtonAnimator)
         animator.hist = {"F": [1.0], "lookahead": [0]}
