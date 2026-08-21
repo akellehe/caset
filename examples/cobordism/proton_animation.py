@@ -44,6 +44,13 @@ split into real- and imaginary-curvature channels:
     the spatial rotation-angle and temporal boost channels respectively; off that locus the
     neutral Re/Im labels avoid assigning a causal interpretation to a genuinely complex
     interval geometry. Both use a signed diverging colormap centered at 0.
+  * **developed spacetime dual** — a metric-derived 3-D observer view, not another
+    projection of the primal graph layout. A best-fit global Wick rotation puts the
+    complex squared intervals near a real signed axis; exact complex simplex charts are
+    then glued through the dual graph. Their circumcenters are split into three principal
+    real spatial directions and one principal imaginary time direction, and shown as
+    `(x,y,t)`. Lorentzian, Euclidean, split-signature, and degenerate cells remain visibly
+    distinct, while the title reports off-axis and atlas-closure residuals.
   * **spare rows (single-node runs only)** — the Gram-degeneracy proximity trace, the descending
     singular-value spectrum of the register operator `L_k`, and TWO **mode-localization**
     panels painting the primal skeleton by the summed weight `|ψᵢ|²` of right singular
@@ -103,6 +110,7 @@ Two independent lookahead knobs, easy to confuse:
     so this buys committed *moves*, not progress in general.
 """
 import argparse
+import cmath
 import itertools
 import json
 import math
@@ -172,6 +180,7 @@ for _var in ("OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
 os.environ.setdefault("OMP_WAIT_POLICY", "passive")
 
 import numpy as np
+from scipy.linalg import sqrtm
 from scipy.sparse.csgraph import shortest_path
 
 import tessera
@@ -334,6 +343,304 @@ def _mds_layout(st):
     return {vids[i]: coords[i] for i in range(n)}
 
 
+def _fit_real_interval_axis(intervals):
+    """Rotate complex squared intervals onto their best common real axis.
+
+    The phase is the least-squares unoriented line through the origin in the
+    complex ``l^2`` plane.  Its sign ambiguity is resolved by making the mean
+    projected interval non-negative, so the overwhelmingly spacelike balanced
+    seed is shown with the conventional positive sign.  The returned off-axis
+    residual is dimensionless RMS imaginary content after the rotation.
+    """
+    if not intervals:
+        return 0.0, {}, 0.0
+    values = np.asarray(list(intervals.values()), dtype=complex)
+    energy = float(np.vdot(values, values).real)
+    second_moment = complex(np.sum(values * values))
+    if abs(second_moment) <= np.finfo(float).eps * max(energy, 1.0):
+        first_moment = complex(np.sum(values))
+        phase = cmath.phase(first_moment) if first_moment else 0.0
+    else:
+        phase = 0.5 * cmath.phase(second_moment)
+    rotation = cmath.exp(-1j * phase)
+    projected = {edge: rotation * value for edge, value in intervals.items()}
+    if sum(value.real for value in projected.values()) < 0.0:
+        phase += math.pi
+        projected = {edge: -value for edge, value in projected.items()}
+    phase = (phase + math.pi) % (2.0 * math.pi) - math.pi
+    off_axis = (math.sqrt(sum(value.imag ** 2 for value in projected.values()) / energy)
+                if energy > 0.0 else 0.0)
+    return phase, projected, off_axis
+
+
+def _simplex_gram(cell, intervals):
+    """The four-dimensional Gram matrix induced by one 4-simplex's intervals."""
+    base = cell[0]
+    others = cell[1:]
+    gram = np.empty((len(others), len(others)), dtype=complex)
+    for row, a in enumerate(others):
+        s0a = intervals[tuple(sorted((base, a)))]
+        for column, b in enumerate(others):
+            s0b = intervals[tuple(sorted((base, b)))]
+            sab = 0.0 if a == b else intervals[tuple(sorted((a, b)))]
+            gram[row, column] = 0.5 * (s0a + s0b - sab)
+    return gram
+
+
+def _gram_signature(gram):
+    """Classify the real projected Gram form without hiding signature defects."""
+    eigenvalues = np.linalg.eigvalsh(np.asarray(gram.real, dtype=float))
+    tolerance = 1e-8 * max(1.0, float(np.max(np.abs(eigenvalues))))
+    negative = int(np.count_nonzero(eigenvalues < -tolerance))
+    zero = int(np.count_nonzero(np.abs(eigenvalues) <= tolerance))
+    positive = int(np.count_nonzero(eigenvalues > tolerance))
+    signature = (negative, zero, positive)
+    if zero:
+        name = "degenerate"
+    elif signature == (0, 0, 4):
+        name = "euclidean"
+    elif signature in ((1, 0, 3), (3, 0, 1)):
+        name = "lorentzian"
+    else:
+        name = "split"
+    return signature, name
+
+
+def _root_simplex_chart(cell, intervals):
+    """Complex Euclidean coordinates whose bilinear Gram form is exact."""
+    gram = _simplex_gram(cell, intervals)
+    factor = np.asarray(sqrtm(gram), dtype=complex)
+    if not np.all(np.isfinite(factor)):
+        raise ValueError("non-finite complex Gram square root")
+    scale = max(float(np.linalg.norm(gram)), 1.0)
+    if float(np.linalg.norm(factor @ factor.T - gram)) > 1e-8 * scale:
+        raise ValueError("complex Gram square root does not reproduce the simplex")
+    chart = {cell[0]: np.zeros(len(cell) - 1, dtype=complex)}
+    chart.update({vertex: factor[index]
+                  for index, vertex in enumerate(cell[1:])})
+    return chart
+
+
+def _extend_simplex_chart(parent_cell, child_cell, parent_chart, intervals):
+    """Glue one child chart through its shared facet in the parent's frame.
+
+    Subtracting its four interval equations leaves three linear constraints and
+    one quadratic normal coordinate.  The quadratic's branch farthest from the
+    parent's opposite vertex unfolds the child on the other side of the facet.
+    """
+    shared = sorted(set(parent_cell) & set(child_cell))
+    fresh = list(set(child_cell) - set(shared))
+    old = list(set(parent_cell) - set(shared))
+    if len(shared) != 4 or len(fresh) != 1 or len(old) != 1:
+        raise ValueError("dual neighbors must share exactly one tetrahedral facet")
+    if any(vertex not in parent_chart for vertex in shared + old):
+        raise ValueError("parent chart does not contain the shared facet")
+    new_vertex = fresh[0]
+    child_chart = {vertex: np.array(parent_chart[vertex], copy=True)
+                   for vertex in shared}
+    p0 = child_chart[shared[0]]
+    s0 = intervals[tuple(sorted((new_vertex, shared[0])))]
+    rows, rhs = [], []
+    for vertex in shared[1:]:
+        point = child_chart[vertex]
+        interval = intervals[tuple(sorted((new_vertex, vertex)))]
+        rows.append(2.0 * (point - p0))
+        rhs.append(np.dot(point, point) - np.dot(p0, p0) - (interval - s0))
+    matrix = np.asarray(rows, dtype=complex)
+    rhs = np.asarray(rhs, dtype=complex)
+    particular = np.linalg.lstsq(matrix, rhs, rcond=None)[0]
+    _u, _sigma, vh = np.linalg.svd(matrix)
+    normal = vh[-1].conj()
+    relative = particular - p0
+    quadratic = np.asarray([
+        np.dot(normal, normal),
+        2.0 * np.dot(normal, relative),
+        np.dot(relative, relative) - s0,
+    ], dtype=complex)
+    tolerance = 1e-12 * max(1.0, float(np.max(np.abs(quadratic))))
+    if abs(quadratic[0]) > tolerance:
+        roots = np.roots(quadratic)
+    elif abs(quadratic[1]) > tolerance:
+        roots = np.asarray([-quadratic[2] / quadratic[1]])
+    else:
+        raise ValueError("shared facet has no resolvable transverse direction")
+    if not len(roots) or not np.all(np.isfinite(roots)):
+        raise ValueError("child apex has no finite development")
+    candidates = [particular + root * normal for root in roots]
+    parent_apex = parent_chart[old[0]]
+    apex = max(candidates, key=lambda point: np.linalg.norm(point - parent_apex))
+    child_chart[new_vertex] = apex
+    residuals = [abs(np.dot(apex - child_chart[vertex],
+                            apex - child_chart[vertex])
+                     - intervals[tuple(sorted((new_vertex, vertex)))])
+                 for vertex in shared]
+    return child_chart, residuals
+
+
+def _simplex_circumcenter(cell, chart):
+    """Circumcenter in the chart's complex bilinear coordinate frame."""
+    points = np.asarray([chart[vertex] for vertex in cell], dtype=complex)
+    base = points[0]
+    matrix = 2.0 * (points[1:] - base)
+    rhs = np.asarray([np.dot(point, point) - np.dot(base, base)
+                      for point in points[1:]], dtype=complex)
+    return np.linalg.lstsq(matrix, rhs, rcond=None)[0]
+
+
+def _principal_axes(values, count):
+    """Return stable-shape PCA coordinates, padded when the cloud is rank-poor."""
+    values = np.asarray(values, dtype=float)
+    if not len(values):
+        return np.empty((0, count)), np.zeros(0)
+    centered = values - values.mean(axis=0)
+    _u, singular, vh = np.linalg.svd(centered, full_matrices=False)
+    axes = np.zeros((values.shape[1], count))
+    available = min(count, vh.shape[0])
+    if available:
+        axes[:, :available] = vh[:available].T
+    return centered @ axes, singular
+
+
+def _develop_spacetime_data(cells, intervals, dual_edges):
+    """Develop a simplicial Regge atlas and form a 3+1 observer projection.
+
+    Charts are glued exactly along a dual spanning forest in complex four-space.
+    Splitting their circumcenters into three principal real directions and one
+    principal imaginary direction produces the observer's ``(t,x,y,z)`` view.
+    Repeated abstract vertices may acquire different chart coordinates after a
+    curved traversal; their normalized dispersion is reported as atlas closure,
+    not silently averaged away.
+    """
+    cells = [tuple(cell) for cell in cells]
+    intervals = {tuple(sorted(edge)): complex(value)
+                 for edge, value in intervals.items()}
+    phase, rotated, off_axis = _fit_real_interval_axis(intervals)
+    if not cells:
+        return {"cells": [], "dual_edges": [], "phase": phase,
+                "off_axis": off_axis, "signatures": [], "signature_names": [],
+                "physical": np.empty((0, 4)), "local_residual": 0.0,
+                "closure_residual": 0.0, "observer_leak": 0.0,
+                "interval_scale": 1.0, "root_cells": []}
+    interval_scale = math.sqrt(float(np.median(
+        [abs(value) for value in rotated.values()]))) if rotated else 1.0
+    interval_scale = interval_scale or 1.0
+    signatures, signature_names = [], []
+    for cell in cells:
+        signature, name = _gram_signature(_simplex_gram(cell, rotated))
+        signatures.append(signature)
+        signature_names.append(name)
+
+    adjacency = {index: set() for index in range(len(cells))}
+    normalized_dual_edges = set()
+    for first, second in dual_edges:
+        first, second = int(first), int(second)
+        if (0 <= first < len(cells) and 0 <= second < len(cells)
+                and first != second):
+            edge = tuple(sorted((first, second)))
+            normalized_dual_edges.add(edge)
+            adjacency[first].add(second)
+            adjacency[second].add(first)
+
+    charts, parent, roots, local_residuals = {}, {}, [], []
+    pending = set(range(len(cells)))
+    component = 0
+    while pending:
+        lorentzian = [index for index in pending
+                      if signature_names[index] == "lorentzian"]
+        root = min(lorentzian or list(pending), key=lambda index: cells[index])
+        roots.append(root)
+        try:
+            root_chart = _root_simplex_chart(cells[root], rotated)
+        except (ValueError, np.linalg.LinAlgError):
+            # A diagnostic panel must not kill a long run when a singular cell
+            # has no stable complex square root. Keep it visible as an
+            # unrealizable signature defect and give its component a finite
+            # placeholder chart; adjacent cells can still start fresh charts.
+            signature_names[root] = "unrealizable"
+            root_chart = {cells[root][0]: np.zeros(4, dtype=complex)}
+            root_chart.update({vertex: interval_scale * np.eye(4)[index]
+                               for index, vertex in enumerate(cells[root][1:])})
+        if component:
+            offset = np.zeros(4, dtype=complex)
+            offset[0] = component * 4.0 * interval_scale
+            root_chart = {vertex: point + offset
+                          for vertex, point in root_chart.items()}
+        charts[root] = root_chart
+        parent[root] = None
+        queue = [root]
+        pending.remove(root)
+        while queue:
+            current = queue.pop(0)
+            for neighbor in sorted(adjacency[current]):
+                if neighbor not in pending:
+                    continue
+                try:
+                    chart, residuals = _extend_simplex_chart(
+                        cells[current], cells[neighbor], charts[current], rotated)
+                except (KeyError, ValueError, np.linalg.LinAlgError):
+                    continue
+                charts[neighbor] = chart
+                parent[neighbor] = current
+                local_residuals.extend(residuals)
+                pending.remove(neighbor)
+                queue.append(neighbor)
+        component += 1
+
+    centers = np.asarray([_simplex_circumcenter(cell, charts[index])
+                          for index, cell in enumerate(cells)], dtype=complex)
+    spatial, real_singular = _principal_axes(centers.real, 3)
+    temporal, imag_singular = _principal_axes(centers.imag, 1)
+    physical = np.column_stack((temporal[:, 0], spatial)) / interval_scale
+    total_variance = (float(np.sum(real_singular ** 2))
+                      + float(np.sum(imag_singular ** 2)))
+    discarded = (float(np.sum(real_singular[3:] ** 2))
+                 + float(np.sum(imag_singular[1:] ** 2)))
+    observer_leak = math.sqrt(discarded / total_variance) if total_variance else 0.0
+
+    copies = {}
+    for chart in charts.values():
+        for vertex, point in chart.items():
+            copies.setdefault(vertex, []).append(point)
+    dispersions = []
+    for points in copies.values():
+        if len(points) < 2:
+            continue
+        points = np.asarray(points, dtype=complex)
+        mean = points.mean(axis=0)
+        dispersions.append(float(np.mean(np.sum(np.abs(points - mean) ** 2,
+                                                axis=1))))
+    closure = (math.sqrt(float(np.mean(dispersions))) / interval_scale
+               if dispersions else 0.0)
+    local = (math.sqrt(float(np.mean(np.square(local_residuals))))
+             / (interval_scale ** 2) if local_residuals else 0.0)
+    return {
+        "cells": cells,
+        "dual_edges": sorted(normalized_dual_edges),
+        "phase": phase,
+        "off_axis": off_axis,
+        "signatures": signatures,
+        "signature_names": signature_names,
+        "physical": physical,
+        "local_residual": local,
+        "closure_residual": closure,
+        "observer_leak": observer_leak,
+        "interval_scale": interval_scale,
+        "root_cells": roots,
+    }
+
+
+def _develop_spacetime(st):
+    """Read a live complex and return its developed-spacetime dual data."""
+    cells = [tuple(sorted(vertex.getId() for vertex in cell.getVertices()))
+             for cell in st.getTopSimplices()]
+    intervals = {}
+    for edge in st.getEdgeList().toVector():
+        first, second = edge.getSource().getId(), edge.getTarget().getId()
+        intervals[tuple(sorted((first, second)))] = complex(edge.getLength() ** 2)
+    rows, columns, _size = st.getDualAdjacency()
+    return _develop_spacetime_data(cells, intervals, zip(rows, columns))
+
+
 def _next_run_index(*directories):
     """The run index for THIS run: one more than the highest already present.
 
@@ -421,6 +728,70 @@ class _StableLayout:
         """The most recently computed view bbox, WITHOUT advancing the easing —
         for a second panel that shares the primal panel's frame (calling `view`
         again in the same frame would double-step the ease)."""
+        return self._view
+
+
+class _StableSpacetimeLayout:
+    """Keep the observer's spatial frame and time orientation stable across frames."""
+
+    def __init__(self, ease=0.3, view_ease=0.25, pad=0.15):
+        self._prev = None       # top-cell tuple -> [t, x, y, z]
+        self._view = None       # [xlo, xhi, ylo, yhi, tlo, thi]
+        self.ease = ease
+        self.view_ease = view_ease
+        self.pad = pad
+
+    def coords(self, cells, physical):
+        current = {tuple(cell): np.asarray(point, dtype=float)
+                   for cell, point in zip(cells, physical)}
+        if not current:
+            self._prev = {}
+            return self._prev
+        if self._prev is None:
+            self._prev = current
+            return self._prev
+        shared = [cell for cell in current if cell in self._prev]
+        aligned = current
+        if len(shared) >= 2:
+            now = np.asarray([current[cell] for cell in shared])
+            before = np.asarray([self._prev[cell] for cell in shared])
+            now_mean, before_mean = now.mean(axis=0), before.mean(axis=0)
+            now0, before0 = now - now_mean, before - before_mean
+            time_sign = -1.0 if np.dot(now0[:, 0], before0[:, 0]) < 0.0 else 1.0
+            u, _singular, vt = np.linalg.svd(now0[:, 1:].T @ before0[:, 1:])
+            rotation = u @ vt
+            aligned = {}
+            for cell, point in current.items():
+                result = np.empty(4, dtype=float)
+                result[0] = ((point[0] - now_mean[0]) * time_sign
+                             + before_mean[0])
+                result[1:] = ((point[1:] - now_mean[1:]) @ rotation
+                              + before_mean[1:])
+                aligned[cell] = result
+        eased = {}
+        for cell, target in aligned.items():
+            previous = self._prev.get(cell)
+            eased[cell] = (target if previous is None
+                           else previous + self.ease * (target - previous))
+        self._prev = eased
+        return eased
+
+    def view(self, coords):
+        if not coords:
+            return (-1.0, 1.0, -1.0, 1.0, -1.0, 1.0)
+        points = np.asarray(list(coords.values()), dtype=float)
+        shown = points[:, [1, 2, 0]]                 # x, y, t
+        low, high = shown.min(axis=0), shown.max(axis=0)
+        span = np.maximum(high - low, 1e-6)
+        padding = self.pad * max(float(span.max()), 1e-6)
+        box = [low[0] - padding, high[0] + padding,
+               low[1] - padding, high[1] + padding,
+               low[2] - padding, high[2] + padding]
+        if self._view is None:
+            self._view = box
+        else:
+            self._view = [old + self.view_ease * (new - old)
+                          for old, new in zip(self._view, box)]
         return self._view
 
 
@@ -528,6 +899,7 @@ class ProtonAnimator:
                      "pair_src": [], "spec_frame": []}
         self._boundaries = []       # step indices where a later node begins (trace markers)
         self._layouts = [_StableLayout() for _ in nodes]   # one per complex panel
+        self._spacetime_layouts = [_StableSpacetimeLayout() for _ in nodes]
         self._active = 0            # index of the node currently being driven
         self._done = False          # so the verdict is announced exactly once
         # node_index -> (frame_computed, curvature map, sorted top-cell signature)
@@ -543,6 +915,7 @@ class ProtonAnimator:
         self._drawn_spec_node = None
         self._drawn_nodes = set()
         self._last_coords = {}
+        self._last_developments = {}
 
     @staticmethod
     def _make_schedule(n_nodes, init_steps, init_chunk, evolve_steps, evolve_chunk):
@@ -899,17 +1272,18 @@ class ProtonAnimator:
         from matplotlib.cm import ScalarMappable
         from matplotlib.colors import Normalize
         # One node per row: [traces | primal complex | Re-curvature dual | Im-curvature
-        # dual]. The two dual panels split the COMPLEX Lorentzian deficit into neutral
-        # algebraic channels. A spatial/temporal interpretation is only valid after the
-        # intervals lie on the real Lorentzian locus. The grid is node-count-generic (the
-        # joint single-node drive gets one panel row; the two-step keeps its two) with the
-        # metrics/register traces always on rows 0/1 of column 0.
+        # dual | developed spacetime dual]. The first dual pair preserves the exact
+        # complex algebraic curvature channels on the 2-D topology map. The final panel
+        # independently develops the Regge intervals into a 3+1 atlas and shows an
+        # observer's 2+1 projection, with mixed signatures exposed rather than hidden.
+        # The grid is node-count-generic (the joint single-node drive gets one panel row;
+        # the two-step keeps its two) with metrics/register traces on rows 0/1, column 0.
         n_nodes = len(self.nodes)
         # Single-node runs get a THIRD row so the two mode-localization panels
         # stack in one column (near-kernel tail above, near-null head below);
         # multi-node grids use every row for complexes and skip the extras.
         n_rows = 3 if n_nodes == 1 else max(2, n_nodes)
-        self.fig, axes = plt.subplots(n_rows, 4, figsize=(21, 4.5 * n_rows),
+        self.fig, axes = plt.subplots(n_rows, 5, figsize=(26, 4.5 * n_rows),
                                       squeeze=False)
         self.axm = axes[0][0]                                # metrics trace
         self.axr = axes[1][0]                                # register trace
@@ -918,6 +1292,12 @@ class ProtonAnimator:
         self._primal_axes = [axes[i][1] for i in range(n_nodes)]
         self._re_axes = [axes[i][2] for i in range(n_nodes)]
         self._im_axes = [axes[i][3] for i in range(n_nodes)]
+        self._spacetime_axes = []
+        for row in range(n_nodes):
+            subplotspec = axes[row][4].get_subplotspec()
+            axes[row][4].remove()
+            self._spacetime_axes.append(
+                self.fig.add_subplot(subplotspec, projection="3d"))
         # A single-node run leaves rows 1-2's panels free: claim row 1 for the
         # null-face proximity trace, the rolling singular-value spectrum, and
         # the near-kernel mode localization; row 2 for the broken-pair count
@@ -938,7 +1318,7 @@ class ProtonAnimator:
         extras = (self.ax_null, self.ax_spec, self.ax_mode,
                   self.ax_pair_trace, self.ax_pair, self.ax_mode_head)
         for row in range(n_nodes, n_rows):
-            for column in (1, 2, 3):
+            for column in (1, 2, 3, 4):
                 if any(ax is not None and axes[row][column] is ax
                        for ax in extras):
                     continue
@@ -1169,7 +1549,7 @@ class ProtonAnimator:
         return f"  (heat frame {cached[0]})"
 
     def _dump_frame(self, frame, coords_by_node):
-        """Write this frame's dual-curvature panels as data, so a claim about the
+        """Write this frame's dual-curvature and developed-spacetime panels as data, so a claim about the
         picture (e.g. "Re ε and Im ε run perpendicular around frame 200") can be
         checked numerically instead of by eye — reaching frame ~200 takes hours,
         so the frame must be recoverable without re-running.
@@ -1216,6 +1596,9 @@ class ProtonAnimator:
                                  float(np.mean([p[1] for p in here]))]
                                 if here else [None, None])
             rows, cols, _n = st.getDualAdjacency()
+            development = self._last_developments.get(ni, {})
+            shown_physical = np.asarray(
+                development.get("shown_physical", np.empty((0, 4))), dtype=float)
             payload["nodes"].append({
                 "label": label,
                 "active": ni == self._active,
@@ -1234,6 +1617,29 @@ class ProtonAnimator:
                 "dual_positions": dual_pos,
                 "dual_adjacency": [list(map(int, rows)), list(map(int, cols))],
                 "heat_frame": heat_frame,  # frame the heat was computed on
+                # The metric-derived panel, deliberately separate from the
+                # graph-MDS `dual_positions` above. Coordinates are [t,x,y,z]
+                # in the stabilized observer atlas; the screen plots x,y,t.
+                "developed_coordinates_3plus1": shown_physical.tolist(),
+                "developed_positions_xyt": (
+                    shown_physical[:, [1, 2, 0]].tolist()
+                    if shown_physical.size else []),
+                "developed_signatures": [list(signature) for signature in
+                                           development.get("signatures", [])],
+                "developed_signature_names": development.get(
+                    "signature_names", []),
+                "interval_axis_phase_degrees": math.degrees(
+                    development.get("phase", 0.0)),
+                "wick_rotation_degrees": -math.degrees(
+                    development.get("phase", 0.0)),
+                "wick_off_axis_rms": development.get("off_axis", 0.0),
+                "development_local_residual": development.get(
+                    "local_residual", 0.0),
+                "development_closure_residual": development.get(
+                    "closure_residual", 0.0),
+                "development_observer_leak": development.get(
+                    "observer_leak", 0.0),
+                "development_root_cells": development.get("root_cells", []),
             })
         path = os.path.join(
             self._dump_dir, f"frame_{frame:04d}{self._runSuffix()}.json")
@@ -1299,6 +1705,86 @@ class ProtonAnimator:
         ax.set_title(f"{title}  ({n} top cells){self._curvature_age_tag(node_index)}",
                      fontsize=9)
         ax.set_xticks([]); ax.set_yticks([])
+
+    def _draw_spacetime_dual(self, ax, node_index):
+        """Develop and draw the dual in an observer's ``(x,y,t)`` projection.
+
+        Unlike `_draw_dual`, no coordinate in this panel comes from graph MDS.
+        Complex Regge intervals are globally de-rotated, simplex charts are
+        glued through their tetrahedral facets, and their complex circumcenters
+        supply three real spatial axes plus one imaginary time axis.  Only two
+        spatial axes fit on screen; the observer leakage reports how much of the
+        atlas does not fit the 3-real + 1-imaginary split.
+        """
+        development = _develop_spacetime(self.nodes[node_index][0].st)
+        stable = self._spacetime_layouts[node_index].coords(
+            development["cells"], development["physical"])
+        development["shown_physical"] = np.asarray(
+            [stable[cell] for cell in development["cells"]], dtype=float)
+        self._last_developments[node_index] = development
+
+        ax.clear()
+        styles = {
+            "lorentzian": ("C0", "o", "Lorentzian"),
+            "euclidean": ("0.55", "o", "Euclidean"),
+            "split": ("C3", "X", "split signature"),
+            "degenerate": ("C1", "s", "degenerate"),
+            "unrealizable": ("C5", "D", "unrealizable"),
+        }
+        for first, second in development["dual_edges"]:
+            a = stable.get(development["cells"][first])
+            b = stable.get(development["cells"][second])
+            if a is None or b is None:
+                continue
+            physical_link = (development["signature_names"][first] == "lorentzian"
+                             and development["signature_names"][second] == "lorentzian")
+            ax.plot([a[1], b[1]], [a[2], b[2]], [a[0], b[0]],
+                    color="0.45" if physical_link else "0.72",
+                    lw=0.9 if physical_link else 0.55,
+                    ls="-" if physical_link else "--", alpha=0.8, zorder=1)
+        for name, (color, marker, label) in styles.items():
+            cells = [cell for cell, kind in zip(development["cells"],
+                                                development["signature_names"])
+                     if kind == name]
+            if not cells:
+                continue
+            points = np.asarray([stable[cell] for cell in cells])
+            ax.scatter(points[:, 1], points[:, 2], points[:, 0], s=25,
+                       c=color, marker=marker, edgecolors="white", linewidths=0.35,
+                       depthshade=True, label=f"{label} ({len(cells)})", zorder=2)
+        root_cells = [development["cells"][index]
+                      for index in development["root_cells"]]
+        if root_cells:
+            points = np.asarray([stable[cell] for cell in root_cells])
+            ax.scatter(points[:, 1], points[:, 2], points[:, 0], s=58,
+                       facecolors="none", edgecolors="black", marker="o",
+                       linewidths=0.8, depthshade=False, label="atlas root", zorder=3)
+        view = self._spacetime_layouts[node_index].view(stable)
+        ax.set_xlim(view[0], view[1])
+        ax.set_ylim(view[2], view[3])
+        ax.set_zlim(view[4], view[5])
+        ax.set_xlabel("x / √|ℓ²|", fontsize=7, labelpad=1)
+        ax.set_ylabel("y / √|ℓ²|", fontsize=7, labelpad=1)
+        ax.set_zlabel("t / √|ℓ²|", fontsize=7, labelpad=1)
+        ax.tick_params(labelsize=6, pad=0)
+        ax.set_box_aspect((1.0, 1.0, 0.85))
+        ax.view_init(elev=22, azim=-55)
+        phase_degrees = math.degrees(development["phase"])
+        counts = {name: development["signature_names"].count(name)
+                  for name in styles}
+        defects = (counts["split"] + counts["degenerate"]
+                   + counts["unrealizable"])
+        ax.set_title(
+            "developed spacetime dual — 2+1 observer view\n"
+            f"Wick {-phase_degrees:+.1f}° · off-axis "
+            f"{100.0 * development['off_axis']:.1f}% · observer leak "
+            f"{100.0 * development['observer_leak']:.0f}%\n"
+            f"L/E/X {counts['lorentzian']}/{counts['euclidean']}/{defects} · "
+            f"closure {development['closure_residual']:.2g}",
+            fontsize=7.5)
+        if stable:
+            ax.legend(loc="upper left", fontsize=5.5, framealpha=0.65,
+                      borderpad=0.25, handletextpad=0.2)
 
     def _set_spectra_title(self, ax, base):
         """Title a spectra panel, remembering the untagged text. These panels
@@ -1498,6 +1984,7 @@ class ProtonAnimator:
                             0, _HEAT_CMAP, "dual — Re curvature channel")
             self._draw_dual(self._im_axes[ni], self._im_sms[ni], ni, coords,
                             1, _HEAT_CMAP_IM, "dual — Im curvature channel")
+            self._draw_spacetime_dual(self._spacetime_axes[ni], ni)
         # Dumped AFTER the panels draw, so the cached curvature is exactly what
         # was rendered. A dump failure must not kill a multi-hour run.
         if self._dump_dir:
