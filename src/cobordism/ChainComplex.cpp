@@ -1042,7 +1042,40 @@ std::vector<int> ChainComplex::endSignCovector(
   return sigma;
 }
 
-std::vector<int> ChainComplex::orientationCovector(
+bool OrientationLocalSystem::orientable() const noexcept {
+  return std::all_of(transitions.begin(), transitions.end(),
+                     [](const OrientationTransition &transition) {
+                       return transition.holonomy == 1;
+                     });
+}
+
+std::vector<int> OrientationLocalSystem::holonomies() const {
+  std::vector<int> result;
+  result.reserve(transitions.size());
+  for (const auto &transition : transitions)
+    result.push_back(transition.holonomy);
+  return result;
+}
+
+std::vector<double> OrientationLocalSystem::connectionLaplacian() const {
+  const std::size_t count = cells.size();
+  std::vector<double> result(count * count, 0.0);
+  for (const auto &transition : transitions) {
+    const std::size_t a = transition.first;
+    const std::size_t b = transition.second;
+    if (a >= count || b >= count)
+      throw std::runtime_error(
+          "OrientationLocalSystem::connectionLaplacian: transition index "
+          "outside the cell ordering");
+    result[a * count + a] += 1.0;
+    result[b * count + b] += 1.0;
+    result[a * count + b] -= static_cast<double>(transition.transport);
+    result[b * count + a] -= static_cast<double>(transition.transport);
+  }
+  return result;
+}
+
+OrientationLocalSystem ChainComplex::orientationLocalSystem(
     const std::vector<std::vector<std::uint64_t>> &topCells) {
   using Cell = std::vector<std::uint64_t>;
   const auto joinIds = [](const Cell &c) {
@@ -1053,7 +1086,8 @@ std::vector<int> ChainComplex::orientationCovector(
     }
     return out + ")";
   };
-  if (topCells.empty()) return {};
+  OrientationLocalSystem result;
+  if (topCells.empty()) return result;
 
   // Sorted-unique cells: the canonical C_d column order, so the returned
   // covector aligns with orientedTopSimplices() / kSimplexVertices(dim) and is
@@ -1063,7 +1097,7 @@ std::vector<int> ChainComplex::orientationCovector(
   for (const auto &raw : topCells) {
     if (raw.size() != nv)
       throw std::runtime_error(
-          "ChainComplex::orientationCovector: cell " + joinIds(raw) + " has " +
+          "ChainComplex::orientationLocalSystem: cell " + joinIds(raw) + " has " +
           std::to_string(raw.size()) + " vertices, expected " +
           std::to_string(nv) + " (one dimension throughout)");
     Cell c = raw;
@@ -1071,6 +1105,7 @@ std::vector<int> ChainComplex::orientationCovector(
     uniq.insert(std::move(c));
   }
   const std::vector<Cell> cells(uniq.begin(), uniq.end());
+  result.cells = cells;
 
   // facet -> its cofaces as (cell index, boundary sign): facet j of a sorted
   // cell drops vertex j and carries (-1)^j.
@@ -1086,43 +1121,81 @@ std::vector<int> ChainComplex::orientationCovector(
   for (const auto &[f, at] : cofaces)
     if (at.size() > 2)
       throw std::runtime_error(
-          "ChainComplex::orientationCovector: facet " + joinIds(f) + " has " +
+          "ChainComplex::orientationLocalSystem: facet " + joinIds(f) + " has " +
           std::to_string(at.size()) + " cofaces (not a pseudomanifold)");
 
-  // Orient by propagation: across an interior facet the two induced signs must
-  // cancel (eps_b = -eps_a * s_a * s_b); boundary facets (one coface) impose
-  // nothing. Component roots are the lex-smallest unvisited cells, eps = +1.
+  // The orientation connection on the dual graph. Across an interior facet the
+  // two induced signs must cancel, so eps_b = transport * eps_a with
+  // transport = -s_a*s_b. Boundary facets carry no dual edge.
+  for (const auto &[facet, at] : cofaces) {
+    if (at.size() != 2) continue;
+    auto [a, sa] = at[0];
+    auto [b, sb] = at[1];
+    if (b < a) {
+      std::swap(a, b);
+      std::swap(sa, sb);
+    }
+    result.transitions.push_back(
+        OrientationTransition{a, b, facet, -sa * sb, 1});
+  }
+
+  // Choose a deterministic spanning-forest gauge. Every discovery edge is
+  // trivialized to +1. A non-tree edge is then +1 when the assignment closes
+  // consistently and -1 when it represents orientation-reversing holonomy.
+  std::vector<std::vector<std::size_t>> adjacency(cells.size());
+  for (std::size_t index = 0; index < result.transitions.size(); ++index) {
+    const auto &transition = result.transitions[index];
+    adjacency[transition.first].push_back(index);
+    adjacency[transition.second].push_back(index);
+  }
+
   std::vector<int> eps(cells.size(), 0);
   for (std::size_t root = 0; root < cells.size(); ++root) {
     if (eps[root] != 0) continue;
+    ++result.components;
     eps[root] = 1;
     std::vector<std::size_t> stack{root};
     while (!stack.empty()) {
       const std::size_t a = stack.back();
       stack.pop_back();
-      for (std::size_t j = 0; j < nv; ++j) {
-        Cell f;
-        f.reserve(nv - 1);
-        for (std::size_t i = 0; i < nv; ++i)
-          if (i != j) f.push_back(cells[a][i]);
-        const int sa = (j % 2 == 0) ? 1 : -1;
-        for (const auto &[b, sb] : cofaces.at(f)) {
-          if (b == a) continue;
-          const int want = -eps[a] * sa * sb;
-          if (eps[b] == 0) {
-            eps[b] = want;
-            stack.push_back(b);
-          } else if (eps[b] != want) {
-            throw std::runtime_error(
-                "ChainComplex::orientationCovector: orientation propagation "
-                "contradicts itself at facet " + joinIds(f) +
-                " (the complex is non-orientable)");
-          }
+      for (const std::size_t transitionIndex : adjacency[a]) {
+        const auto &transition = result.transitions[transitionIndex];
+        const std::size_t b = transition.first == a ? transition.second
+                                                     : transition.first;
+        const int want = transition.transport * eps[a];
+        if (eps[b] == 0) {
+          eps[b] = want;
+          stack.push_back(b);
         }
       }
     }
   }
-  return eps;
+  result.trivialization = std::move(eps);
+  for (auto &transition : result.transitions)
+    transition.holonomy =
+        result.trivialization[transition.first] * transition.transport *
+        result.trivialization[transition.second];
+  return result;
+}
+
+std::vector<int> ChainComplex::orientationCovector(
+    const std::vector<std::vector<std::uint64_t>> &topCells) {
+  const OrientationLocalSystem localSystem = orientationLocalSystem(topCells);
+  const auto joinIds = [](const std::vector<std::uint64_t> &cell) {
+    std::string out = "(";
+    for (std::size_t i = 0; i < cell.size(); ++i) {
+      if (i) out += ",";
+      out += std::to_string(cell[i]);
+    }
+    return out + ")";
+  };
+  for (const auto &transition : localSystem.transitions)
+    if (transition.holonomy == -1)
+      throw std::runtime_error(
+          "ChainComplex::orientationCovector: orientation propagation "
+          "contradicts itself at facet " + joinIds(transition.facet) +
+          " (the complex is non-orientable)");
+  return localSystem.trivialization;
 }
 
 }  // namespace tessera::cobordism

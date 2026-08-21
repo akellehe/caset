@@ -610,6 +610,44 @@ std::vector<std::complex<double>> HodgeLaplacian::weights(int k) const {
   return simplexWeights(orderedFaces(*st_), k, m, /*metric=*/true, weightConvention_);
 }
 
+OrientationLocalSystem HodgeLaplacian::orientationLocalSystem() const {
+  if (!st_) return {};
+  const ChainComplex chain = ChainComplex::fromSpacetime(*st_);
+  return ChainComplex::orientationLocalSystem(chain.orientedTopSimplices());
+}
+
+std::vector<std::complex<double>>
+HodgeLaplacian::orientationConnectionLaplacian() const {
+  const std::vector<double> real = orientationLocalSystem().connectionLaplacian();
+  std::vector<std::complex<double>> result;
+  result.reserve(real.size());
+  for (const double entry : real) result.emplace_back(entry, 0.0);
+  return result;
+}
+
+std::vector<std::complex<double>>
+HodgeLaplacian::orientationContentSection() const {
+  if (!st_) return {};
+  const OrientationLocalSystem orientation = orientationLocalSystem();
+  std::map<Face, cd> principalByCell;
+  for (const auto &simplex : st_->getTopSimplices()) {
+    if (!simplex) continue;
+    principalByCell[sortedIds(simplex)] = simplex->volume();
+  }
+
+  std::vector<cd> result(orientation.cells.size(), cd{0.0, 0.0});
+  for (std::size_t index = 0; index < orientation.cells.size(); ++index) {
+    const auto found = principalByCell.find(orientation.cells[index]);
+    if (found == principalByCell.end())
+      throw std::runtime_error(
+          "HodgeLaplacian::orientationContentSection: canonical top cell has "
+          "no simplex");
+    result[index] =
+        static_cast<double>(orientation.trivialization[index]) * found->second;
+  }
+  return result;
+}
+
 std::vector<std::complex<double>> HodgeLaplacian::laplacianGradient(
     int k, std::uint64_t ea, std::uint64_t eb) const {
   if (k < 1 || !st_) return {};

@@ -422,25 +422,38 @@ class Simplex {
     /// value a real return type could represent.
     [[nodiscard]] std::complex<double> area() const;
 
-    /// Signed d-content (volume) of this simplex on the honest,
-    /// signature-respecting geometry: sign(det G) * sqrt(|det G|) / d!, with G
-    /// the non-Wick-rotated ``gramMatrix`` and d = size() - 1. For a Euclidean
-    /// (all-spacelike) simplex this is the ordinary positive volume; a
-    /// Lorentzian cell whose tangent metric has a negative Gram determinant
-    /// returns a negative content, recording the signature rather than
-    /// discarding it the way |l^2| would.
+    /// Complex d-content of this simplex on the honest, signature-respecting
+    /// geometry:
+    /// \f[ V = \frac{\sqrt{\det G}}{d!}, \qquad d=\text{size()}-1, \f]
+    /// with \f$G\f$ the non-Wick-rotated `gramMatrix()` and `std::sqrt` selecting
+    /// the principal complex square root **pointwise**. A Euclidean
+    /// (all-spacelike) simplex therefore has the ordinary positive volume; a
+    /// real Lorentzian Gram determinant \f$\det G<0\f$ gives positive-imaginary
+    /// content \f$+i\sqrt{|\det G|}/d!\f$, not a negative real number.
+    ///
+    /// This value carries causal phase but not an induced simplex orientation:
+    /// \f$\det G\f$ is unchanged by reversing the reference basis. The other
+    /// square-root sheet is \f$-V\f$. Callers needing a coherent oriented field
+    /// over many simplices must transport that sign with the orientation local
+    /// system; callers following a geometry path must additionally continue the
+    /// lift across accepted steps. `cobordism::ContentBranchTracker` provides
+    /// that experimental path lift. Squaring this result removes both sheets:
+    /// \f$V^2=\det G/(d!)^2\f$.
     [[nodiscard]] std::complex<double> volume() const;
 
-    /// Exact analytic gradient of this simplex's **signed `volume()`** with respect
-    /// to the squared length of each of its edges:
+    /// Exact analytic gradient of this simplex's complex `volume()` on its
+    /// currently selected local square-root sheet, with respect to the squared
+    /// length of each edge:
     /// \f$ \partial V / \partial \ell^2_e \f$, returned as an edge-keyed map (sorted
     /// `(a,b)` ids). By Jacobi's formula on the Gram determinant
-    /// (\f$ V = \mathrm{sgn}\,\sqrt{|\det G|}/d! \f$, \f$ G \f$ linear in \f$ \ell^2 \f$):
+    /// (\f$ V = \sqrt{\det G}/d! \f$, \f$ G \f$ linear in \f$ \ell^2 \f$):
     /// \f$ \partial V/\partial\ell^2_e = \tfrac{V}{2}\,\mathrm{tr}(G^{-1}\,\partial_e G) \f$,
     /// the same machinery (`gramMatrix`/`determinant`/`cofactorMatrix`) the
-    /// circumcentric `dualVolumeGradient` (#354) uses. This is the per-degree
-    /// **Hodge inner-product weight** gradient (the weights \f$ W_k \f$ are signed
-    /// simplex volumes), the keystone for an arbitrary-degree analytic
+    /// circumcentric `dualVolumeGradient` (#354) uses. It is defined away from
+    /// \f$\det G=0\f$; crossing a branch cut requires transporting the lift, not
+    /// changing this local derivative formula (the opposite sheet negates both
+    /// \f$V\f$ and its derivative). This is the per-degree Hodge weight gradient,
+    /// the keystone for an arbitrary-degree analytic
     /// \f$ \partial L_k/\partial\ell^2 \f$ and hence the general-k \f$ r_U \f$ gradient.
     [[nodiscard]] std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>>
     volumeGradient() const;

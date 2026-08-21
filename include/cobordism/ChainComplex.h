@@ -4,6 +4,7 @@
 #ifndef TESSERA_COBORDISM_CHAINCOMPLEX_H
 #define TESSERA_COBORDISM_CHAINCOMPLEX_H
 
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <string>
@@ -14,6 +15,55 @@
 namespace tessera::spacetime { class Spacetime; }
 namespace tessera::cobordism {
 using namespace ::tessera::spacetime;
+
+/// One unoriented edge of the dual top-cell adjacency graph, carrying the
+/// orientation-line transition across the shared facet.
+///
+/// If top cells `first` and `second` use the canonical increasing-vertex
+/// orientation, a local orientation section obeys
+/// \f$ \varepsilon_{\mathrm{second}} =
+///     \text{transport}\,\varepsilon_{\mathrm{first}} \f$.
+/// `transport` is always \f$\pm1\f$. `holonomy` is the same transition after
+/// the canonical spanning-forest trivialization: tree edges are \f$+1\f$;
+/// a \f$-1\f$ non-tree edge closes an orientation-reversing loop. The location
+/// of a negative representative depends on the chosen tree, while its loop
+/// class does not.
+struct OrientationTransition {
+    std::size_t first{0};
+    std::size_t second{0};
+    std::vector<std::uint64_t> facet{};
+    int transport{1};
+    int holonomy{1};
+};
+
+/// The orientation line bundle of a pure simplicial pseudomanifold, represented
+/// as a flat \f$\mathbb Z_2\f$ local system on its dual adjacency graph.
+///
+/// `cells` is the sorted-unique canonical top-cell order. `trivialization`
+/// assigns \f$\pm1\f$ to every cell by deterministic spanning-forest transport;
+/// on an orientable component it is exactly the corresponding component of
+/// `ChainComplex::orientationCovector()`. Unlike that covector this object also
+/// exists on a non-orientable complex: inconsistent non-tree transitions are
+/// retained as `holonomy == -1`, rather than causing rejection. `components`
+/// counts dual-graph components.
+///
+/// `connectionLaplacian()` returns the flat row-major covariant graph Hodge
+/// Laplacian
+/// \f[ (L_{w_1})_{aa}=\deg a,\qquad
+///     (L_{w_1})_{ab}=-g_{ab}, \f]
+/// where \f$g_{ab}=\pm1\f$ is the transition. Its kernel consists of global
+/// parallel orientation sections: one zero mode per orientable connected
+/// component and none on a component with orientation-reversing holonomy.
+struct OrientationLocalSystem {
+    std::vector<std::vector<std::uint64_t>> cells{};
+    std::vector<int> trivialization{};
+    std::vector<OrientationTransition> transitions{};
+    std::size_t components{0};
+
+    [[nodiscard]] bool orientable() const noexcept;
+    [[nodiscard]] std::vector<int> holonomies() const;
+    [[nodiscard]] std::vector<double> connectionLaplacian() const;
+};
 
 /// # ChainComplex
 ///
@@ -166,6 +216,18 @@ class ChainComplex {
     ///   orientation propagation contradicts itself (non-orientable) — exactly
     ///   the conditions a surgical cone must never silently introduce.
     [[nodiscard]] static std::vector<int> orientationCovector(
+        const std::vector<std::vector<std::uint64_t>> &topCells);
+
+    /// The orientation line bundle/local system of a whole top-cell complex.
+    /// It uses the same facet signs and canonical component roots as
+    /// orientationCovector(), but does **not** require a global orientation:
+    /// propagation contradictions are returned as \f$-1\f$ transition
+    /// holonomies. This is the obstruction-preserving input for a covariant
+    /// Hodge operator; orientability is a property of the result, not a gate.
+    /// Empty input returns the empty, orientable local system.
+    /// @throws std::runtime_error if the cells are not all of one dimension or
+    ///   a facet has more than two cofaces (not a pseudomanifold).
+    [[nodiscard]] static OrientationLocalSystem orientationLocalSystem(
         const std::vector<std::vector<std::uint64_t>> &topCells);
 
     /// The symmetric intersection form \f$ Q_{ij} = \langle \alpha_i \cup

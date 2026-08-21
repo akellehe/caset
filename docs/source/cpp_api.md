@@ -165,6 +165,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} HodgeLaplacian.h
 ```
+```{doxygenfile} ContentBranchTracker.h
+```
 ```{doxygenfile} IntegerLinalg.h
 ```
 ```{doxygenfile} EigenstateSynthesis.h

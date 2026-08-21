@@ -16,6 +16,7 @@
 #include "cobordism/Characteristic.h"
 #include "cobordism/Cochain.h"
 #include "cobordism/CombinatorialDimension.h"
+#include "cobordism/ContentBranchTracker.h"
 #include "cobordism/CobordismDAG.h"
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/MultiCobordism.h"
@@ -58,6 +59,61 @@ Spacetime's declared metric dimension.)doc")
            "Return the combinatorial dimension of the given Spacetime as a double.");
 
   // ----- Homology backbone (#64): chain complex + exact linear algebra -----
+
+  py::class_<OrientationTransition>(m, "OrientationTransition",
+      "One Z2 orientation-connection link between adjacent top cells.")
+      .def_readonly("first", &OrientationTransition::first)
+      .def_readonly("second", &OrientationTransition::second)
+      .def_readonly("facet", &OrientationTransition::facet)
+      .def_readonly("transport", &OrientationTransition::transport)
+      .def_readonly("holonomy", &OrientationTransition::holonomy);
+
+  py::class_<OrientationLocalSystem>(m, "OrientationLocalSystem",
+      R"doc(The orientation line bundle as a flat Z2 connection on the dual
+top-cell graph. It exists even when no global orientation covector does:
+orientation-reversing loops remain as -1 holonomy instead of being rejected.)doc")
+      .def_readonly("cells", &OrientationLocalSystem::cells)
+      .def_readonly("trivialization", &OrientationLocalSystem::trivialization)
+      .def_readonly("transitions", &OrientationLocalSystem::transitions)
+      .def_readonly("components", &OrientationLocalSystem::components)
+      .def_property_readonly("orientable", &OrientationLocalSystem::orientable)
+      .def("holonomies", &OrientationLocalSystem::holonomies)
+      .def("connectionLaplacian",
+           &OrientationLocalSystem::connectionLaplacian,
+           "Flat row-major Z2-covariant Laplacian on the dual top-cell graph.");
+
+  py::class_<ContentBranchSnapshot>(m, "ContentBranchSnapshot",
+      "An immutable accepted-step lift of top-cell contents and its Z2 connection.")
+      .def_readonly("cells", &ContentBranchSnapshot::cells)
+      .def_readonly("contents", &ContentBranchSnapshot::contents)
+      .def_readonly("orientation", &ContentBranchSnapshot::orientation)
+      .def_readonly("continued_cells", &ContentBranchSnapshot::continuedCells)
+      .def_readonly("seeded_cells", &ContentBranchSnapshot::seededCells)
+      .def_readonly("principal_branch_flips",
+                    &ContentBranchSnapshot::principalBranchFlips)
+      .def_readonly("ambiguous_cells", &ContentBranchSnapshot::ambiguousCells);
+
+  py::class_<ContentBranchTracker>(m, "ContentBranchTracker",
+      R"doc(Path lift for V -> V^2 on top-simplex contents.
+
+Call update only after an optimizer step is accepted. Mutating branch history
+while evaluating rejected/out-of-order trial points would make the objective
+path-dependent and invalidate its gradient.)doc")
+      .def(py::init<>())
+      .def("reset", &ContentBranchTracker::reset)
+      .def_property_readonly("initialized", &ContentBranchTracker::initialized)
+      .def("update",
+           [](ContentBranchTracker &tracker,
+              const std::shared_ptr<Spacetime> &spacetime) {
+             if (!spacetime)
+               throw std::runtime_error(
+                   "ContentBranchTracker.update: spacetime is null");
+             return tracker.update(*spacetime);
+           },
+           py::arg("spacetime"),
+           "Lift the current accepted top-cell contents and store the snapshot.")
+      .def_property_readonly("snapshot", &ContentBranchTracker::snapshot,
+                             py::return_value_policy::reference_internal);
 
   py::class_<ChainComplex>(m, "ChainComplex",
       R"doc(Simplicial chain complex of a triangulation.
@@ -136,6 +192,12 @@ numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and th
           "combinatorially, independent of geometry, vertex labels, and input "
           "order. Raises on mixed-dimension cells, a facet with > 2 cofaces, "
           "or a non-orientable propagation contradiction.")
+      .def_static(
+          "orientationLocalSystem", &ChainComplex::orientationLocalSystem,
+          py::arg("top_cells"),
+          "The non-throwing orientation line bundle on the dual top-cell "
+          "graph. Non-orientability is retained as -1 transition holonomy; "
+          "mixed dimensions and non-pseudomanifold facets still raise.")
       .def("intersectionForm", &ChainComplex::intersectionForm,
            "Symmetric intersection form on free H^2 (flat b2 x b2), for a closed "
            "oriented 4-manifold; empty if n != 4 or b2 == 0.")
@@ -321,6 +383,19 @@ Euclidean spectrum/kernel.)doc")
            "column order: the per-k-simplex SIGNED complex volume (W_0 = I). A "
            "Lorentzian cell's content is imaginary. Empty for k<0 or k above "
            "the top dimension.")
+      .def("orientationLocalSystem",
+           &HodgeLaplacian::orientationLocalSystem,
+           "Orientation line bundle consumed by the experimental dual "
+           "connection sector; non-orientable holonomy is preserved.")
+      .def("orientationConnectionLaplacian",
+           &HodgeLaplacian::orientationConnectionLaplacian,
+           "Flat row-major Z2-covariant Hodge Laplacian on top-cell dual "
+           "adjacency. Its zero modes are global parallel orientations.")
+      .def("orientationContentSection",
+           &HodgeLaplacian::orientationContentSection,
+           "Principal top-cell contents lifted into the canonical local "
+           "orientation gauge. Interpret with orientationLocalSystem; use "
+           "ContentBranchTracker for accepted-step temporal continuation.")
       .def("laplacianGradient", &HodgeLaplacian::laplacianGradient, py::arg("k"),
            py::arg("edgeA"), py::arg("edgeB"),
            "Exact analytic dL_k^sym/dl^2_e of the symmetric metric Hodge Laplacian "

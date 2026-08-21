@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "cobordism/ChainComplex.h"
 #include "cobordism/Cochain.h"
 #include "cobordism/Spectrum.h"
 
@@ -182,6 +183,37 @@ class HodgeLaplacian {
     /// are the **signed** `Simplex::volume()` (timelike cells negative; degenerate
     /// cells still fall back to \f$ +1 \f$ so \f$ W_k \f$ stays invertible).
     [[nodiscard]] std::vector<std::complex<double>> weights(int k) const;
+
+    /// The orientation line bundle of the top-cell dual graph. On an
+    /// orientable complex its `trivialization` is exactly
+    /// `ChainComplex::orientationCovector(topCells)`; on a non-orientable
+    /// complex the same local propagation is retained and the obstruction is
+    /// recorded by negative transition holonomies instead of throwing.
+    ///
+    /// This is intentionally separate from the diagonal metric weights. A raw
+    /// multiplication \f$W_d\mapsto\operatorname{diag}(\varepsilon)W_d\f$
+    /// would depend on the arbitrary component-root sign. Orientation belongs
+    /// in the covariant derivative/connection, where a change of local simplex
+    /// orientation acts by similarity and leaves the spectrum invariant.
+    [[nodiscard]] OrientationLocalSystem orientationLocalSystem() const;
+
+    /// The flat row-major covariant degree-zero Hodge Laplacian on the dual
+    /// top-cell adjacency graph, using the \f$\mathbb Z_2\f$ orientation
+    /// connection from `orientationLocalSystem()`. It has one zero mode per
+    /// orientable dual component; an orientation-reversing loop removes that
+    /// parallel section. Empty when there are no top cells.
+    [[nodiscard]] std::vector<std::complex<double>>
+    orientationConnectionLaplacian() const;
+
+    /// Principal complex top-cell contents lifted into the canonical local
+    /// orientation gauge: \f$\widetilde V_t=\varepsilon_t\sqrt{\det G_t}/d!\f$.
+    /// On a non-orientable complex the values are a local section and must be
+    /// interpreted with the transition holonomies; they are not a global
+    /// signed scalar field. For continuity across accepted geometry steps use
+    /// `ContentBranchTracker`, which transports this lift through principal
+    /// square-root cut crossings without changing its covariant observables.
+    [[nodiscard]] std::vector<std::complex<double>>
+    orientationContentSection() const;
 
     /// Exact analytic gradient \f$ \partial L_k^{\text{sym}} / \partial \ell^2_e \f$
     /// of the symmetric metric Hodge Laplacian (\f$ k \ge 1 \f$) with respect to one
