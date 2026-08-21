@@ -29,7 +29,13 @@ struct ContentBranchSnapshot {
     OrientationLocalSystem orientation{};
     std::size_t continuedCells{0};
     std::size_t seededCells{0};
+    /// Cells whose continued lift is the negative of the current canonical
+    /// orientation-times-principal-root seed (a sheet occupancy, not an event
+    /// counter; it may remain nonzero over many accepted steps).
     std::size_t principalBranchFlips{0};
+    /// Continued cells essentially equidistant from both sheets. A nonzero
+    /// value means the accepted step was too large, or passed through zero, for
+    /// nearest-sheet continuation to identify the analytic lift reliably.
     std::size_t ambiguousCells{0};
 };
 
@@ -49,8 +55,9 @@ struct ContentBranchSnapshot {
 /// accepted, then pass/read the immutable snapshot for diagnostics or an
 /// explicitly branch-aware experimental operator.
 ///
-/// Continuation is unambiguous only when accepted steps are fine enough that a
-/// root moves by less than half a turn without passing through zero.
+/// Continuation is faithful only when accepted steps are fine enough that a
+/// root moves by less than a quarter turn (phase \f$<\pi/2\f$), equivalently
+/// its square moves by less than half a turn, without passing through zero.
 class ContentBranchTracker {
   public:
     /// Forget all path history. The next update seeds every cell from the
