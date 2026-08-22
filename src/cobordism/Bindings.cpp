@@ -29,6 +29,7 @@
 #include "cobordism/ProtonIngredients.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
+#include "cobordism/RecursiveQuotient.h"
 #include "cobordism/SurgicalCone.h"
 #include "cobordism/Spectrum.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
@@ -774,6 +775,12 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
   m.def("gf2_span", &gf2Span, py::arg("basis"), py::arg("cols"),
         "All 2^k GF(2) combinations of a basis of k length-cols vectors (first "
         "is the zero vector). For a gf2_nullspace basis, the flat Z2 connections.");
+  m.def("integer_nullspace", &integerNullspace, py::arg("matrix"),
+        py::arg("rows"), py::arg("cols"),
+        "Basis of the rational kernel of an integer matrix as INTEGER vectors "
+        "(exact Gauss-Jordan over Q; coprime entries; nullity == cols - rank). "
+        "Raises OverflowError when the exact elimination would overflow 64-bit "
+        "intermediates -- never rounded.");
 
   py::class_<Inertia>(m, "Inertia")
       .def_readonly("n_pos", &Inertia::nPos)
@@ -1658,4 +1665,363 @@ sums and quasi-free Wick reads on crossover fixtures.)doc")
            py::arg("self_adjoint"), py::arg("tolerance") = 1e-10,
            "Dense-Fock oracle at the spectrum level: dense eigensolve + exact "
            "occupation subset sums for the N-particle sector.");
+
+  // ----- Recursive static/shifted response reduction (#768) -----
+  py::enum_<FiberEmbeddingPolicy>(m, "FiberEmbeddingPolicy",
+      "The declared labeled-sum Gram treatment: carry G exactly, certify "
+      "||G - I|| <= epsilon, or quotient ker G and restate the ranks. Exactly "
+      "one per run; an internal direct sum is never assumed.")
+      .value("CarryGramExactly", FiberEmbeddingPolicy::CarryGramExactly)
+      .value("CertifiedNearIsometry", FiberEmbeddingPolicy::CertifiedNearIsometry)
+      .value("QuotientKernel", FiberEmbeddingPolicy::QuotientKernel);
+
+  py::enum_<RetainedCoordinateKind>(m, "RetainedCoordinateKind",
+      "Why a reduced coordinate was kept: Interface cell, interior Harmonic "
+      "zero mode, Resonant shifted kernel mode, or caller-Selected cell. "
+      "Retained coordinates are never silently deleted.")
+      .value("Interface", RetainedCoordinateKind::Interface)
+      .value("Harmonic", RetainedCoordinateKind::Harmonic)
+      .value("Resonant", RetainedCoordinateKind::Resonant)
+      .value("Selected", RetainedCoordinateKind::Selected);
+
+  py::class_<RecursiveQuotient> recursiveQuotient(m, "RecursiveQuotient",
+      R"doc(Recursive static and shifted response reduction over a declared cell
+partition (#768). Static: the exact supported response
+L_eff = L_BB - L_BI L_II^+ L_IB by sparse/rank-revealing factor solves
+(minimization certificate in the positive self-adjoint regime, stationarity
+in the Hermitian-indefinite regime, certified block elimination with the
+left-kernel compatibility check in the non-normal regime; interior kernels
+are RETAINED as explicit stalk coordinates, never regularized away). Band:
+the exact Feshbach-Schur pencil F_B(lambda) = L_BB - lambda I -
+L_BI (L_II - lambda I)^{-1} L_IB over caller-supplied windows with the exact
+determinant factorization det(L - lambda) = det(L_II - lambda) det F_B(lambda),
+honest algebraic (det winding) vs geometric (dim ker F_B) multiplicities, and
+a certified Craig-Bampton/AMLS linear surrogate. The next level is the
+abstract labeled sum of retained fibers with embedding J and Gram G = J^dag W J
+(one declared policy per run), an operator-valued response network, and a
+cellular-sheaf realization emitted ONLY when restriction maps reproduce the
+blocks. Nested quotients carry lineage; per-component contributions reuse the
+#764 AnalyticCache so a published TouchedStar recomputes only the affected
+ancestry. Read-only: nothing here enters the emergence objective.)doc");
+
+  py::class_<RecursiveQuotient::Options>(recursiveQuotient, "Options",
+      "Reduction options: certificate tolerance, rank-revealing threshold, "
+      "dense crossover, the declared FiberEmbeddingPolicy (+ epsilon), and "
+      "caller-selected interior cells to retain.")
+      .def(py::init<>())
+      .def_readwrite("tolerance", &RecursiveQuotient::Options::tolerance)
+      .def_readwrite("rankTolerance", &RecursiveQuotient::Options::rankTolerance)
+      .def_readwrite("denseCrossover", &RecursiveQuotient::Options::denseCrossover)
+      .def_readwrite("embeddingPolicy",
+                     &RecursiveQuotient::Options::embeddingPolicy)
+      .def_readwrite("nearIsometryEpsilon",
+                     &RecursiveQuotient::Options::nearIsometryEpsilon)
+      .def_readwrite("selectedInteriorIndices",
+                     &RecursiveQuotient::Options::selectedInteriorIndices)
+      .def_readwrite("selectedInteriorCells",
+                     &RecursiveQuotient::Options::selectedInteriorCells);
+
+  py::class_<RecursiveQuotient::RetainedCoordinate>(recursiveQuotient,
+      "RetainedCoordinate",
+      "One reduced coordinate: kind, owning component, fine index (cells) or "
+      "-1 (modes), the fine-space embedding column, and provenance.")
+      .def_readonly("kind", &RecursiveQuotient::RetainedCoordinate::kind)
+      .def_readonly("component",
+                    &RecursiveQuotient::RetainedCoordinate::component)
+      .def_readonly("fineIndex",
+                    &RecursiveQuotient::RetainedCoordinate::fineIndex)
+      .def_readonly("embedding",
+                    &RecursiveQuotient::RetainedCoordinate::embedding)
+      .def_readonly("provenance",
+                    &RecursiveQuotient::RetainedCoordinate::provenance);
+
+  py::class_<RecursiveQuotient::InteriorNullspaceRead>(recursiveQuotient,
+      "InteriorNullspaceRead",
+      "Interior nullspace of one component: exact integer topological basis "
+      "(spacetime path), numerical right/left kernels, measured residual.")
+      .def_readonly("component",
+                    &RecursiveQuotient::InteriorNullspaceRead::component)
+      .def_readonly("nullity", &RecursiveQuotient::InteriorNullspaceRead::nullity)
+      .def_readonly("integerNullity",
+                    &RecursiveQuotient::InteriorNullspaceRead::integerNullity)
+      .def_readonly("integerBasis",
+                    &RecursiveQuotient::InteriorNullspaceRead::integerBasis)
+      .def_readonly("kernelBasis",
+                    &RecursiveQuotient::InteriorNullspaceRead::kernelBasis)
+      .def_readonly("leftKernelBasis",
+                    &RecursiveQuotient::InteriorNullspaceRead::leftKernelBasis)
+      .def_readonly("certificate",
+                    &RecursiveQuotient::InteriorNullspaceRead::certificate);
+
+  py::class_<RecursiveQuotient::StaticReductionRead>(recursiveQuotient,
+      "StaticReductionRead",
+      "The exact supported static reduction: kept-cell indices, all reduced "
+      "coordinates with provenance, the effective operator (leading kept "
+      "block = L_BB - L_BI L_II^+ L_IB), residuals, certificate.")
+      .def_readonly("interfaceIndices",
+                    &RecursiveQuotient::StaticReductionRead::interfaceIndices)
+      .def_readonly("coordinates",
+                    &RecursiveQuotient::StaticReductionRead::coordinates)
+      .def_readonly("effectiveOperator",
+                    &RecursiveQuotient::StaticReductionRead::effectiveOperator)
+      .def_readonly("solveResidual",
+                    &RecursiveQuotient::StaticReductionRead::solveResidual)
+      .def_readonly(
+          "compatibilityResidual",
+          &RecursiveQuotient::StaticReductionRead::compatibilityResidual)
+      .def_readonly("certificate",
+                    &RecursiveQuotient::StaticReductionRead::certificate);
+
+  py::class_<RecursiveQuotient::FeshbachRead>(recursiveQuotient, "FeshbachRead",
+      "One exact Feshbach-Schur response evaluation over a declared window, "
+      "with resonance retention, compatibility check, and the measured "
+      "determinant-factorization residual (below the dense crossover).")
+      .def_readonly("lam", &RecursiveQuotient::FeshbachRead::lambda)
+      .def_readonly("windowLower", &RecursiveQuotient::FeshbachRead::windowLower)
+      .def_readonly("windowUpper", &RecursiveQuotient::FeshbachRead::windowUpper)
+      .def_readonly("response", &RecursiveQuotient::FeshbachRead::response)
+      .def_readonly("coordinates", &RecursiveQuotient::FeshbachRead::coordinates)
+      .def_readonly("resonant", &RecursiveQuotient::FeshbachRead::resonant)
+      .def_readonly("solveResidual",
+                    &RecursiveQuotient::FeshbachRead::solveResidual)
+      .def_readonly("compatibilityResidual",
+                    &RecursiveQuotient::FeshbachRead::compatibilityResidual)
+      .def_readonly("determinantResidual",
+                    &RecursiveQuotient::FeshbachRead::determinantResidual)
+      .def_readonly("certificate",
+                    &RecursiveQuotient::FeshbachRead::certificate);
+
+  py::class_<RecursiveQuotient::MultiplicityRead>(recursiveQuotient,
+      "MultiplicityRead",
+      "Honest multiplicity report: algebraic = winding of det F_B plus the "
+      "separately-reported interior winding; geometric = dim ker F_B(lambda). "
+      "They agree only in the self-adjoint/semisimple setting.")
+      .def_readonly("lam", &RecursiveQuotient::MultiplicityRead::lambda)
+      .def_readonly("contourRadius",
+                    &RecursiveQuotient::MultiplicityRead::contourRadius)
+      .def_readonly("nodes", &RecursiveQuotient::MultiplicityRead::nodes)
+      .def_readonly("responseWinding",
+                    &RecursiveQuotient::MultiplicityRead::responseWinding)
+      .def_readonly("interiorWinding",
+                    &RecursiveQuotient::MultiplicityRead::interiorWinding)
+      .def_readonly("algebraic", &RecursiveQuotient::MultiplicityRead::algebraic)
+      .def_readonly("geometric", &RecursiveQuotient::MultiplicityRead::geometric)
+      .def_readonly("semisimple",
+                    &RecursiveQuotient::MultiplicityRead::semisimple)
+      .def_readonly("phaseStepMargin",
+                    &RecursiveQuotient::MultiplicityRead::phaseStepMargin)
+      .def_readonly("certificate",
+                    &RecursiveQuotient::MultiplicityRead::certificate);
+
+  py::class_<RecursiveQuotient::CraigBamptonRead>(recursiveQuotient,
+      "CraigBamptonRead",
+      "Craig-Bampton/AMLS retained-mode surrogate: declared window, retained "
+      "fixed-interface modes per component, basis, reduced (stiffness, mass) "
+      "pencil, discarded-mode gap, and fine-space eigenresiduals.")
+      .def_readonly("windowLower",
+                    &RecursiveQuotient::CraigBamptonRead::windowLower)
+      .def_readonly("windowUpper",
+                    &RecursiveQuotient::CraigBamptonRead::windowUpper)
+      .def_readonly("modeCutoff",
+                    &RecursiveQuotient::CraigBamptonRead::modeCutoff)
+      .def_readonly("retainedModes",
+                    &RecursiveQuotient::CraigBamptonRead::retainedModes)
+      .def_readonly("basis", &RecursiveQuotient::CraigBamptonRead::basis)
+      .def_readonly("reducedStiffness",
+                    &RecursiveQuotient::CraigBamptonRead::reducedStiffness)
+      .def_readonly("reducedMass",
+                    &RecursiveQuotient::CraigBamptonRead::reducedMass)
+      .def_readonly("discardedModeGap",
+                    &RecursiveQuotient::CraigBamptonRead::discardedModeGap)
+      .def_readonly("windowEigenvalues",
+                    &RecursiveQuotient::CraigBamptonRead::windowEigenvalues)
+      .def_readonly("eigenResiduals",
+                    &RecursiveQuotient::CraigBamptonRead::eigenResiduals)
+      .def_readonly("certificate",
+                    &RecursiveQuotient::CraigBamptonRead::certificate);
+
+  py::class_<RecursiveQuotient::LabeledFiberSumRead>(recursiveQuotient,
+      "LabeledFiberSumRead",
+      "The abstract labeled sum of retained fibers: embedding J into the "
+      "chain space, Gram G = J^dag W J, the declared policy, gram defect, "
+      "kernel nullity, and nominal vs effective ranks. Adjacent fibers may "
+      "overlap on shared interface cells; a direct sum is never asserted.")
+      .def_readonly("summandComponents",
+                    &RecursiveQuotient::LabeledFiberSumRead::summandComponents)
+      .def_readonly("summandRanks",
+                    &RecursiveQuotient::LabeledFiberSumRead::summandRanks)
+      .def_readonly("embedding",
+                    &RecursiveQuotient::LabeledFiberSumRead::embedding)
+      .def_readonly("gram", &RecursiveQuotient::LabeledFiberSumRead::gram)
+      .def_readonly("policy", &RecursiveQuotient::LabeledFiberSumRead::policy)
+      .def_readonly("gramDefect",
+                    &RecursiveQuotient::LabeledFiberSumRead::gramDefect)
+      .def_readonly("quotientNullity",
+                    &RecursiveQuotient::LabeledFiberSumRead::quotientNullity)
+      .def_readonly("nominalRank",
+                    &RecursiveQuotient::LabeledFiberSumRead::nominalRank)
+      .def_readonly("effectiveRank",
+                    &RecursiveQuotient::LabeledFiberSumRead::effectiveRank)
+      .def_readonly("quotientBasis",
+                    &RecursiveQuotient::LabeledFiberSumRead::quotientBasis)
+      .def_readonly("certificate",
+                    &RecursiveQuotient::LabeledFiberSumRead::certificate);
+
+  py::class_<RecursiveQuotient::ResponseEdge>(recursiveQuotient, "ResponseEdge",
+      "One operator-valued link: from/to component and the effective block.")
+      .def_readonly("from_component", &RecursiveQuotient::ResponseEdge::from)
+      .def_readonly("to_component", &RecursiveQuotient::ResponseEdge::to)
+      .def_readonly("block", &RecursiveQuotient::ResponseEdge::block);
+
+  py::class_<RecursiveQuotient::ResponseNetworkRead>(recursiveQuotient,
+      "ResponseNetworkRead",
+      "The next-level operator-valued response network: per-component stalks "
+      "(shared interface cells appear in every claiming stalk), vertex and "
+      "edge blocks of the reduced operator, and the coverage residual.")
+      .def_readonly("stalkDimensions",
+                    &RecursiveQuotient::ResponseNetworkRead::stalkDimensions)
+      .def_readonly("stalkCoordinates",
+                    &RecursiveQuotient::ResponseNetworkRead::stalkCoordinates)
+      .def_readonly("vertexBlocks",
+                    &RecursiveQuotient::ResponseNetworkRead::vertexBlocks)
+      .def_readonly("edges", &RecursiveQuotient::ResponseNetworkRead::edges)
+      .def_readonly("coverageResidual",
+                    &RecursiveQuotient::ResponseNetworkRead::coverageResidual)
+      .def_readonly("certificate",
+                    &RecursiveQuotient::ResponseNetworkRead::certificate);
+
+  py::class_<RecursiveQuotient::SheafRealizationRead>(recursiveQuotient,
+      "SheafRealizationRead",
+      "Cellular-sheaf/simplicial realization attempt: emitted ONLY when the "
+      "restriction maps reproduce the network blocks (certified); otherwise "
+      "the general response network is retained and nothing is invented.")
+      .def_readonly("emitted",
+                    &RecursiveQuotient::SheafRealizationRead::emitted)
+      .def_readonly("simplicial",
+                    &RecursiveQuotient::SheafRealizationRead::simplicial)
+      .def_readonly(
+          "edgeStalkDimensions",
+          &RecursiveQuotient::SheafRealizationRead::edgeStalkDimensions)
+      .def_readonly("restrictionMaps",
+                    &RecursiveQuotient::SheafRealizationRead::restrictionMaps)
+      .def_readonly(
+          "reconstructionResidual",
+          &RecursiveQuotient::SheafRealizationRead::reconstructionResidual)
+      .def_readonly("certificate",
+                    &RecursiveQuotient::SheafRealizationRead::certificate);
+
+  recursiveQuotient
+      .def_static("overMatrix", &RecursiveQuotient::overMatrix, py::arg("op"),
+                  py::arg("dim"), py::arg("weights"), py::arg("components"),
+                  py::arg("options") = RecursiveQuotient::Options(),
+                  "Build over an explicit operator (flat row-major) with a "
+                  "diagonal chain metric (empty = identity) and 0-based, "
+                  "possibly overlapping component index sets covering every "
+                  "index. Fixtures and next-level recursion.")
+      .def_static(
+          "overCells",
+          [](std::shared_ptr<Spacetime> st, int degree,
+             const std::vector<std::vector<std::vector<std::uint64_t>>> &cells,
+             const RecursiveQuotient::Options &options, AnalyticCache *cache) {
+            std::shared_ptr<AnalyticCache> held;
+            if (cache) held = std::shared_ptr<AnalyticCache>(cache, [](AnalyticCache *) {});
+            return RecursiveQuotient::overCells(std::move(st), degree, cells,
+                                                options, std::move(held));
+          },
+          py::arg("spacetime"), py::arg("degree"), py::arg("component_cells"),
+          py::arg("options") = RecursiveQuotient::Options(),
+          py::arg("cache") = nullptr,
+          // the non-owning cache pointer must outlive the quotient
+          py::keep_alive<0, 5>(),
+          "Build over the spacetime's Hodge operator at `degree` with "
+          "components as explicit k-cell sets (vertex-id tuples, matched by "
+          "vertex SET). An AnalyticCache bound to the same spacetime enables "
+          "per-component reuse across accepted moves.")
+      .def_static(
+          "overVertexSupports",
+          [](std::shared_ptr<Spacetime> st, int degree,
+             const std::vector<std::vector<std::uint64_t>> &supports,
+             const RecursiveQuotient::Options &options, AnalyticCache *cache) {
+            std::shared_ptr<AnalyticCache> held;
+            if (cache) held = std::shared_ptr<AnalyticCache>(cache, [](AnalyticCache *) {});
+            return RecursiveQuotient::overVertexSupports(
+                std::move(st), degree, supports, options, std::move(held));
+          },
+          py::arg("spacetime"), py::arg("degree"), py::arg("vertex_supports"),
+          py::arg("options") = RecursiveQuotient::Options(),
+          py::arg("cache") = nullptr, py::keep_alive<0, 5>(),
+          "Build with components as vertex supports (the PersistentModularity "
+          "convention): a k-cell belongs to a component when ALL its vertices "
+          "lie in the support; unclaimed cells form one residual component.")
+      .def_property_readonly("dimension", &RecursiveQuotient::dimension)
+      .def_property_readonly("componentCount",
+                             &RecursiveQuotient::componentCount)
+      .def_property_readonly("degree", &RecursiveQuotient::degree)
+      .def_property_readonly("level", &RecursiveQuotient::level)
+      .def_property_readonly("regime", &RecursiveQuotient::regime)
+      .def_property_readonly("interfaceIndices",
+                             &RecursiveQuotient::interfaceIndices)
+      .def("interiorIndices", &RecursiveQuotient::interiorIndices,
+           py::arg("component"))
+      .def_property_readonly("coordinateProvenance",
+                             &RecursiveQuotient::coordinateProvenance)
+      .def("interiorNullspace", &RecursiveQuotient::interiorNullspace,
+           py::arg("component"),
+           "Exact integer topological zero modes (spacetime path) + the "
+           "numerical right/left kernels of the interior block.")
+      .def("staticReduction", &RecursiveQuotient::staticReduction,
+           py::return_value_policy::reference_internal,
+           "The exact supported static reduction (memoized; per-component "
+           "contributions served from the bound AnalyticCache when fresh).")
+      .def("staticProbeCertificate", &RecursiveQuotient::staticProbeCertificate,
+           py::arg("probe"),
+           "Regime-appropriate static certificate on one kept-cell probe: "
+           "minimum (positive), stationarity (Hermitian-indefinite), or "
+           "certified block elimination + left-kernel compatibility "
+           "(non-normal).")
+      .def("verifyStatic", &RecursiveQuotient::verifyStatic,
+           "Worst static probe certificate over every kept basis vector and "
+           "the all-ones probe.")
+      .def("feshbach", &RecursiveQuotient::feshbach, py::arg("lam"),
+           py::arg("window_lower"), py::arg("window_upper"),
+           "Exact Feshbach-Schur response F_B(lambda) over a caller-supplied "
+           "window, with resonance retention + compatibility checks and the "
+           "determinant-factorization residual below the dense crossover.")
+      .def("multiplicity", &RecursiveQuotient::multiplicity, py::arg("lam"),
+           py::arg("radius"), py::arg("nodes") = 64,
+           "Algebraic multiplicity from the unwrapped det-phase windings "
+           "(response + interior, reported separately), geometric from "
+           "dim ker F_B(lambda); node count doubles until stable.")
+      .def("craigBampton", &RecursiveQuotient::craigBampton,
+           py::arg("window_lower"), py::arg("window_upper"),
+           py::arg("mode_cutoff"), py::arg("residual_tolerance") = -1.0,
+           "Craig-Bampton retained-mode basis + reduced (K, M) pencil over "
+           "the declared window (certified approximation: the certificate "
+           "holds against the caller-declared residual_tolerance; negative "
+           "selects the strict Options.tolerance). Refuses the non-normal "
+           "regime and indefinite chain metrics.")
+      .def("labeledFiberSum", &RecursiveQuotient::labeledFiberSum,
+           "The abstract labeled sum of retained fibers with embedding J and "
+           "Gram G = J^dag W J under the run's declared policy.")
+      .def("responseNetwork", &RecursiveQuotient::responseNetwork,
+           "The next-level operator-valued response network (stalks + "
+           "effective blocks).")
+      .def("sheafRealization", &RecursiveQuotient::sheafRealization,
+           "Cellular-sheaf/simplicial realization, emitted only when "
+           "certified; otherwise the general network is retained.")
+      .def("nextLevel",
+           py::overload_cast<const std::vector<std::vector<int>> &,
+                             const RecursiveQuotient::Options &>(
+               &RecursiveQuotient::nextLevel, py::const_),
+           py::arg("components"), py::arg("options"),
+           "Reduce again over this level's reduced operator; the child "
+           "carries provenance-prefixed lineage and level + 1.")
+      .def("nextLevel",
+           py::overload_cast<const std::vector<std::vector<int>> &>(
+               &RecursiveQuotient::nextLevel, py::const_),
+           py::arg("components"))
+      .def("invalidate", &RecursiveQuotient::invalidate,
+           "Drop memoized results and re-read the operator values for the "
+           "same cell complex (call after an accepted metric move).")
+      .def_property_readonly("options", &RecursiveQuotient::options);
 }
