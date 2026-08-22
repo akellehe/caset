@@ -605,6 +605,18 @@ class TestResonanceAndCompatibility(unittest.TestCase):
         read = q.staticReduction()
         self.assertFalse(read.certificate.holds())
 
+    def test_incompatible_probe_certificate_refuses(self):
+        # Probe-level negative control: the SAME non-normal fixture, but the
+        # verification probe itself carries the incompatible load.
+        L = np.array([[1.0, 0.3, -0.2],
+                      [1.0, 0.0, 1.0],
+                      [0.0, 0.0, 2.0]])
+        q = cob.RecursiveQuotient.overMatrix(
+            _flat(L), 3, [], [[0, 1, 2], [0]])
+        cert = q.staticProbeCertificate([1.0 + 0j])
+        self.assertFalse(cert.holds())
+        self.assertGreater(cert.residual, 0.1)
+
     def test_hermitian_indefinite_regime_uses_stationarity(self):
         # W = diag(1, -1, 1) with L = W H (H Hermitian): WL = H is Hermitian
         # while L itself is not -> the HermitianIndefinite regime, whose
@@ -1035,6 +1047,29 @@ class TestRelabeling(unittest.TestCase):
         self.assertTrue(sheaf.emitted)
         self.assertTrue(sheaf.simplicial)
         self.assertEqual(list(sheaf.edgeStalkDimensions), [1])
+
+
+class TestComponentOrderIndependence(unittest.TestCase):
+    def test_component_input_order_never_changes_the_kept_block(self):
+        # The canonical reduced order derives from fine indices and
+        # component position only for MODE coordinates; permuting the
+        # component list leaves the kept block bit-identical and permutes
+        # the mode blocks with the components.
+        L = np.array([[1.0, -1.0, 0.0, 0.0],
+                      [-1.0, 2.0, -1.0, 0.0],
+                      [0.0, -1.0, 2.0, -1.0],
+                      [0.0, 0.0, -1.0, 1.0]])
+        a = cob.RecursiveQuotient.overMatrix(
+            _flat(L), 4, [], [[0, 1], [2, 3]])
+        b = cob.RecursiveQuotient.overMatrix(
+            _flat(L), 4, [], [[2, 3], [0, 1]])
+        E_a, read_a = reduction_matrix(a)
+        E_b, read_b = reduction_matrix(b)
+        np.testing.assert_allclose(E_a, E_b, rtol=0, atol=0)
+        self.assertEqual(list(a.interfaceIndices), list(b.interfaceIndices))
+        # Ownership swaps with the component positions, honestly.
+        self.assertEqual([c.component for c in read_a.coordinates],
+                         [1 - c.component for c in read_b.coordinates])
 
 
 # --------------------------------------------------------------------------

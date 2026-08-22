@@ -394,12 +394,15 @@ void RecursiveQuotient::detectRegime(bool structuralPsd) {
     return;
   }
   if (positiveMetric && dim_ < options_.denseCrossover) {
+    // Pivoted LDLT decides semidefiniteness far cheaper than an eigensolve
+    // (a factorization decision, not a spectrum claim -- the Sylvester
+    // route symmetricInertia already takes for small intersection forms).
     const Eigen::MatrixXcd dense = Eigen::MatrixXcd(weighted);
     const Eigen::MatrixXcd hermitian = 0.5 * (dense + dense.adjoint());
-    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> eigensolver(hermitian);
-    if (eigensolver.info() == Eigen::Success &&
-        (dim_ == 0 ||
-         eigensolver.eigenvalues().minCoeff() >= -tol * std::max(scale, 1.0))) {
+    Eigen::LDLT<Eigen::MatrixXcd> ldlt(hermitian);
+    if (ldlt.info() == Eigen::Success &&
+        (dim_ == 0 || ldlt.vectorD().real().minCoeff() >=
+                          -tol * std::max(scale, 1.0))) {
       regime_ = CertificateRegime::PositiveSemidefinite;
       return;
     }
@@ -555,9 +558,36 @@ RecursiveQuotient::computeSolve(int component, cd lambda) const {
     }
   }
 
-  // Numerical kernel + factor solve.
+  // Numerical kernel + factor solve. Below the crossover, an LU factor
+  // solve runs FIRST; the rank-revealing SVD path is an escalation taken
+  // only when the pivots flag rank deficiency or the measured residual
+  // fails -- never a default dense decomposition on a regular block.
   if (m < options_.denseCrossover) {
     const Eigen::MatrixXcd shifted = Eigen::MatrixXcd(sparseShifted);
+    {
+      Eigen::PartialPivLU<Eigen::MatrixXcd> fastLU(shifted);
+      const Eigen::MatrixXcd &luMatrix = fastLU.matrixLU();
+      double diagMin = kInf;
+      double diagMax = 0.0;
+      for (int i = 0; i < m; ++i) {
+        diagMin = std::min(diagMin, std::abs(luMatrix(i, i)));
+        diagMax = std::max(diagMax, std::abs(luMatrix(i, i)));
+      }
+      if (m > 0 && diagMin > options_.rankTolerance * std::max(diagMax, 1e-300)) {
+        const Eigen::MatrixXcd candidate = fastLU.solve(loadBlock);
+        const double residual =
+            (shifted * candidate - loadBlock).norm() / loadScale;
+        if (residual <= std::max(options_.tolerance, 1e-12)) {
+          solve->X = candidate;
+          solve->conditioning = diagMax / diagMin;
+          solve->interiorDet = fastLU.determinant();
+          solve->detValid = true;
+          solve->solveResidual = residual;
+          solve->contribution = keptBlock * solve->X;
+          return solve;
+        }
+      }
+    }
     Eigen::JacobiSVD<Eigen::MatrixXcd> svd(
         shifted, Eigen::ComputeThinU | Eigen::ComputeThinV);
     const auto &sigma = svd.singularValues();
