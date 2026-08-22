@@ -113,7 +113,7 @@ result (tested).
 ## Benchmark (near-O(|E|) sweep)
 
 Warm timings (canonical ranking cached; `discover`, 1 restart, gamma = 1;
-Ryzen-class 16-core box, single thread):
+single-threaded, Release build on the development workstation):
 
 | fixture | n | edges | cold s | warm s | warm us/edge |
 |---|--:|--:|--:|--:|--:|
