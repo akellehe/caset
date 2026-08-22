@@ -94,8 +94,11 @@ class Certificate {
     [[nodiscard]] static Certificate heuristicDiscovery(CertificateDomain domain,
                                                         CertificateRegime regime);
 
+    /// The claim class (see `CertificateGrade`).
     [[nodiscard]] CertificateGrade grade() const noexcept { return grade_; }
+    /// The spectral domain the claim speaks for.
     [[nodiscard]] CertificateDomain domain() const noexcept { return domain_; }
+    /// The metric regime the producing kernel verified.
     [[nodiscard]] CertificateRegime regime() const noexcept { return regime_; }
 
     /// Measured relative residual of the produced result (NaN = not measured).
@@ -149,7 +152,9 @@ class Certificate {
 /// of the analytic-first kernels, so no result travels without its
 /// certification.
 struct CertifiedVector {
+  /// The result values (a solution vector or a sorted eigenvalue list).
   std::vector<std::complex<double>> values{};
+  /// The certification record grading `values`.
   Certificate certificate{};
 };
 

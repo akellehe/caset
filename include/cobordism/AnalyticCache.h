@@ -152,6 +152,7 @@ class AnalyticCache {
     /// nullptr) but keeps accepting stores, so replay can compare the cold
     /// path against the incremental one.
     void setEnabled(bool enabled) noexcept { enabled_ = enabled; }
+    /// Whether the cache is serving entries (see `setEnabled`).
     [[nodiscard]] bool enabled() const noexcept { return enabled_; }
 
     /// Served-fetch count since construction/clear-counters.

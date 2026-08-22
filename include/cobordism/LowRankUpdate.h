@@ -54,8 +54,8 @@ class LowRankUpdate {
     /// the declared touched rows/columns, the factors are NOT exact, and the
     /// caller must fall back to a cold recompute.
     struct TouchedFactors {
-      bool spansChange{false};
-      int rank{0};
+      bool spansChange{false};  ///< exactness verdict (false = cold-recompute)
+      int rank{0};              ///< number of factor columns/rows
       std::vector<std::complex<double>> left{};   ///< dim x rank, row-major
       std::vector<std::complex<double>> right{};  ///< rank x dim, row-major
     };
@@ -64,6 +64,7 @@ class LowRankUpdate {
     /// partial-pivot LU. @throws std::invalid_argument on a size mismatch.
     LowRankUpdate(const std::vector<std::complex<double>> &base, int dim);
 
+    /// The operator dimension \f$ n \f$.
     [[nodiscard]] int dimension() const noexcept { return dim_; }
     /// Rank of the registered change (0 = none).
     [[nodiscard]] int updateRank() const noexcept { return rank_; }

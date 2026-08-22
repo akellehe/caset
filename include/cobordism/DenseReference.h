@@ -44,10 +44,13 @@ class DenseReference {
     /// Ships small: dense kernels are for fixtures, not production scale.
     static constexpr int kDefaultCrossoverDimension = 512;
 
+    /// @param crossoverDimension The dimension at and above which every
+    ///   dense kernel refuses. @throws std::invalid_argument if < 1.
     explicit DenseReference(int crossoverDimension = kDefaultCrossoverDimension);
 
     /// The dimension at and above which dense kernels refuse.
     [[nodiscard]] int crossoverDimension() const noexcept { return crossover_; }
+    /// Reconfigure the crossover. @throws std::invalid_argument if < 1.
     void setCrossoverDimension(int crossoverDimension);
     /// Whether a `dim`-dimensional dense computation is permitted.
     [[nodiscard]] bool belowCrossover(int dim) const noexcept {
