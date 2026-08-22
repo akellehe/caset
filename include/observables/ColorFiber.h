@@ -67,6 +67,8 @@
 // indices with incidence signs).  It does not construct spectral fibers
 // (#769) and contains no transport / Wilson-loop code (#770).
 
+#include "cobordism/Certificate.h"
+
 #include <Eigen/Dense>
 
 #include <array>
@@ -145,6 +147,18 @@ struct AnchorProfile {
     std::string weightingId{};
     /// The declared convex weights w_τ actually used.
     std::vector<double> weights{};
+    /// The #764 certification record grading the calibrated score.
+    /// Diagonal-weight path: StructureExact — the [0,1] calibration is a
+    /// closed-form identity GIVEN the verified premise Φ†|W|Φ = I on a
+    /// decoupled |W|; residual = max(frameGramResidual,
+    /// max(0, calibrationMargin)), tolerance = the evaluate() gram
+    /// tolerance.  General Hermitian-matrix path: CertifiedNumerical (the
+    /// eigen-modulus computation; same residual recipe, conditioning not
+    /// measured = NaN).  Regime: PositiveSemidefinite in the positive
+    /// regime, HermitianIndefinite in signed sectors.  A
+    /// default-constructed profile carries the never-holding
+    /// HeuristicDiscovery default — no read travels bare.
+    ::tessera::cobordism::Certificate certificate{};
 };
 
 /// # ColorFiber
@@ -370,6 +384,14 @@ class ColorFiber {
     /// absolute residual.  Run once at startup in debug builds (NDEBUG
     /// off); callable from tests and bindings in every build.
     [[nodiscard]] static double verifyConstantAlgebra();
+
+    /// The #764 certificate of the constant algebra: AlgebraicallyExact /
+    /// Static / PositiveSemidefinite with the measured
+    /// verifyConstantAlgebra() residual against the startup tolerance
+    /// 1e-12 — the same claim the debug-build startup check enforces,
+    /// attached in the shared certification vocabulary.
+    [[nodiscard]] static ::tessera::cobordism::Certificate
+    constantAlgebraCertificate();
 };
 
 /// # ColorAnchor
@@ -523,11 +545,14 @@ class ColorAnchor {
                                std::size_t count);
     /// Shared scoring core over precomputed per-triangle |W_τ|^{1/2}
     /// blocks and their (already exact) Krein signatures.
+    /// `diagonalWeights` selects the certificate grade (StructureExact
+    /// closed-form vs CertifiedNumerical eigen-modulus).
     [[nodiscard]] AnchorProfile evaluateBlocks(
         const Eigen::MatrixXcd& frame,
         const std::vector<Eigen::Matrix3cd>& sqrtBlocks,
         const std::vector<std::array<int, 3>>& signatures,
-        const Eigen::MatrixXcd& gram, double gramTolerance);
+        const Eigen::MatrixXcd& gram, double gramTolerance,
+        bool diagonalWeights);
 
     std::vector<OrientedTriangle> triangles_{};
     std::vector<double> weights_{};

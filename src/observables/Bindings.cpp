@@ -1195,7 +1195,14 @@ convex weighting that produced the score.)doc")
       .def_readonly("frame_gram_residual", &AnchorProfile::frameGramResidual)
       .def_readonly("calibration_margin", &AnchorProfile::calibrationMargin)
       .def_readonly("weighting_id", &AnchorProfile::weightingId)
-      .def_readonly("weights", &AnchorProfile::weights);
+      .def_readonly("weights", &AnchorProfile::weights)
+      .def_readonly("certificate", &AnchorProfile::certificate,
+          "The #764 tessera.cobordism.Certificate grading the calibrated "
+          "score: StructureExact on the diagonal (decoupled) weight path, "
+          "CertifiedNumerical on the general Hermitian-matrix path; regime "
+          "PositiveSemidefinite / HermitianIndefinite per the Krein read; "
+          "residual = max(frame_gram_residual, max(0, calibration_margin)) "
+          "against the evaluate gram tolerance.");
 
   py::class_<ColorFiber::SectorWeights>(m, "SectorWeights",
       "Occupation-sector weights ||P_N psi||^2 of an 8-dimensional Fock "
@@ -1337,7 +1344,12 @@ solver call, no mutation, nothing enters the emergence objective.)doc")
       .def_static("verifyConstantAlgebra", &ColorFiber::verifyConstantAlgebra,
                   "Re-derive every constant-algebra identity and return the "
                   "maximum absolute residual (run at startup in debug "
-                  "builds; callable in every build).");
+                  "builds; callable in every build).")
+      .def_static("constantAlgebraCertificate",
+                  &ColorFiber::constantAlgebraCertificate,
+                  "The #764 AlgebraicallyExact certificate of the constant "
+                  "algebra (measured verifyConstantAlgebra residual against "
+                  "the startup tolerance 1e-12).");
 
   py::class_<ColorAnchor>(m, "ColorAnchor",
       R"doc(The calibrated weighted oriented-triangle anchoring kernel for

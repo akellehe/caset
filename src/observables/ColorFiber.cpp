@@ -453,6 +453,13 @@ double ColorFiber::verifyConstantAlgebra() {
     return residual;
 }
 
+::tessera::cobordism::Certificate ColorFiber::constantAlgebraCertificate() {
+    return ::tessera::cobordism::Certificate::algebraicallyExact(
+        ::tessera::cobordism::CertificateDomain::Static,
+        ::tessera::cobordism::CertificateRegime::PositiveSemidefinite,
+        verifyConstantAlgebra(), 1e-12);
+}
+
 #ifndef NDEBUG
 namespace {
 /// Design spec §11: the constant algebra is generated once and CHECKED AT
@@ -688,7 +695,7 @@ AnchorProfile ColorAnchor::evaluate(const Eigen::MatrixXcd& frame,
         edgeWeights.cwiseAbs().cast<std::complex<double>>().asDiagonal() *
         frame;
     return evaluateBlocks(frame, sqrtBlocks, signatures, gram,
-                          gramTolerance);
+                          gramTolerance, /*diagonalWeights=*/true);
 }
 
 AnchorProfile ColorAnchor::evaluate(const Eigen::MatrixXcd& frame,
@@ -732,14 +739,15 @@ AnchorProfile ColorAnchor::evaluate(const Eigen::MatrixXcd& frame,
     const Eigen::MatrixXcd gram =
         frame.adjoint() * matrixModulus(weight) * frame;
     return evaluateBlocks(frame, sqrtBlocks, signatures, gram,
-                          gramTolerance);
+                          gramTolerance, /*diagonalWeights=*/false);
 }
 
 AnchorProfile ColorAnchor::evaluateBlocks(
     const Eigen::MatrixXcd& frame,
     const std::vector<Eigen::Matrix3cd>& sqrtBlocks,
     const std::vector<std::array<int, 3>>& signatures,
-    const Eigen::MatrixXcd& gram, double gramTolerance) {
+    const Eigen::MatrixXcd& gram, double gramTolerance,
+    bool diagonalWeights) {
     AnchorProfile profile;
     profile.weightingId = weightingId_;
     profile.weights = weights_;
@@ -815,6 +823,29 @@ AnchorProfile ColorAnchor::evaluateBlocks(
         profile.phaseDispersion = std::numeric_limits<double>::quiet_NaN();
     }
     profile.calibrationMargin = maxLambda - 1.0;
+
+    // Attach the #764 certification record (never a bare read).  The
+    // graded claim is the calibrated score: closed-form given the verified
+    // |W|-orthonormal premise on a decoupled (diagonal) weight, an
+    // eigen-modulus numerical evaluation on a general Hermitian weight.
+    using ::tessera::cobordism::Certificate;
+    using ::tessera::cobordism::CertificateDomain;
+    using ::tessera::cobordism::CertificateRegime;
+    const CertificateRegime regime =
+        profile.positiveRegime ? CertificateRegime::PositiveSemidefinite
+                               : CertificateRegime::HermitianIndefinite;
+    const double certResidual = std::max(
+        profile.frameGramResidual, std::max(0.0, profile.calibrationMargin));
+    profile.certificate =
+        diagonalWeights
+            ? Certificate::structureExact(CertificateDomain::Static, regime,
+                                          certResidual,
+                                          Certificate::kUnmeasured,
+                                          gramTolerance)
+            : Certificate::certifiedNumerical(CertificateDomain::Static,
+                                              regime, certResidual,
+                                              Certificate::kUnmeasured,
+                                              gramTolerance);
     return profile;
 }
 

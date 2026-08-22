@@ -741,6 +741,21 @@ class TestAnchorOracle(unittest.TestCase):
         self.assertLessEqual(p.frame_gram_residual, 1e-12)
         self.assertEqual(p.weighting_id, "uniform")
         self.assertEqual(p.weights, [1.0])
+        # The attached #764 certificate (shared vocabulary, no bare read):
+        # closed-form given the verified |W|-orthonormal premise on a
+        # decoupled diagonal weight.
+        cob = tessera.cobordism
+        cert = p.certificate
+        self.assertEqual(cert.grade, cob.CertificateGrade.StructureExact)
+        self.assertEqual(cert.domain, cob.CertificateDomain.Static)
+        self.assertEqual(cert.regime,
+                         cob.CertificateRegime.PositiveSemidefinite)
+        self.assertTrue(cert.holds())
+        self.assertLessEqual(cert.residual, 1e-12)
+        self.assertEqual(cert.tolerance, 1e-9)
+        # Unmeasured quantities are NaN, never zero (#764 convention).
+        self.assertTrue(math.isnan(cert.conditioning))
+        self.assertTrue(math.isnan(cert.denseReferenceError))
 
     def test_oracle_exact_algebraic_fixture_f3(self) -> None:
         # Phi = F3 on three unit-weight edges: A_tau IS F3, |det A|^2 = 1.
@@ -1141,6 +1156,12 @@ class TestAnchorSignedAndMatrixWeights(unittest.TestCase):
         self.assertTrue(p_abs.positive_regime)
         self.assertEqual(p_signed.krein_signatures, [[2, 0, 1], [3, 0, 0]])
         self.assertEqual(p_abs.krein_signatures, [[3, 0, 0], [3, 0, 0]])
+        cob = tessera.cobordism
+        self.assertEqual(p_signed.certificate.regime,
+                         cob.CertificateRegime.HermitianIndefinite)
+        self.assertEqual(p_abs.certificate.regime,
+                         cob.CertificateRegime.PositiveSemidefinite)
+        self.assertTrue(p_signed.certificate.holds())
 
     def test_zero_weight_reports_zero_mode(self) -> None:
         rng = np.random.default_rng(102)
@@ -1168,6 +1189,15 @@ class TestAnchorSignedAndMatrixWeights(unittest.TestCase):
             np.max(np.abs(np.array(p_vec.terms) - np.array(p_mat.terms))),
             1e-12)
         self.assertEqual(p_vec.krein_signatures, p_mat.krein_signatures)
+        # Grades name the claim class honestly: closed-form structure-exact
+        # on the diagonal path, certified-numerical on the eigen-modulus
+        # matrix path.
+        cob = tessera.cobordism
+        self.assertEqual(p_vec.certificate.grade,
+                         cob.CertificateGrade.StructureExact)
+        self.assertEqual(p_mat.certificate.grade,
+                         cob.CertificateGrade.CertifiedNumerical)
+        self.assertTrue(p_mat.certificate.holds())
 
     def test_matrix_weight_requires_hermitian(self) -> None:
         rng = np.random.default_rng(104)
@@ -1219,6 +1249,20 @@ class TestConstantAlgebraSelfCheck(unittest.TestCase):
         # every build can call it): the WHOLE constant algebra re-derives
         # within double round-off.
         self.assertLessEqual(ColorFiber.verifyConstantAlgebra(), 1e-12)
+
+    def test_constant_algebra_certificate(self) -> None:
+        # The same claim in the shared #764 vocabulary: AlgebraicallyExact,
+        # holds, with the measured residual and the startup tolerance; the
+        # re-derivation is deterministic so the residual matches the raw
+        # call bitwise.
+        cob = tessera.cobordism
+        cert = ColorFiber.constantAlgebraCertificate()
+        self.assertEqual(cert.grade, cob.CertificateGrade.AlgebraicallyExact)
+        self.assertEqual(cert.domain, cob.CertificateDomain.Static)
+        self.assertTrue(cert.holds())
+        self.assertEqual(cert.residual, ColorFiber.verifyConstantAlgebra())
+        self.assertEqual(cert.tolerance, 1e-12)
+        self.assertTrue(math.isnan(cert.conditioning))
 
 
 if __name__ == "__main__":
