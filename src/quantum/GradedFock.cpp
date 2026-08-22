@@ -998,24 +998,24 @@ EdgeModeRegistry EdgeModeRegistry::relabeled(
     const std::unordered_map<std::uint64_t, std::uint64_t>& vertexMap) const {
     // The map must cover every used vertex and stay injective on them —
     // a merging relabeling would silently identify distinct edges.
-    std::unordered_set<std::uint64_t> images;
+    std::unordered_set<std::uint64_t> used;
     for (const EdgeModeRecord& r : records_) {
         for (std::uint64_t v : {r.vertexA, r.vertexB}) {
-            const auto it = vertexMap.find(v);
-            if (it == vertexMap.end()) {
+            if (vertexMap.find(v) == vertexMap.end()) {
                 throw std::invalid_argument(
                     "EdgeModeRegistry::relabeled: vertex " +
                     std::to_string(v) + " missing from the relabeling map");
             }
+            used.insert(v);
         }
     }
-    for (const auto& [from, to] : vertexMap) {
-        (void)from;
-        if (!images.insert(to).second) {
+    std::unordered_set<std::uint64_t> images;
+    for (std::uint64_t v : used) {
+        if (!images.insert(vertexMap.at(v)).second) {
             throw std::invalid_argument(
                 "EdgeModeRegistry::relabeled: relabeling map is not "
-                "injective (image " +
-                std::to_string(to) + " repeats)");
+                "injective on the used vertices (image " +
+                std::to_string(vertexMap.at(v)) + " repeats)");
         }
     }
     EdgeModeRegistry out;
