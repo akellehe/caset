@@ -568,6 +568,7 @@ Eigen::Matrix3cd ColorAnchor::anchorMatrix(const Eigen::MatrixXcd& frame,
             "ColorAnchor::anchorMatrix: edgeWeights size must match the "
             "frame's edge rows");
     }
+    validateTriangles({tri});
     validateEdgeRange({tri}, frame.rows());
     // Diagonal weights: the τ-oriented restricted block S W_τ S is again
     // diagonal (the signs cancel), so |W_τ|^{1/2} = diag(|w_e|^{1/2}).

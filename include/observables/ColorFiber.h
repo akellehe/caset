@@ -168,6 +168,7 @@ struct AnchorProfile {
 /// particle, and none of it enters the emergence objective.
 class ColorFiber {
   public:
+    /// Double-precision complex scalar of every operator/state entry.
     using Complex = std::complex<double>;
 
     ColorFiber() = delete;  // constant algebra — no instances.
@@ -426,6 +427,7 @@ class ColorFiber {
 /// and never enters the emergence objective.
 class ColorAnchor {
   public:
+    /// Double-precision complex scalar of the frame/weight entries.
     using Complex = std::complex<double>;
 
     /// Eigenvalues of a restricted block with |λ| ≤ kreinTolerance() count
