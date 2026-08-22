@@ -350,12 +350,19 @@ struct ComponentBandRead {
 ///           + d_{k+1}^S (W_{k+1}^S)^{-1} (d_{k+1}^S)^T W_k^S ,
 ///
 /// where `d^S` restricts the integer boundary maps to the cells inside
-/// `S`.  When `S` is the whole vertex set this equals
-/// `HodgeLaplacian::laplacian(k)` entry for entry; at degree 0 it is the
-/// induced-subgraph Hermitian U(1) graph Laplacian under exactly the
-/// whole-complex conventions (A_ij = sum l^2 e^{i phase}, magnitude
-/// degree).  A `(k+1)`-cell with a vertex outside `S` does not contribute
-/// (the component is read as a complex in its own right).
+/// `S`.  When `S` is the whole vertex set this is the whole-complex
+/// operator: on the signed/complex-weight paths it equals
+/// `HodgeLaplacian::laplacian(k)` entry for entry (the tests pin this via
+/// the spectral resolution `sum_bands Phi Lambda Psi^dagger W = L`); on
+/// the verified positive path the SOLVED object is the symmetric
+/// W-orthonormal similarity `B_k^T B_k + B_{k+1} B_{k+1}^T` with the
+/// identical spectrum, and the frames are mapped back to cochain
+/// coordinates (`Phi = W^{-1/2} U`), so the same resolution identity
+/// holds.  At degree 0 it is the induced-subgraph Hermitian U(1) graph
+/// Laplacian under exactly the whole-complex conventions
+/// (A_ij = sum l^2 e^{i phase}, magnitude degree).  A `(k+1)`-cell with a
+/// vertex outside `S` does not contribute (the component is read as a
+/// complex in its own right).
 ///
 /// **Regimes** (design spec section 5.2; the regime is VERIFIED, never
 /// assumed):
