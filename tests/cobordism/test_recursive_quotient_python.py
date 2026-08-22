@@ -700,6 +700,41 @@ class TestOverlappingInterfaceLabeledSum(unittest.TestCase):
         np.testing.assert_allclose(np.abs(basis), np.full((2, 1), 1 / np.sqrt(2)),
                                    rtol=0, atol=1e-12)
 
+    def test_near_isometry_epsilon_bounds_the_amplitude_error(self):
+        # The whitepaper inequality |a^dag G b - a^dag b| <= eps ||a|| ||b||
+        # with eps = the reported gramDefect (a 2-norm statement), checked
+        # on random vectors against the read's own numbers.
+        q = self._quotient(cob.FiberEmbeddingPolicy.CertifiedNearIsometry)
+        read = q.labeledFiberSum()
+        G = _mat(read.gram, int(read.nominalRank))
+        rng = np.random.default_rng(5)
+        for _ in range(25):
+            a = rng.normal(size=2) + 1j * rng.normal(size=2)
+            b = rng.normal(size=2) + 1j * rng.normal(size=2)
+            error = abs(np.conj(a) @ G @ b - np.conj(a) @ b)
+            bound = read.gramDefect * np.linalg.norm(a) * np.linalg.norm(b)
+            self.assertLessEqual(error, bound + 1e-12)
+
+    def test_amplitude_budget_composes(self):
+        # eps_AB <= eps_A + eps_B + eps_A eps_B, and the tensor Gram of two
+        # near-isometries actually obeys the composed budget.
+        compose = cob.RecursiveQuotient.composeNearIsometryBudget
+        self.assertAlmostEqual(compose(0.1, 0.2), 0.32, places=15)
+        self.assertEqual(compose(0.0, 0.0), 0.0)
+        rng = np.random.default_rng(9)
+        for _ in range(10):
+            def near_isometry(n, scale):
+                defect = scale * rng.normal(size=(n, n))
+                defect = 0.5 * (defect + defect.T)
+                return np.eye(n) + defect
+            G_a = near_isometry(2, 0.05)
+            G_b = near_isometry(3, 0.03)
+            eps_a = np.linalg.norm(G_a - np.eye(2), 2)
+            eps_b = np.linalg.norm(G_b - np.eye(3), 2)
+            tensor = np.kron(G_a, G_b)
+            eps_ab = np.linalg.norm(tensor - np.eye(6), 2)
+            self.assertLessEqual(eps_ab, compose(eps_a, eps_b) + 1e-12)
+
     def test_disjoint_fibers_give_identity_gram(self):
         # Negative control for the overlap: partition WITHOUT overlap keeps
         # the labeled sum an honest (external) direct sum, G = I.
@@ -1162,6 +1197,37 @@ class TestCacheIncremental(unittest.TestCase):
                                    rtol=0, atol=0)
         self.assertEqual(E_child_after.shape, E_cold.shape)
         np.testing.assert_allclose(E_child_after, E_cold, rtol=0, atol=0)
+
+
+class TestCachePartitionSafety(unittest.TestCase):
+    def test_same_vertex_set_different_partition_never_cross_serves(self):
+        # Two quotients over the SAME spacetime and cache whose components
+        # share a vertex-id union but classify its cells differently (one
+        # retains a selected cell): the partition fingerprint keeps their
+        # payloads apart, so each equals its cacheless clone.
+        st = build_graph([(0, 1, 2.0, 0.0), (1, 2, 3.0, 0.0)])
+        cache = cob.AnalyticCache(st)
+        cells = [[[0], [1], [2]], [[0]], [[2]]]
+
+        plain = cob.RecursiveQuotient.overCells(
+            st, 0, cells, cob.RecursiveQuotient.Options(), cache)
+        E_plain, _ = reduction_matrix(plain)
+
+        options = cob.RecursiveQuotient.Options()
+        options.selectedInteriorCells = [[1]]
+        selected = cob.RecursiveQuotient.overCells(st, 0, cells, options,
+                                                   cache)
+        E_selected, _ = reduction_matrix(selected)
+
+        cold = cob.RecursiveQuotient.overCells(st, 0, cells, options)
+        E_cold, _ = reduction_matrix(cold)
+        np.testing.assert_allclose(E_selected, E_cold, rtol=0, atol=0)
+        # And the plain quotient still matches ITS cacheless clone.
+        cold_plain = cob.RecursiveQuotient.overCells(st, 0, cells)
+        E_cold_plain, _ = reduction_matrix(cold_plain)
+        np.testing.assert_allclose(E_plain, E_cold_plain, rtol=0, atol=0)
+        self.assertEqual(E_plain.shape, (2, 2))
+        self.assertEqual(E_selected.shape, (3, 3))
 
 
 # --------------------------------------------------------------------------

@@ -590,6 +590,20 @@ class RecursiveQuotient {
     /// treated by the run's declared `FiberEmbeddingPolicy`.
     [[nodiscard]] LabeledFiberSumRead labeledFiberSum() const;
 
+    /// The composable amplitude budget of the `CertifiedNearIsometry`
+    /// policy: two embeddings with Gram defects $ arepsilon_A,
+    /// arepsilon_B $ compose (tensor) to at most
+    /// [ arepsilon_{AB} \le arepsilon_A + arepsilon_B +
+    ///     arepsilon_Aarepsilon_B , ]
+    /// and the amplitude error obeys
+    /// $ |a^\dagger G b - a^\dagger b| \le arepsilon\|a\|\|b\| $
+    /// (whitepaper, "Interactions and the expanding Hilbert space"). This is
+    /// how a certified $ arepsilon $ PROPAGATES to composite reads.
+    [[nodiscard]] static double composeNearIsometryBudget(
+        double epsilonA, double epsilonB) noexcept {
+      return epsilonA + epsilonB + epsilonA * epsilonB;
+    }
+
     /// The next-level operator-valued response network (component stalks +
     /// effective blocks of the static reduction).
     [[nodiscard]] ResponseNetworkRead responseNetwork() const;
@@ -669,6 +683,7 @@ class RecursiveQuotient {
     std::vector<int> interfacePosition_{};             // fine -> kept position
     std::vector<std::vector<int>> claimants_{};        // fine -> components
     std::vector<std::string> provenance_{};            // fine coordinates
+    std::uint64_t partitionFingerprint_{0};            // cache-kind qualifier
     std::shared_ptr<Spacetime> st_{};
     std::shared_ptr<AnalyticCache> cache_{};
     // spacetime path extras: per-cell vertex tuples + integer boundary maps

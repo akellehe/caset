@@ -2003,6 +2003,11 @@ ancestry. Read-only: nothing here enters the emergence objective.)doc");
       .def("labeledFiberSum", &RecursiveQuotient::labeledFiberSum,
            "The abstract labeled sum of retained fibers with embedding J and "
            "Gram G = J^dag W J under the run's declared policy.")
+      .def_static("composeNearIsometryBudget",
+                  &RecursiveQuotient::composeNearIsometryBudget,
+                  py::arg("epsilon_a"), py::arg("epsilon_b"),
+                  "Composable amplitude budget of the CertifiedNearIsometry "
+                  "policy: eps_AB <= eps_A + eps_B + eps_A * eps_B.")
       .def("responseNetwork", &RecursiveQuotient::responseNetwork,
            "The next-level operator-valued response network (stalks + "
            "effective blocks).")

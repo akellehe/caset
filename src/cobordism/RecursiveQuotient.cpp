@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <cstring>
 #include <numeric>
 #include <set>
 #include <sstream>
@@ -368,6 +369,36 @@ void RecursiveQuotient::classify() {
       keptOwner_.push_back(owners.empty() ? 0 : owners[0]);
     }
   }
+
+  // Cache-kind qualifier: two instances may share a component VERTEX set
+  // (the AnalyticCache key) while classifying its cells differently — a
+  // different partition, degree, or rank tolerance produces a different
+  // payload. The fingerprint folds the classification so such instances
+  // never serve each other's entries (splitmix64-style mixing).
+  auto mix = [](std::uint64_t h, std::uint64_t v) {
+    h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+    h *= 0xbf58476d1ce4e5b9ULL;
+    return h ^ (h >> 31);
+  };
+  std::uint64_t fingerprint = mix(0x243f6a8885a308d3ULL,
+                                  static_cast<std::uint64_t>(dim_));
+  fingerprint = mix(fingerprint, static_cast<std::uint64_t>(degree_ + 2));
+  std::uint64_t bits = 0;
+  static_assert(sizeof(bits) == sizeof(options_.rankTolerance));
+  std::memcpy(&bits, &options_.rankTolerance, sizeof(bits));
+  fingerprint = mix(fingerprint, bits);
+  std::memcpy(&bits, &options_.tolerance, sizeof(bits));
+  fingerprint = mix(fingerprint, bits);
+  fingerprint = mix(fingerprint,
+                    static_cast<std::uint64_t>(options_.denseCrossover));
+  for (const int kept : interfaceIndices_)
+    fingerprint = mix(fingerprint, static_cast<std::uint64_t>(kept) + 1);
+  for (const auto &interior : interior_) {
+    fingerprint = mix(fingerprint, interior.size() + 0x51ULL);
+    for (const int index : interior)
+      fingerprint = mix(fingerprint, static_cast<std::uint64_t>(index) + 3);
+  }
+  partitionFingerprint_ = fingerprint;
 }
 
 void RecursiveQuotient::detectRegime(bool structuralPsd) {
@@ -706,17 +737,18 @@ RecursiveQuotient::componentSolve(int component) const {
   auto &slot = solves_[static_cast<std::size_t>(component)];
   if (slot) return slot;
 
-  static const std::string kKind = "recursive-quotient-static";
+  const std::string kind =
+      "recursive-quotient-static#" + std::to_string(partitionFingerprint_);
   if (cache_ && st_) {
     const auto key = componentVertexIds(component);
-    if (auto cached = cache_->fetch(key, kKind, degree_)) {
+    if (auto cached = cache_->fetch(key, kind, degree_)) {
       slot = std::static_pointer_cast<ComponentSolve>(cached);
       return slot;
     }
     slot = computeSolve(component, cd(0.0, 0.0));
     const double residual =
         std::max(slot->solveResidual, slot->compatibilityResidual);
-    cache_->store(key, kKind, degree_, slot,
+    cache_->store(key, kind, degree_, slot,
                   Certificate::structureExact(
                       CertificateDomain::Static, regime_, residual,
                       slot->conditioning, options_.tolerance));
