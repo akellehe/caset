@@ -1,12 +1,12 @@
 # Referee response: recursive spectral fibers
 
-This note records the dispositions of the external reviews of the whitepaper,
-round by round. The revised LaTeX/PDF and design specification are normative.
+This note records the disposition of the external review supplied after the first
+whitepaper draft. The revised LaTeX/PDF and design specification are normative.
 “Accepted” means the paper contained an internal inconsistency or an under-specified
 construction. “Qualified” means the diagnosis was useful but the proposed repair
 made a stronger claim than the mathematics supports.
 
-## Round one
+## Disposition
 
 | # | Disposition | Revision |
 |---:|---|---|
@@ -48,60 +48,36 @@ The following remain exact in their stated domains:
 5. `F_-(h_A⊕h_B)≅F_-(h_A)⊗̂F_-(h_B)` and the `dΓ` direct-sum identity;
 6. bifundamental covariance of accepted frame-overlap transport and conjugacy
    invariance of closed holonomies;
-7. integer determinant winding for closed, continuous, full-rank loops; and
-8. the existing Gram-defect amplitude bounds and inductive-limit dimension identity.
+7. integer determinant winding for closed, continuous, full-rank loops;
+8. the existing Gram-defect amplitude bounds and inductive-limit dimension identity;
+   and
+9. closure of the quasi-free class under every quadratic/mean-field generator
+   currently admitted by the model.
 
 The quark, baryon-number, flavor, confinement, spin, and proton identifications
 remain proposed physical readings with explicit failure states.
 
-## Round two
+## Review of v2 and v3 disposition
 
-A second external review examined the revised draft. Its findings were accepted
-essentially in full, with one sharpening running in the other direction: the
-reviewer proposed state-geometry backreaction as a source of interacting
-sectors, and the correct statement is stronger — classical or mean-field
-backreaction alone cannot produce non-Gaussianity. The round-one qualified and
-rejected dispositions (Kasteleyn/spin structure, Kähler–Dirac taste, and the
-stationarity/envelope conjecture) were re-examined by the reviewer and upheld.
+The second review accepted the three qualifications above and identified seven
+additional consistency requirements. The v3 whitepaper and design specification
+resolve them as follows.
 
-| # | Disposition | Revision |
+| # | Disposition | v3 contract |
 |---:|---|---|
-| 1 | Accepted; diagnosis sharpened | Every generator in the model is `dΓ` of a one-particle map, so quasi-free states stay quasi-free. The closure survives self-consistency `h=h(Γ(t),g(t))`: mean-field geometry backreaction is nonlinear Hartree–Fock-like dynamics and does not leave the Gaussian manifold, so the proposed backreaction channel is legitimate but is not by itself a producer of non-Gaussian correlations. Genuine non-Gaussianity requires one of: a quartic interaction `Σ V_ijkl a_i†a_j†a_k a_l`; quantized geometry entangled with the fermions; integrating out dynamical geometry beyond mean field, producing a retarded or quartic effective interaction; a cobordism map that is not the second quantization of a one-particle map; or measurement/postselection. None is currently in the model. The covariance layer `Γ_ij=<a_j†a_i>`, `iΓ̇=[h,Γ]`, `Γ²=Γ` for pure Slater states, is the exact primary state representation, and Wick's theorem evaluates every polynomial certificate; a Fock vector is materialized only for oracle tests or explicitly non-Gaussian boundary data. The emergence protocol splits into strict and certificates-blind mean-field backreaction sub-modes, both Gaussian-closed. |
-| 2 | Accepted | Geometric fiber subspaces `E_v ⊂ C(K)` of adjacent components need not form a direct sum. The recursion uses the abstract labeled sum with an embedding `J: ⊞_v E_v → C(K)` and Gram matrix `G=J†WJ`, and proceeds by exactly one declared option: carry `G` exactly, certify `‖G−I‖≤ε` through the composable amplitude budget, or quotient `ker G`. A sheaf-stalk decomposition is a valid realization, not a requirement. |
-| 3 | Accepted | The anchor uses the weighted restriction `A_τ=|W_τ|^{1/2}R_τΦ_Q`, so `|det A_τ|²≤1` in the positive regime and the convex score is calibrated to `[0,1]`. The weighting is declared before the data are examined; the full profile (maximum term, participation ratio, determinant-phase dispersion) is reported alongside the score; signed sectors report the restricted block's Krein signature separately. |
-| 4 | Accepted | An integer winding requires a closed determinant-line loop. Open cobordism segments use only the relative winding: close the composite with the inverse matched reference transport or with fixed endpoint trivializations from the boundary registers, and report the reference specification. Without closure `ν` is an endpoint phase change, not an invariant. |
-| 5 | Accepted | Modularity cannot be both a mere proposal generator and a mandatory particle condition. The load-bearing acceptance conditions are spectral gap, localization, persistence, leakage, anchoring, and refinement stability; modularity proposes candidate supports and may not veto an otherwise certified fiber. |
-| 6 | Accepted | The opposite-signature pair-selection rule with conserved real sum is recorded as second-tier measured evidence for the particle/antiparticle reading; the identification itself remains a third-tier proposed interpretation. Evidence for a hypothesis is not the same as making the hypothesis exact. |
-| 7 | Accepted | For `det(L−λI)=det(L_II−λI)·det F_B(λ)`, the order of the zero of `det F_B(·)` at `λ` is the algebraic multiplicity and `dim ker F_B(λ)` the geometric multiplicity; the two coincide in the self-adjoint/semisimple setting but not in general. |
+| 1 | Accepted and sharpened | Every current many-body generator is quadratic, so Gaussian data remain quasi-free even under classical mean-field backreaction. The covariance matrix is the exact primary state representation; Wick contraction evaluates all polynomial certificates. Lazy Fock state is an oracle/boundary carrier, not the production quasi-free path. A genuinely non-Gaussian producer requires a separately authorized quartic, quantized-geometry, beyond-mean-field, non-second-quantized, or measurement/postselection mechanism. |
+| 2 | Accepted | Retained component fibers form an abstract labeled sum `⊞_v E_v` with embedding `J` and Gram matrix `G=J†WJ`. A run must carry `G`, certify a near-isometry and propagate its defect, or quotient `ker G`; it never silently asserts that overlapping geometric images form an internal direct sum. |
+| 3 | Accepted | Triangle restriction is metric-weighted, `A_τ=|W_τ|^{1/2}R_τΦ`. The positive-regime determinant terms and pre-declared convex atlas score lie in `[0,1]`. The full maximum/participation/phase-dispersion profile and weighting identifier are reported. |
+| 4 | Accepted | Integer determinant winding is defined only on a closed, continuous, full-rank, gapped loop. Open tubes are closed by inverse matched-reference transport or fixed boundary trivializations; the closure is serialized. A raw endpoint phase is not a winding certificate. |
+| 5 | Accepted | Newman-Girvan modularity is only one proposal generator and cannot veto an otherwise certified fiber. Weight-aware gap, localization, leakage, persistence, refinement, and anchor data are load-bearing. |
+| 6 | Accepted evidence-tier correction | Opposite-signature pair selection and real-part conservation are recorded as existing Tessera evidence. Negative Krein signature alone is still not defined to mean antiparticle. |
+| 7 | Accepted | For the Feshbach pencil, algebraic multiplicity is the root order of `det F_B(·)`; `dim ker F_B(λ)` is geometric multiplicity. Equality is asserted only in the self-adjoint/semisimple setting. |
 
-### Minor findings, round two
-
-- Accepted: the spin certificate is sharpness-certified, `<J²>=3/4` with
-  `Var(J²)=<(J²)²>−<J²>²≈0`, both exactly Wick-computable on the covariance
-  layer. A Gaussian state can in special cases be an exact `J²` eigenstate, so
-  quasi-free failure is not automatic; a generic Slater determinant with the
-  right expectation need not be spin-1/2, and the variance separates a proton
-  certificate from an accidental expectation value.
-- Accepted: the `2π` rotation path is the documented total-space spin holonomy
-  cycle, executed as a closed loop against a co-moving non-rotating reference;
-  it is not left abstract.
-- Accepted: the `uud` certificate bullet now references the still-hypothetical
-  isospin-doublet construction explicitly.
-- Accepted: BibTeX name-suffix entries (Craig Jr., Lawson Jr.) corrected.
-
-### Exact core after the second revision
-
-Added to the round-one ledger:
-
-9. closure of the quasi-free class under every generator currently in the
-   model, including the mean-field self-consistency loop; and
-10. Wick evaluation of every polynomial certificate — occupations, parity,
-    Pauli/Gram determinants, `|S_ABC|²`, `<J²>`, and `Var(J²)` — on the
-    covariance matrix.
-
-The organizing open question is the covariance-only dichotomy: either an exact
-covariance-only proton exists, or a genuinely non-Gaussian, geometry-mediated
-interaction is required. The preferred programme order is covariance-first;
-failure of the sharp proton certificate across the accepted covariance-only
-class is a meaningful structural branch point mandating an explicit
-non-Gaussian mechanism, not a failure of the geometry.
+The proton spin certificate now requires both
+`<J²>=3/4` and `Var(J²)≈0`, with both values evaluated by Wick contraction on
+the quasi-free path. Failure of sharp spin throughout the accepted covariance-only
+class is reported as `quasi_free_sharp_spin_obstruction`: a scientific branch
+point, not permission to add an interaction silently. The physical `2π` path is
+the existing documented total-space spin-holonomy cycle with a matched co-moving
+reference. Flavor `uud` remains conditional on the independently accepted
+isospin-doublet hypothesis.
