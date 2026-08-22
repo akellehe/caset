@@ -49,6 +49,7 @@
 #include "quantum/ChoiJamiolkowski.h"
 #include "quantum/ChoiState.hpp"
 #include "quantum/DMRGRunner.hpp"
+#include "quantum/GradedFock.h"
 #include "quantum/Holography.hpp"
 #include "simulations/InteractionSimulation.h"
 #include "quantum/Majorization.hpp"
@@ -61,6 +62,35 @@
 #include "spacetime/Spacetime.h"  // full type needed for py::cast<Spacetime*>()
 
 namespace py = pybind11;
+
+namespace {
+// COO conversion for sparse operators crossing the Python boundary. The
+// pybind11/eigen.h sparse binding produces an empty CSC under LTO (see
+// EmergentGraph::laplacianCOO above/below), so every sparse-returning
+// GradedFock method ships plain (rows, cols, values, n) arrays instead.
+// Wrap in scipy on the Python side:
+//     rows, cols, vals, n = alg.creationMatrixCOO(i)
+//     a = scipy.sparse.csr_matrix((vals, (rows, cols)), shape=(n, n))
+py::tuple sparseOpToCoo(
+    const Eigen::SparseMatrix<std::complex<double>>& op) {
+    std::vector<std::int64_t> rows;
+    std::vector<std::int64_t> cols;
+    std::vector<std::complex<double>> vals;
+    rows.reserve(static_cast<std::size_t>(op.nonZeros()));
+    cols.reserve(static_cast<std::size_t>(op.nonZeros()));
+    vals.reserve(static_cast<std::size_t>(op.nonZeros()));
+    for (int k = 0; k < op.outerSize(); ++k) {
+        for (Eigen::SparseMatrix<std::complex<double>>::InnerIterator it(op, k);
+             it; ++it) {
+            rows.push_back(static_cast<std::int64_t>(it.row()));
+            cols.push_back(static_cast<std::int64_t>(it.col()));
+            vals.push_back(it.value());
+        }
+    }
+    return py::make_tuple(rows, cols, vals,
+                          static_cast<std::int64_t>(op.rows()));
+}
+}  // namespace
 
 void register_quantum(py::module_ m) {
     using namespace tessera::quantum;
@@ -1532,4 +1562,306 @@ if ``targetMI`` lies outside [0, 2·H(λ)].)doc");
         .value("Sigma",  ::tessera::quantum::QuantumSimplex::Sigma)
         .value("APrime", ::tessera::quantum::QuantumSimplex::APrime)
         .value("BPrime", ::tessera::quantum::QuantumSimplex::BPrime);
+
+    // ── Exterior-algebra / graded-tensor primitives (issue #766) ─────────
+    // Sparse operators cross the boundary as COO tuples (see sparseOpToCoo).
+
+    py::class_<OccupationBitset>(m, "OccupationBitset",
+        R"doc(An exterior basis state of Λ*C^M as a chunked occupation bitset.
+
+One 64-bit word up to the machine-word threshold, ceil(M/64) words above
+it, with the exact prefix-popcount creation sign
+(-1)^popcount(b & ((1 << i) - 1)) in both regimes. The mode order behind
+bit positions is a compilation artifact of the order-independent abstract
+exterior algebra (no Kasteleyn orientation is required); permuted /
+permutationParity give the exact signed action of a mode relabeling.)doc")
+        .def(py::init<std::size_t>(), py::arg("modeCount"))
+        .def_static("fromOccupiedModes", &OccupationBitset::fromOccupiedModes,
+             py::arg("modeCount"), py::arg("modes"),
+             "Bitset with exactly the listed modes occupied.")
+        .def_static("fromIndex", &OccupationBitset::fromIndex,
+             py::arg("modeCount"), py::arg("index"),
+             "Bitset from a Fock basis index (modeCount <= 64).")
+        .def("modeCount", &OccupationBitset::modeCount)
+        .def("chunkCount", &OccupationBitset::chunkCount,
+             "Number of 64-bit storage chunks, ceil(M/64).")
+        .def("chunks", &OccupationBitset::chunks,
+             "Raw storage words, least-significant chunk first.")
+        .def("test", &OccupationBitset::test, py::arg("mode"))
+        .def("set", &OccupationBitset::set, py::arg("mode"))
+        .def("reset", &OccupationBitset::reset, py::arg("mode"))
+        .def("count", &OccupationBitset::count,
+             "Total occupation number N.")
+        .def("parity", &OccupationBitset::parity,
+             "Fermion parity (-1)^N as +1/-1.")
+        .def("prefixPopcount", &OccupationBitset::prefixPopcount,
+             py::arg("mode"),
+             "Number of occupied modes strictly below `mode`.")
+        .def("applyCreation", &OccupationBitset::applyCreation, py::arg("mode"),
+             R"doc(Apply a_i^dagger at the bit level: 0 if the mode was occupied
+(Pauli exclusion, state unchanged), else the exact sign
+(-1)^prefixPopcount(mode) with the mode now occupied.)doc")
+        .def("applyAnnihilation", &OccupationBitset::applyAnnihilation,
+             py::arg("mode"),
+             "Apply a_i at the bit level: 0 if empty, else the exact sign.")
+        .def("toIndex", &OccupationBitset::toIndex,
+             "Fock basis index sum_i b_i 2^i (modeCount <= 64).")
+        .def("occupiedModes", &OccupationBitset::occupiedModes,
+             "Occupied modes in ascending order (the wedge word).")
+        .def("permuted", &OccupationBitset::permuted, py::arg("perm"),
+             "The relabeled bitset: bit perm[i] of the result = bit i.")
+        .def("permutationParity", &OccupationBitset::permutationParity,
+             py::arg("perm"),
+             R"doc(The exact +1/-1 a basis state picks up under the mode relabeling
+`perm`: the inversion parity of the images of its occupied modes. Physical
+amplitudes are invariant under relabeling once this parity is applied.)doc")
+        .def("__eq__",
+             [](const OccupationBitset& a, const OccupationBitset& b) {
+                 return a == b;
+             }, py::is_operator())
+        .def("__repr__", &OccupationBitset::str)
+        .def("__str__", &OccupationBitset::str);
+
+    py::class_<ExteriorAlgebra>(m, "ExteriorAlgebra",
+        R"doc(The exterior algebra Λ*C^M with its CAR operator layer.
+
+Fock basis |b> at index n(b) = sum_i b_i 2^i (mode 0 = least-significant
+bit). Exact identities carried (tested to double round-off): the CAR
+{a_i, a_j} = {a_i+, a_j+} = 0, {a_i, a_j+} = delta_ij; dim Λ*C^M = 2^M;
+||v_1 ^ ... ^ v_n||^2 = det(<v_i, v_j>); duplicate complete one-particle
+modes wedge to exactly zero. Sparse operators are returned as COO tuples
+(rows, cols, values, n) — wrap with scipy.sparse.csr_matrix.)doc")
+        .def(py::init<std::size_t>(), py::arg("modeCount"))
+        .def("modeCount", &ExteriorAlgebra::modeCount)
+        .def("fockDimension", &ExteriorAlgebra::fockDimension,
+             "dim Λ*C^M = 2^M.")
+        .def("creationMatrixCOO",
+             [](const ExteriorAlgebra& a, std::size_t mode) {
+                 return sparseOpToCoo(a.creationMatrix(mode));
+             }, py::arg("mode"),
+             "a_i^dagger with the prefix-popcount sign rule, as COO.")
+        .def("annihilationMatrixCOO",
+             [](const ExteriorAlgebra& a, std::size_t mode) {
+                 return sparseOpToCoo(a.annihilationMatrix(mode));
+             }, py::arg("mode"), "a_i (adjoint of creationMatrixCOO), as COO.")
+        .def("numberMatrixCOO",
+             [](const ExteriorAlgebra& a, std::size_t mode) {
+                 return sparseOpToCoo(a.numberMatrix(mode));
+             }, py::arg("mode"), "n_i = a_i^dagger a_i, as COO.")
+        .def("totalNumberMatrixCOO",
+             [](const ExteriorAlgebra& a) {
+                 return sparseOpToCoo(a.totalNumberMatrix());
+             }, "N = sum_i n_i, as COO.")
+        .def("parityMatrixCOO",
+             [](const ExteriorAlgebra& a) {
+                 return sparseOpToCoo(a.parityMatrix());
+             }, "Fermion parity (-1)^N, as COO.")
+        .def("sectorProjectorCOO",
+             [](const ExteriorAlgebra& a, std::size_t occupation) {
+                 return sparseOpToCoo(a.sectorProjector(occupation));
+             }, py::arg("occupation"),
+             "Projector onto total occupation N = `occupation`, as COO.")
+        .def("subsetSectorProjectorCOO",
+             [](const ExteriorAlgebra& a, const std::vector<std::size_t>& modes,
+                std::size_t occupation) {
+                 return sparseOpToCoo(a.subsetSectorProjector(modes, occupation));
+             }, py::arg("modes"), py::arg("occupation"),
+             R"doc(Projector onto occupation `occupation` restricted to the mode
+subset `modes`, as COO. With a three-mode subset these are the exact
+Lambda^0, Lambda^1, Lambda^2, Lambda^3 sector projectors of that factor —
+occupation-number projectors; sector interpretation is out of scope.)doc")
+        .def("vacuumState", &ExteriorAlgebra::vacuumState,
+             "The vacuum |0...0> as a dense Fock vector.")
+        .def("basisState", &ExteriorAlgebra::basisState, py::arg("bitset"),
+             "The Fock basis vector |b> of an occupation bitset.")
+        .def("creationOperatorCOO",
+             [](const ExteriorAlgebra& a, const Eigen::VectorXcd& v) {
+                 return sparseOpToCoo(a.creationOperator(v));
+             }, py::arg("v"),
+             "Smeared creation a^dagger(v) = sum_i v_i a_i^dagger, as COO.")
+        .def("annihilationOperatorCOO",
+             [](const ExteriorAlgebra& a, const Eigen::VectorXcd& v) {
+                 return sparseOpToCoo(a.annihilationOperator(v));
+             }, py::arg("v"),
+             R"doc(Smeared annihilation a(v) = sum_i conj(v_i) a_i (antilinear in v),
+so {a(v), a^dagger(w)} = <v, w> exactly, as COO.)doc")
+        .def("wedge", &ExteriorAlgebra::wedge, py::arg("vectors"),
+             R"doc(v_1 ^ ... ^ v_n = a^dagger(v_1)...a^dagger(v_n)|vacuum> as a dense
+Fock vector (rightmost factor applied first).
+||v_1 ^ ... ^ v_n||^2 = det(<v_i, v_j>) exactly; a repeated complete
+one-particle mode gives exactly zero.)doc")
+        .def("contract", &ExteriorAlgebra::contract, py::arg("w"),
+             py::arg("state"),
+             "Interior product iota_w state = a(w) state (odd antiderivation).")
+        .def("dGammaCOO",
+             [](const ExteriorAlgebra& a, const Eigen::MatrixXcd& L) {
+                 return sparseOpToCoo(a.dGamma(L));
+             }, py::arg("oneParticle"),
+             R"doc(Second quantization dGamma(L) = sum_ij L_ij a_i^dagger a_j of an
+MxM one-particle block matrix — the number-preserving quadratic/hopping
+operator. For Hermitian L the spectrum is exactly the occupation subset
+sums of the one-particle spectrum. Returned as COO.)doc")
+        .def("modePermutationMatrixCOO",
+             [](const ExteriorAlgebra& a, const std::vector<std::size_t>& perm) {
+                 return sparseOpToCoo(a.modePermutationMatrix(perm));
+             }, py::arg("perm"),
+             R"doc(The signed permutation unitary U_pi with
+U_pi |b> = permutationParity(b) |pi(b)>, so
+U_pi a_i^dagger U_pi^dagger = a_pi(i)^dagger. Returned as COO.)doc");
+
+    py::class_<GradedTensorComplex>(m, "GradedTensorComplex",
+        R"doc(The graded tensor product of two finite chain complexes.
+
+C_n = sum_{p+q=n} A_p x B_q with the graded Leibniz differential
+d(a x b) = da x b + (-1)^deg(a) a x db — the chain complex of an actual
+product cell complex (cubical/CW products satisfy C(XxY) = C(X) x C(Y)
+on the nose). Exact consequences of the sign rule: d o d = 0, and the
+Hodge Laplacian is blockwise Delta_A x 1 + 1 x Delta_B, so the degree-n
+Hodge spectrum is the multiset of pairwise sums (Kunneth at the Hodge
+level, identity metrics).
+
+Conventions: diff[k] is the boundary C_{k+1} -> C_k of shape
+dims[k] x dims[k+1]; product blocks are ordered by ascending p; within a
+block the index is i_a * dimB_q + i_b (kron(A-side, B-side)).)doc")
+        .def(py::init<std::vector<std::size_t>, std::vector<Eigen::MatrixXcd>,
+                      std::vector<std::size_t>, std::vector<Eigen::MatrixXcd>,
+                      double>(),
+             py::arg("dimsA"), py::arg("diffA"), py::arg("dimsB"),
+             py::arg("diffB"), py::arg("boundaryTolerance") = 0.0)
+        .def("maxDegree", &GradedTensorComplex::maxDegree)
+        .def("chainDimension", &GradedTensorComplex::chainDimension,
+             py::arg("degree"))
+        .def("blocks", &GradedTensorComplex::blocks, py::arg("degree"),
+             "The (p, q) block labels of C_degree in storage order.")
+        .def("differential", &GradedTensorComplex::differential,
+             py::arg("degree"),
+             "The graded Leibniz differential C_degree -> C_{degree-1}.")
+        .def("laplacian", &GradedTensorComplex::laplacian, py::arg("degree"),
+             "Hodge Laplacian d+ d + d d+ of the product at `degree`.")
+        .def("factorLaplacianA", &GradedTensorComplex::factorLaplacianA,
+             py::arg("degree"), "Hodge Laplacian of factor A alone.")
+        .def("factorLaplacianB", &GradedTensorComplex::factorLaplacianB,
+             py::arg("degree"), "Hodge Laplacian of factor B alone.");
+
+    py::class_<FockDirectSum>(m, "FockDirectSum",
+        R"doc(The Fock direct-sum functor F(h_A + h_B) = F(h_A) x F(h_B).
+
+Compiled with A modes first: |b> <-> |b_A> x |b_B> at joint index
+i_A + 2^M_A i_B, sign-free. Even operators lift as X x 1 and 1 x Y; ODD
+right-factor operators acquire the parity twist (-1)^N_A x Y (the Koszul
+sign / Jordan-Wigner string over A), making joint CAR generators exactly
+the lifted factor generators — direct sums become graded tensor products,
+and coupling blocks of a one-particle operator become hopping terms. The
+graded swap S(x b y) = (-1)^{|x||y|} y x x has odd/odd sign -1 and +1 on
+every other elementary parity combination. Operator arguments are dense;
+sparse results are COO tuples.)doc")
+        .def(py::init<std::size_t, std::size_t>(), py::arg("modesA"),
+             py::arg("modesB"))
+        .def("modesA", &FockDirectSum::modesA)
+        .def("modesB", &FockDirectSum::modesB)
+        .def("jointAlgebra", &FockDirectSum::jointAlgebra,
+             "The joint ExteriorAlgebra over M_A + M_B modes.")
+        .def("leftAlgebra", &FockDirectSum::leftAlgebra)
+        .def("rightAlgebra", &FockDirectSum::rightAlgebra)
+        .def("liftLeftCOO",
+             [](const FockDirectSum& f, const Eigen::MatrixXcd& opA) {
+                 return sparseOpToCoo(f.liftLeft(opA.sparseView()));
+             }, py::arg("opA"),
+             R"doc(X_A -> X_A x 1_FB, exact for odd and even operators (A modes
+precede all B modes, so the Jordan-Wigner string is empty). COO result.)doc")
+        .def("liftRightCOO",
+             [](const FockDirectSum& f, const Eigen::MatrixXcd& opB,
+                bool oddOperator) {
+                 return sparseOpToCoo(f.liftRight(opB.sparseView(),
+                                                  oddOperator));
+             }, py::arg("opB"), py::arg("oddOperator"),
+             R"doc(Y_B -> 1 x Y_B (even) or (-1)^N_A x Y_B (odd; the Koszul /
+Jordan-Wigner parity twist that preserves the joint CAR). COO result.)doc")
+        .def("gradedSwapMatrixCOO",
+             [](const FockDirectSum& f) {
+                 return sparseOpToCoo(f.gradedSwapMatrix());
+             },
+             R"doc(The graded swap S: F_A x F_B -> F_B x F_A,
+S(x b y) = (-1)^{|x||y|} y x x: odd/odd exchange is -1, every other
+elementary parity combination is +1. COO result.)doc")
+        .def_static("assembleBlockOneParticle",
+             &FockDirectSum::assembleBlockOneParticle, py::arg("blockA"),
+             py::arg("blockB"), py::arg("coupling"),
+             "The block one-particle matrix [[L_A, C], [C+, L_B]] (dense).")
+        .def("dGammaBlockCOO",
+             [](const FockDirectSum& f, const Eigen::MatrixXcd& blockA,
+                const Eigen::MatrixXcd& blockB,
+                const Eigen::MatrixXcd& coupling) {
+                 return sparseOpToCoo(f.dGammaBlock(blockA, blockB, coupling));
+             }, py::arg("blockA"), py::arg("blockB"), py::arg("coupling"),
+             R"doc(dGamma([[L_A, C], [C+, L_B]]) on the joint Fock space: equals
+liftLeft(dGamma(L_A)) + liftRight(dGamma(L_B), even) plus the hopping
+terms sum_{i in A, j in B} C_ij a_i^dagger a_j + h.c. COO result.)doc");
+
+    py::class_<EdgeModeRecord>(m, "EdgeModeRecord",
+        R"doc(One edge-mode record: oriented incidence + mode identity.
+
+The edge indexes one two-level mode FACTOR span{|0>, |1>} (modeId) inside
+the global exterior Fock space. No per-edge state vector is stored, and
+the Edge's single complex length stays on the Edge; a per-edge occupation
+is a derived marginal of the global state, not a stored product state.)doc")
+        .def_readonly("vertexA", &EdgeModeRecord::vertexA)
+        .def_readonly("vertexB", &EdgeModeRecord::vertexB)
+        .def_readonly("orientationSign", &EdgeModeRecord::orientationSign)
+        .def_readonly("modeId", &EdgeModeRecord::modeId)
+        .def_readonly("lineageKey", &EdgeModeRecord::lineageKey);
+
+    py::class_<EdgeModeRegistry>(m, "EdgeModeRegistry",
+        R"doc(Edge-mode basis bookkeeping + the deterministic compilation order.
+
+canonicalModeOrder sorts modes by (lineageKey, min vertex, max vertex):
+oriented component lineage first, the unordered vertex pair as the
+deterministic tie-break. The order is a compilation artifact of the
+order-independent abstract exterior algebra — no Kasteleyn orientation is
+required. A vertex relabeling rebuilds the order; orderPermutation +
+OccupationBitset.permutationParity / ExteriorAlgebra.modePermutationMatrixCOO
+give the exact parity map under which all physical amplitudes are
+invariant.
+
+Reorientation convention: reverseStoredDirection swaps endpoints AND flips
+orientationSign (pure storage change — nothing observable moves);
+flipOrientation flips only the sign (physical reversal — the mode's
+one-particle embedding vector is multiplied by -1, i.e. a_e -> -a_e,
+a_e+ -> -a_e+, with the two-level factor fixed pointwise and nothing
+conjugated; CAR and occupation observables are preserved).)doc")
+        .def(py::init<>())
+        .def("addEdge", &EdgeModeRegistry::addEdge, py::arg("vertexA"),
+             py::arg("vertexB"), py::arg("orientationSign"),
+             py::arg("lineageKey"),
+             "Register an edge mode; returns the assigned modeId.")
+        .def("modeCount", &EdgeModeRegistry::modeCount)
+        .def("record", &EdgeModeRegistry::record, py::arg("modeId"),
+             py::return_value_policy::copy)
+        .def("records", &EdgeModeRegistry::records,
+             py::return_value_policy::copy)
+        .def("reverseStoredDirection", &EdgeModeRegistry::reverseStoredDirection,
+             py::arg("modeId"),
+             "(a, b, s) -> (b, a, -s): storage convention only; invariant.")
+        .def("flipOrientation", &EdgeModeRegistry::flipOrientation,
+             py::arg("modeId"),
+             "s -> -s: physically reverses the oriented edge.")
+        .def("canonicalOrientationSign",
+             &EdgeModeRegistry::canonicalOrientationSign, py::arg("modeId"),
+             R"doc(Orientation relative to the canonical (min -> max vertex)
+direction; invariant under reverseStoredDirection, flips under
+flipOrientation.)doc")
+        .def("canonicalModeOrder", &EdgeModeRegistry::canonicalModeOrder,
+             "modeIds sorted by (lineageKey, min vertex, max vertex).")
+        .def("compilationPositions", &EdgeModeRegistry::compilationPositions,
+             "positions[modeId] = index in canonicalModeOrder().")
+        .def("relabeled", &EdgeModeRegistry::relabeled, py::arg("vertexMap"),
+             R"doc(The registry after a vertex relabeling (dict old -> new; must
+cover all used vertices, injectively). modeIds, signs and lineage keys are
+preserved; the canonical order is rebuilt from the new ids.)doc")
+        .def_static("orderPermutation", &EdgeModeRegistry::orderPermutation,
+             py::arg("before"), py::arg("after"),
+             R"doc(perm[i] = position in `after`'s canonical order of the mode at
+position i of `before`'s canonical order (matched by modeId). Feed to
+OccupationBitset.permutationParity / ExteriorAlgebra.
+modePermutationMatrixCOO for the exact parity map.)doc");
 }

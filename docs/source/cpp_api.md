@@ -245,6 +245,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} QuantumVertex.hpp
 ```
+```{doxygenfile} GradedFock.h
+```
 
 ## Graph
 

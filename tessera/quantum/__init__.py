@@ -190,6 +190,13 @@ _EXPORTS = (
     # Coarse-grained workflow classes
     "SchwingerModel", "SchwingerQuench", "InteractionSimulation",
     "Majorization", "Causet", "MutualInformation", "ChoiJamiolkowski",
+    # Exterior-algebra / graded-tensor primitives (issue #766): occupation
+    # bitsets with the prefix-popcount sign rule, the CAR operator layer,
+    # the graded chain/tensor differential, the Fock direct-sum functor and
+    # dGamma, and the edge-mode registry with its deterministic compilation
+    # order and relabeling parity.
+    "OccupationBitset", "ExteriorAlgebra", "GradedTensorComplex",
+    "FockDirectSum", "EdgeModeRecord", "EdgeModeRegistry",
     # KI + QuantumSimplex (Van Raamsdonk-metric simplex factory)
     "QuantumSimplex", "QuantumSimplexPosition", "QuantumVertex",
     "createQuantumVertex",
