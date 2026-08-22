@@ -11,6 +11,8 @@
 #include <string>
 #include <vector>
 
+#include "observables/PersistentModularity.h"
+
 // === tessera subsystem ns fwd-decls ===
 namespace tessera::graph {}
 namespace tessera::mesh {}
@@ -23,6 +25,7 @@ namespace tessera::simulations {
 }
 namespace tessera::spacetime {
   class PachnerMove;
+  class Spacetime;
 }
 namespace tessera::observables {
 using namespace ::tessera::mesh;
@@ -61,6 +64,18 @@ struct ModularityOptimizerConfig {
 /// Modularity sweep on a CDT spacetime, driven by transactional
 /// Pachner moves with Q-direction acceptance.
 ///
+/// **Score domain and status.**  Every modularity number this class
+/// produces — the sweep's Q trajectory (via
+/// ``Spacetime::modularityOnSkeleton``) and the label-free discovery
+/// reachable through :func:`discoverComponents` — is a Newman-Girvan /
+/// generalized-modularity score evaluated on a combinatorial /
+/// nonnegative one-skeleton.  It is blind to signed and complex Hodge
+/// weights, so it is a heuristic proposal generator only: it may
+/// propose candidate component supports, it never enters the emergence
+/// objective, and it may not veto an otherwise certified fiber.  Fiber
+/// acceptance rests solely on the independent weight-aware
+/// gap/localization/leakage/persistence/anchor certificates.
+///
 /// Algorithm (per iteration):
 ///   1. Pick a random move type from {add, remove, flip, iflip, shift}.
 ///   2. ``cdt.proposeXxx()`` — read-only target selection.  If no
@@ -72,6 +87,10 @@ struct ModularityOptimizerConfig {
 ///      fell), keep the move.  Otherwise ``move.rollback()``.
 ///   6. If Q crossed the next ``target_dq`` threshold, build the dual
 ///      graph and measure D_S; record a Measurement.
+///
+/// The sweep's fixed-partition read (community = vertex id mod M) is
+/// unchanged and remains available; label-free discovery is the
+/// :class:`PersistentModularity` extension below.
 ///
 /// The "informed proposal" hook in ``selectMoveType`` can bias the
 /// move-type distribution toward those most likely to move Q in the
@@ -93,6 +112,19 @@ public:
       CDT &cdt,
       const std::string &direction,
       ProgressCallback progress = nullptr);
+
+  /// Label-free discovery of persistent modular components on the CURRENT
+  /// spacetime one-skeleton (ticket #765, design spec section 8): builds
+  /// the nonnegative similarity graph under ``map`` and delegates to
+  /// :func:`PersistentModularity::scanResolutions`.  Read-only — never
+  /// mutates the spacetime, never proposes or applies moves, and its
+  /// result must never feed the emergence objective (heuristic proposal
+  /// generator; see the class documentation).  Deterministic for a fixed
+  /// ``cfg`` seed sequence; the optimizer's own RNG is untouched.
+  ScanReport discoverComponents(
+      const Spacetime &st, const PersistentModularityConfig &cfg,
+      PersistentModularity::WeightMap map =
+          PersistentModularity::WeightMap::ExpNegAbsLength) const;
 
   // Per-sweep counters.  Reset at the top of each ``sweep()`` call.
   /// Number of moves applied + kept (Q moved in the desired direction).
