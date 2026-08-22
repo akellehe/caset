@@ -1070,6 +1070,21 @@ class TestRelabeling(unittest.TestCase):
                          sorted(net_b.stalkDimensions))
         self.assertEqual(len(net_a.edges), len(net_b.edges))
 
+    def test_within_cell_vertex_order_is_never_a_convention(self):
+        # Cells are matched by vertex SET: reversing every tuple (and
+        # shuffling the support lists) yields the identical reduction.
+        st = tessera.Spacetime.fromCells(2, [[0, 1, 2], [1, 2, 3]], 1.0, 0.0)
+        st.materializeFacets()
+        forward = cob.RecursiveQuotient.overCells(
+            st, 1, [[[0, 1], [0, 2], [1, 2]], [[1, 3], [2, 3]]])
+        reversed_cells = cob.RecursiveQuotient.overCells(
+            st, 1, [[[2, 1], [2, 0], [1, 0]], [[3, 2], [3, 1]]])
+        E_f, _ = reduction_matrix(forward)
+        E_r, _ = reduction_matrix(reversed_cells)
+        np.testing.assert_allclose(E_f, E_r, rtol=0, atol=0)
+        self.assertEqual(list(forward.interfaceIndices),
+                         list(reversed_cells.interfaceIndices))
+
     def test_relabeled_sheaf_fixture_reproduces_its_realization(self):
         L = TestResponseNetworkAndSheaf.L
         perm = [2, 0, 3, 1]
