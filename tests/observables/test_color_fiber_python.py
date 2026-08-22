@@ -751,7 +751,9 @@ class TestAnchorOracle(unittest.TestCase):
         self.assertLessEqual(np.max(np.abs(a_tau - f)), 1e-15)
         anchor = ColorAnchor([tri])
         p = anchor.evaluate(f, w)
-        self.assertLessEqual(abs(p.score - 1.0), 1e-14)
+        # "Reaches one exactly" at the machine-precision bar: unit weights
+        # make A_tau = F3 bitwise, so the score is 1 to double round-off.
+        self.assertLessEqual(abs(p.score - 1.0), 1e-15)
         # The determinant phase equals arg det F3 (algebraic value -i for
         # this DFT: det F3 = (omega^2 - omega)(...)/3^{3/2} — compare to
         # the independently computed reference).

@@ -656,22 +656,38 @@ AnchorProfile ColorAnchor::evaluate(const Eigen::MatrixXcd& frame,
     }
     validateEdgeRange(triangles_, frame.rows());
 
-    std::vector<Eigen::Matrix3cd> blocks;
-    blocks.reserve(triangles_.size());
+    // Diagonal weights: the τ-oriented restricted block S W_τ S is again
+    // diagonal (the signs cancel), so |W_τ|^{1/2} = diag(|w_e|^{1/2}) and
+    // the Krein signature reads off the raw weight signs EXACTLY — no
+    // per-triangle eigensolve on the production path.
+    std::vector<Eigen::Matrix3cd> sqrtBlocks;
+    std::vector<std::array<int, 3>> signatures;
+    sqrtBlocks.reserve(triangles_.size());
+    signatures.reserve(triangles_.size());
     for (const auto& tri : triangles_) {
-        // Diagonal weights: S W_τ S = W_τ = diag(w on the three edges).
-        Eigen::Matrix3cd block = Eigen::Matrix3cd::Zero();
+        Eigen::Matrix3cd sqrtBlock = Eigen::Matrix3cd::Zero();
+        std::array<int, 3> sig{0, 0, 0};
         for (int k = 0; k < 3; ++k) {
-            block(k, k) =
+            const double w =
                 edgeWeights(tri.edges[static_cast<std::size_t>(k)]);
+            sqrtBlock(k, k) = std::sqrt(std::abs(w));
+            if (w > kreinTolerance()) {
+                ++sig[0];
+            } else if (w < -kreinTolerance()) {
+                ++sig[2];
+            } else {
+                ++sig[1];
+            }
         }
-        blocks.push_back(block);
+        sqrtBlocks.push_back(sqrtBlock);
+        signatures.push_back(sig);
     }
     const Eigen::MatrixXcd gram =
         frame.adjoint() *
         edgeWeights.cwiseAbs().cast<std::complex<double>>().asDiagonal() *
         frame;
-    return evaluateBlocks(frame, blocks, gram, gramTolerance);
+    return evaluateBlocks(frame, sqrtBlocks, signatures, gram,
+                          gramTolerance);
 }
 
 AnchorProfile ColorAnchor::evaluate(const Eigen::MatrixXcd& frame,
@@ -691,8 +707,10 @@ AnchorProfile ColorAnchor::evaluate(const Eigen::MatrixXcd& frame,
     }
     validateEdgeRange(triangles_, frame.rows());
 
-    std::vector<Eigen::Matrix3cd> blocks;
-    blocks.reserve(triangles_.size());
+    std::vector<Eigen::Matrix3cd> sqrtBlocks;
+    std::vector<std::array<int, 3>> signatures;
+    sqrtBlocks.reserve(triangles_.size());
+    signatures.reserve(triangles_.size());
     for (const auto& tri : triangles_) {
         // The τ-oriented restricted block S_τ W_ττ S_τ = R_τ W R_τ†.
         Eigen::Matrix3cd block;
@@ -706,16 +724,20 @@ AnchorProfile ColorAnchor::evaluate(const Eigen::MatrixXcd& frame,
                            tri.edges[static_cast<std::size_t>(c)]);
             }
         }
-        blocks.push_back(block);
+        std::array<int, 3> sig{0, 0, 0};
+        sqrtBlocks.push_back(modulusSqrt(block, kreinTolerance(), &sig));
+        signatures.push_back(sig);
     }
     const Eigen::MatrixXcd gram =
         frame.adjoint() * matrixModulus(weight) * frame;
-    return evaluateBlocks(frame, blocks, gram, gramTolerance);
+    return evaluateBlocks(frame, sqrtBlocks, signatures, gram,
+                          gramTolerance);
 }
 
 AnchorProfile ColorAnchor::evaluateBlocks(
     const Eigen::MatrixXcd& frame,
-    const std::vector<Eigen::Matrix3cd>& signedBlocks,
+    const std::vector<Eigen::Matrix3cd>& sqrtBlocks,
+    const std::vector<std::array<int, 3>>& signatures,
     const Eigen::MatrixXcd& gram, double gramTolerance) {
     AnchorProfile profile;
     profile.weightingId = weightingId_;
@@ -746,16 +768,14 @@ AnchorProfile ColorAnchor::evaluateBlocks(
     double resultantWeight = 0.0;
 
     for (std::size_t t = 0; t < nTri; ++t) {
-        std::array<int, 3> sig{0, 0, 0};
-        const Eigen::Matrix3cd sqrtBlock =
-            modulusSqrt(signedBlocks[t], kreinTolerance(), &sig);
+        const std::array<int, 3>& sig = signatures[t];
         profile.kreinSignatures[t] = sig;
         if (sig[1] != 0 || sig[2] != 0) {
             profile.positiveRegime = false;
         }
 
         const Eigen::Matrix3cd a =
-            sqrtBlock * signedRestriction(frame, triangles_[t]);
+            sqrtBlocks[t] * signedRestriction(frame, triangles_[t]);
         const std::complex<double> det = a.determinant();
         const double term = std::norm(det);
         profile.terms[t] = term;

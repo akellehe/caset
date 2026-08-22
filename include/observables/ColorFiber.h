@@ -519,9 +519,12 @@ class ColorAnchor {
     static void validateTriangles(const std::vector<OrientedTriangle>& tris);
     static void validateConvex(const std::vector<double>& weights,
                                std::size_t count);
+    /// Shared scoring core over precomputed per-triangle |W_τ|^{1/2}
+    /// blocks and their (already exact) Krein signatures.
     [[nodiscard]] AnchorProfile evaluateBlocks(
         const Eigen::MatrixXcd& frame,
-        const std::vector<Eigen::Matrix3cd>& signedBlocks,
+        const std::vector<Eigen::Matrix3cd>& sqrtBlocks,
+        const std::vector<std::array<int, 3>>& signatures,
         const Eigen::MatrixXcd& gram, double gramTolerance);
 
     std::vector<OrientedTriangle> triangles_{};
