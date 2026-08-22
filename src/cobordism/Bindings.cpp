@@ -12,8 +12,14 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include "cobordism/AnalyticCache.h"
+#include "cobordism/Certificate.h"
 #include "cobordism/ChainComplex.h"
 #include "cobordism/Characteristic.h"
+#include "cobordism/DenseReference.h"
+#include "cobordism/KuennethProduct.h"
+#include "cobordism/LowRankUpdate.h"
+#include "cobordism/OccupationSpectra.h"
 #include "cobordism/Cochain.h"
 #include "cobordism/CombinatorialDimension.h"
 #include "cobordism/CobordismDAG.h"
@@ -1318,4 +1324,338 @@ invariant.)doc")
       .def("validate", &SurgicalCone::validate,
            "(ok, reason): the manifold-with-boundary verdict on the CURRENT "
            "complex -- the same gate coneOut / coneIn apply.");
+
+  // ----- Analytic-first kernel and cache contract (#764) -----
+
+  py::enum_<CertificateGrade>(m, "CertificateGrade",
+      "How a result was obtained: algebraically exact (closed-form identity, "
+      "rounding only), structure-exact (exact given a verified structural "
+      "premise), certified numerical (iterative/truncated with residual + "
+      "conditioning), or heuristic discovery (uncertified proposal).")
+      .value("AlgebraicallyExact", CertificateGrade::AlgebraicallyExact)
+      .value("StructureExact", CertificateGrade::StructureExact)
+      .value("CertifiedNumerical", CertificateGrade::CertifiedNumerical)
+      .value("HeuristicDiscovery", CertificateGrade::HeuristicDiscovery);
+
+  py::enum_<CertificateDomain>(m, "CertificateDomain",
+      "The spectral domain a certificate speaks for: the static/whole-"
+      "operator statement, or an explicit frequency band window.")
+      .value("Static", CertificateDomain::Static)
+      .value("BandWindow", CertificateDomain::BandWindow);
+
+  py::enum_<CertificateRegime>(m, "CertificateRegime",
+      "The metric regime the producing kernel verified: positive-"
+      "semidefinite, Hermitian indefinite, or non-normal (the general "
+      "Lorentzian d'Alembertian regime).")
+      .value("PositiveSemidefinite", CertificateRegime::PositiveSemidefinite)
+      .value("HermitianIndefinite", CertificateRegime::HermitianIndefinite)
+      .value("NonNormal", CertificateRegime::NonNormal);
+
+  py::class_<Certificate>(m, "Certificate",
+      R"doc(Certification record attached to every analytic-first kernel result (#764).
+
+Grade (claim class) + domain + regime + measured relative residual, the
+conditioning of the computation, the dense-reference error where one was
+measured on a crossover fixture, and the declared tolerance. Unmeasured
+quantities are NaN, never zero. holds() = a certified grade whose residual met
+the tolerance; HeuristicDiscovery never holds.)doc")
+      .def(py::init<>())
+      .def_static("algebraicallyExact", &Certificate::algebraicallyExact,
+                  py::arg("domain"), py::arg("regime"), py::arg("residual"),
+                  py::arg("tolerance"))
+      .def_static("structureExact", &Certificate::structureExact,
+                  py::arg("domain"), py::arg("regime"), py::arg("residual"),
+                  py::arg("conditioning"), py::arg("tolerance"))
+      .def_static("certifiedNumerical", &Certificate::certifiedNumerical,
+                  py::arg("domain"), py::arg("regime"), py::arg("residual"),
+                  py::arg("conditioning"), py::arg("tolerance"))
+      .def_static("heuristicDiscovery", &Certificate::heuristicDiscovery,
+                  py::arg("domain"), py::arg("regime"))
+      .def_property_readonly("grade", &Certificate::grade)
+      .def_property_readonly("domain", &Certificate::domain)
+      .def_property_readonly("regime", &Certificate::regime)
+      .def_property_readonly("residual", &Certificate::residual)
+      .def_property_readonly("conditioning", &Certificate::conditioning)
+      .def_property_readonly("denseReferenceError",
+                             &Certificate::denseReferenceError)
+      .def("setDenseReferenceError", &Certificate::setDenseReferenceError,
+           py::arg("error"),
+           "Record the relative error measured against the dense reference on "
+           "a crossover fixture.")
+      .def_property_readonly("tolerance", &Certificate::tolerance)
+      .def("holds", &Certificate::holds)
+      .def("describe", &Certificate::describe)
+      .def("__repr__", &Certificate::describe);
+
+  py::class_<CertifiedVector>(m, "CertifiedVector",
+      "A vector-valued kernel result (solution / eigenvalue list / spectrum) "
+      "with its attached Certificate; no result travels without its "
+      "certification.")
+      .def_readonly("values", &CertifiedVector::values)
+      .def_readonly("certificate", &CertifiedVector::certificate);
+
+  py::class_<TouchedStar>(m, "TouchedStar",
+      R"doc(Publication record of one accepted move (design spec section 19): touched
+simplices, changed edges, created/deleted cells, all named by vertex
+identifiers. AnalyticCache.publish drops entries whose component vertex set
+meets this star; disjoint siblings survive.)doc")
+      .def(py::init<>())
+      .def("addTouchedSimplex", &TouchedStar::addTouchedSimplex,
+           py::arg("vertex_ids"),
+           "Record a simplex whose geometry or incidence changed.")
+      .def("addChangedEdge", &TouchedStar::addChangedEdge, py::arg("vertex_a"),
+           py::arg("vertex_b"),
+           "Record an edge whose complex length or phase changed.")
+      .def("addCreatedCell", &TouchedStar::addCreatedCell, py::arg("vertex_ids"),
+           "Record a created cell (a combinatorial change).")
+      .def("addDeletedCell", &TouchedStar::addDeletedCell, py::arg("vertex_ids"),
+           "Record a deleted cell (a combinatorial change).")
+      .def_property_readonly("vertices",
+           [](const TouchedStar &star) {
+             return std::vector<std::uint64_t>(star.vertices().begin(),
+                                               star.vertices().end());
+           },
+           "The union of recorded vertex identifiers (unordered).")
+      .def_property_readonly("structuralChange", &TouchedStar::structuralChange)
+      .def_property_readonly("empty", &TouchedStar::empty);
+
+  py::class_<AnalyticCache>(m, "AnalyticCache",
+      R"doc(Revision- and touched-star-keyed cache for per-component analytic payloads
+(#764): Hodge blocks, component factorizations, spectral projectors,
+transports, covariance blocks, Wick contraction plans.
+
+Entries are keyed by the order-independent component vertex-set fingerprint
+(the MultiCobordism block convention), a kind string, and an integer
+parameter, and stamped with Spacetime.metricRevisionKey(). An entry is served
+only while nothing changed anywhere, or while every change since its stamp
+was published (publish) and the entry survived every star-intersection test.
+An unpublished revision drift serves NOTHING until the next publish/store --
+fail-safe. Replay mode disables the cache (setEnabled) and compares against
+the incremental path.)doc")
+      .def(py::init<std::shared_ptr<Spacetime>>(), py::arg("spacetime"),
+           "Bind to the spacetime whose geometry revisions gate this cache.")
+      .def_static("componentKey", &AnalyticCache::componentKey,
+                  py::arg("vertex_ids"),
+                  "Order-independent fingerprint of a vertex-identifier set "
+                  "(any permutation yields the same key).")
+      .def("geometryRevision", &AnalyticCache::geometryRevision,
+           "Spacetime.metricRevisionKey(): moves on any combinatorial change, "
+           "setLength, or setPhase.")
+      .def("structuralRevision", &AnalyticCache::structuralRevision,
+           "Spacetime.structuralRevision(): the combinatorial revision.")
+      .def("store",
+           [](AnalyticCache &cache,
+              const std::vector<std::uint64_t> &componentVertexIds,
+              const std::string &kind, std::int64_t parameter,
+              const py::object &payload, const Certificate &certificate) {
+             cache.store(componentVertexIds, kind, parameter,
+                         std::make_shared<py::object>(payload), certificate);
+           },
+           py::arg("component_vertex_ids"), py::arg("kind"),
+           py::arg("parameter"), py::arg("payload"), py::arg("certificate"),
+           "Store payload + certificate for (component vertex set, kind, "
+           "parameter), stamped at the CURRENT metric revision.")
+      .def("fetch",
+           [](const AnalyticCache &cache,
+              const std::vector<std::uint64_t> &componentVertexIds,
+              const std::string &kind, std::int64_t parameter) -> py::object {
+             const auto payload =
+                 cache.fetch(componentVertexIds, kind, parameter);
+             if (!payload)
+               return py::none();
+             return *std::static_pointer_cast<py::object>(payload);
+           },
+           py::arg("component_vertex_ids"), py::arg("kind"),
+           py::arg("parameter"),
+           "The cached payload, or None when absent, disabled, or stale.")
+      .def("fetchCertificate",
+           [](const AnalyticCache &cache,
+              const std::vector<std::uint64_t> &componentVertexIds,
+              const std::string &kind, std::int64_t parameter) -> py::object {
+             const Certificate *certificate =
+                 cache.fetchCertificate(componentVertexIds, kind, parameter);
+             if (certificate == nullptr)
+               return py::none();
+             return py::cast(*certificate);
+           },
+           py::arg("component_vertex_ids"), py::arg("kind"),
+           py::arg("parameter"),
+           "The certificate stored beside a payload, or None exactly when "
+           "fetch would return None.")
+      .def("publish", &AnalyticCache::publish, py::arg("star"),
+           "Publish one accepted move AFTER mutating: drop entries meeting "
+           "the star, then mark the cache synchronized to the current "
+           "revision. Disjoint siblings survive.")
+      .def_property_readonly("size", &AnalyticCache::size)
+      .def("clear", &AnalyticCache::clear)
+      .def("setEnabled", &AnalyticCache::setEnabled, py::arg("enabled"),
+           "Replay-mode switch: a disabled cache serves nothing but keeps "
+           "accepting stores.")
+      .def_property_readonly("enabled", &AnalyticCache::enabled)
+      .def_property_readonly("hits", &AnalyticCache::hits)
+      .def_property_readonly("misses", &AnalyticCache::misses)
+      .def_property_readonly("invalidations", &AnalyticCache::invalidations);
+
+  py::class_<KuennethProduct>(m, "KuennethProduct",
+      R"doc(The exact Kronecker-sum/Kuenneth rule L_{AxB} = L_A (x) I + I (x) L_B (#764).
+
+Algebraically exact as a matrix identity; as a statement about a complex it
+holds only for an actual product cell structure with product weights, which
+productCertificate verifies at degree zero (a staircase SimplicialProduct is
+refused: holds() == False). The spectrum of the Kronecker sum is exactly the
+pairwise sums of the factor spectra -- no product eigensolve.)doc")
+      .def_static("kroneckerSum", &KuennethProduct::kroneckerSum,
+                  py::arg("laplacian_a"), py::arg("dim_a"),
+                  py::arg("laplacian_b"), py::arg("dim_b"),
+                  "L_A (x) I + I (x) L_B, flat row-major (dimA*dimB)^2; "
+                  "product index (iA, iB) -> iA*dimB + iB.")
+      .def_static("pairwiseSpectrum", &KuennethProduct::pairwiseSpectrum,
+                  py::arg("spectrum_a"), py::arg("spectrum_b"),
+                  "All pairwise sums, ascending by (Re, Im): the exact "
+                  "Kronecker-sum spectrum.")
+      .def_static("productCertificate", &KuennethProduct::productCertificate,
+                  py::arg("product"), py::arg("factor_a"), py::arg("factor_b"),
+                  py::arg("pairing"), py::arg("tolerance") = 1e-12,
+                  "Certify that `product`'s k=0 weighted graph Laplacian "
+                  "equals the Kronecker sum of the factors' under the declared "
+                  "(product_id, a_id, b_id) vertex pairing. holds() grants the "
+                  "Kuenneth rule for this complex.");
+
+  py::class_<OccupationSpectra>(m, "OccupationSpectra",
+      R"doc(Fermionic second quantization at the SPECTRUM/MATRIX level (#764): free
+many-body spectra as occupation subset sums of a one-particle spectrum, the
+direct-sum identity at the spectrum level, and one-particle direct-sum /
+hopping-block assembly. Exact for any square one-particle operator (complex
+eigenvalues allowed; nothing assumes Hermitian or positive-definite). Fock
+OPERATOR structure (creation/annihilation, wedge, dGamma as an operator) is
+the exterior-algebra track's, not built here.)doc")
+      .def_static("subsetSums", &OccupationSpectra::subsetSums,
+                  py::arg("one_particle"), py::arg("particles"),
+                  py::arg("max_terms") = OccupationSpectra::kDefaultMaxTerms,
+                  "The C(n, N) fermionic occupation subset sums: the exact "
+                  "free N-particle spectrum of dGamma(h). Ascending (Re, Im).")
+      .def_static("fockSums", &OccupationSpectra::fockSums,
+                  py::arg("one_particle"),
+                  py::arg("max_terms") = OccupationSpectra::kDefaultMaxTerms,
+                  "All 2^n subset sums: the full free fermionic Fock spectrum "
+                  "across every particle number.")
+      .def_static("directSumSubsetSums", &OccupationSpectra::directSumSubsetSums,
+                  py::arg("factor_a"), py::arg("factor_b"), py::arg("particles"),
+                  py::arg("max_terms") = OccupationSpectra::kDefaultMaxTerms,
+                  "The N-particle spectrum of h_A + h_B (direct sum) computed "
+                  "FROM THE FACTORS: merged pairwise sums over particle splits "
+                  "N_A + N_B = N -- the F_-(A (+) B) ~ F_-(A) (x) F_-(B) "
+                  "identity at the spectrum level.")
+      .def_static("directSum", &OccupationSpectra::directSum,
+                  py::arg("block_a"), py::arg("dim_a"), py::arg("block_b"),
+                  py::arg("dim_b"),
+                  "The one-particle direct sum [[A, 0], [0, B]], flat "
+                  "row-major (dimA+dimB)^2.")
+      .def_static("hoppingBlock", &OccupationSpectra::hoppingBlock,
+                  py::arg("block_a"), py::arg("dim_a"), py::arg("block_b"),
+                  py::arg("dim_b"), py::arg("coupling"),
+                  py::arg("coupling_reverse") =
+                      std::vector<std::complex<double>>{},
+                  "The one-particle hopping assembly [[A, C], [C', B]]. An "
+                  "empty coupling_reverse selects C' = C^dagger (the Hermitian "
+                  "hopping term); pass it explicitly in the non-normal "
+                  "regime.");
+
+  py::class_<LowRankUpdate> lowRankUpdate(m, "LowRankUpdate",
+      R"doc(Structure-exact Woodbury / secular update helpers for genuinely low-rank
+local operator changes (#764). The base operator is LU-factored once (general
+complex square; no Hermitian or positive-definite assumption); a registered
+change Delta = U W is solved through the Woodbury identity by factor solves
+only -- no explicit inverse. Results are exact GIVEN the verified premise that
+U W spans the FULL affected change: factorsFromTouched builds spanning factors
+from a declared touched row/column set and reports leakage, spansAffectedChange
+re-verifies a claimed factorization, refactor is the cold-recompute fallback.
+Every solve reports its measured residual and conditioning.
+
+rankOneEigenvalues is the secular rank-one HERMITIAN eigenvalue update
+(interlacing bisection, certified numerical); the non-normal regime is refused
+-- a self-adjoint method is never applied to a non-self-adjoint operator.)doc");
+
+  py::class_<LowRankUpdate::TouchedFactors>(lowRankUpdate, "TouchedFactors",
+      "Factors of a touched-star operator change: Delta = left * right, rank "
+      "<= 2 * |active touched indices|. spansChange == False means the delta "
+      "leaked outside the declared touched rows/columns -- the factors are "
+      "NOT exact and the caller must cold-recompute.")
+      .def_readonly("spansChange", &LowRankUpdate::TouchedFactors::spansChange)
+      .def_readonly("rank", &LowRankUpdate::TouchedFactors::rank)
+      .def_readonly("left", &LowRankUpdate::TouchedFactors::left)
+      .def_readonly("right", &LowRankUpdate::TouchedFactors::right);
+
+  lowRankUpdate
+      .def(py::init<const std::vector<std::complex<double>> &, int>(),
+           py::arg("base"), py::arg("dim"),
+           "Factor the base operator (flat row-major dim x dim, partial-pivot "
+           "LU).")
+      .def_property_readonly("dimension", &LowRankUpdate::dimension)
+      .def_property_readonly("updateRank", &LowRankUpdate::updateRank)
+      .def("setUpdate", &LowRankUpdate::setUpdate, py::arg("left"),
+           py::arg("right"), py::arg("rank"),
+           "Register the pending change Delta = left(dim x rank) * "
+           "right(rank x dim), replacing any previous one.")
+      .def("clearUpdate", &LowRankUpdate::clearUpdate)
+      .def("solve", &LowRankUpdate::solve, py::arg("rhs"),
+           py::arg("tolerance") = 1e-12,
+           "Woodbury solve of (A + U W) x = b by factor solves; certificate "
+           "carries the measured relative residual and the LU/capacitance "
+           "condition estimates.")
+      .def("apply", &LowRankUpdate::apply, py::arg("x"),
+           "y = (A + U W) x, for external residual checks and benchmarks.")
+      .def("spansAffectedChange", &LowRankUpdate::spansAffectedChange,
+           py::arg("updated"), py::arg("tolerance") = 1e-12,
+           "Exactness check: ||(updated - A) - U W||_F <= tolerance * "
+           "||updated||_F. False = the low-rank path may NOT be called exact; "
+           "cold-recompute instead.")
+      .def_static("factorsFromTouched", &LowRankUpdate::factorsFromTouched,
+                  py::arg("base"), py::arg("updated"), py::arg("dim"),
+                  py::arg("touched"),
+                  "Exact factors of the change from the declared touched "
+                  "row/column set, with the spans-the-change verdict.")
+      .def("refactor", &LowRankUpdate::refactor, py::arg("base"), py::arg("dim"),
+           "Cold-recompute fallback: refactor `base` as the new base operator "
+           "and clear any registered update.")
+      .def_static("rankOneEigenvalues", &LowRankUpdate::rankOneEigenvalues,
+                  py::arg("eigenvalues"), py::arg("z"), py::arg("rho"),
+                  py::arg("tolerance") = 1e-10,
+                  "Secular rank-one Hermitian eigenvalue update: ascending "
+                  "eigenvalues of diag(d) + rho z z^dagger, z in the "
+                  "eigenbasis. Certified numerical (bracket width + exact "
+                  "trace identity + deflation bound). Hermitian domain only.");
+
+  py::class_<DenseReference>(m, "DenseReference",
+      R"doc(Dense reference kernels used ONLY below a configurable dimension crossover
+(#764): on small fixtures they supply the independent answer a structured path
+is compared against; at or above the crossover they refuse (throw) -- a dense
+global solve is the prohibited default at scale, never a silent fallback.
+solve is an LU factor solve (never an explicit inverse); spectrum honors a
+self-adjoint request only after verifying Hermiticity; fockSpectrum is the
+dense-Fock oracle at the SPECTRUM level (dense one-particle eigensolve +
+explicit occupation subset-sum enumeration) used to validate structured subset
+sums and quasi-free Wick reads on crossover fixtures.)doc")
+      .def(py::init<int>(),
+           py::arg("crossover_dimension") =
+               DenseReference::kDefaultCrossoverDimension)
+      .def_property_readonly("crossoverDimension",
+                             &DenseReference::crossoverDimension)
+      .def("setCrossoverDimension", &DenseReference::setCrossoverDimension,
+           py::arg("crossover_dimension"))
+      .def("belowCrossover", &DenseReference::belowCrossover, py::arg("dim"))
+      .def("solve", &DenseReference::solve, py::arg("matrix"), py::arg("dim"),
+           py::arg("rhs"), py::arg("tolerance") = 1e-12,
+           "Dense LU factor solve with measured residual + conditioning.")
+      .def("spectrum", &DenseReference::spectrum, py::arg("matrix"),
+           py::arg("dim"), py::arg("self_adjoint"),
+           py::arg("tolerance") = 1e-10,
+           "Dense eigenvalues ascending by (Re, Im); the self-adjoint solver "
+           "runs only after Hermiticity is verified, else the general solver "
+           "with a NonNormal certificate.")
+      .def("fockSpectrum", &DenseReference::fockSpectrum,
+           py::arg("one_particle"), py::arg("dim"), py::arg("particles"),
+           py::arg("self_adjoint"), py::arg("tolerance") = 1e-10,
+           "Dense-Fock oracle at the spectrum level: dense eigensolve + exact "
+           "occupation subset sums for the N-particle sector.");
 }

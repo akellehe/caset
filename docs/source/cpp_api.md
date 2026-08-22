@@ -187,6 +187,18 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} SurgicalCone.h
 ```
+```{doxygenfile} Certificate.h
+```
+```{doxygenfile} AnalyticCache.h
+```
+```{doxygenfile} KuennethProduct.h
+```
+```{doxygenfile} OccupationSpectra.h
+```
+```{doxygenfile} LowRankUpdate.h
+```
+```{doxygenfile} DenseReference.h
+```
 
 ## Reinforcement Learning
 
