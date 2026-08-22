@@ -68,11 +68,34 @@
 \usepackage{array}
 \usepackage{longtable}
 \usepackage{etoolbox}
+\usepackage{graphicx}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,backgrounds,calc,fit,matrix,positioning,shapes.geometric}
 
 \definecolor{TesseraNavy}{HTML}{16324F}
 \definecolor{TesseraBlue}{HTML}{245A86}
 \definecolor{TesseraSlate}{HTML}{526577}
 \definecolor{TesseraRule}{HTML}{C9D5DF}
+\definecolor{TesseraExact}{HTML}{E8F1F7}
+\definecolor{TesseraDerived}{HTML}{E8F5EE}
+\definecolor{TesseraHypothesis}{HTML}{FFF2D6}
+\definecolor{TesseraAlert}{HTML}{A63D40}
+
+\tikzset{
+  rsf/flow/.style={-{Latex[length=2.4mm]},thick,draw=TesseraSlate},
+  rsf/exact/.style={draw=TesseraBlue,fill=TesseraExact,very thick,
+    rounded corners=2pt,align=center,inner sep=5pt,font=\small\sffamily},
+  rsf/derived/.style={draw=ForestGreen!75!black,fill=TesseraDerived,very thick,
+    rounded corners=2pt,align=center,inner sep=5pt,font=\small\sffamily},
+  rsf/hypothesis/.style={draw=OrangeRed!75!black,fill=TesseraHypothesis,very thick,
+    rounded corners=2pt,align=center,inner sep=5pt,font=\small\sffamily},
+  rsf/micro/.style={circle,draw=TesseraNavy,fill=white,thick,minimum size=4.5mm,inner sep=0pt},
+  rsf/coarse/.style={circle,draw=ForestGreen!75!black,fill=TesseraDerived,very thick,
+    minimum size=8mm,inner sep=1pt,font=\small\bfseries\sffamily},
+  rsf/barrier/.style={draw=TesseraAlert,dashed,very thick},
+  rsf/note/.style={align=center,font=\scriptsize\sffamily,text=TesseraSlate}
+}
 
 \AtBeginDocument{\hypersetup{
   linkcolor=TesseraNavy,
@@ -246,6 +269,34 @@ scientifically and computationally: adding a new independent field could
 fit a desired answer, while deriving every readout from one complex
 leaves the construction falsifiable.
 
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[node distance=8mm and 7mm]
+  \node[rsf/exact,text width=3.2cm] (state)
+    {Microscopic state\\oriented simplices, edge phases, edge qubits};
+  \node[rsf/derived,text width=3.2cm,right=of state] (modules)
+    {Persistent modules\\connected clusters selected by scale stability};
+  \node[rsf/exact,text width=3.2cm,right=of modules] (quotient)
+    {Exact response quotient\\Schur/Kron coarse operator};
+  \node[rsf/derived,text width=3.2cm,below=of quotient] (fiber)
+    {Spectral fibers\\localized isolated Hodge bands};
+  \node[rsf/derived,text width=3.2cm,left=of fiber] (structure)
+    {Derived quantum structure\\transport, grading, tensor composition};
+  \node[rsf/hypothesis,text width=3.2cm,left=of structure] (particle)
+    {Particle certificates\\quark clusters, baryons, charge and spin tests};
+
+  \draw[rsf/flow] (state) -- (modules);
+  \draw[rsf/flow] (modules) -- (quotient);
+  \draw[rsf/flow] (quotient) -- (fiber);
+  \draw[rsf/flow] (fiber) -- (structure);
+  \draw[rsf/flow] (structure) -- (particle);
+\end{tikzpicture}
+\caption{Concept map for the recursive complex construction. Colors encode
+epistemic status, not physical sectors: blue is established or exact machinery,
+green is a derived observable, and amber is a proposed physical identification.}
+\label{fig:concept-map}
+\end{figure}
+
 \hypertarget{present-evidence-in-tessera}{%
 \section{Present evidence in
 Tessera}\label{present-evidence-in-tessera}}
@@ -268,6 +319,11 @@ near-four-dimensional spectral regime. The strongest reported
 measurements approach, but do not yet prove, an exact spectral dimension
 of four. The current status and finite-size caveats are recorded in
 \href{../source/quantum-experiments/overview/h_ds4_status.md}{\texttt{h\_ds4\_status.md}}.
+Diffusion-based spectral dimension on simplicial quantum geometries has
+important precedent in causal dynamical triangulations
+\cite{ambjorn2005spectral}; the Tessera evidence is an independent result
+for a different construction and should be compared at the level of the
+return-probability estimator and its finite-size window.
 
 The current proton animation adds a third, more preliminary observation.
 It starts with the phase pattern $\{1,\omega,\omega^2\}$ and evaluates
@@ -330,6 +386,15 @@ observables below are read after optimization and are not inserted as
 target terms. Controlled synthesis mode may pin a carrier to test
 realizability, but that is a separate experiment.
 
+This operator stack sits on established foundations: Regge calculus
+encodes piecewise-flat gravity in simplicial deficit angles
+\cite{regge1961}, discrete exterior calculus supplies metric-dependent
+chain/cochain operators \cite{desbrun2005dec}, and combinatorial Hodge
+spectra on simplicial complexes have a developed spectral theory
+\cite{horak2013spectra}. Tessera's proposal is not a replacement for
+those constructions; it is a constrained use of them as the sole source
+of the later particle readouts.
+
 \hypertarget{a-component-is-exactly-an-effective-vertex}{%
 \section{A component is exactly an effective
 vertex}\label{a-component-is-exactly-an-effective-vertex}}
@@ -380,6 +445,14 @@ coordinate attached to the coarse vertex.
 This reduction is exact for the retained interface. Approximation enters
 only if one additionally truncates the interface or the fiber, and that
 approximation has a measurable residual.
+
+For graph Laplacians this is the classical Kron reduction by Schur
+complement \cite{dorfler2013kron}. Spectral graph reduction provides
+related approximation guarantees when additional coarsening or
+truncation is performed \cite{loukas2019graph}. The extension proposed
+here is to apply the same response-preserving logic degree by degree to
+the weighted Hodge blocks and to retain localized zero or near-zero modes
+as explicit fiber coordinates rather than silently eliminating them.
 
 \hypertarget{recursive-spectral-fibers}{%
 \section{Recursive spectral fibers}\label{recursive-spectral-fibers}}
@@ -439,6 +512,69 @@ next. A fractal-like pattern is permitted but not required: the measured
 scaling of module count, volume, boundary size, and spectral gap decides
 whether the hierarchy is self-similar.
 
+Community objectives supply principled cluster candidates
+\cite{reichardt2006community}, while network renormalization supplies
+tests for genuine self-similarity rather than visual resemblance
+\cite{song2005selfsimilar}. The partition is therefore a measured part
+of the state: a recursively drawn pattern is not evidence of a fractal
+unless its scaling observables survive a refinement window.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \node[font=\bfseries\sffamily,text=TesseraNavy] at (1.85,4.35)
+    {$K_\ell$: connected modules};
+  \node[font=\bfseries\sffamily,text=ForestGreen!70!black] at (6.75,4.35)
+    {$K_{\ell+1}=K_\ell/P_\ell$};
+  \node[font=\bfseries\sffamily,text=ForestGreen!70!black] at (11.2,4.35)
+    {$K_{\ell+2}$: recurse};
+
+  \node[rsf/exact,minimum width=1.75cm,minimum height=1.35cm] (CA) at (0.9,2.95) {};
+  \node[rsf/exact,minimum width=1.75cm,minimum height=1.35cm] (CB) at (0.9,0.85) {};
+  \node[rsf/exact,minimum width=1.75cm,minimum height=1.35cm] (CC) at (3.0,1.90) {};
+  \node[font=\small\sffamily,text=TesseraBlue] at (0.9,3.72) {$C_A^\ell$};
+  \node[font=\small\sffamily,text=TesseraBlue] at (0.9,0.08) {$C_B^\ell$};
+  \node[font=\small\sffamily,text=TesseraBlue] at (3.0,1.12) {$C_C^\ell$};
+
+  \foreach \prefix/\x/\y in {a/0.9/2.95,b/0.9/0.85,c/3.0/1.90}{
+    \node[rsf/micro] (\prefix1) at (\x-0.48,\y-0.25) {};
+    \node[rsf/micro] (\prefix2) at (\x,\y+0.35) {};
+    \node[rsf/micro] (\prefix3) at (\x+0.48,\y-0.25) {};
+    \draw[TesseraNavy,thick] (\prefix1)--(\prefix2)--(\prefix3)--(\prefix1);
+  }
+  \draw[TesseraSlate,thick] (a3)--(c2) (b3)--(c3) (a1)--(b2);
+
+  \node[rsf/derived,text width=1.25cm,minimum height=1.25cm] (A) at (6.05,2.95)
+    {$A$\\[-1mm]\scriptsize fiber $E_A$};
+  \node[rsf/derived,text width=1.25cm,minimum height=1.25cm] (B) at (6.05,0.85)
+    {$B$\\[-1mm]\scriptsize fiber $E_B$};
+  \node[rsf/derived,text width=1.25cm,minimum height=1.25cm] (C) at (7.65,1.90)
+    {$C$\\[-1mm]\scriptsize fiber $E_C$};
+  \draw[ForestGreen!75!black,very thick] (A)--(B)--(C)--(A);
+
+  \node[rsf/derived,text width=1.25cm,minimum height=1.25cm] (X) at (10.75,2.40)
+    {$X$\\[-1mm]\scriptsize coarse vertex};
+  \node[rsf/derived,text width=2.5cm,below=6mm of X] (EX)
+    {$E_X$: retained internal fiber};
+
+  \draw[rsf/flow] (3.95,2.55) -- (5.15,2.55);
+  \node[rsf/note] at (4.55,3.02) {partition + exact Schur quotient};
+  \draw[rsf/flow] (8.55,2.55) -- (9.95,2.55);
+  \node[rsf/note] at (9.25,3.02) {recurse on supermodule};
+  \draw[rsf/flow] (X) -- (EX);
+
+  \node[rsf/note] at (6.1,-0.35)
+    {Response is exact on the retained interface; any fiber truncation carries a residual.};
+\end{tikzpicture}%
+}
+\caption{One recursive step. Persistent connected modules in $K_\ell$ become
+vertices of $K_{\ell+1}$, their external quadratic response is preserved by a
+Schur complement, and selected internal modes remain attached as fibers. A
+persistent supermodule can then be treated identically at the next scale.}
+\label{fig:recursive-step}
+\end{figure}
+
 \hypertarget{interactions-and-the-expanding-hilbert-space}{%
 \section{Interactions and the expanding Hilbert
 space}\label{interactions-and-the-expanding-hilbert-space}}
@@ -496,6 +632,15 @@ and two tensor factors obey
 \]
 
 Thus the amplitude claim has an explicit, composable error budget.
+
+Cobordism composition as a map between boundary state spaces is the
+organizing idea of topological field theory \cite{atiyah1988tqft}; the
+general-boundary program makes the region/boundary assignment explicit
+for quantum theory \cite{oeckl2003boundary}, and categorical quantum
+mechanics formalizes tensor composition and diagrammatic process
+semantics \cite{abramsky2004categorical}. Tessera keeps only the parts
+that can be realized by its finite simplicial carrier and tests the
+resulting map numerically rather than assuming topological invariance.
 
 \hypertarget{a-triangle-carries-the-exact-color-algebra}{%
 \section{A triangle carries the exact color
@@ -558,6 +703,56 @@ are the eight generators of \texttt{su(3)}. Thus the triangle does not
 merely hold three phases: its one-particle edge sector carries the
 fundamental representation, its two-particle sector carries the dual
 representation, and its traceless bilinears carry the adjoint octet.
+
+The triplet description of quarks and the three-quark construction of
+baryons originate with the quark model \cite{gellmann1964quark}; the
+additional color triplet was introduced to resolve the statistics and
+state-counting problem \cite{han1965color,greenberg1964paraquark}. The
+claim here is narrower and new: Tessera's three oriented edge modes
+would provide a geometric carrier of the same representation content,
+not a derivation of QCD from the combinatorics alone.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[node distance=7mm and 12mm]
+  \coordinate (p1) at (0,0);
+  \coordinate (p2) at (2.3,0);
+  \coordinate (p3) at (1.15,2.0);
+  \draw[TesseraNavy,very thick] (p1)--(p2)--(p3)--(p1);
+  \node[font=\small\sffamily,text=TesseraNavy] at (1.15,-0.28) {$e_1:q_1$};
+  \node[font=\small\sffamily,text=TesseraNavy] at (2.08,1.20) {$e_2:q_2$};
+  \node[font=\small\sffamily,text=TesseraNavy] at (0.22,1.20) {$e_3:q_3$};
+  \node[font=\small\bfseries\sffamily,text=TesseraNavy] at (1.15,0.75)
+    {oriented face};
+  \node[rsf/exact,text width=2.5cm,right=18mm of p2] (ext)
+    {$\Lambda^\bullet\C^3$\\graded edge-mode algebra};
+
+  \node[rsf/derived,text width=2.7cm,right=12mm of ext,yshift=18mm] (n0)
+    {$N=0$\\$\Lambda^0\C^3=\mathbf1$};
+  \node[rsf/derived,text width=2.7cm,right=12mm of ext,yshift=6mm] (n1)
+    {$N=1$\\$\Lambda^1\C^3=\mathbf3$};
+  \node[rsf/derived,text width=2.7cm,right=12mm of ext,yshift=-6mm] (n2)
+    {$N=2$\\$\Lambda^2\C^3=\overline{\mathbf3}$};
+  \node[rsf/derived,text width=2.7cm,right=12mm of ext,yshift=-18mm] (n3)
+    {$N=3$\\$\Lambda^3\C^3=\mathbf1$};
+
+  \node[rsf/hypothesis,text width=3.1cm,right=12mm of n1,yshift=-6mm] (phys)
+    {candidate readouts\\triplet color, singlet baryon, odd parity};
+
+  \draw[rsf/flow] (2.55,0.72) -- node[below,rsf/note]{graded tensor product} (ext);
+  \draw[rsf/flow] (ext) -- (n0);
+  \draw[rsf/flow] (ext) -- (n1);
+  \draw[rsf/flow] (ext) -- (n2);
+  \draw[rsf/flow] (ext) -- (n3);
+  \draw[rsf/flow] (n1) -- (phys);
+  \draw[rsf/flow] (n3) -- (phys);
+\end{tikzpicture}
+\caption{Exact representation content of three oriented edge qubits. The
+exterior sectors and their parity are algebraic identities. Interpreting the
+rank-three odd sector as quark color and the top wedge as a baryon color
+singlet is the physical hypothesis to be tested.}
+\label{fig:color-exterior}
+\end{figure}
 
 \hypertarget{geometric-normalization}{%
 \subsection{Geometric normalization}\label{geometric-normalization}}
@@ -640,6 +835,15 @@ W(\gamma)=\frac13\operatorname{Tr}
 Polar normalization must never conceal a bad fiber assignment: every
 Wilson value is reported together with $\eta_{AB}$, the band gap, and
 the frame condition number.
+
+This construction is the discrete spectral-frame analogue of Berry
+transport \cite{berry1984phase} and its non-Abelian Wilczek-Zee
+generalization \cite{wilczekzee1984gauge}. Overlap matrices are also a
+standard route to gauge-covariant lattice observables
+\cite{fukui2005chern}. Wilson loops themselves are foundational lattice
+gauge observables \cite{wilson1974confinement}. What is specific here is
+that the link matrix is not independently assigned: it is reconstructed
+from neighboring Hodge frames and accompanied by a leakage certificate.
 
 \hypertarget{quarks-as-modular-clusters}{%
 \section{Quarks as modular clusters}\label{quarks-as-modular-clusters}}
@@ -759,6 +963,14 @@ independent of the arbitrary frame chosen inside the isolated band. A
 separate $2\pi$ rotation loop must also return $-1$ before
 the construction can claim a spin-statistics link.
 
+Configuration-space topology already explains how exchange classes can
+carry quantum phases \cite{laidlaw1971indistinguishable} and, in two
+dimensions, more general statistics \cite{leinaas1977identical}. The
+Tessera proposal uses this precedent only as a diagnostic template. The
+minus sign from the graded exterior algebra is exact; the claim that an
+actual geometric exchange cobordism realizes the corresponding
+determinant holonomy remains an experiment.
+
 \hypertarget{fock-space-as-an-inductive-limit-of-interactions}{%
 \section{Fock space as an inductive limit of
 interactions}\label{fock-space-as-an-inductive-limit-of-interactions}}
@@ -812,6 +1024,13 @@ span the color octet in $\mathbf3\otimes\overline{\mathbf3}
 Arbitrarily many such collective excitations are represented by adding
 more microscopic modes at finer resolution. The finite edge qubit
 remains unchanged.
+
+This scale-by-scale state growth is adjacent to entanglement
+renormalization, where local Hilbert data are reorganized across layers
+before truncation \cite{vidal2007entanglement}. The distinction is
+material: Tessera uses a response-preserving Schur quotient plus an
+inductive vacuum embedding, and it must certify compatibility between
+successive finite spaces rather than assume a fixed bond dimension.
 
 \hypertarget{the-proton-as-the-maximally-informative-baryon}{%
 \section{The proton as the maximally informative
@@ -869,6 +1088,57 @@ proton is found only if the base geometric optimization produces a
 component satisfying them. Targeted runs remain valuable as existence
 and obstruction experiments, but must be labeled as synthesis rather
 than emergence.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[node distance=7mm and 8mm]
+  \node[rsf/exact,text width=2.9cm] (state) {geometric state $K,z,q$};
+  \node[rsf/exact,text width=2.9cm,right=of state] (objective)
+    {base objective\\Regge + Hodge stationarity};
+  \node[rsf/exact,text width=2.9cm,right=of objective] (move)
+    {local cobordism move\\analytic update};
+  \node[rsf/exact,text width=2.9cm,right=of move] (accept)
+    {accept/reject\\geometry only};
+
+  \draw[rsf/flow] (state) -- (objective);
+  \draw[rsf/flow] (objective) -- (move);
+  \draw[rsf/flow] (move) -- (accept);
+  \draw[rsf/flow,dashed] (accept.north) -- ++(0,0.55) -|
+    node[pos=0.28,above,rsf/note]{continue optimization} (state.north);
+
+  \node[rsf/derived,text width=2.9cm,below=15mm of state] (cluster)
+    {post-hoc modules\\persistence + modularity};
+  \node[rsf/derived,text width=2.9cm,right=of cluster] (fiber)
+    {spectral fibers\\rank, gap, localization};
+  \node[rsf/derived,text width=2.9cm,right=of fiber] (transport)
+    {derived structure\\transport, parity, Fock stage};
+  \node[rsf/hypothesis,text width=2.9cm,right=of transport] (certificate)
+    {particle certificate\\quark, baryon, charge, spin};
+
+  \draw[rsf/flow] (accept) -- node[right,rsf/note]{frozen snapshot} (certificate);
+  \draw[rsf/flow] (cluster) -- (fiber);
+  \draw[rsf/flow] (fiber) -- (transport);
+  \draw[rsf/flow] (transport) -- (certificate);
+
+  \draw[rsf/barrier] ($(objective.south west)+(-0.25,-0.52)$) --
+    ($(accept.south east)+(0.25,-0.52)$);
+  \node[font=\scriptsize\bfseries\sffamily,text=TesseraAlert,fill=white,inner sep=2pt]
+    at ($(move.south)+(0,-0.52)$) {emergence firewall};
+  \draw[-{Latex[length=2.4mm]},draw=TesseraAlert,very thick,dashed]
+    (transport.north) -- node[right,font=\scriptsize\bfseries\sffamily,
+      text=TesseraAlert,fill=white,inner sep=1pt]{feedback blocked}
+    ($(transport.north)+(0,0.90)$);
+  \node[font=\Large\bfseries,text=TesseraAlert]
+    at ($(transport.north)+(0,1.02)$) {$\times$};
+\end{tikzpicture}%
+}
+\caption{No-feedback emergence protocol. Only the base geometric objective
+drives optimization. Cluster, fiber, color, exchange, and baryon observables are
+computed from accepted snapshots and cannot feed back into the objective in an
+emergence run. Targeted synthesis is a separate, explicitly labeled mode.}
+\label{fig:emergence-firewall}
+\end{figure}
 
 \hypertarget{the-master-recursive-construction}{%
 \section{The master recursive
@@ -931,6 +1201,110 @@ dense numerical operation whenever both compute the same object:
 The exact route is not only faster. It prevents a numerical tolerance
 from becoming an undocumented physical postulate.
 
+\hypertarget{prior-art-and-boundary-of-novelty}{%
+\section{Prior art and boundary of
+novelty}\label{prior-art-and-boundary-of-novelty}}
+
+No single cited work establishes the full recursive spectral-fiber
+proposal. The construction is a synthesis of several mature ideas, and
+its novelty should be evaluated at the joins. Table~\ref{tab:prior-art}
+states the boundary explicitly.
+
+\begin{longtable}[]{@{}p{0.21\textwidth}p{0.33\textwidth}p{0.38\textwidth}@{}}
+\caption{Established ingredients and the additional Tessera claim.}
+\label{tab:prior-art}\\
+\toprule
+Topic & Established prior art & Additional claim made here \\
+\midrule
+\endfirsthead
+\toprule
+Topic & Established prior art & Additional claim made here \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Simplicial geometry and Hodge spectra &
+Regge curvature, discrete exterior calculus, and combinatorial Laplace spectra
+\cite{regge1961,desbrun2005dec,horak2013spectra}. &
+Use one jointly optimized Regge-Hodge complex as the only microscopic carrier
+for geometry and quantum readouts. \\
+
+Coarse response and recursive modules &
+Kron/Schur reduction, certified graph reduction, modular communities, and
+self-similar network renormalization
+\cite{dorfler2013kron,loukas2019graph,reichardt2006community,song2005selfsimilar}. &
+Treat a persistent component as a coarse vertex while retaining its localized
+Hodge band as a fiber, and repeat the operation recursively. \\
+
+Geometric gauge transport &
+Berry and Wilczek-Zee holonomy, overlap-based lattice links, and Wilson loops
+\cite{berry1984phase,wilczekzee1984gauge,fukui2005chern,wilson1974confinement}. &
+Derive every $SU(3)$ link from overlap of rank-three component frames; assign no
+independent gauge link variable. \\
+
+Color and fermion structure &
+Quark/color triplets and topological exchange phases
+\cite{gellmann1964quark,han1965color,greenberg1964paraquark,
+laidlaw1971indistinguishable,leinaas1977identical}. &
+Realize $\mathbf1\oplus\mathbf3\oplus\overline{\mathbf3}\oplus\mathbf1$
+on three edge qubits, identify quarks with persistent odd modular fibers, and
+test exchange through determinant-line holonomy. \\
+
+Scale composition and boundaries &
+TQFT cobordisms, general-boundary state assignments, categorical tensor
+composition, and entanglement renormalization
+\cite{atiyah1988tqft,oeckl2003boundary,abramsky2004categorical,
+vidal2007entanglement}. &
+Build finite Fock stages from actual interaction cobordisms and require
+vacuum-embedding compatibility under refinement. \\
+
+Spectral spacetime &
+Diffusion spectral dimension on ensembles of simplicial geometries
+\cite{ambjorn2005spectral}. &
+Test whether many interacting Tessera cobordisms yield a stable four-dimensional
+spectral window while simultaneously supporting the particle certificates. \\
+\end{longtable}
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \node[rsf/exact,text width=3.25cm] (hodge) at (0,4.4)
+    {simplicial geometry\\Regge + DEC + Hodge spectra};
+  \node[rsf/exact,text width=3.25cm] (coarse) at (0,2.8)
+    {multiscale reduction\\Schur/Kron + communities};
+  \node[rsf/exact,text width=3.25cm] (gauge) at (0,1.2)
+    {geometric transport\\Berry/Wilczek-Zee + Wilson};
+  \node[rsf/exact,text width=3.25cm] (compose) at (0,-0.4)
+    {composition\\cobordisms + tensor hierarchy};
+
+  \node[rsf/derived,text width=4.0cm,minimum height=2.3cm] (synthesis) at (5.2,2.0)
+    {recursive spectral-fiber synthesis\\[2mm]
+     one complex $\rightarrow$ modules $\rightarrow$ fibers $\rightarrow$
+     transport $\rightarrow$ graded state space};
+
+  \node[rsf/hypothesis,text width=3.5cm] (quark) at (10.6,4.2)
+    {quark = persistent odd rank-three modular fiber};
+  \node[rsf/hypothesis,text width=3.5cm] (color) at (10.6,2.6)
+    {color link = overlap of local spectral frames};
+  \node[rsf/hypothesis,text width=3.5cm] (stats) at (10.6,1.0)
+    {fermion certificate = graded sign + exchange holonomy};
+  \node[rsf/hypothesis,text width=3.5cm] (baryon) at (10.6,-0.6)
+    {baryon = unforced singlet module};
+
+  \foreach \n in {hodge,coarse,gauge,compose}
+    \draw[rsf/flow] (\n.east) -- (synthesis.west);
+  \foreach \n in {quark,color,stats,baryon}
+    \draw[rsf/flow] (synthesis.east) -- (\n.west);
+\end{tikzpicture}%
+}
+\caption{Relationship to prior art. The blue inputs are established research
+programs; the green center is the proposed Tessera synthesis; the amber outputs
+are new physical identifications and must be validated independently. An arrow
+denotes conceptual inheritance, not a proof of the downstream claim.}
+\label{fig:prior-art-map}
+\end{figure}
+
 \hypertarget{falsification-program}{%
 \section{Falsification program}\label{falsification-program}}
 
@@ -988,17 +1362,18 @@ actually produces the required persistent clusters and holonomies. That
 question is now a finite sequence of measurable implementation and
 validation tasks rather than a metaphor.
 
-\hypertarget{references-and-repository-evidence}{%
-\section*{References and repository
-evidence}\label{references-and-repository-evidence}}
-\addcontentsline{toc}{section}{References and repository evidence}
+\clearpage
+\renewcommand{\refname}{Prior-art references}
+\addcontentsline{toc}{section}{Prior-art references}
+\bibliographystyle{unsrtnat}
+\bibliography{docs/design/recursive_spectral_fibers_references}
+
+\hypertarget{repository-evidence}{%
+\section*{Repository evidence}\label{repository-evidence}}
+\addcontentsline{toc}{section}{Repository evidence}
 
 \begin{itemize}
 \tightlist
-\item
-  F. Dörfler and F. Bullo, ``Kron Reduction of Graphs with Applications
-  to Electrical Networks,''
-  \href{https://arxiv.org/abs/1102.2950}{\texttt{arXiv:1102.2950}}.
 \item
   Tessera amplitude and obstruction results,
   \href{../source/quantum-experiments/state-operation-cobordism/cobordism-results.md}{\texttt{cobordism-results.md}}.
