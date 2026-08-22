@@ -8,7 +8,11 @@ as a complete, falsifiable Tessera simulation. The implementation must discover
 particles as persistent modular spectral components, derive rank-dependent
 transport from the Hodge data, enforce fermion statistics through exterior
 grading, grow the state space by second-quantizing the glued one-particle
-operator, and identify a proton only from post-optimization observables.
+operator, and identify a proton only from post-optimization observables. The
+quasi-free covariance layer is the exact primary state representation of
+the current theory; the programme's organizing open question is whether
+an exact covariance-only proton exists, or a genuinely non-Gaussian,
+geometry-mediated interaction is required.
 
 The simulation must scale. Exact algebraic and structure-exact reductions are the
 default. Iterative numerical algorithms are permitted only with residual, spectral
@@ -25,8 +29,9 @@ qualified or rejected, are recorded in
 
 ## 2. Goals
 
-- Replace “quark = hole” with “quark candidate = persistent high-modularity
-  component with an odd, rank-three localized spectral fiber.”
+- Replace “quark = hole” with “quark candidate = persistent certified
+  component with an odd, rank-three, triangle-anchored localized spectral
+  fiber.”
 - Represent a connected component as a coarse response vertex using exact static
   Schur/Kron reduction and shifted Feshbach or certified AMLS reduction for
   nonzero spectral bands.
@@ -41,6 +46,15 @@ qualified or rejected, are recorded in
   exterior grading.
 - Represent the growing finite stages of the Fock expansion without allocating the
   full tensor product when its exact state is factorized or block sparse.
+- Make the covariance matrix the exact primary representation of the
+  quasi-free sector: evolve `Γ` by `iΓ̇=[h,Γ]` and evaluate every polynomial
+  certificate — occupations, parity, Pauli/Gram, `|S_ABC|²`, `<J²>`, and
+  `Var(J²)` — by Wick contraction; materialize a Fock vector only for oracle
+  tests or explicitly non-Gaussian boundary data.
+- Decide the covariance-only dichotomy empirically: either an exact
+  covariance-only proton exists, or a genuinely non-Gaussian,
+  geometry-mediated interaction is required; a certified quasi-free
+  sharp-spin obstruction is a first-class outcome, not a failure.
 - Read quark, antiquark, gluon, meson, baryon, and proton candidates from the same
   underlying complex.
 - Preserve current amplitude, Hodge, Regge, topology, and spectral-dimension tests.
@@ -76,6 +90,14 @@ qualified or rejected, are recorded in
 - Do not infer Kähler-Dirac taste multiplicity from occupation-number exterior
   algebra unless the one-particle operator is actually promoted to `d-d*` on all
   cochain degrees.
+- Do not present classical or mean-field geometry backreaction as a source of
+  non-Gaussian correlations; it is Gaussian-closed.
+- Do not adopt a quartic interaction, quantized geometry entangled with the
+  fermions, beyond-mean-field geometry integration, a cobordism map that is
+  not the second quantization of a one-particle map, or
+  measurement/postselection without an explicit scope decision: these are
+  the only named routes to genuine non-Gaussianity, and none is part of the
+  present model.
 
 ## 4. Required modes
 
@@ -86,6 +108,13 @@ The public simulation interface exposes three modes.
 The production scientific mode. Optimize only the existing geometry/state
 functional and permitted scale regulation. All particle and gauge quantities are
 post-hoc observables. A proton either appears or does not.
+
+Emergence has two labeled, Gaussian-closed sub-modes, recorded in
+provenance: `strict`, in which the state never acts back on the geometry,
+and `meanfield`, certificates-blind backreaction in which only the carried
+state's energy density enters the base objective through the
+covariance-layer loop `h=h(Γ,g)`. Every particle certificate is firewalled
+from both sub-modes.
 
 ### 4.2 Synthesis mode
 
@@ -121,7 +150,10 @@ $$
 
 In a Hermitian signed regime, report the inertia of `Φ†WΦ` and normalize it to a
 signature matrix `J=diag(I_p,-I_q)`. Negative signature is not automatically an
-antiparticle. In a non-normal regime, report left/right eigen residuals and the
+antiparticle; existing pair-creation experiments do exhibit an
+opposite-signature selection rule with conserved real part, which is
+recorded as second-tier measured evidence for that reading while the
+identification itself stays third-tier. In a non-normal regime, report left/right eigen residuals and the
 biorthogonal condition number. Do not apply a self-adjoint solver to a
 non-self-adjoint operator.
 
@@ -153,6 +185,10 @@ $$
 
 or a Craig-Bampton/AMLS linear surrogate. Report the window, discarded-mode gap,
 and resolvent/eigen residual. No nonzero-spectrum claim is attached to `F_B(0)`.
+Report multiplicity honestly: for `λ` outside `spec L_II`,
+`det(L−λI)=det(L_II−λI)·det F_B(λ)`; the order of the zero of `det F_B(·)`
+at `λ` is the algebraic multiplicity and `dim ker F_B(λ)` the geometric
+multiplicity, equal only in the self-adjoint/semisimple setting.
 
 ### 5.4 Fiber isometry
 
@@ -195,6 +231,20 @@ $$
 $$
 
 on the active carried subspace.
+
+### 5.8 Quasi-free closure and covariance purity
+
+Every generator in the model is `dΓ` of a one-particle map, so quasi-free
+states remain quasi-free — including under the mean-field self-consistency
+`h=h(Γ(t),g(t))`. For the covariance layer report
+
+$$
+\epsilon_\Gamma=\|\Gamma^2-\Gamma\|
+$$
+
+for pure Slater states across evolution and across every mean-field
+iteration, and require Wick-evaluated certificates to match dense Fock
+references on crossover fixtures.
 
 ## 6. Data model
 
@@ -279,6 +329,13 @@ class SpectralComponent {
 };
 ```
 
+Fibers of adjacent components may overlap on shared interface cells. The
+next-level one-particle space is the abstract labeled sum `⊞_v E_v`,
+carried with its embedding `J` and Gram matrix `G=J†WJ`; a run declares
+exactly one of: carry `G` in every subsequent formula, certify `‖G−I‖≤ε`
+through the composable amplitude budget, or quotient `ker G`. An internal
+direct sum in `C(K)` is never asserted.
+
 ### 6.5 Derived transport
 
 ```cpp
@@ -309,6 +366,7 @@ struct QuarkRead {
   double triangleAnchorScore;
   double anchorPhaseCoherence;
   std::optional<int> determinantWinding;
+  std::string windingClosure;
   double baryonFlux;
   std::optional<double> isospin;
   std::optional<double> electricFlux;
@@ -324,13 +382,37 @@ struct BaryonRead {
   double baryonFlux;
   std::optional<double> electricFlux;
   std::optional<double> totalJ2;
+  std::optional<double> varJ2;
   std::optional<std::complex<double>> rotationCharacter;
   double persistence;
   std::vector<std::string> failedCertificates;
 };
 ```
 
-Unknown or uncertified values are `null`, not zero.
+Unknown or uncertified values are `null`, not zero. `windingClosure`
+records the declared closure of an open world-tube segment
+(matched-reference transport or boundary-register trivialization); a
+winding without a closure specification is not certified. `varJ2` is the
+Wick-evaluated `Var(J²)` on quasi-free candidates; the sharp spin
+certificate requires both `totalJ2=3/4` and `varJ2≈0`.
+
+### 6.7 Covariance-layer state
+
+```cpp
+class CovarianceState {
+ public:
+  Eigen::MatrixXcd gamma() const;        // Γ_ij = <a_j† a_i>
+  double purityDefect() const;           // ‖Γ² − Γ‖
+  double occupation(std::size_t mode) const;
+  std::complex<double> wickExpectation(const NormalPolynomial& poly) const;
+};
+```
+
+The covariance layer is the primary exact representation of the quasi-free
+sector. It is initialized from accepted band projectors (`Γ=P`) or from
+boundary registers, evolved by the one-particle transport, and queried by
+Wick contraction. The graded Fock DAG of Algorithm F remains the dense
+oracle and the carrier for explicitly non-Gaussian boundary data.
 
 ## 7. Proposed source layout
 
@@ -342,6 +424,7 @@ Unknown or uncertified values are `null`, not zero.
 | Color algebra | `include/observables/ColorFiber.h` | `src/observables/ColorFiber.cpp` | `tests/observables/test_color_fiber_python.py` |
 | Derived connection | `include/observables/FiberConnection.h` | `src/observables/FiberConnection.cpp` | `tests/observables/test_fiber_connection_python.py` |
 | Exterior/Fock state | `include/quantum/GradedFock.h` | `src/quantum/GradedFock.cpp` | `tests/quantum/test_graded_fock_python.py` |
+| Covariance layer | `include/quantum/CovarianceState.h` | `src/quantum/CovarianceState.cpp` | `tests/quantum/test_covariance_state_python.py` |
 | Particle classification | `include/observables/ParticleClusters.h` | `src/observables/ParticleClusters.cpp` | `tests/observables/test_particle_clusters_python.py` |
 | Total-space exchange/spin | extend `include/observables/DiracKahler.h` or add a class beside it | matching source | `tests/observables/test_exchange_holonomy_python.py` |
 | Orchestration | extend `include/cobordism/MultiCobordism.h` | matching source | `tests/cobordism/test_recursive_fiber_simulation.py` |
@@ -383,7 +466,8 @@ complex Hodge weights. Treat it only as a deterministic proposal generator and
 record the resolution parameter. The downstream gap, localization, persistence,
 transport, and anchor certificates are weight-aware and decisive. Include explicit
 Fortunato-Barthélemy resolution-limit fixtures so modularity cannot imprint a fake
-preferred scale on the recursive hierarchy.
+preferred scale on the recursive hierarchy. Modularity proposes candidate
+supports; it may not veto an otherwise certified fiber.
 
 ### 8.3 Persistence
 
@@ -436,10 +520,14 @@ For each accepted partition and Hodge degree:
 7. when a reusable linear eigenproblem is needed, retain interface constraint modes
    and selected fixed-interface modes in a Craig-Bampton/AMLS basis;
 8. retain harmonic, resonant, and selected interior coordinates as vertex stalks;
-9. emit an operator-valued quotient graph; emit a cellular-sheaf realization only
-   if explicit restriction maps reproduce the response blocks and satisfy their
-   composition rules; and
-10. verify static quadratic response and band-window resolvent/eigen residuals on
+9. assemble the next-level one-particle space as the abstract labeled sum
+   `⊞_v E_v` with embedding `J` and Gram matrix `G=J†WJ`, declaring exactly
+   one of carry-`G`, certify-`‖G−I‖≤ε`, or quotient-`ker G`; never assert an
+   internal direct sum;
+10. emit an operator-valued quotient graph; emit a cellular-sheaf realization only
+    if explicit restriction maps reproduce the response blocks and satisfy their
+    composition rules; and
+11. verify static quadratic response and band-window resolvent/eigen residuals on
     deterministic probe vectors.
 
 Nested reductions reuse child factorizations and shifted factorizations by band
@@ -459,8 +547,9 @@ preservation.
 - `det(C)` and `det(C†C)` singlet certificates; and
 - the complex-squared-length color vector `c=z/||z||_2`;
 - perimeter and Hilbert normalizers as distinct methods; and
-- triangle-anchor matrices `R_τΦ`, alternating volumes, and phase-coherence
-  certificates for abstract rank-three bands.
+- weighted triangle-anchor matrices `A_τ=|W_τ|^{1/2}R_τΦ`, calibrated atlas
+  scores and anchor profiles, and phase-coherence certificates for abstract
+  rank-three bands.
 
 The constant algebra is generated once and checked at startup in debug builds. The
 production operation count is constant.
@@ -478,10 +567,17 @@ $$
 Use algebraic expected values containing `√3` and `ω`; compare floating
 representations only at the final boundary.
 
-An accepted color fiber need not concentrate on one literal triangle. It must have a
-stable weighted atlas score `Σ_τ w_τ|det(R_τΦ)|²` and coherent determinant-line
-phases on overlapping oriented triangles. A single-triangle fixture is the exact
-oracle; an extended anchored fiber is the production case.
+An accepted color fiber need not concentrate on one literal triangle. It must
+have a stable calibrated atlas score `a²=Σ_τ w_τ|det A_τ|²` with
+`A_τ=|W_τ|^{1/2}R_τΦ` and the convex weighting `{w_τ}` declared before the
+data are examined, plus coherent determinant-line phases on overlapping
+oriented triangles. In the positive regime each `|det A_τ|²≤1`, so
+`a²∈[0,1]` with value one exactly at full concentration on the weighted edge
+span; the reported datum is the profile — maximal term, participation ratio,
+and determinant-phase dispersion — alongside the score. Signed sectors
+restrict with `|W_τ|^{1/2}` and report the restricted block's Krein
+signature separately. A single-triangle fixture is the exact oracle; an
+extended anchored fiber is the production case.
 
 ## 12. Algorithm E — spectral transport and Wilson observables
 
@@ -501,7 +597,10 @@ Given two accepted equal-rank fibers:
 8. multiply accepted maps around a loop and report full `U(r)`, determinant-line,
    projective/adjoint, and explicitly lifted fundamental observables as applicable;
 9. for a closed full-rank world-tube family, compute the unwrapped determinant
-   winding and invalidate it if the gap or rank closes; and
+   winding and invalidate it if the gap or rank closes; for an open cobordism
+   segment compute only the relative winding, closing the composite with the
+   inverse matched reference transport or with fixed boundary-register
+   endpoint trivializations and recording the closure specification; and
 10. in the non-normal regime retain the certified `GL(r,C)` transport unless a
     separate pseudo-unitary reduction is justified by matching Krein signatures.
 
@@ -512,20 +611,35 @@ while a lifted fundamental observable must report the branch/center sector. A
 deliberately leaking fixture must be rejected even though polar normalization can
 produce a unitary matrix.
 
-## 13. Algorithm F — graded Fock engine
+## 13. Algorithm F — quasi-free covariance layer and graded Fock engine
 
 The one-particle edge space is `h=span{|e>}` and the global carrier is
-`F_-(h)=Λ•h`. A spectral projector supplies an optional quasi-free reference state
-with covariance `Γ_ef=<a_f†a_e>=P_ef`; interacting or spin-entangled states remain
-explicit vectors/density operators in the lazy sectors below. Per-edge occupations
-are marginals, not a product-state ontology.
+`F_-(h)=Λ•h`. The covariance layer below is the primary exact representation
+of the quasi-free sector; the lazy Fock DAG is the dense oracle and the
+carrier for explicitly non-Gaussian boundary data. Per-edge occupations are
+marginals, not a product-state ontology.
 
 For a block one-particle operator `L=[[L_A,C],[C†,L_B]]`, construct
 `dΓ(L)=Σ_ij L_ij a_i†a_j`. Verify exactly that direct sums become graded tensor
 products and that coupling blocks become hopping terms. Free many-body eigenvalues
 are occupation subset sums of one-particle eigenvalues.
 
-### 13.1 Exact occupation representation
+### 13.1 Covariance layer (primary quasi-free path)
+
+Represent the number-conserving quasi-free state by `Γ_ij=<a_j†a_i>` with
+`iΓ̇=[h,Γ]` (equivalently, conjugation by the one-particle transport of a
+cobordism step) and `Γ²=Γ` for pure Slater states; a pairing sector extends
+`Γ` to the full Nambu covariance without changing the closure statement.
+Initialize from accepted band projectors (`Γ=P`) or boundary registers.
+Evaluate every polynomial certificate by Wick contraction: occupations,
+parities, Pauli/Gram determinants, the color wedge `|S_ABC|²`, and both
+`<J²>` and `Var(J²)=<(J²)²>−<J²>²`. Implement the mean-field loop `h=h(Γ,g)`
+used by the certificates-blind backreaction sub-mode, with a purity
+certificate at every iteration. Never materialize a Fock vector on the
+quasi-free path; cross-validate against the lazy DAG of §13.3 on quasi-free
+fixtures.
+
+### 13.2 Exact occupation representation
 
 For up to the machine-word threshold, an exterior basis state is a bitset. Creating
 mode `i` multiplies by
@@ -540,7 +654,7 @@ and applies the corresponding permutation parity. This order is a compilation
 choice, not extra physical data; no Kasteleyn orientation is required for the
 abstract exterior algebra.
 
-### 13.2 Lazy exact state
+### 13.3 Lazy exact state
 
 Represent a state as an expression DAG with nodes:
 
@@ -556,7 +670,7 @@ subexpressions. Certification mode allows algebraically lossless compression onl
 An optional approximation mode may use a stated singular-value truncation, but its
 discarded norm is accumulated and printed in every amplitude result.
 
-### 13.3 Gluon candidates
+### 13.4 Gluon candidates
 
 Even traceless quark-antiquark bilinears supply the `8` sector. A gluon candidate is
 a persistent transported octet excitation with zero baryon flux and even parity.
@@ -587,9 +701,11 @@ Required fixtures:
 - a vertex relabeling or in-band frame rotation changes no character;
 - closing the spectral gap invalidates the read instead of emitting a sign.
 
-The physical rotation path is separate from a label permutation. Build a geometric
-`2π` loop of the cluster frame and a matched co-moving reference loop; require their
-determinant ratio to be `-1` before reporting spin `1/2`. If the emergent geometry is
+The physical rotation path is separate from a label permutation, and it is
+never left abstract: the geometric `2π` loop is the documented total-space
+spin holonomy cycle of the cluster frame, executed as a closed loop with a
+matched co-moving reference loop; require their determinant ratio to be
+`-1` before reporting spin `1/2`. If the emergent geometry is
 manifold-like and the claim is continuum spin, also construct or reject a lift of
 the frame holonomy from `SO(d)` to `Spin(d)` and report any `w2` obstruction. A
 Kasteleyn orientation is only a possible surface-dimer implementation, not the
@@ -610,8 +726,10 @@ candidate requires:
 - a stable oriented-triangle anchor score and determinant-phase coherence;
 - bounded transport leakage;
 - sufficient persistence and localization;
-- a certified determinant-line winding `ν=+1` or `-1`, provisionally interpreted
-  as baryon flux `B=ν/3`; and
+- a certified relative determinant-line winding `ν=+1` or `-1` in the
+  closed-composite sense of Algorithm E (matched-reference or
+  boundary-register closure recorded), provisionally interpreted as baryon
+  flux `B=ν/3`; and
 - refinement stability.
 
 Flavor is reported only if an unlabeled, transported two-state spectral subclass
@@ -644,12 +762,22 @@ A baryon may be called a proton only when all required values are certified:
 | flavor occupation | `uud` |
 | electric Gauss flux | `+1` |
 | total `J²` | `3/4` |
+| `Var(J²)` | `≈0`, Wick-certified on quasi-free candidates |
 | normalized `2π` character | `-1` |
 | spin lift | accepted when a continuum spin claim is made |
 | composite parity | odd |
 
 A partial match is a “baryon candidate” with an explicit list of missing or failed
 certificates, never a proton.
+
+The variance row separates a proton from an accidental expectation value: a
+Gaussian state can be an exact `J²` eigenstate, but a generic Slater
+determinant with `<J²>=3/4` need not be spin-1/2. If every certificate
+except the sharp spin passes across the entire accepted covariance-only
+class under refinement, the verdict is `quasi-free sharp-spin obstruction`
+— a branch point mandating exactly one of the named non-Gaussian mechanisms
+as an explicit scope decision, never a silent failure and never a
+refutation of the geometry.
 
 ## 16. Optimizer and refinement integration
 
@@ -666,12 +794,19 @@ with the existing, explicitly selected scale regulator where required. Particle
 confidence, modularity, color determinant, Wilson loops, flavor, charge, and spin do
 not enter this functional in emergence mode.
 
+Emergence runs in one of the two labeled, Gaussian-closed sub-modes of
+§4.1, recorded in provenance: `strict` (no state backreaction) and
+`meanfield` (certificates-blind backreaction, in which only the carried
+state's energy density enters `F_base` through the covariance-layer loop
+`h=h(Γ,g)`). The firewall below applies to both sub-modes.
+
 After an accepted geometry move or a configurable analysis cadence:
 
 1. update affected Hodge/Regge caches;
 2. update the local component hierarchy;
 3. update affected spectral projectors and transports;
-4. update the lazy Fock expression for the interaction;
+4. update the covariance-layer state and, where a non-Gaussian boundary
+   sector is active, the lazy Fock expression for the interaction;
 5. evaluate particle reads; and
 6. checkpoint the raw state plus certificates.
 
@@ -694,6 +829,7 @@ manifold/orientation gates.
 | component score | cached exact `ΔQ` | near `O(|E|)` per sweep | recompute all communities per move |
 | coarse response | sparse static/shifted Schur solves; AMLS band surrogate | affected component/window factorization | explicit dense inverse or DC spectrum claim |
 | product/Fock spectrum | Künneth sums only for product complexes; `dΓ` subset sums for Fock sectors | output-sensitive | diagonalize full Kronecker/Fock matrix |
+| quasi-free state | covariance evolution `iΓ̇=[h,Γ]` plus Wick contraction | `O(M²)`–`O(M³)` per step | eager `2^M` vector for a quasi-free sector |
 | local topology update | Woodbury/secular low-rank update | affected rank and star | rebuild every global operator |
 | color algebra | fixed `3×3`/`8×8` formulas | `O(1)` | generic symbolic solver at runtime |
 | singlet | `3×3` determinant/Gram determinant | `O(1)` | sampling color permutations |
@@ -733,6 +869,7 @@ Each frame stores:
 ```json
 {
   "mode": "emergence",
+  "submode": "strict",
   "geometry_revision": 0,
   "raw_complex": {},
   "edge_quantum_data": {},
@@ -740,6 +877,10 @@ Each frame stores:
   "hierarchy": [],
   "fibers": [],
   "transports": [],
+  "covariance": {
+    "active": true,
+    "purity_defect": 0.0
+  },
   "fock": {
     "active_modes": 0,
     "exact": true,
@@ -789,6 +930,22 @@ must reject an unknown schema version.
     single/double exchange ratios are `-1/+1`.
 13. Vacuum embedding preserves all existing amplitudes.
 14. Cached low-rank updates equal cold recomputation.
+15. Wick-evaluated certificates on the covariance layer match dense Fock
+    references: occupations, parity, Pauli/Gram, `|S_ABC|²`, `<J²>`, and
+    `Var(J²)`.
+16. A single-mode spin-1/2 Slater fixture is an exact `J²` eigenstate with
+    zero variance; a generic Slater fixture with `<J²>=3/4` reports nonzero
+    variance and fails the sharp certificate.
+17. Purity `‖Γ²−Γ‖` is preserved across evolution and across the mean-field
+    loop.
+18. An open-segment winding fixture yields the same integer under
+    matched-reference and boundary-register closure, and returns unknown
+    without a declared closure.
+19. A defective (non-semisimple) pencil fixture reports distinct algebraic
+    and geometric multiplicities.
+20. An overlapping-interface two-component fixture is exact under its
+    declared labeled-sum option and demonstrates that a naive internal
+    direct sum miscounts.
 
 ### 20.2 Property tests
 
@@ -822,10 +979,13 @@ The epic is complete when one command can:
 1. start from a documented neutral initial complex and seed;
 2. run unforced joint stationarity with geometry-only refinement;
 3. build and persist the recursive component hierarchy;
-4. maintain an exact or certified Fock state through interactions;
+4. maintain the exact covariance-layer state for the quasi-free sector,
+   with certified Fock sectors only for oracle tests or explicitly
+   non-Gaussian boundary data;
 5. report all quark, gauge, exchange, and baryon certificates;
-6. distinguish “no baryon,” “baryon candidate,” and “certified proton” without a
-   target-dependent code path;
+6. distinguish “no baryon,” “baryon candidate,” “certified proton,” and
+   “quasi-free sharp-spin obstruction” without a target-dependent code
+   path;
 7. replay the checkpoint with cold caches and reproduce the verdict;
 8. render the hierarchy, color transport, Wilson loops, and particle world tubes;
 9. emit scaling data for at least three problem sizes; and
@@ -855,7 +1015,9 @@ condition. The software is complete if it can return a rigorous negative result.
   loops;
 - Berry-cancelled exchange holonomy, structural permutation parity, and normalized
   physical `2π` loop/spin-lift certificate;
-- lazy inductive-limit Fock engine.
+- lazy inductive-limit Fock engine;
+- quasi-free covariance layer with Wick certificate evaluation,
+  cross-validated against the Fock engine.
 
 ### Wave 3 — particles and interactions
 
@@ -866,7 +1028,9 @@ condition. The software is complete if it can return a rigorous negative result.
 ### Wave 4 — unforced complete simulation
 
 - optimizer/refinement integration;
-- multiscale continuum and spectral-dimension validation;
+- multiscale continuum and spectral-dimension validation, including the
+  covariance-only dichotomy experiment and the stationarity-defect
+  correlation measurement;
 - deterministic campaign, checkpoint/replay, benchmark, and animation.
 
 ## 22. Merge discipline

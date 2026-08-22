@@ -177,8 +177,8 @@ Implementation is tracked by GitHub epic
 \noindent
 
 This paper proposes a single geometric formulation for the particle
-content already suggested by Tessera's cobordism experiments. A
-connected, high-modularity simplicial component is treated as one
+content already suggested by Tessera's cobordism experiments. A persistent, spectrally certified connected simplicial component is
+treated as one
 effective vertex at the next resolution. The component's selected
 localized Hodge eigenspace is its fiber, and the couplings between
 components induce transport between those fibers. Repeating this
@@ -196,7 +196,11 @@ supported boundary quadratic energies. Nonzero spectral bands instead
 use the energy-dependent Feshbach--Schur map, or a certified
 Craig--Bampton/AMLS linear surrogate. Simplicial gluing acts on the
 one-particle chain space; fermionic second quantization then turns direct
-sums into graded tensor products and coupling blocks into hopping terms.
+sums into graded tensor products and coupling blocks into hopping terms. Every generator so obtained
+is quadratic, so the dynamics is exactly quasi-free: the state is
+carried without loss by a covariance matrix, Wick's theorem evaluates
+every polynomial certificate, and mean-field geometry backreaction
+provably stays Gaussian.
 Three oriented edge-mode factors form the exact exterior algebra
 $\Lambda^\bullet \mathbb C^3 = \mathbf 1 \oplus \mathbf 3 \oplus
 \overline{\mathbf 3} \oplus \mathbf 1$; the one-occupation sector
@@ -212,15 +216,18 @@ interactions generate the finite stages of an inductive-limit Fock space.
 
 The physical identification remains a hypothesis to be tested. A quark
 is proposed to be a persistent, odd-parity, rank-three spectral fiber
-localized on a high-modularity component; a proton is three such
+anchored to oriented faces of a certified component; a proton is three such
 components bound into one persistent supercomponent, occupying a
 normalized color wedge, carrying baryon number \texttt{+1}, electric
-charge \texttt{+1}, and a total-space spin-\texttt{1/2} holonomy. The
+charge \texttt{+1}, and a
+sharpness-certified total-space spin-\texttt{1/2} readout. The
 paper separates exact identities, results already supported by Tessera,
-and new falsifiable conjectures. It also states an implementation
-program in which analytic or structure-exact operations are used before
-iterative numerical work, so the model can scale without turning its
-defining observables into uncontrolled approximations.
+and new falsifiable conjectures, and it states the sharpest open
+question as a dichotomy: either an exact covariance-only proton exists,
+or a genuinely non-Gaussian, geometry-mediated interaction is required.
+An implementation program of structure-exact operations before
+iterative numerics keeps the defining observables from becoming
+uncontrolled approximations.
 
 \end{abstract}
 
@@ -276,7 +283,11 @@ sectors, and coarse vertices are \emph{derived views} of that same data.
 They are not separately sampled fields. This is important both
 scientifically and computationally: adding a new independent field could
 fit a desired answer, while deriving every readout from one complex
-leaves the construction falsifiable.
+leaves the construction falsifiable. One consequence is recorded in
+Section~\ref{quasi-free-dynamics-and-the-covariance-layer}: every
+generator this ontology currently supplies is quadratic after second
+quantization, so the reachable states are exactly the quasi-free class
+together with whatever non-Gaussian data is fed at the boundary.
 
 \begin{figure}[htbp]
 \centering
@@ -383,10 +394,14 @@ reference state has covariance
 \]
 
 Thus a per-edge Bloch vector or occupation is a derived marginal/readout.
-The quasi-free state is a useful analytic baseline, not a restriction:
-finitely many interacting non-Gaussian sectors are represented explicitly
-by the lazy Fock construction of
-Section~\ref{fock-space-as-an-inductive-limit-of-interactions}.
+The quasi-free state is a useful analytic baseline, not a restriction
+of the state space: the lazy Fock construction of
+Section~\ref{fock-space-as-an-inductive-limit-of-interactions} can
+represent explicitly non-Gaussian sectors.
+Section~\ref{quasi-free-dynamics-and-the-covariance-layer} records,
+however, that no generator currently present in the model produces such
+sectors from Gaussian data; until one of the mechanisms listed there is
+adopted, non-Gaussianity can enter only as boundary data.
 
 Let
 
@@ -418,7 +433,10 @@ The geometry evolves toward joint stationary points of the existing
 Regge and Hodge functionals. In emergence mode, particle-specific
 observables below are read after optimization and are not inserted as
 target terms. Controlled synthesis mode may pin a carrier to test
-realizability, but that is a separate experiment.
+realizability, but that is a separate experiment. Section~\ref{quasi-free-dynamics-and-the-covariance-layer} refines
+the emergence protocol into two labeled modes --- strict
+no-backreaction, and certificates-blind mean-field backreaction --- and
+records that both remain inside the quasi-free class.
 
 This operator stack sits on established foundations: Regge calculus
 encodes piecewise-flat gravity in simplicial deficit angles
@@ -497,7 +515,14 @@ Then
 0\in\operatorname{spec}F_B(\lambda),
 \]
 
-with algebraic multiplicities in the supported finite-dimensional sector.
+for $\lambda$ outside $\operatorname{spec}L_{II}$, via the exact
+determinant factorization
+$\det(L-\lambda I)=\det(L_{II}-\lambda I)\,\det F_B(\lambda)$.
+The order of the zero of $\det F_B(\cdot)$ at $\lambda$ equals the
+algebraic multiplicity of $\lambda$ in $L$, while
+$\dim\ker F_B(\lambda)$ equals its geometric multiplicity; the two
+agree in the self-adjoint or otherwise semisimple setting but not in
+general.
 At an interior resonance the inverse is replaced only after checking the
 compatibility condition
 $L_{IB}x_B\perp\ker(L_{II}-\lambda I)^\dagger$ and retaining the resonant
@@ -555,7 +580,12 @@ E_C=\operatorname{Ran}\Phi_C.
 In a Hermitian indefinite regime record the inertia of
 $\Phi_C^\dagger W_C\Phi_C$ and normalize it to a signature matrix
 $J_C=\operatorname{diag}(I_p,-I_q)$. Negative Krein signature is a
-certificate, not an automatic identification with an antiparticle. In a
+certificate, not an automatic identification with an antiparticle. Existing Tessera pair-creation
+experiments do, however, exhibit an opposite-signature selection rule
+with conserved real part under conjugate-pair formation; that measured
+behavior is second-tier evidence for the particle/antiparticle reading,
+while the identification itself remains a third-tier proposed
+interpretation. In a
 non-normal regime use matched right and left frames $\Phi_C,\Psi_C$ with
 $\Psi_C^\dagger W_C\Phi_C=I$ and report both residuals and the frame
 condition number.
@@ -568,7 +598,7 @@ following remain stable across a stated range of scales:
 \begin{itemize}
 \tightlist
 \item
-  high modularity and low conductance relative to neighboring cuts;
+  a persistent connected cluster support, however proposed;
 \item
   a localized spectral projector with stable rank;
 \item
@@ -605,9 +635,13 @@ unless its scaling observables survive a refinement window. The current
 \texttt{ModularityOptimizer} uses Newman--Girvan modularity on a
 combinatorial one-skeleton; it is a heuristic proposal generator that
 does not see signed or complex Hodge weights and is subject to the
-modularity resolution limit \cite{fortunato2007resolution}. Every accepted
-fiber is therefore conditioned on independent, weight-aware gap,
-localization, leakage, persistence, and refinement certificates.
+modularity resolution limit \cite{fortunato2007resolution}. Modularity may therefore
+propose candidate supports, but it may not veto an otherwise certified
+fiber: acceptance is conditioned only on the independent, weight-aware
+gap, localization, leakage, persistence, and refinement certificates
+above, together with the anchoring certificate of
+Section~\ref{quarks-as-modular-clusters} whenever a color
+interpretation is claimed.
 
 \begin{figure}[htbp]
 \centering
@@ -742,7 +776,12 @@ At the selected-fiber level, an interaction grows the carried space as
 
 and a later interaction appends another factor. This is a statement
 about state-space composition after second quantization, not the topology
-of the glued chain complex. If $J_C$ embeds
+of the glued chain complex. When carried
+subspaces of adjacent components overlap on interface cells, the
+composite is built on the abstract labeled sum with an explicit
+embedding Gram matrix;
+Section~\ref{the-master-recursive-construction} states the exact
+rule. If $J_C$ embeds
 an abstract state into the geometric carrier, exact amplitude
 preservation requires
 
@@ -776,6 +815,111 @@ mechanics formalizes tensor composition and diagrammatic process
 semantics \cite{abramsky2004categorical}. Tessera keeps only the parts
 that can be realized by its finite simplicial carrier and tests the
 resulting map numerically rather than assuming topological invariance.
+
+\hypertarget{quasi-free-dynamics-and-the-covariance-layer}{%
+\section{Quasi-free dynamics and the covariance
+layer}\label{quasi-free-dynamics-and-the-covariance-layer}}
+
+Every many-body generator exhibited in this paper is quadratic. Free
+propagation is $d\Gamma(L)$, gluing contributes $d\Gamma$ of a coupling
+block, and every derived transport is the second quantization of a
+one-particle map. The exact consequence is closure of the quasi-free
+class: if the Hamiltonian is always of the form
+
+\[
+H(t)=d\Gamma\big(h(t)\big)=\sum_{ij}h_{ij}(t)\,a_i^\dagger a_j,
+\]
+
+then Gaussian/quasi-free states remain Gaussian.
+
+The closure survives self-consistency. Let the one-particle operator
+depend on the covariance and on the classical geometry,
+
+\[
+h=h\big(\Gamma(t),g(t)\big),
+\]
+
+with the geometry in turn relaxed against the state's energy density.
+That is nonlinear mean-field dynamics of generalized Hartree--Fock type
+\cite{bach1994ghf}; it can localize and it can produce self-bound
+solutions, but it does not leave the Gaussian manifold. Classical or
+mean-field geometry backreaction alone therefore does not generate
+genuinely non-Gaussian correlations.
+
+The emergence protocol accordingly splits into two labeled modes, both
+Gaussian-closed: \emph{strict emergence}, in which the state does not
+act back on the geometry at all, and \emph{certificates-blind mean-field
+backreaction}, in which the carried state's energy density enters the
+joint stationarity objective while every particle certificate remains
+firewalled from it. The certificate firewall of
+Section~\ref{the-proton-as-the-maximally-informative-baryon} applies to
+both modes.
+
+Genuinely non-Gaussian correlations would require at least one of the
+following, none of which is currently part of the model:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  a genuine quartic effective interaction,
+  $H_{\mathrm{int}}=\sum_{ijkl}V_{ijkl}\,
+  a_i^\dagger a_j^\dagger a_k a_l$;
+\item
+  quantized geometry that becomes entangled with the fermions;
+\item
+  integrating out dynamical geometry beyond the mean-field
+  approximation, producing a retarded or quartic effective interaction;
+\item
+  a cobordism map that is not the second quantization of a one-particle
+  map; or
+\item
+  measurement or postselection capable of taking Gaussian states outside
+  the Gaussian class.
+\end{enumerate}
+
+Adopting one of these is an explicit scope decision with its own
+certificates, not a background assumption. Until then, the statement
+that non-Gaussian sectors are representable
+(Section~\ref{the-microscopic-geometric-state}) must not be read as a
+statement that they are produced.
+
+The quasi-free formulation is extremely attractive on its own terms. In
+the number-conserving case the entire state is the covariance matrix
+
+\[
+\Gamma_{ij}=\langle a_j^\dagger a_i\rangle,
+\qquad
+i\dot\Gamma=[h,\Gamma],
+\]
+
+with $\Gamma^2=\Gamma$ exactly for a pure Slater state; a pairing sector
+would extend $\Gamma$ to the full Nambu covariance without changing the
+closure statement. Wick's theorem then computes every polynomial
+observable exactly: occupations and parities, the Pauli/Gram
+determinants, the color wedge $|S_{ABC}|^2$, and both
+$\langle J^2\rangle$ and its variance. There is no reason to construct
+an exponential Fock vector except for oracle tests or for explicitly
+non-Gaussian boundary data.
+
+The programme order follows. First test the strongest possible
+covariance-only theory. Treat failure of the sharp proton certificate of
+Section~\ref{the-proton-as-the-maximally-informative-baryon} as a
+meaningful structural result rather than a numerical nuisance. Introduce
+a non-Gaussian interaction only if the geometry supplies one naturally,
+through one of the mechanisms above. The question that decides the next
+stage of the programme is stated exactly:
+
+\begin{center}
+\fbox{\parbox{0.9\linewidth}{\centering\itshape
+Is an exact covariance-only proton possible, or is a genuinely
+non-Gaussian, geometry-mediated interaction required?}}
+\end{center}
+
+Either answer is informative. A covariance-only proton would make the
+entire particle layer polynomially computable and exactly certifiable; a
+demonstrated obstruction would be the first internal evidence that the
+geometry must supply a true interaction term.
 
 \hypertarget{a-triangle-carries-the-exact-color-algebra}{%
 \section{A triangle carries the exact color
@@ -1002,7 +1146,19 @@ a closed, full-rank world-tube family $V(t)$,
 \]
 
 is homotopy-invariant while the gap and rank remain open, and changes sign
-when the tube orientation is reversed. Identifying $B=\nu/3$ for an
+when the tube orientation is reversed. The integer character of
+$\nu$ requires the closed loop. A quark or proton world tube on a
+cobordism segment is an interval, and its raw endpoint change of
+$\arg\det V$ is a phase difference, not an invariant. The
+open-segment definition is therefore relative: either compose the
+physical transport with the inverse of a matched reference transport
+--- the same non-exchanging reference construction used in
+Section~\ref{a-label-independent-exchange-experiment} --- so that the
+composite closes, or fix endpoint trivializations supplied by the
+boundary registers. The reported $\nu$ is the integer winding of that
+closed composite, together with its reference specification. Without
+such closure $\nu$ is merely an endpoint phase change and is not
+certified. Identifying $B=\nu/3$ for an
 accepted quark tube is a proposed physical interpretation, not a group
 identity. Conservation under pair creation is exact only for a continuous
 conjugate-pair homotopy with no determinant zero or boundary flux.
@@ -1043,38 +1199,62 @@ satisfying all of the following derived conditions:
 The abstract rank-three band must first be anchored to oriented
 two-simplices. For an oriented triangle $\tau\subset Q$, let
 $R_\tau:C_1(Q)\to\mathbb C^3$ restrict a one-chain to the three ordered
-boundary edges, including their incidence signs. For a rank-three frame
-$\Phi_Q$, define the gauge-invariant anchor score
+boundary edges, including their incidence signs, and let $|W_\tau|$ be
+the modulus of the edge-weight block on those three edges. Define the
+weighted restriction
+
+\[
+A_\tau=|W_\tau|^{1/2}R_\tau\Phi_Q.
+\]
+
+For a rank-three frame $\Phi_Q$, define the gauge-invariant anchor score
 
 \[
 a_Q^2=\sum_{\tau\subset Q}w_\tau
-\left|\det(R_\tau\Phi_Q)\right|^2,
-\qquad w_\tau\ge0,\quad\sum_\tau w_\tau=1.
+\left|\det A_\tau\right|^2,
+\qquad w_\tau\ge0,\quad\sum_\tau w_\tau=1,
 \]
+
+with the convex weighting $\{w_\tau\}$ declared before the data are
+examined. In the positive regime
+$R_\tau^\dagger|W_\tau|R_\tau\preceq W$, so each
+$|\det A_\tau|^2=\det(A_\tau^\dagger A_\tau)\le1$ and the score is
+calibrated: $a_Q^2\in[0,1]$, with value one exactly at full
+concentration on the weighted edge span of the anchoring faces. In
+signed sectors the restriction still uses $|W_\tau|^{1/2}$ and the Krein
+signature of the restricted block is reported separately.
 
 The phases of the nonzero determinants give a local determinant-line
 trivialization; their coherence on overlapping triangles is recorded
-separately. Concentration on one triangle is a sufficient special case,
-not a requirement: an extended fiber may be anchored by an atlas of
-oriented faces. Because every 2-simplex has exactly three boundary edges,
+separately. The reported anchor datum is the profile, not only the
+score: the maximal term $\max_\tau|\det A_\tau|^2$, the participation
+ratio of the distribution $\{|\det A_\tau|^2\}$, and the
+determinant-phase dispersion accompany $a_Q^2$. Concentration on one
+triangle is a sufficient special case, not a requirement: an extended
+fiber may be anchored by an atlas of oriented faces. Because every
+2-simplex has exactly three boundary edges,
 this anchor is independent of the ambient spectral dimension.
 
 \begin{enumerate}
 \def\labelenumi{\arabic{enumi}.}
 \tightlist
 \item
-  \texttt{Q} is a persistent high-modularity cluster, not a prescribed
-  region.
+  \texttt{Q} is a persistent cluster certified as in
+  Section~\ref{recursive-spectral-fibers}, however its support was
+  proposed.
 \item
   Its selected color fiber has stable rank three.
 \item
-  Its triangle-anchor score and determinant-line coherence are stable.
+  Its calibrated triangle-anchor profile and determinant-line coherence
+  are stable.
 \item
   It occupies an odd exterior sector.
 \item
   Its color transport has bounded leakage over its lifetime.
 \item
-  Its determinant line has an accepted oriented winding $\nu=\pm1$;
+  Its determinant line has an accepted relative winding $\nu=\pm1$ in
+  the closed-composite sense of
+  Section~\ref{color-transport-and-wilson-loops-without-a-new-gauge-field};
   reversing the tube yields the dual color representation and an
   antiquark.
 \item
@@ -1188,7 +1368,12 @@ in-block motion after comparison with the reference loop. The algebraic
 wedge sign is exact; the interferometric holonomy is the dynamical
 certificate.
 
-A physical $2\pi$ rotation uses the same reference normalization. If an
+A physical $2\pi$ rotation uses the same reference normalization. The
+rotation path is not left abstract: it is the documented total-space
+spin holonomy cycle already used for the $J^2$ readout
+(\texttt{joint\_proton\_spin\_findings.md}), executed as a closed
+loop and normalized against its own co-moving, non-rotating
+reference. If an
 emergent manifold-like regime supplies tangent frames, a continuum
 spinor claim additionally requires a lift of the frame holonomy from
 $SO(d)$ to $\operatorname{Spin}(d)$; obstruction by the second
@@ -1338,19 +1523,35 @@ singlet. The proposed proton certificate is the conjunction:
   normalized color wedge with $|S_{ABC}|^2\approx1$
   and vanishing net color flux;
 \item
-  flavor spectrum with the \texttt{uud} occupation pattern;
+  flavor spectrum with the \texttt{uud} occupation pattern, in the
+  sense of the still-hypothetical isospin-doublet construction of
+  Section~\ref{quarks-as-modular-clusters};
 \item
-  oriented baryon flux $B=1$;
+  oriented baryon flux $B=1$ in the relative-winding sense of
+  Section~\ref{color-transport-and-wilson-loops-without-a-new-gauge-field};
 \item
   Gauss flux $Q=+1$;
 \item
-  total-space spin holonomy $J^2=3/4$, a reference-normalized
-  $2\pi\mapsto-1$, and, where applicable, an accepted spin lift;
+  a sharp total-space spin readout: $\langle J^2\rangle=3/4$ with
+  $\operatorname{Var}(J^2)=\langle(J^2)^2\rangle-\langle J^2\rangle^2\approx0$,
+  a reference-normalized $2\pi\mapsto-1$, and, where applicable, an
+  accepted spin lift;
 \item
   finite radius and stable spectral mass/form-factor readouts; and
 \item
   stability of every dimensionless certificate under refinement.
 \end{itemize}
+
+The variance condition is essential and is exactly computable: $J^2$
+is quartic and $(J^2)^2$ octic in the fermion operators, so on any
+quasi-free state both are finite Wick sums over the covariance matrix.
+A Gaussian state can in special cases be an exact $J^2$ eigenstate, so
+quasi-free failure is not automatic; but a generic Slater determinant
+with $\langle J^2\rangle=3/4$ need not be spin-$1/2$, and the
+variance is what separates a proton certificate from an accidental
+expectation value. Failure of the sharp certificate across the entire
+accepted covariance-only class is the structural branch point of
+Section~\ref{quasi-free-dynamics-and-the-covariance-layer}.
 
 None of these conditions should be included as an emergence target. The
 proton is found only if the base geometric optimization produces a
@@ -1376,12 +1577,19 @@ than emergence.
   \draw[rsf/flow,dashed] (accept.north) -- ++(0,0.55) -|
     node[pos=0.28,above,rsf/note]{continue optimization} (state.north);
 
-  \node[rsf/derived,text width=2.9cm,below=15mm of state] (cluster)
-    {post-hoc modules\\persistence + modularity};
+  \node[rsf/derived,text width=3.0cm]
+    (backr) at ($(state.south)+(0.10,-1.55)$)
+    {carried-state energy density\\[-0.5mm]\scriptsize optional labeled
+     mode: certificates-blind mean-field backreaction (Gaussian-closed)};
+  \draw[rsf/flow,dashed,draw=ForestGreen!70!black]
+    (backr.north) -- (objective.south west);
+
+  \node[rsf/derived,text width=2.9cm,below=30mm of state] (cluster)
+    {post-hoc modules\\persistence + cluster certificates};
   \node[rsf/derived,text width=2.9cm,right=of cluster] (fiber)
     {spectral fibers\\rank, gap, localization};
   \node[rsf/derived,text width=2.9cm,right=of fiber] (transport)
-    {derived structure\\transport, parity, Fock stage};
+    {derived structure\\transport, parity, covariance, Fock stage};
   \node[rsf/hypothesis,text width=2.9cm,right=of transport] (certificate)
     {particle certificate\\quark, baryon, charge, spin};
 
@@ -1393,7 +1601,7 @@ than emergence.
   \draw[rsf/barrier] ($(objective.south west)+(-0.25,-0.52)$) --
     ($(accept.south east)+(0.25,-0.52)$);
   \node[font=\scriptsize\bfseries\sffamily,text=TesseraAlert,fill=white,inner sep=2pt]
-    at ($(move.south)+(0,-0.52)$) {emergence firewall};
+    at ($(move.south)+(0,-0.52)$) {certificate firewall};
   \draw[-{Latex[length=2.4mm]},draw=TesseraAlert,very thick,dashed]
     (transport.north) -- node[right,font=\scriptsize\bfseries\sffamily,
       text=TesseraAlert,fill=white,inner sep=1pt]{feedback blocked}
@@ -1402,10 +1610,14 @@ than emergence.
     at ($(transport.north)+(0,1.02)$) {$\times$};
 \end{tikzpicture}%
 }
-\caption{No-feedback emergence protocol. Only the base geometric objective
-drives optimization. Cluster, fiber, color, exchange, and baryon observables are
-computed from accepted snapshots and cannot feed back into the objective in an
-emergence run. Targeted synthesis is a separate, explicitly labeled mode.}
+\caption{No-feedback emergence protocol. Only the base geometric
+objective drives optimization. In the certificates-blind backreaction
+mode the carried state's energy density may enter that objective;
+Section~\ref{quasi-free-dynamics-and-the-covariance-layer} records
+that this remains inside the quasi-free class. Cluster, fiber, color,
+exchange, and baryon observables are computed from accepted snapshots
+and cannot feed back into the objective in either emergence mode.
+Targeted synthesis is a separate, explicitly labeled mode.}
 \label{fig:emergence-firewall}
 \end{figure}
 
@@ -1425,10 +1637,30 @@ E_v^{\ell+1}&=\text{certified isolated subspace of }C_v^\ell,\\
 &=\operatorname{Feshbach}_{P_\ell}(\mathcal R_\ell(\lambda)),\\
 V_{vw}^{\ell+1}&=\operatorname{Polar}_{r_v}
 \big((\Phi_v^\ell)^\dagger W T_{vw}\Phi_w^\ell\big),\\
-\mathcal H_{\ell+1}&=\mathcal F_-
-\!\left(\bigoplus_v E_v^{\ell+1}\right).
+\mathfrak h_{\ell+1}&=\boxplus_v E_v^{\ell+1},\qquad
+J_{\ell+1}:\mathfrak h_{\ell+1}\to C(K),\qquad
+G_{\ell+1}=J_{\ell+1}^\dagger W J_{\ell+1},\\
+\mathcal H_{\ell+1}&=\mathcal F_-\big(\mathfrak h_{\ell+1}\big).
 \end{aligned}}
 \]
+
+where $\boxplus$ is the abstract labeled sum: one summand per retained
+fiber, with no claim that the geometric subspaces are independent
+inside $C(K)$.
+
+The geometric subspaces $E_v\subset C(K)$ of adjacent components may
+overlap on shared interface cells, so their internal sum need not be
+direct. The recursion therefore never asserts
+$\bigoplus_v E_v\subset C(K)$. It forms the abstract labeled sum,
+carries the embedding $J_{\ell+1}$ and its Gram matrix $G_{\ell+1}$
+exactly, and proceeds by exactly one of three declared options: carry
+$G$ in every subsequent formula; certify $\|G-I\|\le\varepsilon$
+and propagate $\varepsilon$ through the composable amplitude budget of
+Section~\ref{interactions-and-the-expanding-hilbert-space}; or
+quotient $\ker G$ and restate the fiber ranks. A sheaf-stalk
+decomposition that assigns interface modes to link stalks is a valid
+realization of the same requirement \cite{hansen2019sheaves}, but it
+is not necessary.
 
 At $\lambda=0$ the response step is the exact supported static Schur
 complement. For a nonzero band it is the exact energy-dependent pencil;
@@ -1449,8 +1681,14 @@ dense numerical operation whenever both compute the same object:
 \begin{itemize}
 \tightlist
 \item
-  use sparse static and shifted Schur/Feshbach solves, not explicit dense
-  inverses, and use AMLS when a reusable linear band surrogate is needed;
+  in the quasi-free sector, evolve the covariance matrix by
+  $i\dot\Gamma=[h,\Gamma]$ and evaluate every polynomial certificate
+  by Wick contraction; materialize a Fock vector only for oracle tests
+  or explicitly non-Gaussian boundary data;
+\item
+  use sparse static and shifted Schur/Feshbach solves, not explicit
+  dense inverses, and use AMLS when a reusable linear band surrogate is
+  needed;
 \item
   use Künneth sums only for actual product complexes, and occupation
   subset sums for $d\Gamma(L)$, not diagonalization of an eager Fock matrix;
@@ -1521,6 +1759,15 @@ Treat a persistent component as a static response vertex; retain nonzero
 bands through shifted or certified component-mode reduction; recurse in
 operator-valued response networks, using a sheaf realization only when
 its factorization is certified. \\
+
+Quasi-free many-body calculus &
+Second quantization, generalized Hartree--Fock theory, and
+quasi-free/Gaussian state methods
+\cite{berezin1966second,bach1994ghf}. &
+Run the entire particle-certificate layer on the covariance matrix;
+prove mean-field geometry backreaction is Gaussian-closed; treat
+sharp-certificate failure as a structural dichotomy rather than a
+numerical shortfall. \\
 
 Geometric gauge transport &
 Berry and Wilczek-Zee holonomy, overlap-based lattice links, connection
@@ -1619,7 +1866,8 @@ persists under refinement and tighter numerical certification:
   appear, but their localized fiber rank or spectral gap is unstable.
 \item
   \textbf{No oriented color anchor.} A rank-three band appears, but its
-  projected alternating volume on oriented triangles vanishes or drifts.
+  calibrated anchor profile
+  (Section~\ref{quarks-as-modular-clusters}) vanishes or drifts.
 \item
   \textbf{No faithful coarse response.} Schur-reduced components fail to
   reproduce static response, or shifted/AMLS reduction fails over its
@@ -1640,6 +1888,14 @@ persists under refinement and tighter numerical certification:
   \textbf{No inductive compatibility.} Adding vacuum modes changes
   already-computed amplitudes by a nonvanishing amount.
 \item
+  \textbf{No quasi-free proton.} Every other certificate is met inside
+  the covariance-only theory, but $\operatorname{Var}(J^2)$ fails to
+  converge to zero on every accepted candidate across refinement. This
+  outcome is a branch point rather than a refutation of the geometry:
+  it mandates adopting exactly one of the non-Gaussian mechanisms of
+  Section~\ref{quasi-free-dynamics-and-the-covariance-layer}, as an
+  explicit scope decision, before any proton claim is made.
+\item
   \textbf{No unforced baryon.} Targeted synthesis can build the
   certificates, but the stationary geometric ensemble never produces
   them without a proton-specific term.
@@ -1659,29 +1915,45 @@ this paper depends on them doing so.
 \hypertarget{conclusion}{%
 \section{Conclusion}\label{conclusion}}
 
-The revised geometry is economical but more precise: an edge carries a
+The geometry is economical and precise: an edge carries a
 two-level mode, not an independently stored pure state; a quark candidate
 is a modular spectral component whose rank-three band is anchored to
-oriented faces; its transport is a certified $U(3)$ overlap with retained
+oriented faces by a calibrated profile; its transport is a certified $U(3)$ overlap with retained
 determinant-line and projective color data; and its fermionic sign is the
 exterior grading, checked dynamically only after cancelling ordinary
 Berry phase. Simplicial gluing constructs the one-particle operator and
 second quantization constructs the expanding Fock state. Three accepted
 components form a baryon through their normalized color wedge; the proton
 is the sharpest test because it also demands the correct determinant-line
-flux, charge, flavor, and reference-normalized spin response.
+flux, charge, flavor, and a variance-certified spin response.
 
-The exact claims are now limited to their proper domains: static Schur
-response, energy-dependent Feshbach isospectrality, exterior/CAR algebra,
-second-quantized direct-sum composition, and gauge covariance of accepted
-transport. What remains genuinely open is whether Tessera's unforced
-Regge-Hodge dynamics produces the required anchored clusters, low-leakage
-holonomies, determinant windings, and spin lift. A tempting
+The exact claims are limited to their proper domains: static Schur
+response, energy-dependent Feshbach isospectrality, exterior/CAR
+algebra, second-quantized direct-sum composition, gauge covariance of
+accepted transport, and closure of the quasi-free class under every
+generator the model currently possesses. That last identity organizes
+the programme. Classical or mean-field geometry backreaction does not
+leave the Gaussian manifold, so the covariance matrix is not an
+approximation tier: it is the exact state representation of the present
+theory, and every particle certificate --- including
+$\langle J^2\rangle$ and its variance --- is a finite Wick sum over
+it.
+
+What remains genuinely open is whether Tessera's unforced Regge--Hodge
+dynamics produces the required anchored clusters, low-leakage
+holonomies, relative determinant windings, and sharp spin response. A tempting
 Hellmann--Feynman/envelope argument does not by itself make the first
 variation of transport Gram defect vanish at a Regge--Hodge stationary
 point, because the defect is not the optimized functional. Tessera will
 therefore measure that correlation as a conjectural scaling law rather
-than cite stationarity as a theorem.
+than cite stationarity as a theorem. The decisive question is the
+dichotomy of Section~\ref{quasi-free-dynamics-and-the-covariance-layer}:
+either an exact covariance-only proton exists, or a genuinely
+non-Gaussian, geometry-mediated interaction is required. Either outcome
+is a result. The first makes the particle layer exactly and
+polynomially certifiable; the second would be the first internal
+evidence that the geometry must supply a true interaction term, through
+one of the five mechanisms this paper names.
 
 \clearpage
 \renewcommand{\refname}{Prior-art references}
@@ -1714,7 +1986,8 @@ than cite stationarity as a theorem.
   Current visualization and joint-stationarity experiment,
   \href{../../examples/cobordism/proton_animation.py}{\texttt{proton\_animation.py}}.
 \item
-  External-review disposition and exact-claim ledger,
+  External-review dispositions and exact-claim ledger, review rounds one
+and two,
   \href{recursive_spectral_fibers_referee_response.md}{\texttt{referee response}}.
 \end{itemize}
 
