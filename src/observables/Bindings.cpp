@@ -5,6 +5,7 @@
 #include <pybind11/stl.h>
 #include <pybind11/options.h>
 #include <pybind11/complex.h>
+#include <pybind11/eigen.h>
 #include <pybind11/functional.h>
 #include <pybind11/chrono.h>
 
@@ -24,7 +25,9 @@
 #include "mesh/SimplexFilter.h"
 #include "observables/ModularityOptimizer.h"
 #include "observables/PersistentModularity.h"
+#include "observables/SpectralFiber.h"
 #include "observables/SparseGraph.h"
+#include "cobordism/AnalyticCache.h"
 #include "observables/VolumeProfile.h"
 #include "observables/WilsonLoop.h"
 #include "observables/Spectral.h"
@@ -480,6 +483,285 @@ ticket supplies the projectors.)doc")
 whose support intersects the touched level-0 cells, plus the affected
 tracks.  Siblings with disjoint support remain valid.  Pure bookkeeping —
 no recomputation.)doc");
+
+  // ========================================
+  // SpectralFiber (#769): localized spectral bands and their certificates
+  // ========================================
+  py::class_<SpectralFiberConfig>(m, "SpectralFiberConfig",
+      "Configuration of the spectral-band detector/tracker (ticket #769, "
+      "design spec section 9).  Thresholds select which bands are "
+      "CERTIFIED, never which eigenvalues exist; no threshold is a "
+      "Betti-number oracle and no rank is ever requested.")
+      .def(py::init<>())
+      .def_readwrite("degrees", &SpectralFiberConfig::degrees,
+                     "Form degrees enumerated by enumerateOnComponents.")
+      .def_readwrite("groupingTolerance",
+                     &SpectralFiberConfig::groupingTolerance,
+                     "Relative band-grouping width (fraction of the "
+                     "spectral scale).")
+      .def_readwrite("minRelativeGap", &SpectralFiberConfig::minRelativeGap,
+                     "Isolation floor: certified bands need both gaps >= "
+                     "minRelativeGap * scale (a closing gap returns an "
+                     "uncertified band).")
+      .def_readwrite("gapDominance", &SpectralFiberConfig::gapDominance,
+                     "Certified gaps must exceed this multiple of the "
+                     "in-band spread.")
+      .def_readwrite("residualTolerance",
+                     &SpectralFiberConfig::residualTolerance,
+                     "Cap on the relative eigen/left/projector residuals.")
+      .def_readwrite("gramDefectTolerance",
+                     &SpectralFiberConfig::gramDefectTolerance,
+                     "Cap on ||Phi^dagger W Phi - J||.")
+      .def_readwrite("conditionNumberCap",
+                     &SpectralFiberConfig::conditionNumberCap,
+                     "Cap on the band condition number ||P||_2.")
+      .def_readwrite("denseCrossover", &SpectralFiberConfig::denseCrossover,
+                     "Dimension at/above which the self-adjoint path goes "
+                     "sparse.")
+      .def_readwrite("requestedEigenpairs",
+                     &SpectralFiberConfig::requestedEigenpairs,
+                     "Lowest eigenpairs the sparse block path computes.")
+      .def_readwrite("oversample", &SpectralFiberConfig::oversample,
+                     "Extra Ritz vectors beyond requestedEigenpairs.")
+      .def_readwrite("maxSolverIterations",
+                     &SpectralFiberConfig::maxSolverIterations)
+      .def_readwrite("solverTolerance", &SpectralFiberConfig::solverTolerance)
+      .def_readwrite("solverSeed", &SpectralFiberConfig::solverSeed,
+                     "Seed of the deterministic sparse start block.")
+      .def_readwrite("trackOverlapThreshold",
+                     &SpectralFiberConfig::trackOverlapThreshold,
+                     "Minimum subspace overlap for a certified track "
+                     "continuation.")
+      .def_readwrite("crossValidateDense",
+                     &SpectralFiberConfig::crossValidateDense,
+                     "Cross-check solves below the crossover against the "
+                     "independent DenseReference kernel and record the "
+                     "deviation on the certificate.");
+
+  py::class_<SpectralBandCertificate>(m, "SpectralBandCertificate",
+      R"doc(Certification record of one whole spectral band (design spec
+section 6.3): degree, rank, lower/upper gap, localization (projector-
+diagonal inverse participation ratio), projector/eigen/left residuals,
+weighted Gram/signature defect ||Phi^dagger W Phi - J||, band condition
+number ||P||_2, Krein inertia (p, q), frequency window, self-adjointness
+flag, and the graded #764 Certificate (BandWindow domain; an uncertified
+band carries HeuristicDiscovery, which never holds).
+
+A degenerate band is one object of rank >= 2; an unexplained multiplicity
+is reported exactly as its rank and never labeled.  Negative signature is
+a certificate, never an automatic antiparticle identification.  Unmeasured
+quantities are NaN, never zero.)doc")
+      .def_readonly("degree", &SpectralBandCertificate::degree)
+      .def_readonly("rank", &SpectralBandCertificate::rank)
+      .def_readonly("lowerGap", &SpectralBandCertificate::lowerGap)
+      .def_readonly("upperGap", &SpectralBandCertificate::upperGap)
+      .def_readonly("localization", &SpectralBandCertificate::localization)
+      .def_readonly("projectorResidual",
+                    &SpectralBandCertificate::projectorResidual)
+      .def_readonly("eigenResidual", &SpectralBandCertificate::eigenResidual)
+      .def_readonly("leftResidual", &SpectralBandCertificate::leftResidual)
+      .def_readonly("gramDefect", &SpectralBandCertificate::gramDefect)
+      .def_readonly("conditionNumber",
+                    &SpectralBandCertificate::conditionNumber)
+      .def_readonly("positiveSignature",
+                    &SpectralBandCertificate::positiveSignature)
+      .def_readonly("negativeSignature",
+                    &SpectralBandCertificate::negativeSignature)
+      .def_readonly("frequencyLower",
+                    &SpectralBandCertificate::frequencyLower)
+      .def_readonly("frequencyUpper",
+                    &SpectralBandCertificate::frequencyUpper)
+      .def_readonly("selfAdjoint", &SpectralBandCertificate::selfAdjoint)
+      .def_readonly("accepted", &SpectralBandCertificate::accepted)
+      .def_readonly("certificate", &SpectralBandCertificate::certificate)
+      .def("describe", &SpectralBandCertificate::describe)
+      .def("__repr__", &SpectralBandCertificate::describe);
+
+  py::class_<FiberOverlapRead>(m, "FiberOverlapRead",
+      "Principal-angle / support comparison of two fibers: cells matched "
+      "by sorted vertex-id tuple (gauge- and relabeling-invariant).")
+      .def_readonly("supportOverlap", &FiberOverlapRead::supportOverlap)
+      .def_readonly("sharedCells", &FiberOverlapRead::sharedCells)
+      .def_readonly("principalAngles", &FiberOverlapRead::principalAngles)
+      .def_readonly("subspaceOverlap", &FiberOverlapRead::subspaceOverlap);
+
+  py::class_<SpectralFiber>(m, "SpectralFiber",
+      R"doc(One whole isolated spectral band of a component-restricted Hodge
+operator (design spec section 6.3): right/left frames, band projector
+P = Phi Psi^dagger W with Psi^dagger W Phi = I, eigenvalues, and the
+SpectralBandCertificate.  The band is represented by its PROJECTOR —
+individual eigenvectors are a gauge choice and never determine an identity
+or a downstream observable.)doc")
+      .def("degree", &SpectralFiber::degree)
+      .def("rank", &SpectralFiber::rank)
+      .def("accepted", &SpectralFiber::accepted)
+      .def("rightFrame", &SpectralFiber::rightFrame,
+           "Right frame Phi (cells x rank).")
+      .def("leftFrame", &SpectralFiber::leftFrame,
+           "Left frame Psi (cells x rank), Psi^dagger W Phi = I.")
+      .def("projector", &SpectralFiber::projector,
+           "The band projector P = Phi Psi^dagger W (cells x cells).")
+      .def("weightDiagonal", &SpectralFiber::weightDiagonal,
+           "Diagonal inner-product weights W restricted to the band's "
+           "cells.")
+      .def("eigenvalues", &SpectralFiber::eigenvalues,
+           "Band eigenvalues (with multiplicity), sorted by (Re, Im).")
+      .def("bandCenter", &SpectralFiber::bandCenter)
+      .def("cellVertices", &SpectralFiber::cellVertices,
+           "The k-cells carrying the band, as sorted vertex-id tuples in "
+           "frame row order.")
+      .def("certificate", &SpectralFiber::certificate,
+           py::return_value_policy::copy)
+      .def_static("overlap", &SpectralFiber::overlap, py::arg("a"),
+                  py::arg("b"),
+                  "Principal-angle / support comparison (cells matched by "
+                  "vertex-id tuple).")
+      .def("toRecord",
+           [](const SpectralFiber &self) {
+             return recordToPython(self.toRecord());
+           },
+           "Checkpoint serialization: the JSON-able record of the fiber "
+           "(schema-versioned; complex leaves split _re/_im).")
+      .def_static("fromRecord",
+                  [](const py::handle &record) {
+                    return SpectralFiber::fromRecord(pythonToRecord(record));
+                  },
+                  py::arg("record"),
+                  "Rehydrate from toRecord() output; rejects an unknown "
+                  "schema_version (ValueError).");
+
+  py::class_<SpectralBandWindow>(m, "SpectralBandWindow",
+      "An accepted band's frequency window as PLAIN DATA for the response "
+      "consumer (#768): lower/upper frequency bounds plus the band "
+      "certificate.  Carries no operator, frame, or quotient reference.")
+      .def_readonly("degree", &SpectralBandWindow::degree)
+      .def_readonly("rank", &SpectralBandWindow::rank)
+      .def_readonly("frequencyLower", &SpectralBandWindow::frequencyLower)
+      .def_readonly("frequencyUpper", &SpectralBandWindow::frequencyUpper)
+      .def_readonly("certificate", &SpectralBandWindow::certificate);
+
+  py::class_<FiberMatchRead>(m, "FiberMatchRead",
+      "One matched fiber pair across frames or resolutions.  A certified "
+      "continuation needs both endpoint bands accepted, equal ranks, and "
+      "subspace overlap above the threshold — an endpoint whose gap closed "
+      "is reported but never certified (no discontinuous identity flip).")
+      .def_readonly("fromIndex", &FiberMatchRead::fromIndex)
+      .def_readonly("toIndex", &FiberMatchRead::toIndex)
+      .def_readonly("degree", &FiberMatchRead::degree)
+      .def_readonly("overlap", &FiberMatchRead::overlap)
+      .def_readonly("ranksEqual", &FiberMatchRead::ranksEqual)
+      .def_readonly("certifiedContinuation",
+                    &FiberMatchRead::certifiedContinuation);
+
+  py::class_<ComponentBandRead>(m, "ComponentBandRead",
+      "The band enumeration of one (component, degree) pair: the restricted "
+      "operator's cells, verified regime, solver path, covered eigenvalues, "
+      "every enumerated band (certified or not), and the solve certificate.")
+      .def_readonly("support", &ComponentBandRead::support)
+      .def_readonly("degree", &ComponentBandRead::degree)
+      .def_readonly("dimension", &ComponentBandRead::dimension)
+      .def_readonly("cellVertices", &ComponentBandRead::cellVertices)
+      .def_readonly("regime", &ComponentBandRead::regime)
+      .def_readonly("solverPath", &ComponentBandRead::solverPath)
+      .def_readonly("truncated", &ComponentBandRead::truncated)
+      .def_readonly("coveredEigenvalues",
+                    &ComponentBandRead::coveredEigenvalues)
+      .def_readonly("fibers", &ComponentBandRead::fibers)
+      .def_readonly("solveCertificate", &ComponentBandRead::solveCertificate)
+      .def("toRecord",
+           [](const ComponentBandRead &self) {
+             return recordToPython(self.toRecord());
+           },
+           "Checkpoint serialization of the whole read (fibers included).")
+      .def_static("fromRecord",
+                  [](const py::handle &record) {
+                    return ComponentBandRead::fromRecord(
+                        pythonToRecord(record));
+                  },
+                  py::arg("record"),
+                  "Rehydrate; rejects an unknown schema_version "
+                  "(ValueError).");
+
+  py::class_<SpectralFiberTracker>(m, "SpectralFiberTracker",
+      R"doc(Extraction and tracking of whole isolated localized Hodge bands
+on persistent components (ticket #769; design spec section 9, Algorithm B).
+
+Identity: for a component support S the tracker assembles the weighted
+Hodge operator of the full induced subcomplex on S (the same boundary maps,
+canonical cell order, and diagonal inner-product weights as the
+whole-complex HodgeLaplacian, consumed read-only), so support = all
+vertices reproduces HodgeLaplacian.laplacian(k) entry for entry.  Regimes
+are VERIFIED, never assumed: positive -> self-adjoint solves (exact dense
+below the crossover, deterministic sparse block shift-invert at/above);
+real signed weights -> W-self-adjointness verified, Krein inertia of
+Phi^dagger W Phi recorded and normalized to diag(I_p, -I_q); complex
+weights -> matched biorthogonal right/left subspaces with
+Psi^dagger W Phi = I.  Bands are grouped by a relative gap rule and every
+band is reported with its projector and certificate; a closing gap yields
+an uncertified band, never a different identity.  The detector never
+requests rank three and no eigenvalue threshold is a Betti oracle.
+
+Read-only observable: never calls a solver on the spacetime, never mutates
+it, and nothing here enters any emergence objective.)doc")
+      .def(py::init([](std::shared_ptr<Spacetime> st,
+                       const SpectralFiberConfig &cfg,
+                       const py::object &weights) {
+             const auto convention =
+                 weights.is_none()
+                     ? tessera::cobordism::HodgeLaplacian::
+                           defaultWeightConvention()
+                     : weights
+                           .cast<tessera::cobordism::HodgeLaplacian::
+                                     WeightConvention>();
+             return SpectralFiberTracker(std::move(st), cfg, convention);
+           }),
+           py::arg("spacetime"), py::arg("config") = SpectralFiberConfig{},
+           py::arg("weights") = py::none(),
+           "Bind to the spacetime to read; weights=None follows the "
+           "process-wide HodgeLaplacian.defaultWeightConvention() at call "
+           "time.")
+      .def("config", &SpectralFiberTracker::config,
+           py::return_value_policy::copy)
+      .def("weightConvention", &SpectralFiberTracker::weightConvention)
+      .def("enumerateBands",
+           [](const SpectralFiberTracker &self,
+              const std::vector<std::uint64_t> &support, int degree) {
+             py::gil_scoped_release release;
+             return self.enumerateBands(support, degree);
+           },
+           py::arg("support"), py::arg("degree"),
+           "Enumerate the bands of one component (vertex-id support) at "
+           "one form degree.")
+      .def("enumerateOnComponents",
+           [](const SpectralFiberTracker &self,
+              const std::vector<ComponentRead> &components) {
+             py::gil_scoped_release release;
+             return self.enumerateOnComponents(components);
+           },
+           py::arg("components"),
+           "Enumerate every configured degree on every #765 component.")
+      .def("enumerateBandsCached",
+           [](const SpectralFiberTracker &self,
+              tessera::cobordism::AnalyticCache &cache,
+              const std::vector<std::uint64_t> &support, int degree) {
+             py::gil_scoped_release release;
+             return self.enumerateBandsCached(cache, support, degree);
+           },
+           py::arg("cache"), py::arg("support"), py::arg("degree"),
+           "enumerateBands through the #764 AnalyticCache contract "
+           "(touched-star invalidation; served while the component is "
+           "untouched).")
+      .def_static("acceptedWindows", &SpectralFiberTracker::acceptedWindows,
+                  py::arg("reads"),
+                  "The accepted bands' frequency windows as plain data for "
+                  "the response consumer (#768).")
+      .def_static("matchFibers", &SpectralFiberTracker::matchFibers,
+                  py::arg("fromFibers"), py::arg("toFibers"),
+                  py::arg("overlapThreshold") = 0.5,
+                  "Track fibers across frames/resolutions by principal "
+                  "angles and component overlap.")
+      .def_readonly_static("CACHE_KIND", &SpectralFiberTracker::kCacheKind);
+
   // ========================================
   // ModularityOptimizer
   // ========================================
