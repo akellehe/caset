@@ -71,8 +71,8 @@ std::vector<cd> OccupationSpectra::subsetSums(const std::vector<cd> &oneParticle
     sortSpectrum(sums);
     return sums;
   }
-  // Revolving-door enumeration of index combinations in lexicographic order;
-  // each sum is accumulated fresh (no cancellation drift across subsets).
+  // Lexicographic enumeration of index combinations; each sum is
+  // accumulated fresh (no cancellation drift across subsets).
   std::vector<std::size_t> combo(want);
   for (std::size_t i = 0; i < want; ++i)
     combo[i] = i;

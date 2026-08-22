@@ -150,6 +150,27 @@ class TestProductCertificate(unittest.TestCase):
         self.assertTrue(cert.holds(), cert.describe())
         self.assertLess(cert.residual, 1e-14)
 
+    def test_reversed_edge_orientations_certify_identically(self):
+        """Storing an edge in the opposite direction with the negated phase
+        is the SAME Hermitian operator (the stored source->target
+        orientation carries +phase, the reverse -phase): the certificate is
+        orientation-independent."""
+        a = _graph(3, _A_EDGES)
+        b = _graph(2, _B_EDGES)
+        pair_to_index = {(u, v): 2 * u + v for u in range(3) for v in
+                         range(2)}
+        edges = _cartesian_product_edges(3, _A_EDGES, 2, _B_EDGES,
+                                         pair_to_index)
+        # Reverse every other product edge: swap endpoints, negate phase.
+        reversed_edges = [
+            (tgt, src, w, -phi) if k % 2 else (src, tgt, w, phi)
+            for k, (src, tgt, w, phi) in enumerate(edges)]
+        product = _graph(6, reversed_edges)
+        cert = cob.KuennethProduct.productCertificate(
+            product, a, b, self._pairing(pair_to_index))
+        self.assertTrue(cert.holds(), cert.describe())
+        self.assertLess(cert.residual, 1e-14)
+
     def test_wrong_pairing_fails_to_certify(self):
         # A transposed pairing misassigns the weights: the identity must NOT
         # certify (holds() False), it must not throw — the pairing is
