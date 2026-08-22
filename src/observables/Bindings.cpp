@@ -23,6 +23,7 @@
 #include "matter/MatterConfiguration.h"
 #include "mesh/SimplexFilter.h"
 #include "observables/ModularityOptimizer.h"
+#include "observables/PersistentModularity.h"
 #include "observables/SparseGraph.h"
 #include "observables/VolumeProfile.h"
 #include "observables/WilsonLoop.h"
@@ -234,6 +235,252 @@ order ``polyOrder`` is fit over a centered ``windowSize`` window in
 (log sigma, log P) and its slope read off at each point.  ``windowSize``
 must be odd and >= ``polyOrder + 1``.)doc");
   // ========================================
+  // PersistentModularity (#765): label-free persistent component discovery
+  // ========================================
+  py::class_<ComponentId>(m, "ComponentId",
+      R"doc(Stable label-free component identity: a canonical hash derived
+from oriented incidence structure and parent lineage (never raw vertex
+numbers) plus the multilevel-aggregation level.  Used for persistence
+matching and deterministic tie-breaking, never as a physical observable.
+Structurally identical (automorphic) components share a hash.)doc")
+      .def("canonicalHash", &ComponentId::canonicalHash,
+           "The canonical structural hash (32 lowercase hex chars).")
+      .def("level", &ComponentId::level,
+           "Multilevel-aggregation depth at which the component formed.")
+      .def("__eq__", [](const ComponentId &a, const ComponentId &b) {
+             return a == b;
+           }, py::is_operator())
+      .def("__lt__", [](const ComponentId &a, const ComponentId &b) {
+             return a < b;
+           }, py::is_operator())
+      .def("__hash__", [](const ComponentId &a) {
+             return py::hash(py::make_tuple(a.canonicalHash(), a.level()));
+           })
+      .def("__repr__", [](const ComponentId &a) {
+             return "ComponentId(" + a.canonicalHash() + ", level=" +
+                    std::to_string(a.level()) + ")";
+           });
+
+  py::class_<PersistentModularityConfig>(m, "PersistentModularityConfig",
+      "Configuration for the label-free multiscale component discovery.")
+      .def(py::init<>())
+      .def_readwrite("resolutions", &PersistentModularityConfig::resolutions,
+                     "Resolution parameters gamma, in scan order.")
+      .def_readwrite("baseSeed", &PersistentModularityConfig::baseSeed,
+                     "Base of the fixed restart seed sequence "
+                     "(restart t uses splitmix64(baseSeed + t)).")
+      .def_readwrite("restarts", &PersistentModularityConfig::restarts,
+                     "Deterministic restarts per resolution; best exact "
+                     "score kept, spread reported.")
+      .def_readwrite("maxSweepsPerLevel",
+                     &PersistentModularityConfig::maxSweepsPerLevel,
+                     "Hard cap on local-move sweeps per aggregation level.")
+      .def_readwrite("overlapThreshold",
+                     &PersistentModularityConfig::overlapThreshold,
+                     "Minimum support overlap for a persistence track to "
+                     "continue across adjacent resolutions.");
+
+  py::class_<ComponentRead>(m, "ComponentRead",
+      "One discovered component: canonical id, level-0 cell support, cached "
+      "sufficient statistics, and the exact per-component scores.")
+      .def_readonly("id", &ComponentRead::id)
+      .def_readonly("support", &ComponentRead::support,
+                    "Level-0 member cell ids (ascending; a set — the order "
+                    "carries no convention).")
+      .def_readonly("internalWeight", &ComponentRead::internalWeight,
+                    "Sigma_in: internal weight counting both directions.")
+      .def_readonly("strength", &ComponentRead::strength,
+                    "S_C: summed member strength.")
+      .def_readonly("conductance", &ComponentRead::conductance,
+                    "cut(C)/min(vol C, vol V\\C); 0 when the denominator "
+                    "vanishes.")
+      .def_readonly("modularityContribution",
+                    &ComponentRead::modularityContribution,
+                    "This community's exact additive Q_gamma term.");
+
+  py::class_<RestartRead>(m, "RestartRead",
+      "One deterministic restart: seed and exact best score.")
+      .def_readonly("seed", &RestartRead::seed)
+      .def_readonly("q", &RestartRead::q)
+      .def_readonly("communities", &RestartRead::communities);
+
+  py::class_<ResolutionSlice>(m, "ResolutionSlice",
+      R"doc(Discovery result at one resolution gamma.  ``q`` is the exact
+Q_gamma of the winning partition (cold recompute) — the best score across
+deterministic restarts, a heuristic proposal, never the NP-hard global
+optimum.  ``qIncremental`` is the accepted-delta-Q ledger and must agree
+with ``q`` to double round-off.)doc")
+      .def_readonly("gamma", &ResolutionSlice::gamma)
+      .def_readonly("q", &ResolutionSlice::q)
+      .def_readonly("qIncremental", &ResolutionSlice::qIncremental)
+      .def_readonly("levels", &ResolutionSlice::levels)
+      .def_readonly("components", &ResolutionSlice::components,
+                    "Final-level components, ordered by canonical hash.")
+      .def_readonly("hierarchy", &ResolutionSlice::hierarchy,
+                    "hierarchy[k] = communities at aggregation level k+1.")
+      .def_readonly("restarts", &ResolutionSlice::restarts)
+      .def_readonly("restartSpread", &ResolutionSlice::restartSpread,
+                    "max - min of the restart scores (honest heuristic "
+                    "uncertainty).");
+
+  py::class_<ComponentMatch>(m, "ComponentMatch",
+      R"doc(Matched component pair across adjacent resolutions or cobordism
+time.  ``projectorOverlap`` is the documented spectral-projector hook: None
+(unknown) until a later ticket supplies projectors and a hook is installed;
+unknown is never encoded as zero.)doc")
+      .def_readonly("fromId", &ComponentMatch::from)
+      .def_readonly("toId", &ComponentMatch::to)
+      .def_readonly("fromIndex", &ComponentMatch::fromIndex)
+      .def_readonly("toIndex", &ComponentMatch::toIndex)
+      .def_readonly("supportOverlap", &ComponentMatch::supportOverlap,
+                    "Jaccard overlap of level-0 cell supports.")
+      .def_readonly("projectorOverlap", &ComponentMatch::projectorOverlap);
+
+  py::class_<PersistenceTrack>(m, "PersistenceTrack",
+      R"doc(A component followed across the resolution scan by maximum
+support overlap.  Lifetime/overlap/conductance are proposal diagnostics
+only: they neither accept nor veto a fiber.  ``weightAwareStatus`` is the
+downstream weight-aware gap/localization/persistence status — None until
+the later weight-aware certificate tickets populate it (unknown is never
+encoded as zero).)doc")
+      .def_readonly("members", &PersistenceTrack::members)
+      .def_readonly("memberIndices", &PersistenceTrack::memberIndices)
+      .def_readonly("firstSlice", &PersistenceTrack::firstSlice)
+      .def_readonly("lastSlice", &PersistenceTrack::lastSlice)
+      .def_readonly("gammaFirst", &PersistenceTrack::gammaFirst)
+      .def_readonly("gammaLast", &PersistenceTrack::gammaLast)
+      .def_readonly("minAdjacentOverlap",
+                    &PersistenceTrack::minAdjacentOverlap)
+      .def_readonly("meanConductance", &PersistenceTrack::meanConductance)
+      .def_property_readonly("weightAwareStatus",
+           [](const PersistenceTrack &t) {
+             return recordToPython(t.weightAwareStatus);
+           });
+
+  py::class_<ScanReport>(m, "ScanReport",
+      "The full resolution-scan report: slices, adjacent-slice matches, and "
+      "persistence tracks.")
+      .def_readonly("slices", &ScanReport::slices)
+      .def_readonly("matches", &ScanReport::matches)
+      .def_readonly("tracks", &ScanReport::tracks);
+
+  py::class_<InvalidationRead>(m, "InvalidationRead",
+      "Components and tracks invalidated by a local change; positions "
+      "(slice, level index, index in level) disambiguate automorphic twins "
+      "that share a hash.")
+      .def_readonly("components", &InvalidationRead::components)
+      .def_readonly("positions", &InvalidationRead::positions)
+      .def_readonly("tracks", &InvalidationRead::tracks);
+
+  py::class_<PersistentModularity> pm(m, "PersistentModularity",
+      R"doc(Label-free discovery of modular components that persist across
+resolution and cobordism time (ticket #765, design spec section 8).
+
+Exact identities on the nonnegative weighted undirected similarity graph:
+generalized modularity Q_gamma(P) = (1/2m) sum_ij (A_ij - gamma k_i k_j/2m)
+[c_i = c_j], evaluated from per-community sufficient statistics, and the
+exact O(deg v) cached local move gain
+dQ(v: a->b) = (w_vb - w_va)/m - gamma k_v (k_v + S_b - S_a)/(2 m^2), so one
+sparse sweep is near O(|E|).  Incremental accumulations are tested against
+cold recomputation at double round-off.
+
+Heuristic status: global modularity maximization is NP-hard; discovery is a
+deterministic multilevel aggregation from a fixed seed sequence with the
+restart spread reported honestly.  The score is blind to signed/complex
+Hodge weights.  Modularity is a heuristic proposal generator only: it never
+enters the emergence objective and may not veto an otherwise certified
+fiber (acceptance belongs to the independent weight-aware certificates,
+which later tickets supply; unknown is reported as None, never zero).
+
+Read-only: never calls a solver, never mutates the spacetime it reads.)doc");
+
+  py::enum_<PersistentModularity::WeightMap>(pm, "WeightMap",
+      "Documented monotone map from complex edge magnitude to similarity.")
+      .value("Unit", PersistentModularity::WeightMap::Unit,
+             "w = 1: the combinatorial one-skeleton, exactly the legacy "
+             "Newman-Girvan graph.")
+      .value("ExpNegAbsLength",
+             PersistentModularity::WeightMap::ExpNegAbsLength,
+             "w = exp(-|l|): monotone decreasing in the complex edge "
+             "magnitude (the mutual-information convention l = -log I).");
+
+  pm.def_static("fromWeightedEdges", &PersistentModularity::fromWeightedEdges,
+                py::arg("src"), py::arg("tgt"), py::arg("weight"),
+                py::arg("isolatedCells") = std::vector<std::uint64_t>{},
+                R"doc(Build from an explicit nonnegative weighted edge list
+(cells are arbitrary 64-bit ids; parallel edges consolidate by weight
+summation; self-loops and zero weights are ignored).  Raises ValueError on
+negative weights or mismatched lengths.)doc")
+      .def_static("fromSpacetime",
+                  [](const std::shared_ptr<Spacetime> &st,
+                     PersistentModularity::WeightMap map) {
+                    return PersistentModularity::fromSpacetime(*st, map);
+                  },
+                  py::arg("spacetime"),
+                  py::arg("map") =
+                      PersistentModularity::WeightMap::ExpNegAbsLength,
+                  "Build the similarity graph from the spacetime one-skeleton "
+                  "(read-only).")
+      .def("nCells", &PersistentModularity::nCells)
+      .def("nEdges", &PersistentModularity::nEdges)
+      .def("totalWeight2", &PersistentModularity::totalWeight2,
+           "Total adjacency weight 2m = sum_ij A_ij.")
+      .def("cellIds", &PersistentModularity::cellIds,
+           "Cell ids in internal storage order (no convention).")
+      .def("modularityGamma", &PersistentModularity::modularityGamma,
+           py::arg("labels"), py::arg("gamma"),
+           R"doc(Exact generalized modularity Q_gamma of a fixed partition
+(labels[i] labels cellIds()[i]).  The fixed-partition entry point: at
+gamma = 1 on a Unit-weight graph this is exactly the Newman-Girvan score.)doc")
+      .def("discover",
+           [](const PersistentModularity &self, double gamma,
+              const PersistentModularityConfig &cfg) {
+             py::gil_scoped_release release;
+             return self.discover(gamma, cfg);
+           },
+           py::arg("gamma"), py::arg("config"),
+           "Deterministic label-free discovery at one resolution.")
+      .def("scanResolutions",
+           [](const PersistentModularity &self,
+              const PersistentModularityConfig &cfg) {
+             py::gil_scoped_release release;
+             return self.scanResolutions(cfg);
+           },
+           py::arg("config"),
+           "The configurable resolution-sequence scan with persistence "
+           "tracks.")
+      .def("matchComponents", &PersistentModularity::matchComponents,
+           py::arg("a"), py::arg("b"),
+           R"doc(Match components across resolution or cobordism time by
+simplex-support overlap (Jaccard on level-0 cell ids over a common cell-id
+universe).  When a projector-overlap hook is installed its value is
+reported per match; matching decisions remain support-based until a later
+ticket supplies the projectors.)doc")
+      .def("setProjectorOverlapHook",
+           [](PersistentModularity &self, py::object hook) {
+             if (hook.is_none()) {
+               self.setProjectorOverlapHook(nullptr);
+               return;
+             }
+             self.setProjectorOverlapHook(
+                 [hook](const ComponentId &a, const ComponentId &b) {
+                   py::gil_scoped_acquire acquire;
+                   return hook(a, b).cast<double>();
+                 });
+           },
+           py::arg("hook"),
+           "Install (or clear with None) the documented spectral-projector "
+           "overlap hook: hook(fromId, toId) -> float in [0, 1].  This "
+           "ticket only plumbs the hook; a later ticket supplies the "
+           "projectors.")
+      .def_static("invalidatedAncestry",
+                  &PersistentModularity::invalidatedAncestry,
+                  py::arg("report"), py::arg("touchedCells"),
+                  R"doc(Components (at every hierarchy level of every slice)
+whose support intersects the touched level-0 cells, plus the affected
+tracks.  Siblings with disjoint support remain valid.  Pure bookkeeping —
+no recomputation.)doc");
+  // ========================================
   // ModularityOptimizer
   // ========================================
   py::class_<ModularityMeasurement>(m, "ModularityMeasurement",
@@ -307,7 +554,23 @@ See docs/source/modularity-plan.md for the design rationale.)doc")
       .def("getNNoMove", &ModularityOptimizer::getNNoMove,
            "Number of iterations with no eligible move.")
       .def("getNMeasurements", &ModularityOptimizer::getNMeasurements,
-           "Number of D_S measurements taken.");
+           "Number of D_S measurements taken.")
+      .def("discoverComponents",
+           [](const ModularityOptimizer &self,
+              const std::shared_ptr<Spacetime> &st,
+              const PersistentModularityConfig &cfg,
+              PersistentModularity::WeightMap map) {
+             py::gil_scoped_release release;
+             return self.discoverComponents(*st, cfg, map);
+           },
+           py::arg("spacetime"), py::arg("config"),
+           py::arg("map") = PersistentModularity::WeightMap::ExpNegAbsLength,
+           R"doc(Label-free discovery of persistent modular components on the
+CURRENT spacetime one-skeleton (ticket #765).  Read-only: never mutates the
+spacetime and never proposes moves.  Builds the nonnegative similarity graph
+under ``map`` and runs PersistentModularity.scanResolutions(config).  A
+heuristic proposal generator — blind to signed/complex Hodge weights, never
+part of the emergence objective, and never a veto over a certified fiber.)doc");
   // ========================================
   // VolumeProfile
   // ========================================

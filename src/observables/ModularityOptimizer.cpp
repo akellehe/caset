@@ -26,6 +26,12 @@ using namespace ::tessera::spacetime;
 using namespace ::tessera::simulations;
 using namespace ::tessera::quantum;
 
+ScanReport ModularityOptimizer::discoverComponents(
+    const Spacetime &st, const PersistentModularityConfig &cfg,
+    PersistentModularity::WeightMap map) const {
+  return PersistentModularity::fromSpacetime(st, map).scanResolutions(cfg);
+}
+
 std::unique_ptr<PachnerMove> ModularityOptimizer::proposeAny(CDT &cdt) {
   // Random shuffle of the 5 move types each iteration.
   std::array<int, 5> order{0, 1, 2, 3, 4};

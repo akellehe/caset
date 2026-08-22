@@ -129,6 +129,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} ModularityOptimizer.h
 ```
+```{doxygenfile} PersistentModularity.h
+```
 ```{doxygenfile} SparseGraph.h
 ```
 
