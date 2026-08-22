@@ -199,6 +199,40 @@ class TestExactSmallFixtures(unittest.TestCase):
         self.assertEqual(c.upperGap, math.inf)
         self.assertTrue(c.accepted)
 
+    def test_band_center_and_window(self):
+        # Band center = mean of the band eigenvalues; the frequency window
+        # is [min Re, max Re].  Degenerate C3 band: center exactly 3;
+        # Content-triangle complex band: center exactly 1 - 2i.
+        st = _triangle()
+        read = _tracker(st).enumerateBands([0, 1, 2], 0)
+        deg = read.fibers[1]
+        self.assertLessEqual(abs(deg.bandCenter() - 3.0), MACHINE)
+        c = deg.certificate()
+        self.assertLessEqual(abs(c.frequencyLower - 3.0), MACHINE)
+        self.assertLessEqual(abs(c.frequencyUpper - 3.0), MACHINE)
+        st2 = _triangle(alpha=1.0)
+        tracker = obs.SpectralFiberTracker(
+            st2, obs.SpectralFiberConfig(), cob.HodgeWeightConvention.Content)
+        read2 = tracker.enumerateBands([0, 1, 2], 1)
+        complex_band = min(
+            read2.fibers,
+            key=lambda f: abs(np.array(f.eigenvalues())[0] - (1.0 - 2.0j)))
+        self.assertLessEqual(abs(complex_band.bandCenter() - (1.0 - 2.0j)),
+                             1e-10)
+
+    def test_certificate_domains_and_cache_kind(self):
+        # Band certificates speak for a frequency window (BandWindow); the
+        # solve certificate is the whole-operator Static claim.
+        st = _triangle()
+        read = _tracker(st).enumerateBands([0, 1, 2], 0)
+        self.assertEqual(read.solveCertificate.domain,
+                         cob.CertificateDomain.Static)
+        for f in read.fibers:
+            self.assertEqual(f.certificate().certificate.domain,
+                             cob.CertificateDomain.BandWindow)
+        self.assertEqual(obs.SpectralFiberTracker.CACHE_KIND,
+                         "spectral-fiber")
+
     def test_triangle_k1_metric_spectrum(self):
         # All-spacelike C3 at k=1: spec(L_1) = {0, 3, 3} (no 2-cells).
         st = _triangle()
