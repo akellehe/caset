@@ -5,6 +5,9 @@
 Implementation is tracked by GitHub epic
 [#763](https://github.com/akellehe/tessera/issues/763).
 
+Standalone editions: [LaTeX source](recursive_spectral_fibers_whitepaper.tex) and
+[compiled PDF](recursive_spectral_fibers_whitepaper.pdf).
+
 ## Abstract
 
 This paper proposes a single geometric formulation for the particle content already
