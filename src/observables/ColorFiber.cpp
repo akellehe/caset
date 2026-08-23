@@ -6,6 +6,7 @@
 #include "quantum/GradedFock.h"
 
 #include <Eigen/Eigenvalues>
+#include <unsupported/Eigen/KroneckerProduct>
 
 #include <algorithm>
 #include <bit>
@@ -216,6 +217,56 @@ Eigen::MatrixXcd ColorFiber::adjointOctetProjector() {
 
 Eigen::Matrix3cd ColorFiber::tracelessPart(const Eigen::Matrix3cd& m) {
     return m - (m.trace() / 3.0) * Eigen::Matrix3cd::Identity();
+}
+
+// ── #774 additions beside the octet projector ──────────────────────────────
+
+Eigen::MatrixXcd ColorFiber::adjointSingletProjector() {
+    // Literally the complement of the octet projector, so P₁ + P₈ = I₉ is
+    // a bitwise-exact resolution of 3 ⊗ 3̄ = 1 ⊕ 8.
+    return Eigen::MatrixXcd::Identity(9, 9) - adjointOctetProjector();
+}
+
+Eigen::MatrixXcd ColorFiber::octetBilinear(std::size_t i, std::size_t j) {
+    if (i >= 3 || j >= 3) {
+        throw std::invalid_argument(
+            "ColorFiber::octetBilinear: indices must be in 0..2");
+    }
+    // The literal composition — the traceless even bilinear
+    // a_i†a_j − (δ_ij/3) N̂ is dΓ of the traceless matrix unit.
+    return dGamma(tracelessPart(matrixUnit(i, j)));
+}
+
+Eigen::MatrixXcd ColorFiber::adjointCasimirMatrix() {
+    // C = Σ_a K_a², K_a = I ⊗ (λ_a/2) − (λ_a/2)ᵀ ⊗ I acting on the
+    // column-major vec(M): K_a vec(M) = vec([λ_a/2, M]), by the Kronecker
+    // rule vec(A M B) = (Bᵀ ⊗ A) vec(M).  A constant of the algebra —
+    // generated once (the colorAlgebra() precedent) as the INDEPENDENT
+    // commutator-sum construction; verifyConstantAlgebra cross-checks it
+    // against 3 P₈, where that independence is load-bearing.
+    static const Eigen::MatrixXcd casimir = [] {
+        Eigen::MatrixXcd sum = Eigen::MatrixXcd::Zero(9, 9);
+        const Eigen::Matrix3cd id = Eigen::Matrix3cd::Identity();
+        for (int a = 1; a <= 8; ++a) {
+            const Eigen::Matrix3cd half = 0.5 * gellMann(a);
+            const Eigen::MatrixXcd k =
+                Eigen::kroneckerProduct(id, half) -
+                Eigen::kroneckerProduct(half.transpose(), id);
+            sum += k * k;
+        }
+        return sum;
+    }();
+    return casimir;
+}
+
+double ColorFiber::adjointCasimir(const Eigen::Matrix3cd& m) {
+    const double norm2 = m.squaredNorm();
+    if (norm2 == 0.0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    // Evaluated through the EXACT identity C = 3 P₈: the quadratic form
+    // ⟨vec M, C vec M⟩ equals 3 ‖P₈ vec M‖² = 3 ‖M − (Tr M/3) I‖_F².
+    return 3.0 * tracelessPart(m).squaredNorm() / norm2;
 }
 
 ColorFiber::Complex ColorFiber::omega() {
@@ -434,6 +485,61 @@ double ColorFiber::verifyConstantAlgebra() {
         const Eigen::VectorXcd v =
             Eigen::Map<const Eigen::VectorXcd>(id.data(), 9);
         track((p8 * v).cwiseAbs().maxCoeff());
+    }
+
+    // #774: the singlet complement resolves 3 ⊗ 3̄ = 1 ⊕ 8 — P₁ + P₈ = I₉
+    // (bitwise by construction), P₁ idempotent/Hermitian/rank one,
+    // P₁P₈ = P₈P₁ = 0, and P₁ vec(M) = vec((Tr M / 3) I).
+    {
+        const Eigen::MatrixXcd p1 = adjointSingletProjector();
+        track((p1 + p8 - Eigen::MatrixXcd::Identity(9, 9))
+                  .cwiseAbs()
+                  .maxCoeff());
+        track((p1 - p1.adjoint()).cwiseAbs().maxCoeff());
+        track((p1 * p1 - p1).cwiseAbs().maxCoeff());
+        track(std::abs(p1.trace() - Complex(1.0, 0.0)));
+        track((p1 * p8).cwiseAbs().maxCoeff());
+        track((p8 * p1).cwiseAbs().maxCoeff());
+    }
+
+    // #774: the traceless even bilinears — delegation identity
+    // T_ij = E_ij − (δ_ij/3) Σ_k E_kk, exact tracelessness of the family,
+    // N-conservation (even fermion parity: T commutes with (−1)^N), and
+    // the N = 1 restriction is the traceless matrix unit.
+    {
+        Eigen::MatrixXcd number = Eigen::MatrixXcd::Zero(8, 8);
+        for (std::size_t k = 0; k < 3; ++k) number += hoppingMatrix(k, k);
+        Eigen::MatrixXcd parity = Eigen::MatrixXcd::Zero(8, 8);
+        for (unsigned b = 0; b < 8; ++b) {
+            parity(b, b) = (std::popcount(b) % 2 == 0) ? 1.0 : -1.0;
+        }
+        Eigen::MatrixXcd diagonalSum = Eigen::MatrixXcd::Zero(8, 8);
+        for (std::size_t i = 0; i < 3; ++i) {
+            for (std::size_t j = 0; j < 3; ++j) {
+                const Eigen::MatrixXcd t = octetBilinear(i, j);
+                Eigen::MatrixXcd want = hoppingMatrix(i, j);
+                if (i == j) want -= number / 3.0;
+                track((t - want).cwiseAbs().maxCoeff());
+                track((t * parity - parity * t).cwiseAbs().maxCoeff());
+                track((restrictToTriplet(t) -
+                       tracelessPart(matrixUnit(i, j)))
+                          .cwiseAbs()
+                          .maxCoeff());
+                if (i == j) diagonalSum += t;
+            }
+        }
+        track(diagonalSum.cwiseAbs().maxCoeff());
+    }
+
+    // #774: the adjoint quadratic Casimir equals 3 P₈ — 0 on the singlet,
+    // C₂(adjoint) = 3 on every octet direction.
+    {
+        const Eigen::MatrixXcd casimir = adjointCasimirMatrix();
+        track((casimir - 3.0 * p8).cwiseAbs().maxCoeff());
+        for (int a = 1; a <= 8; ++a) {
+            track(std::abs(adjointCasimir(gellMann(a)) - 3.0));
+        }
+        track(std::abs(adjointCasimir(Eigen::Matrix3cd::Identity())));
     }
 
     // The N = 1 identification: restrictToTriplet ∘ dΓ = id on 3×3, and
