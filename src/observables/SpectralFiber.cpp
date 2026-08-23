@@ -170,6 +170,7 @@ Record bandCertificateToRecord(const SpectralBandCertificate &c) {
   m["nearest_discarded_separation"] = Record(c.nearestDiscardedSeparation);
   m["localization"] = Record(c.localization);
   m["localization_support_fraction"] = Record(c.localizationSupportFraction);
+  m["localization_excess"] = Record(c.localizationExcess);
   m["projector_residual"] = Record(c.projectorResidual);
   m["eigen_residual"] = Record(c.eigenResidual);
   m["left_residual"] = Record(c.leftResidual);
@@ -198,6 +199,7 @@ SpectralBandCertificate bandCertificateFromRecord(const Record &record) {
   c.localization = m.at("localization").asDouble();
   c.localizationSupportFraction =
       optionalDouble(m, "localization_support_fraction");
+  c.localizationExcess = optionalDouble(m, "localization_excess");
   c.projectorResidual = m.at("projector_residual").asDouble();
   c.eigenResidual = m.at("eigen_residual").asDouble();
   c.leftResidual = m.at("left_residual").asDouble();
@@ -368,7 +370,8 @@ std::string SpectralBandCertificate::describe() const {
       << ", signature (+" << positiveSignature << ", -" << negativeSignature
       << ")"
       << ", localization " << localization << " (support fraction "
-      << localizationSupportFraction << "), residuals (eig " << eigenResidual
+      << localizationSupportFraction << ", excess " << localizationExcess
+      << "), residuals (eig " << eigenResidual
       << ", left " << leftResidual << ", proj " << projectorResidual
       << ", gram " << gramDefect << "), projector norm " << projectorNorm
       << ", frame condition " << frameConditionNumber << ", "
@@ -1318,10 +1321,18 @@ void SpectralFiberTracker::buildFibers(const RestrictedOperator &op,
         diagSq += pi * pi;
       }
       cert.localization = diagSq;
-      // n_eff / n: 1 exactly for a uniform (perfectly delocalized)
-      // projector diagonal, rank/n for a band living on `rank` cells.
+      // n_eff = 1 / IPR is the effective number of cells the band lives on:
+      // `rank` at maximal concentration, n when perfectly spread.
+      const double effectiveSupport = 1.0 / diagSq;
       cert.localizationSupportFraction =
-          1.0 / (static_cast<double>(n) * diagSq);
+          effectiveSupport / static_cast<double>(n);
+      const double room = static_cast<double>(n) - static_cast<double>(rank);
+      cert.localizationExcess =
+          room > 0.0
+              ? std::min(1.0, std::max(0.0,
+                                       (effectiveSupport -
+                                        static_cast<double>(rank)) / room))
+              : 0.0;
     }
 
     // Certification: isolation from the nearest DISCARDED eigenvalue,
@@ -1338,8 +1349,8 @@ void SpectralFiberTracker::buildFibers(const RestrictedOperator &op,
         cert.leftResidual <= cfg_.residualTolerance &&
         cert.projectorResidual <= cfg_.residualTolerance;
     const bool localizedOk =
-        std::isfinite(cert.localizationSupportFraction) &&
-        cert.localizationSupportFraction <= cfg_.maxLocalizationSupportFraction;
+        std::isfinite(cert.localizationExcess) &&
+        cert.localizationExcess <= cfg_.maxLocalizationExcess;
     cert.accepted = separationOk(cert.nearestDiscardedSeparation) &&
                     localizedOk && residualsOk &&
                     cert.gramDefect <= cfg_.gramDefectTolerance &&

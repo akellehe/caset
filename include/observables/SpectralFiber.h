@@ -65,16 +65,16 @@ struct SpectralFiberConfig {
   /// (`SpectralBandCertificate::frameConditionNumber`) depends on the
   /// in-band basis choice and is reported, not capped.
   double projectorNormCap = 1e8;
-  /// Certification cap on the band's LOCALIZATION SUPPORT FRACTION
-  /// n_eff / n (`SpectralBandCertificate::localizationSupportFraction`) —
-  /// the whitepaper acceptance conjunct "a localized spectral projector
-  /// with stable rank", enforced HERE, in fiber acceptance, where the
-  /// specification puts it.  A perfectly delocalized band covers every
-  /// cell (fraction exactly 1) and is REJECTED; the default 0.5 certifies
-  /// a band whose effective support is at most half its component's cells.
-  /// 1.0 accepts any MEASURED localization (an unmeasured NaN still
-  /// fails) and reproduces the pre-#808 behaviour.
-  double maxLocalizationSupportFraction = 0.5;
+  /// Certification cap on the band's LOCALIZATION EXCESS
+  /// (`SpectralBandCertificate::localizationExcess`) — the whitepaper
+  /// acceptance conjunct "a localized spectral projector with stable
+  /// rank", enforced HERE, in fiber acceptance, where the specification
+  /// puts it.  The excess is 0 for a band as concentrated as its rank
+  /// permits and exactly 1 for a perfectly delocalized one, so the default
+  /// 0.5 certifies a band no more than halfway from maximally localized to
+  /// fully spread.  1.0 accepts any MEASURED localization (an unmeasured
+  /// NaN still fails) and reproduces the pre-#808 behaviour.
+  double maxLocalizationExcess = 0.5;
   /// Dimension at and above which the self-adjoint paths switch from the
   /// exact dense solve to the sparse block solve (mirrors
   /// `DenseReference::kDefaultCrossoverDimension`).
@@ -143,13 +143,19 @@ struct SpectralBandCertificate {
   /// rank-one band on a single cell), 1/n perfectly spread.
   /// Gauge-invariant (reads only the projector) and relabeling-invariant.
   double localization = std::numeric_limits<double>::quiet_NaN();
-  /// The RANK-NORMALIZED localization datum the acceptance conjunct gates
-  /// on: the effective support fraction n_eff / n = 1 / (n * localization)
-  /// in [rank/n, 1].  Exactly 1 for a perfectly delocalized band (uniform
+  /// The effective support fraction n_eff / n = 1 / (n * localization) in
+  /// [rank/n, 1]: exactly 1 for a perfectly delocalized band (uniform
   /// projector diagonal), rank/n for a band concentrated on `rank` cells.
-  /// Gauge- and relabeling-invariant, and — unlike the bare IPR —
-  /// comparable across dimensions and ranks.
+  /// Gauge- and relabeling-invariant and comparable across dimensions, but
+  /// NOT across ranks — a rank-r band cannot read below r/n.  Reported.
   double localizationSupportFraction = std::numeric_limits<double>::quiet_NaN();
+  /// The localization datum the acceptance conjunct GATES on: the
+  /// rank-normalized excess (n_eff - rank) / (n - rank) in [0, 1] — 0 when
+  /// the band is as concentrated as a rank-`rank` projector can be, 1
+  /// exactly when it is perfectly delocalized.  Defined as 0 when the band
+  /// spans the whole operator (n == rank): a full-space band leaves no
+  /// room to be localized in, so localization says nothing about it.
+  double localizationExcess = std::numeric_limits<double>::quiet_NaN();
   /// Idempotency defect ||P^2 - P||_F / max(1, ||P||_F).
   double projectorResidual = std::numeric_limits<double>::quiet_NaN();
   /// epsilon_eig = ||L Phi - Phi Lambda||_F / ||L||_F on the eigen-paired

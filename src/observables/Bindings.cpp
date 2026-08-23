@@ -553,9 +553,9 @@ no recomputation.)doc");
       .def_readwrite("projectorNormCap",
                      &SpectralFiberConfig::projectorNormCap,
                      "Cap on the band projector norm ||P||_2.")
-      .def_readwrite("maxLocalizationSupportFraction",
-                     &SpectralFiberConfig::maxLocalizationSupportFraction,
-                     "Cap on the band's effective support fraction n_eff/n "
+      .def_readwrite("maxLocalizationExcess",
+                     &SpectralFiberConfig::maxLocalizationExcess,
+                     "Cap on the band's rank-normalized localization excess "
                      "-- the localization acceptance conjunct.  1.0 accepts "
                      "any measured localization.")
       .def_readwrite("denseCrossover", &SpectralFiberConfig::denseCrossover,
@@ -607,6 +607,11 @@ quantities are NaN, never zero.)doc")
                     &SpectralBandCertificate::localizationSupportFraction,
                     "Effective support fraction n_eff/n in [rank/n, 1]; 1 "
                     "exactly for a perfectly delocalized band.")
+      .def_readonly("localizationExcess",
+                    &SpectralBandCertificate::localizationExcess,
+                    "(n_eff - rank)/(n - rank) in [0, 1] -- the GATED "
+                    "localization datum; 0 = as concentrated as the rank "
+                    "permits, 1 = perfectly delocalized.")
       .def_readonly("projectorResidual",
                     &SpectralBandCertificate::projectorResidual)
       .def_readonly("eigenResidual", &SpectralBandCertificate::eigenResidual)

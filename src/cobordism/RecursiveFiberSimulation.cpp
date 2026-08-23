@@ -1313,6 +1313,8 @@ void MultiCobordism::runRecursiveAnalysisOn(
           {"localization", Json::number(certificate.localization)},
           {"localization_support_fraction",
            Json::number(certificate.localizationSupportFraction)},
+          {"localization_excess",
+           Json::number(certificate.localizationExcess)},
           {"projector_residual", Json::number(certificate.projectorResidual)},
           {"eigen_residual", Json::number(certificate.eigenResidual)},
           {"gram_defect", Json::number(certificate.gramDefect)},
