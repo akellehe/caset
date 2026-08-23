@@ -1626,6 +1626,39 @@ class ParticleClusters {
     [[nodiscard]] BaryonRead classifyBaryon(
         const BaryonCandidateEvidence &evidence) const;
 
+    /// `classifyBaryon` over the `boundSupercomponentSearch` result: for
+    /// every binding that grouped EXACTLY three certified constituents,
+    /// assemble the evidence bundle from the constituent verdicts the
+    /// caller already produced and classify it.  One `BaryonRead` per such
+    /// binding, in `bindings` order.
+    ///
+    /// A binding that grouped a different number of certified constituents
+    /// emits NOTHING: a three-cluster verdict is never assembled by padding
+    /// the missing legs with default reads, because a padded leg would
+    /// report a structural gap the geometry did not have.
+    ///
+    /// Only the evidence the caller HAS travels: the binding, the three
+    /// `QuarkRead`s (`BoundSupercomponentRead::quarkIndices` indexes
+    /// `constituentReads`), and the bound component's #765 persistence
+    /// lifetime.  The color columns, the octet flux read, the #772 rotation
+    /// character, the #780 quasi-free spin reads, the swept covariance-only
+    /// class, and the refinement-window samples are left ABSENT, so
+    /// `classifyBaryon` NAMES each gap rather than presuming it — an
+    /// unsupplied quantity is unknown, never a fabricated pass.  A caller
+    /// holding any of them classifies through `classifyBaryon` directly.
+    ///
+    /// `boundLifetimes` is the bound component's persistence lifetime per
+    /// binding, in `bindings` order; EMPTY leaves every one unknown (NaN).
+    /// Read-only, and never throws on missing evidence.
+    /// @throws std::invalid_argument when `boundLifetimes` is neither empty
+    ///   nor exactly as long as `bindings`, or when a binding indexes a
+    ///   constituent outside `constituentReads` (a caller error, never a
+    ///   silently dropped verdict).
+    [[nodiscard]] std::vector<BaryonRead> classifyBoundSupercomponents(
+        const std::vector<BoundSupercomponentRead> &bindings,
+        const std::vector<QuarkRead> &constituentReads,
+        const std::vector<double> &boundLifetimes = {}) const;
+
     // ── the emergent flavor doublet (no requested dimension) ────────────
 
     /// Search the candidate's band enumeration ACROSS FRAMES for a stable

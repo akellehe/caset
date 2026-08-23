@@ -67,7 +67,7 @@ Printed by ``--help`` and emitted in every run document under
 
 Reused machinery, all merged on main
 ------------------------------------
-``MultiCobordism`` (modes, the analysis overlay, the schema-3 checkpoint,
+``MultiCobordism`` (modes, the analysis overlay, the schema-4 checkpoint,
 ``replay_checkpoint``, ``refinement_decision``/``refine_geometry``),
 ``PersistentModularity``, ``SpectralFiberTracker``/``SpectralFiber``,
 ``RecursiveQuotient`` (static / Feshbach / response network / labeled fiber
@@ -103,7 +103,7 @@ non-zero only when a stored verdict or content hash fails to reproduce.
 Reproducibility, exactly
 ------------------------
 Every emitted document carries its ``config_hash``, ``commit``, seeds and
-sizes, and embeds every schema-3 checkpoint it produced, so
+sizes, and embeds every schema-4 checkpoint it produced, so
 ``MultiCobordism.replay_checkpoint`` reproduces each frame from the record
 alone. #579/#776 measured that the engine's move draw is NOT
 process-deterministic past the first committed move; a fresh rebuild from
@@ -136,7 +136,7 @@ EH = T.ExchangeHolonomy
 QU = T.quantum
 
 #: The schema version of the RUN document this file writes and reads. The
-#: schema-3 CHECKPOINTS it embeds are `MultiCobordism`'s, and are versioned
+#: schema-4 CHECKPOINTS it embeds are `MultiCobordism`'s, and are versioned
 #: independently.
 RUN_SCHEMA_VERSION = 1
 
@@ -581,9 +581,9 @@ class RecursiveReadout:
     component read (the FIRST accepted one), one derived transport per
     ordered pair of same-degree same-rank candidate bands, the pure Slater
     covariance of each accepted band projector — so that the layers the
-    schema-3 checkpoint does NOT carry (the baryon verdict, the response
-    hierarchy, the determinant/projective/center holonomy sectors, the
-    covariance matrices) are built on identical evidence. The run
+    schema-4 checkpoint does NOT carry (the response hierarchy, the
+    determinant/projective/center holonomy sectors, the covariance
+    matrices) are built on identical evidence. The run
     cross-checks its own quark reads against the checkpoint's and records
     the agreement, so a divergence could never hide.
 
@@ -867,7 +867,7 @@ class RecursiveReadout:
 def raw_geometry_block(spacetime):
     """Versioned raw geometry: the top cells and the canonical edge lengths.
 
-    Serialized in the SAME canonical endpoint order the schema-3 checkpoint
+    Serialized in the SAME canonical endpoint order the schema-4 checkpoint
     uses, so the block is a pure function of the geometry.
     """
     # The vertex tuple is kept in its INTRINSIC stored order — the cell's own
@@ -1457,9 +1457,15 @@ def scan_particles_block(scan_checkpoint):
         "all_failing_certificates": _histogram(
             name for q in quarks
             for name in (q.get("failed_certificates") or [])),
+        "bound_supercomponents": len(
+            scan_checkpoint["particles"]["bound_supercomponents"]),
+        "bound_supercomponents_found": sum(
+            1 for b in scan_checkpoint["particles"]["bound_supercomponents"]
+            if b["found"]),
         "baryons": len(scan_checkpoint["particles"]["baryons"]),
-        "baryons_found": sum(1 for b in scan_checkpoint["particles"]["baryons"]
-                             if b["found"]),
+        "baryon_classifications": _histogram(
+            b["classification"]
+            for b in scan_checkpoint["particles"]["baryons"]),
     }
 
 
@@ -2234,7 +2240,7 @@ def run_simulation(config, commit=None, sidecar_path=None, progress=False):
                 "the first committed move (#579, re-measured in #776), so a "
                 "fresh rebuild from (config, seed, commit) reproduces the "
                 "first committed move and the whole relaxation but not a "
-                "longer trajectory; the schema-3 CHECKPOINT is the faithful "
+                "longer trajectory; the schema-4 CHECKPOINT is the faithful "
                 "record and `replay` replays it"),
             "deterministic_unit": "one stage-1 update plus one stage-2 "
                                   "relaxation",
@@ -2516,8 +2522,11 @@ def discrete_verdicts(checkpoint):
                                   for q in checkpoint["particles"]["quarks"]],
         "quark_failed": [q["failed_certificates"]
                          for q in checkpoint["particles"]["quarks"]],
-        "baryon_found": [b["found"]
-                         for b in checkpoint["particles"]["baryons"]],
+        "bound_supercomponent_found": [
+            b["found"]
+            for b in checkpoint["particles"]["bound_supercomponents"]],
+        "baryon_classifications": [
+            b["classification"] for b in checkpoint["particles"]["baryons"]],
         "active_modes": checkpoint["covariance"]["active_modes"],
         "fock_present": checkpoint["fock_oracle"]["present"],
     }

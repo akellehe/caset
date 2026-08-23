@@ -920,8 +920,35 @@ class CheckpointSchemaTest(unittest.TestCase):
         self.assertTrue(covariance["number_conserving"])
 
     def test_the_particles_block_carries_the_declared_sectors(self):
-        for key in ("quarks", "gluons", "baryons"):
+        for key in ("quarks", "gluons", "bound_supercomponents", "baryons"):
             self.assertIn(key, self.doc["particles"])
+
+    def test_the_search_records_and_the_verdicts_are_separate_blocks(self):
+        """Schema 4 splits them: `bound_supercomponents` is the section 16.2
+        SEARCH, `baryons` is the section 16.4 three-cluster VERDICT. A search
+        record is not a baryon read and never travels as one."""
+        for binding in self.doc["particles"]["bound_supercomponents"]:
+            self.assertIn("found", binding)
+            self.assertNotIn("classification", binding)
+        for baryon in self.doc["particles"]["baryons"]:
+            self.assertIn("classification", baryon)
+            self.assertNotIn("found", baryon)
+
+    def test_a_baryon_read_is_emitted_only_for_three_certified_legs(self):
+        """The overlay classifies a binding of EXACTLY three certified
+        constituents and nothing else -- a three-cluster verdict is never
+        assembled by padding. On this host no candidate certifies, so the
+        search emits no binding and the verdict list is empty for a NAMED
+        reason rather than by omission."""
+        bindings = self.doc["particles"]["bound_supercomponents"]
+        baryons = self.doc["particles"]["baryons"]
+        three = [b for b in bindings if b["constituents"] == 3]
+        self.assertEqual(len(baryons), len(three))
+        certified = [q for q in self.doc["particles"]["quarks"]
+                     if q["classification"] == "quark"]
+        if not certified:
+            self.assertEqual(bindings, [])
+            self.assertEqual(baryons, [])
 
     def test_unknown_values_serialize_as_null_never_as_zero(self):
         quarks = self.doc["particles"]["quarks"]
@@ -1051,10 +1078,23 @@ class ReplayTest(unittest.TestCase):
 
     def test_an_unknown_schema_version_is_rejected(self):
         node = self._driven_node()
-        bad = node.checkpoint_json.replace('"schema_version": 3',
-                                           '"schema_version": 99')
+        current = '"schema_version": %d' % MC.checkpoint_schema_version()
+        self.assertIn(current, node.checkpoint_json)
+        bad = node.checkpoint_json.replace(current, '"schema_version": 99')
         with self.assertRaises(ValueError):
             MC.replay_checkpoint(bad)
+
+    def test_the_previous_schema_version_is_rejected(self):
+        """Schema 3 wrote the bound-supercomponent SEARCH records under
+        `particles.baryons`; schema 4 writes the three-cluster VERDICT there.
+        The entries mean different things, so an older document is refused
+        rather than reinterpreted."""
+        node = self._driven_node()
+        current = '"schema_version": %d' % MC.checkpoint_schema_version()
+        older = node.checkpoint_json.replace(current, '"schema_version": 3')
+        self.assertEqual(MC.checkpoint_version_of(older), 3)
+        with self.assertRaises(ValueError):
+            MC.replay_checkpoint(older)
 
     def test_a_missing_schema_version_is_rejected(self):
         with self.assertRaises(ValueError):
@@ -1066,7 +1106,8 @@ class ReplayTest(unittest.TestCase):
 
     def test_replay_of_a_checkpoint_without_a_raw_complex_is_rejected(self):
         with self.assertRaises(ValueError):
-            MC.replay_checkpoint('{"schema_version": 3}')
+            MC.replay_checkpoint('{"schema_version": %d}'
+                                 % MC.checkpoint_schema_version())
 
 
 # ======================================================================
@@ -1175,6 +1216,77 @@ class AnalysisOverlayTest(unittest.TestCase):
                           ("none", "quark", "antiquark"))
             if quark["classification"] == "none":
                 self.assertTrue(quark["failed_certificates"])
+
+    def test_the_overlay_runs_the_baryon_classifier(self):
+        """#802 — the overlay drives the section 16.4 classifier over its
+        own section 16.2 search, so a proton verdict can reach a driver at
+        all. The wiring is pinned at the source: the overlay's translation
+        unit calls the composition, and the objective's does not."""
+        root = os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))))
+        overlay = os.path.join(root, "src", "cobordism",
+                               "RecursiveFiberSimulation.cpp")
+        engine = os.path.join(root, "src", "cobordism", "MultiCobordism.cpp")
+        if not os.path.exists(overlay):     # installed wheel, not a checkout
+            self.skipTest("source tree not available")
+        with open(overlay) as handle:
+            overlay_text = handle.read()
+        self.assertIn("classifyBoundSupercomponents", overlay_text)
+        self.assertIn("boundSupercomponentSearch", overlay_text)
+        with open(engine) as handle:
+            self.assertNotIn("classifyBoundSupercomponents", handle.read())
+
+    def test_the_baryon_writer_emits_every_declared_field(self):
+        """The `particles.baryons` record is the BaryonRead, whole: the
+        proton-certificate fields, the evidence summary, the named gaps and
+        the #764 certificate. A field silently dropped from the writer is a
+        measurement lost from the record."""
+        root = os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))))
+        overlay = os.path.join(root, "src", "cobordism",
+                               "RecursiveFiberSimulation.cpp")
+        if not os.path.exists(overlay):
+            self.skipTest("source tree not available")
+        with open(overlay) as handle:
+            text = handle.read()
+        for key in ("bound_component", "quarks", "classification",
+                    "confidence", "color_gram_determinant", "color_wedge",
+                    "color_flux", "baryon_flux", "electric_flux",
+                    "total_winding", "exterior_parity", "flavor_pattern",
+                    "total_isospin", "total_j2", "total_j2_variance",
+                    "sharp_spin", "quasi_free_class_swept",
+                    "class_variance_floor", "rotation_character",
+                    "rotation_character_sign", "exchange_character",
+                    "spin_statistics_ratio", "spin_lift_applicable",
+                    "spin_lift_accepted", "radius", "radius_finite",
+                    "spectral_mass", "radius_ratio",
+                    "profile_max_deviation", "profile_stable",
+                    "physical_mass", "persistence", "lifetime_overlap",
+                    "transport_count", "transport_leakage_max",
+                    "failed_certificates", "certificate"):
+            self.assertIn('"%s"' % key, text, "%s is not written" % key)
+
+    def test_no_emergent_candidate_can_certify_in_one_pass(self):
+        """The measured reason the verdict list is empty, NAMED rather than
+        left as an unexplained absence.
+
+        One analysis pass is ONE frame, so the overlay supplies no
+        determinant winding, no lifetime-transport family and no refinement
+        overlap to the quark classifier. Those four certificates therefore
+        fail on every candidate BY NAME, no candidate certifies, the section
+        16.2 search counts no member, and the section 16.4 classifier has no
+        three-cluster candidate to classify. That is a structural property
+        of a single-frame pass, not a property of this host.
+        """
+        quarks = self.doc["particles"]["quarks"]
+        self.assertTrue(quarks)
+        for quark in quarks:
+            self.assertEqual(quark["classification"], "none")
+            for name in ("winding", "winding-unit", "transport-leakage",
+                         "refinement-stability"):
+                self.assertIn(name, quark["failed_certificates"])
+        self.assertEqual(self.doc["particles"]["bound_supercomponents"], [])
+        self.assertEqual(self.doc["particles"]["baryons"], [])
 
     def test_nothing_requests_a_hole_a_rank_or_a_uud_pattern(self):
         """Emergence mode never ASKS for a proton-shaped thing."""
@@ -1330,7 +1442,12 @@ class RelabelingInvarianceTest(unittest.TestCase):
             "labeled": [(s["nominal_rank"], s["effective_rank"])
                         for s in doc["labeled_fiber_sums"]],
             "transports": len(doc["transports"]),
-            "baryons": [(b["found"], sorted(b["failed_certificates"]))
+            "bound_supercomponents": [
+                (b["found"], sorted(b["failed_certificates"]))
+                for b in doc["particles"]["bound_supercomponents"]],
+            "baryons": [(b["classification"], b["exterior_parity"],
+                         b["flavor_pattern"],
+                         sorted(b["failed_certificates"]))
                         for b in doc["particles"]["baryons"]],
         }
 

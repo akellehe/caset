@@ -317,6 +317,18 @@ future ticket should make the struct default NaN, per the epic's own
 `quasi_free_sharp_spin_obstruction`. Two independent obstructions block the
 branch point, and both are results in their own right.
 
+> **Instrument note (#802).** The run reported here was taken with a driver
+> whose terminal conditional assigned `inconclusive` on *both* branches, and
+> which received no proton verdict at all because the analysis overlay never
+> ran the baryon classifier. The outcome above was therefore a constant, not
+> a measurement. That is now fixed: the overlay runs the §16.4 classifier
+> over its own §16.2 search, the driver consumes the resulting verdicts, and
+> all three outcomes are reachable and tested. The measured content below is
+> unchanged — the accepted class is still empty, so the instrument still
+> returns `inconclusive` — but the verdict is now produced by evaluating the
+> branch point rather than by assignment, and the reason string is the one
+> that names which of the five situations applied.
+
 **Obstruction 1 — the accepted class is empty.** 82 quark reads, 0 certified,
 0 baryon candidates, at every size and every seed. There is no accepted
 covariance-only class on which to ask whether Var(J²) converges. The

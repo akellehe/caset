@@ -3747,3 +3747,269 @@ class TestBindingCoherence(unittest.TestCase):
             color=_color_triad()[:, [2, 0, 1]], binding=ev.binding)
         read = self.pc.classifyBaryon(permuted)
         self.assertEqual(read.classification, "certified-proton")
+
+
+class TestClassifyBoundSupercomponents(unittest.TestCase):
+    """#802 — the composition the #776 analysis overlay runs.
+
+    ``classifyBoundSupercomponents`` is what turns a §16.2 search result
+    into §16.4 verdicts: every binding that grouped EXACTLY three certified
+    constituents is classified, nothing is padded, and every quantity the
+    caller did not supply stays ABSENT so ``classifyBaryon`` names it.
+    """
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+        self.candidates = _bound_candidates()
+        self.constituents = [c.quark for c in self.candidates]
+        _groups, _fine, self.coarse = _modular_hierarchy()
+        self.bindings = list(self.pc.boundSupercomponentSearch(
+            self.coarse.components, self.candidates))
+
+    def assertRecordsEqual(self, mine, theirs, path="record"):
+        """Records compared with the UNMEASURED NaNs matched as NaNs.
+
+        ``nan != nan``, so a raw dict comparison of a record carrying
+        honest unknowns could never hold — and silently passing one that
+        did would mean the unknowns had been zero-filled."""
+        if isinstance(mine, dict):
+            self.assertIsInstance(theirs, dict, path)
+            self.assertEqual(sorted(mine), sorted(theirs), path)
+            for key in mine:
+                self.assertRecordsEqual(mine[key], theirs[key],
+                                        f"{path}.{key}")
+        elif isinstance(mine, list):
+            self.assertIsInstance(theirs, list, path)
+            self.assertEqual(len(mine), len(theirs), path)
+            for index, item in enumerate(mine):
+                self.assertRecordsEqual(item, theirs[index],
+                                        f"{path}[{index}]")
+        elif isinstance(mine, float) and math.isnan(mine):
+            self.assertTrue(isinstance(theirs, float) and math.isnan(theirs),
+                            path)
+        else:
+            self.assertEqual(mine, theirs, path)
+
+    # ---- the emission rule -------------------------------------------
+
+    def test_three_certified_constituents_emit_one_baryon_read(self):
+        self.assertEqual(len(self.bindings), 1)
+        self.assertTrue(self.bindings[0].found)
+        reads = self.pc.classifyBoundSupercomponents(
+            self.bindings, self.constituents)
+        self.assertEqual(len(reads), 1)
+        read = reads[0]
+        self.assertEqual(read.boundComponent.canonicalHash(),
+                         self.bindings[0].boundComponent.canonicalHash())
+        self.assertEqual(
+            sorted(q.canonicalHash() for q in read.quarks),
+            sorted(q.canonicalHash() for q in self.bindings[0].quarks))
+
+    def test_both_structural_gates_hold_so_the_verdict_is_not_no_baryon(self):
+        read = self.pc.classifyBoundSupercomponents(
+            self.bindings, self.constituents)[0]
+        self.assertNotIn("constituent-quarks", read.failedCertificates)
+        self.assertNotIn("bound-supercomponent", read.failedCertificates)
+        self.assertEqual(read.classification, "baryon-candidate")
+
+    def test_two_certified_constituents_emit_nothing(self):
+        """A three-cluster verdict is NEVER assembled by padding the
+        missing legs: a padded leg would report a structural gap the
+        geometry did not have."""
+        candidates = _bound_candidates(kinds=("u", "d"))
+        bindings = list(self.pc.boundSupercomponentSearch(
+            self.coarse.components, candidates))
+        self.assertEqual(len(bindings), 1)
+        self.assertEqual(len(bindings[0].quarkIndices), 2)
+        self.assertEqual(
+            self.pc.classifyBoundSupercomponents(
+                bindings, [c.quark for c in candidates]), [])
+
+    def test_an_uncertified_candidate_is_never_a_constituent(self):
+        """The search counts only CERTIFIED quark candidates, so three
+        candidates of which one is uncertified never reach the classifier."""
+        candidates = _bound_candidates()
+        candidates[2].quark = obs.QuarkRead()     # classification "none"
+        bindings = list(self.pc.boundSupercomponentSearch(
+            self.coarse.components, candidates))
+        self.assertEqual(len(bindings[0].quarkIndices), 2)
+        self.assertEqual(
+            self.pc.classifyBoundSupercomponents(
+                bindings, [c.quark for c in candidates]), [])
+
+    def test_no_binding_emits_no_verdict(self):
+        self.assertEqual(
+            self.pc.classifyBoundSupercomponents([], self.constituents), [])
+
+    def test_one_read_per_qualifying_binding_in_binding_order(self):
+        doubled = self.bindings + self.bindings
+        reads = self.pc.classifyBoundSupercomponents(
+            doubled, self.constituents)
+        self.assertEqual(len(reads), 2)
+        self.assertEqual(reads[0].boundComponent.canonicalHash(),
+                         reads[1].boundComponent.canonicalHash())
+        self.assertEqual(reads[0].classification, reads[1].classification)
+
+    # ---- the delegation is exactly classifyBaryon ---------------------
+
+    def test_it_is_classify_baryon_on_the_same_bundle(self):
+        evidence = obs.BaryonCandidateEvidence()
+        evidence.boundComponent = self.bindings[0].boundComponent
+        evidence.binding = self.bindings[0]
+        evidence.quarks = [self.constituents[i]
+                           for i in self.bindings[0].quarkIndices]
+        evidence.persistenceLifetime = 4.0
+        direct = self.pc.classifyBaryon(evidence)
+        composed = self.pc.classifyBoundSupercomponents(
+            self.bindings, self.constituents, [4.0])[0]
+        self.assertEqual(composed.classification, direct.classification)
+        self.assertEqual(composed.failedCertificates,
+                         direct.failedCertificates)
+        self.assertEqual(composed.confidence, direct.confidence)
+        self.assertEqual(composed.persistence, direct.persistence)
+        self.assertRecordsEqual(composed.toRecord(), direct.toRecord())
+
+    # ---- unsupplied evidence is NAMED, never presumed ----------------
+
+    def test_every_unsupplied_certificate_is_named(self):
+        """Exactly the COMPOSITE-level evidence is missing, and each gap is
+        named. The constituent-derived rows (winding, parity, flavor,
+        charge) are supplied by the #773 verdicts themselves and hold."""
+        read = self.pc.classifyBoundSupercomponents(
+            self.bindings, self.constituents)[0]
+        self.assertEqual(
+            read.failedCertificates,
+            ["color-singlet", "color-flux-zero", "spin-expectation",
+             "sharp-spin", "rotation-character", "finite-radius",
+             "profile-stability"])
+        self.assertEqual(read.confidence, 7.0 / 14.0)
+
+    def test_the_constituent_derived_rows_hold_on_certified_legs(self):
+        read = self.pc.classifyBoundSupercomponents(
+            self.bindings, self.constituents)[0]
+        for name in ("baryon-flux-unit", "composite-parity-odd",
+                     "flavor-uud", "electric-flux-unit"):
+            self.assertNotIn(name, read.failedCertificates)
+        self.assertEqual(read.totalWinding, 3)
+        self.assertEqual(read.baryonFlux, 1.0)
+        self.assertEqual(read.exteriorParity, -1)
+        self.assertEqual(read.flavorPattern, "uud")
+
+    def test_unknown_values_are_null_or_nan_never_zero(self):
+        read = self.pc.classifyBoundSupercomponents(
+            self.bindings, self.constituents)[0]
+        self.assertTrue(math.isnan(read.colorGramDeterminant))
+        self.assertTrue(math.isnan(read.colorWedge.real))
+        self.assertTrue(math.isnan(read.colorFlux))
+        self.assertIsNone(read.totalJ2)
+        self.assertIsNone(read.totalJ2Variance)
+        self.assertIsNone(read.rotationCharacter)
+        self.assertIsNone(read.exchangeCharacter)
+        self.assertIsNone(read.physicalMass)
+        self.assertTrue(math.isnan(read.classVarianceFloor))
+        self.assertFalse(read.quasiFreeClassSwept)
+        self.assertTrue(math.isnan(read.radius))
+        self.assertTrue(math.isnan(read.transportLeakageMax))
+
+    def test_a_continuum_spin_claim_is_never_declared_here(self):
+        """The composition makes no continuum claim, so the SO(d)->Spin(d)
+        lift is not demanded and `spin-lift` is not a failure."""
+        read = self.pc.classifyBoundSupercomponents(
+            self.bindings, self.constituents)[0]
+        self.assertFalse(read.spinLiftApplicable)
+        self.assertNotIn("spin-lift", read.failedCertificates)
+
+    # ---- the bound component's lifetime -------------------------------
+
+    def test_an_unsupplied_lifetime_is_nan(self):
+        read = self.pc.classifyBoundSupercomponents(
+            self.bindings, self.constituents)[0]
+        self.assertTrue(math.isnan(read.persistence))
+
+    def test_a_supplied_lifetime_travels_verbatim(self):
+        read = self.pc.classifyBoundSupercomponents(
+            self.bindings, self.constituents, [7.0])[0]
+        self.assertEqual(read.persistence, 7.0)
+
+    def test_a_mismatched_lifetime_list_is_refused(self):
+        with self.assertRaises(ValueError):
+            self.pc.classifyBoundSupercomponents(
+                self.bindings, self.constituents, [1.0, 2.0])
+
+    def test_a_constituent_index_outside_the_read_list_is_refused(self):
+        with self.assertRaises(ValueError):
+            self.pc.classifyBoundSupercomponents(
+                self.bindings, self.constituents[:2])
+
+    # ---- ordering / relabeling ----------------------------------------
+
+    def test_the_verdict_is_insensitive_to_constituent_order(self):
+        order = [2, 0, 1]
+        candidates = [self.candidates[i] for i in order]
+        bindings = list(self.pc.boundSupercomponentSearch(
+            self.coarse.components, candidates))
+        permuted = self.pc.classifyBoundSupercomponents(
+            bindings, [c.quark for c in candidates])[0]
+        base = self.pc.classifyBoundSupercomponents(
+            self.bindings, self.constituents)[0]
+        self.assertEqual(permuted.classification, base.classification)
+        self.assertEqual(permuted.failedCertificates, base.failedCertificates)
+        self.assertEqual(
+            sorted(q.canonicalHash() for q in permuted.quarks),
+            sorted(q.canonicalHash() for q in base.quarks))
+
+    # ---- the record schema round-trips with its nulls ------------------
+
+    def test_the_record_round_trips_with_nulls_for_unknowns(self):
+        read = self.pc.classifyBoundSupercomponents(
+            self.bindings, self.constituents, [4.0])[0]
+        record = read.toRecord()
+        # Every UNSUPPLIED optional serializes as null, never as zero.
+        for key in ("total_j2", "total_j2_variance", "physical_mass",
+                    "rotation_character_re", "rotation_character_im",
+                    "exchange_character_re", "exchange_character_im",
+                    "spin_statistics_ratio_re", "spin_statistics_ratio_im"):
+            self.assertIsNone(record[key], f"{key} is not null")
+        # Every UNMEASURED double serializes as NaN, never as zero.
+        for key in ("color_gram_determinant", "color_flux", "color_wedge_re",
+                    "color_wedge_im", "class_variance_floor", "radius",
+                    "radius_ratio", "spectral_mass", "profile_max_deviation",
+                    "transport_leakage_max"):
+            self.assertTrue(math.isnan(record[key]), f"{key} is not NaN")
+        rehydrated = obs.BaryonRead.fromRecord(record)
+        self.assertEqual(rehydrated.classification, read.classification)
+        self.assertEqual(rehydrated.failedCertificates,
+                         read.failedCertificates)
+        self.assertIsNone(rehydrated.totalJ2)
+        self.assertIsNone(rehydrated.totalJ2Variance)
+        self.assertIsNone(rehydrated.physicalMass)
+        self.assertTrue(math.isnan(rehydrated.colorGramDeterminant))
+        self.assertEqual(rehydrated.persistence, 4.0)
+        self.assertRecordsEqual(rehydrated.toRecord(), record)
+
+    def test_an_unknown_record_schema_version_is_rejected(self):
+        record = self.pc.classifyBoundSupercomponents(
+            self.bindings, self.constituents)[0].toRecord()
+        record["schema_version"] = record["schema_version"] + 97
+        with self.assertRaises(ValueError):
+            obs.BaryonRead.fromRecord(record)
+
+    # ---- the three-outcome vocabulary is reachable through here -------
+
+    def test_a_fully_evidenced_bundle_certifies_a_proton(self):
+        """The same three constituents, given the rest of the evidence,
+        reach `certified-proton` — so the composition's `baryon-candidate`
+        is a statement about the MISSING evidence, not a ceiling."""
+        read = self.pc.classifyBaryon(_baryon_evidence())
+        self.assertEqual(read.classification, "certified-proton")
+        self.assertEqual(read.failedCertificates, [])
+        self.assertEqual(read.confidence, 1.0)
+
+    def test_the_obstruction_verdict_is_reachable(self):
+        read = self.pc.classifyBaryon(_baryon_evidence(
+            spin="generic",
+            class_variances=[_generic_slater_spin_reads()[1]] * 3))
+        self.assertEqual(read.classification,
+                         "quasi-free-sharp-spin-obstruction")
+        self.assertEqual(read.failedCertificates, ["sharp-spin"])
+        self.assertTrue(read.quasiFreeClassSwept)

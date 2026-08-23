@@ -802,13 +802,19 @@ class MultiCobordism {
   void runRecursiveAnalysis();
 
   /// The versioned checkpoint document of the last pass (design spec §20,
-  /// schema version 3), as JSON. Empty before the first pass. Unknown /
+  /// schema version 4), as JSON. Empty before the first pass. Unknown /
   /// uncertified values serialize as `null`, never as zero.
   [[nodiscard]] const std::string &checkpointJson() const noexcept {
     return checkpointJson_;
   }
-  /// The schema version this build writes and accepts.
-  [[nodiscard]] static int checkpointSchemaVersion() noexcept { return 3; }
+  /// The schema version this build writes and accepts. Version 4 splits the
+  /// former `particles.baryons` block in two: the bound-supercomponent
+  /// SEARCH records moved to `particles.bound_supercomponents` and
+  /// `particles.baryons` now carries the three-cluster VERDICT itself, one
+  /// baryon read per binding of exactly three certified constituents. A
+  /// version-3 document is REJECTED on read rather than reinterpreted —
+  /// its `baryons` entries mean a different thing.
+  [[nodiscard]] static int checkpointSchemaVersion() noexcept { return 4; }
 
   /// Replay mode: rebuild the raw complex recorded in `checkpoint`, disable
   /// every cache, recompute every derived hierarchy and certificate, and

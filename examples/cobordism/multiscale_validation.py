@@ -20,7 +20,7 @@ stationarity objective in `SimulationMode.EMERGENCE` /
 `EmergenceSubmode.STRICT`. Nothing in this file enters that objective: the
 #776 firewall (a static `objectiveOf` over five declared scalars) makes that
 structural, and this driver only *reads* the accepted geometry afterwards
-through `runRecursiveAnalysis`'s schema-3 checkpoint and the public observable
+through `runRecursiveAnalysis`'s schema-4 checkpoint and the public observable
 classes.
 
 Reused machinery, all merged on main: `MultiCobordism` (modes, checkpoint,
@@ -67,7 +67,7 @@ check. Each run's own wall time is recorded in the output under ``runtime``.
 Reproducibility, exactly
 ------------------------
 Every emitted point carries its `config_hash`, `commit`, `size`, and `seed`,
-and the run's schema-3 checkpoint is embedded, so `MultiCobordism.
+and the run's schema-4 checkpoint is embedded, so `MultiCobordism.
 replayCheckpoint` reproduces the point exactly from the record alone. A fresh
 rebuild from (config, seed, commit) reproduces the FIRST committed move and the
 whole stage-2 relaxation, but #579/#776 measured that the engine's move draw is
@@ -178,6 +178,13 @@ DECLARED_THRESHOLD_SCAN = (1.0e-2, 1.0e-1, 1.0, 1.0e1, 1.0e2, 1.0e3,
 #: Control seeds (kept apart from the ensemble seeds so a control can never
 #: be mistaken for a measurement).
 DECLARED_CONTROL_SEED = 20260823
+
+#: "Var(J^2) approximately zero" is the SAME statement the baryon classifier
+#: makes, so the two layers read one number: `ParticleClusters`' own
+#: sharp-spin tolerance. Declared here, never fitted, and never widened to
+#: reach a verdict.
+DECLARED_VAR_J2_ZERO_TOLERANCE = (
+    T.ParticleClustersConfig().spinVarianceTolerance)
 
 #: Certificate gates, in the exact order `ParticleClusters` evaluates them.
 #: `failedCertificates[0]` is therefore the FIRST failing certificate.
@@ -1167,9 +1174,46 @@ def _statistics_reads(band_reads):
     return out
 
 
+#: The ONE proton certificate the dichotomy's branch point is about. The
+#: whitepaper's premise is "every OTHER certificate is met inside the
+#: covariance-only theory, but Var(J^2) fails to converge to zero", and
+#: `ParticleClusters::classifyBaryon` reaches its own
+#: `quasi-free-sharp-spin-obstruction` verdict when this is the ONLY failure.
+#: A read whose failures are a subset of {this} is one whose non-spin
+#: certificates all hold.
+SHARP_SPIN_CERTIFICATE = "sharp-spin"
+
+
+def _proton_verdict(baryon):
+    """One BaryonRead record, reduced to what the branch point reads.
+
+    `all_non_spin_certificates_hold` is the whitepaper's premise, taken from
+    the classifier's own named failures: every certificate except the sharp
+    total-space spin one held. It is never inferred from a missing read --
+    an absent Var(J^2) is a NAMED `sharp-spin` failure, and an absent
+    anything else keeps the premise false.
+    """
+    failed = set(baryon.get("failed_certificates") or [])
+    return {
+        "size": None,
+        "seed": None,
+        "bound_component": baryon.get("bound_component"),
+        "classification": baryon.get("classification"),
+        "confidence": _finite(baryon.get("confidence")),
+        "failed_certificates": sorted(failed),
+        "all_non_spin_certificates_hold": failed <= {SHARP_SPIN_CERTIFICATE},
+        "sharp_spin": baryon.get("sharp_spin"),
+        "total_j2": baryon.get("total_j2"),
+        "total_j2_variance": baryon.get("total_j2_variance"),
+        "quasi_free_class_swept": baryon.get("quasi_free_class_swept"),
+        "class_variance_floor": _finite(baryon.get("class_variance_floor")),
+    }
+
+
 def _particle_reads(doc):
     """Verdicts, charge, anchoring, and the first-failing-certificate map."""
     quarks = doc["particles"]["quarks"]
+    bindings = doc["particles"]["bound_supercomponents"]
     baryons = doc["particles"]["baryons"]
     first_failure = {}
     for quark in quarks:
@@ -1192,14 +1236,33 @@ def _particle_reads(doc):
         "electric_flux": [q["electric_flux"] for q in quarks],
         "isospin": [q["isospin"] for q in quarks],
         "confidence": [_finite(q["confidence"]) for q in quarks],
+        # The §16.2 SEARCH layer: one record per next-level component that
+        # contains at least one CERTIFIED quark candidate.
+        "bound_supercomponents": len(bindings),
+        "bound_supercomponents_found": sum(1 for b in bindings if b["found"]),
+        "bound_supercomponent_failed_certificates": _string_histogram(
+            name for b in bindings
+            for name in (b.get("failed_certificates") or [])),
+        # The §16.4 VERDICT layer: one BaryonRead per binding that grouped
+        # exactly three certified constituents.
         "baryons": len(baryons),
-        "baryons_found": sum(1 for b in baryons if b["found"]),
+        "baryon_classifications": _string_histogram(
+            b["classification"] for b in baryons),
         "baryon_failed_certificates": _string_histogram(
             name for b in baryons for name in (b.get("failed_certificates") or [])),
-        # The overlay emits BoundSupercomponentRead, never a BaryonRead, so
-        # no proton verdict reaches this driver.  Unmeasured is null, never
-        # zero: a zero would claim a proton count that was never computed.
-        "certified_protons": None,
+        "proton_verdicts": [_proton_verdict(b) for b in baryons],
+        # Counted over the baryon reads the overlay ACTUALLY produced -- a
+        # measurement, with its denominator (`baryons`) beside it. Zero
+        # baryon reads means the bound-supercomponent search grouped three
+        # certified constituents nowhere, which is itself a measured result
+        # and not an unrun classifier.
+        "certified_protons": sum(1 for b in baryons
+                                 if b["classification"] == "certified-proton"),
+        "certified_proton_candidates": sum(
+            1 for b in baryons if b["classification"] == "baryon-candidate"),
+        "sharp_spin_obstructions": sum(
+            1 for b in baryons
+            if b["classification"] == "quasi-free-sharp-spin-obstruction"),
     }
 
 
@@ -1717,6 +1780,82 @@ def _convergence(runs, extractor, name):
     return result
 
 
+def proton_verdicts_of(runs):
+    """Every BaryonRead the overlay produced across the ensemble.
+
+    Stamped with the member that produced it. An EMPTY list is a real
+    measurement -- the overlay ran the §16.2 search on every member and it
+    grouped three certified constituents nowhere, so the §16.4 classifier
+    had no three-cluster candidate to classify.
+    """
+    out = []
+    for run in runs:
+        for verdict in run["particles"].get("proton_verdicts", []):
+            entry = dict(verdict)
+            entry["size"] = run["size"]
+            entry["seed"] = run["seed"]
+            out.append(entry)
+    return out
+
+
+def var_j2_zero_limit(fit):
+    """Does the accepted class's Var(J^2) extrapolate to ZERO under 1/N?
+
+    TRI-STATE, and ``None`` is not ``False``. The whitepaper's obstruction
+    is "Var(J^2) FAILS to converge to zero across refinement", which cannot
+    be asserted from a fit that was never made or from one whose own
+    verdict says the extrapolation is not to be trusted. The measured
+    limit, its standard error, the zero band and the fit's own verdict all
+    travel with the answer.
+
+    The statement is about the extrapolated LIMIT, not about the trend: an
+    observable can converge beautifully to a nonzero value, and that is the
+    obstruction, not the absence of one.
+    """
+    out = {"converges_to_zero": None,
+           "extrapolated_limit": None,
+           "extrapolated_limit_se": None,
+           "tolerance": DECLARED_VAR_J2_ZERO_TOLERANCE,
+           "zero_band": None,
+           "fit_verdict": None,
+           "reason": None}
+    if not fit:
+        out["reason"] = (
+            "fewer than three sizes carry a Var(J^2) on an accepted "
+            "non-trivial band, so no 1/N refinement fit exists and the "
+            "limit is UNMEASURED")
+        return out
+    out["fit_verdict"] = fit.get("verdict")
+    limit = _finite(fit.get("extrapolated_limit"))
+    se = _finite(fit.get("extrapolated_limit_se"))
+    out["extrapolated_limit"] = limit
+    out["extrapolated_limit_se"] = se
+    if out["fit_verdict"] in ("insufficient_points",
+                              "trending_but_not_inverse_size"):
+        out["reason"] = (
+            f"the 1/N fit reports `{out['fit_verdict']}`, so its "
+            "extrapolation is not to be trusted and the limit is UNMEASURED")
+        return out
+    if limit is None:
+        out["reason"] = ("the 1/N fit produced no finite extrapolated "
+                         "limit, so the limit is UNMEASURED")
+        return out
+    # The zero band is the wider of the fit's own two-sigma interval and the
+    # declared sharp-spin tolerance: a limit inside it is zero as far as
+    # this measurement can tell, and a limit outside it is not.
+    band = DECLARED_VAR_J2_ZERO_TOLERANCE
+    if se is not None:
+        band = max(band, 2.0 * se)
+    out["zero_band"] = band
+    out["converges_to_zero"] = abs(limit) <= band
+    out["reason"] = (
+        f"extrapolated limit {limit:.6g} "
+        + (f"+- {se:.6g} " if se is not None else "")
+        + ("within" if out["converges_to_zero"] else "outside")
+        + f" the zero band {band:.6g}, fit verdict `{out['fit_verdict']}`")
+    return out
+
+
 def dichotomy(runs, proton_verdicts=None):
     """The covariance-only dichotomy: Var(J^2) on accepted candidates.
 
@@ -1726,9 +1865,27 @@ def dichotomy(runs, proton_verdicts=None):
       accepted candidate class AND Var(J^2) converges to zero;
     * ``quasi_free_sharp_spin_obstruction`` — every OTHER certificate holds
       but Var(J^2) does not converge to zero;
-    * ``inconclusive`` — the accepted candidate class is empty, so the
-      dichotomy is not reached. The first-failing-certificate distribution is
-      then the result, and it is reported.
+    * ``inconclusive`` — the branch point was not reached. Five distinct
+      situations produce it and each names itself in ``reason``: no quark
+      candidate was certified at all; this call was given no proton verdict
+      list (an INSTRUMENT gap); the overlay ran the baryon classifier but the
+      bound-supercomponent search grouped three certified constituents
+      nowhere (a measured emptiness); three-cluster candidates were
+      classified and none completed the non-spin certificates; or they did
+      and the refinement behaviour of Var(J^2) was never measured, so
+      neither branch can be claimed.
+
+    Between the two informative outcomes the branch is decided first by the
+    CLASSIFIER's own verdict — a ``certified-proton`` carries the sharp-spin
+    certificate, a ``quasi-free-sharp-spin-obstruction`` is its negation over
+    a SWEPT covariance-only class — and, when the classifier reached neither,
+    by whether the accepted class's Var(J^2) extrapolates to zero under 1/N
+    refinement (``var_j2_zero_limit``).
+
+    ``proton_verdicts`` is the ensemble's ``BaryonRead`` reductions --
+    ``proton_verdicts_of(runs)`` builds it from the overlay's own
+    ``particles.baryons`` block. ``None`` means the branch point could not be
+    evaluated, and the proton counts stay ``null`` rather than zero.
     """
     certified = []
     trivial = []
@@ -1788,9 +1945,35 @@ def dichotomy(runs, proton_verdicts=None):
         for name, count in run["particles"]["classifications"].items()
         if name != "none")
 
+    # The proton counts come from the verdicts THIS call was given. With no
+    # verdict list the classifier's output never reached here, so the counts
+    # are UNKNOWN (null), never zero -- a zero would claim a proton count
+    # that was never computed.
+    if proton_verdicts is None:
+        certified_protons = None
+        certified_proton_candidates = None
+        sharp_spin_obstructions = None
+    else:
+        certified_protons = sum(
+            1 for v in proton_verdicts
+            if v.get("classification") == "certified-proton")
+        certified_proton_candidates = sum(
+            1 for v in proton_verdicts
+            if v.get("classification") == "baryon-candidate")
+        sharp_spin_obstructions = sum(
+            1 for v in proton_verdicts
+            if v.get("classification")
+            == "quasi-free-sharp-spin-obstruction")
+
     out = {
         "accepted_candidates": accepted_candidates,
-        "certified_proton_candidates": None,
+        "proton_verdicts": (None if proton_verdicts is None
+                            else list(proton_verdicts)),
+        "proton_verdicts_total": (None if proton_verdicts is None
+                                  else len(proton_verdicts)),
+        "certified_protons": certified_protons,
+        "certified_proton_candidates": certified_proton_candidates,
+        "sharp_spin_obstructions": sharp_spin_obstructions,
         "first_failing_certificate": primary["first_failing_certificate"],
         "first_failing_certificate_fraction":
             primary["first_failing_certificate_fraction"],
@@ -1854,11 +2037,19 @@ def dichotomy(runs, proton_verdicts=None):
     elif proton_verdicts is None:
         out["classification"] = "inconclusive"
         out["reason"] = (
-            "quark candidates were classified, but this driver receives no "
-            "proton verdict at all: the analysis overlay emits a bound "
-            "supercomponent search and never runs the baryon classifier, so "
-            "the branch point cannot be evaluated here. This is an "
-            "instrument gap, NOT a measurement that the dichotomy failed")
+            "quark candidates were classified, but this call was given no "
+            "proton verdict list at all, so the branch point cannot be "
+            "evaluated here. This is an instrument gap, NOT a measurement "
+            "that the dichotomy failed")
+    elif not proton_verdicts:
+        out["classification"] = "inconclusive"
+        out["reason"] = (
+            "quark candidates were classified and the analysis overlay ran "
+            "the baryon classifier, but the bound-supercomponent search "
+            "grouped three certified constituents nowhere, so no "
+            "three-cluster candidate was classified and the branch point is "
+            "not reached. This is a measured emptiness of the accepted "
+            "three-cluster class, not an unrun instrument")
     else:
         # The branch point proper: every OTHER proton certificate holds on an
         # accepted class, and the question is only whether Var(J^2) converges.
@@ -1867,22 +2058,67 @@ def dichotomy(runs, proton_verdicts=None):
         if not others_hold:
             out["classification"] = "inconclusive"
             out["reason"] = (
-                "no candidate completed the non-spin proton certificates, so "
-                "the sharp-spin branch point is not reached")
+                f"{len(proton_verdicts)} three-cluster candidate(s) were "
+                "classified and none completed the non-spin proton "
+                "certificates, so the sharp-spin branch point is not reached")
         else:
-            fit = out.get("var_j2_convergence") or {}
-            converges = fit.get("verdict") == "converges_to_zero"
-            if converges:
+            proton_reads = [v for v in others_hold
+                            if v.get("classification") == "certified-proton"]
+            obstructed = [
+                v for v in others_hold
+                if v.get("classification")
+                == "quasi-free-sharp-spin-obstruction"]
+            limit = var_j2_zero_limit(out.get("var_j2_convergence"))
+            out["var_j2_zero_limit"] = limit
+            out["non_spin_certificates_hold"] = len(others_hold)
+            if proton_reads:
+                # The CLASSIFIER itself certified the sharp spin on an
+                # accepted candidate: every one of its fourteen gates held,
+                # Var(J^2) included.
+                out["classification"] = "covariance_only_proton"
+                out["reason"] = (
+                    f"{len(proton_reads)} accepted three-cluster "
+                    "candidate(s) carry the COMPLETE proton certificate, "
+                    "sharp spin included, so an exact covariance-only proton "
+                    "exists in this ensemble")
+            elif obstructed:
+                # The classifier reached its own branch point: sharp-spin is
+                # the ONLY failure and the accepted covariance-only class was
+                # swept, so the variance floor is a property of the class.
+                out["classification"] = "quasi_free_sharp_spin_obstruction"
+                floors = [v.get("class_variance_floor")
+                          for v in obstructed
+                          if v.get("class_variance_floor") is not None]
+                out["reason"] = (
+                    f"{len(obstructed)} accepted three-cluster candidate(s) "
+                    "hold every proton certificate except the sharp spin, "
+                    "over a SWEPT accepted covariance-only class"
+                    + (f" whose Var(J^2) floor is {min(floors):.6g}"
+                       if floors else "")
+                    + "; a non-Gaussian mechanism is required")
+            elif limit["converges_to_zero"] is True:
                 out["classification"] = "covariance_only_proton"
                 out["reason"] = (
                     "every other proton certificate holds on the accepted "
-                    "class and Var(J^2) converges to zero under refinement")
-            else:
+                    "class and Var(J^2) extrapolates to zero under 1/N "
+                    "refinement (" + limit["reason"] + ")")
+            elif limit["converges_to_zero"] is False:
                 out["classification"] = "quasi_free_sharp_spin_obstruction"
                 out["reason"] = (
                     "every other proton certificate holds on the accepted "
-                    "class but Var(J^2) does not converge to zero; a "
+                    "class but Var(J^2) does not extrapolate to zero under "
+                    "1/N refinement (" + limit["reason"] + "); a "
                     "non-Gaussian mechanism is required")
+            else:
+                # UNMEASURED is not a measured failure: the whitepaper's
+                # obstruction is "Var(J^2) FAILS to converge", which no
+                # absent fit can establish.
+                out["classification"] = "inconclusive"
+                out["reason"] = (
+                    "every other proton certificate holds on the accepted "
+                    "class, but the refinement behaviour of Var(J^2) was "
+                    "never measured, so neither branch can be claimed ("
+                    + limit["reason"] + ")")
     return out
 
 
@@ -2122,9 +2358,16 @@ def _discrete_verdicts(document):
              quark["exterior_parity"], quark["winding_closure"],
              tuple(quark["failed_certificates"]))
             for quark in document.get("particles", {}).get("quarks", [])],
+        "bound_supercomponent_verdicts": [
+            (binding["bound_component"], binding["found"],
+             binding["constituents"], tuple(binding["failed_certificates"]))
+            for binding in document.get("particles", {}).get(
+                "bound_supercomponents", [])],
         "baryon_verdicts": [
-            (baryon["bound_component"], baryon["found"],
-             baryon["constituents"], tuple(baryon["failed_certificates"]))
+            (baryon["bound_component"], baryon["classification"],
+             tuple(baryon["quarks"]), baryon["exterior_parity"],
+             baryon["flavor_pattern"],
+             tuple(baryon["failed_certificates"]))
             for baryon in document.get("particles", {}).get("baryons", [])],
     }
 
@@ -2360,7 +2603,7 @@ def main(argv=None):
     parser.add_argument("--no-replay", action="store_true",
                         help="skip the cold checkpoint replay check")
     parser.add_argument("--drop-checkpoints", action="store_true",
-                        help="drop the embedded schema-3 checkpoints from the "
+                        help="drop the embedded schema-4 checkpoints from the "
                              "output. They are embedded by default and are "
                              "what makes a plotted point exactly replayable, "
                              "so a published run keeps them")
@@ -2393,7 +2636,7 @@ def main(argv=None):
         },
         "reproducibility": {
             "point_identity": "config_hash + commit + size + seed",
-            "exact_replay": ("every run embeds its schema-3 checkpoint; "
+            "exact_replay": ("every run embeds its schema-4 checkpoint; "
                              "MultiCobordism.replay_checkpoint rebuilds the "
                              "raw complex with cold caches and reproduces the "
                              "verdicts"),
@@ -2406,7 +2649,8 @@ def main(argv=None):
         },
         "runs": runs,
         "aggregates": aggregates,
-        "dichotomy": dichotomy(runs),
+        "dichotomy": dichotomy(runs,
+                               proton_verdicts=proton_verdicts_of(runs)),
         "stationarity_defect_correlation":
             stationarity_defect_correlation(runs),
         "spectral_dimension_verdict":

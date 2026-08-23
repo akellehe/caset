@@ -1011,7 +1011,7 @@ class ProtonAnimator:
         if self.status:
             print(f"  checkpoint -> {path}", flush=True)
         # #776: the recursive-analysis checkpoint (design spec section 20,
-        # schema 3) beside the geometry state, and ONLY when the overlay is
+        # schema 4) beside the geometry state, and ONLY when the overlay is
         # selected — `checkpoint_json` is empty otherwise, so nothing extra is
         # written on the path this example has always taken.
         analysis = node.checkpoint_json

@@ -204,7 +204,16 @@ in the objective's translation unit.
 ## What the next tickets consume
 
 #777 and #778 consume the modes (`SimulationMode`, `EmergenceSubmode`), the
-schema-3 checkpoint document, and the static `replayCheckpoint` entry point
-unchanged. The checkpoint's `analysis` block carries the cadence, the degrees
-and resolutions the pass used, and that pass's own cache activity, so a campaign
+checkpoint document, and the static `replayCheckpoint` entry point unchanged.
+The checkpoint's `analysis` block carries the cadence, the degrees and
+resolutions the pass used, and that pass's own cache activity, so a campaign
 can be replayed and costed from the record alone.
+
+The document this integration wrote was schema 3, in which `particles.baryons`
+held the §16.2 bound-supercomponent SEARCH records — the overlay never ran the
+§16.4 baryon classifier, so no baryon verdict existed to record. #802 closed
+that: the overlay now classifies every binding of exactly three certified
+constituents, the search records moved to `particles.bound_supercomponents`,
+`particles.baryons` carries the `BaryonRead` verdict, and the version is 4. A
+schema-3 document is rejected on read rather than reinterpreted, because its
+`baryons` entries mean a different thing.
