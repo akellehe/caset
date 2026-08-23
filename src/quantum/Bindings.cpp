@@ -54,6 +54,7 @@
 #include "quantum/DMRGRunner.hpp"
 #include "quantum/GradedFock.h"
 #include "quantum/Holography.hpp"
+#include "quantum/LazyFock.h"
 #include "simulations/InteractionSimulation.h"
 #include "quantum/Majorization.hpp"
 #include "quantum/MutualInformation.hpp"
@@ -1921,6 +1922,253 @@ preserved; the canonical order is rebuilt from the new ids.)doc")
 position i of `before`'s canonical order (matched by modeId). Feed to
 OccupationBitset.permutationParity / ExteriorAlgebra.
 modePermutationMatrixCOO for the exact parity map.)doc");
+
+    // ── Lazy graded Fock oracle and boundary carrier (issue #771) ───────
+    // Dense Eigen crossings only; the LocalMap COO route uses plain
+    // (rows, cols, values) arrays per the repository convention.
+
+    py::enum_<LazyNodeKind>(m, "LazyNodeKind",
+        "Node vocabulary of the lazy Fock expression DAG (spec 14.2).")
+        .value("Vacuum", LazyNodeKind::Vacuum)
+        .value("Occupation", LazyNodeKind::Occupation)
+        .value("GradedTensor", LazyNodeKind::GradedTensor)
+        .value("LocalMap", LazyNodeKind::LocalMap)
+        .value("SectorSum", LazyNodeKind::SectorSum)
+        .value("Wedge", LazyNodeKind::Wedge);
+
+    py::enum_<LazySectorKind>(m, "LazySectorKind",
+        "Conserved functional labeling a sector direct sum.")
+        .value("Occupation", LazySectorKind::Occupation)
+        .value("Parity", LazySectorKind::Parity);
+
+    py::class_<LazyFockState>(m, "LazyFockState",
+        R"doc(A value handle on one lazy-Fock expression-DAG root.
+
+Carries the accumulated discarded-norm bound D (exactly 0.0 in exact
+certification mode; in truncation mode an upper bound on the l2 error of
+the represented state, reported in every scalar read) and the optional
+boundary-fixture label — set ONLY by boundaryProductFixture, the one
+sanctioned way to store a product preparation. Per-edge occupations are
+derived marginals of the global state; the handle never stores per-mode
+state vectors.)doc")
+        .def("valid", &LazyFockState::valid)
+        .def("rootNodeId", &LazyFockState::rootNodeId,
+             "Process-unique root node id (sharing / negative-control "
+             "tests).")
+        .def("contentHash", &LazyFockState::contentHash,
+             "Replay-stable content hash of the root subexpression.")
+        .def("kind", &LazyFockState::kind, "Root node kind.")
+        .def("modes", &LazyFockState::modes,
+             "Sorted global mode indices the state covers.")
+        .def("childNodeIds", &LazyFockState::childNodeIds)
+        .def("childContentHashes", &LazyFockState::childContentHashes)
+        .def("nodeCount", &LazyFockState::nodeCount,
+             "Distinct DAG nodes (a shared subexpression counts once).")
+        .def("discardedNorm", &LazyFockState::discardedNorm,
+             "Accumulated discarded-norm bound D (0.0 = exact).")
+        .def("definiteOccupation", &LazyFockState::definiteOccupation,
+             "Definite total occupation, or -1 when indefinite.")
+        .def("definiteParity", &LazyFockState::definiteParity,
+             "Definite fermion parity +1/-1, or 0 when indefinite.")
+        .def("boundaryFixtureLabel", &LazyFockState::boundaryFixtureLabel,
+             py::return_value_policy::copy)
+        .def("isBoundaryFixture", &LazyFockState::isBoundaryFixture);
+
+    py::class_<LazyScalarRead>(m, "LazyScalarRead",
+        R"doc(A scalar read (amplitude / inner product / squared norm) with the
+accumulated discarded norm REPORTED IN EVERY RESULT (0.0 in exact
+certification mode) and its #764 Certificate: AlgebraicallyExact when the
+discarded norm is exactly zero, CertifiedNumerical with residual = the
+ABSOLUTE discarded-norm bound otherwise. |value - exact| <= discardedNorm
+for amplitude reads.)doc")
+        .def_readonly("value", &LazyScalarRead::value)
+        .def_readonly("discardedNorm", &LazyScalarRead::discardedNorm)
+        .def_readonly("certificate", &LazyScalarRead::certificate);
+
+    py::class_<LazySlaterReference>(m, "LazySlaterReference",
+        R"doc(The optional quasi-free/Slater reference from a spectral projector:
+covariance Gamma_ef = P_ef exactly (StructureExact given the verified
+premise P^2 = P = P^dagger, residual on the certificate). The quasi-free
+sector's PRIMARY representation is the covariance layer (#780); this
+engine is its dense/oracle reference.)doc")
+        .def_readonly("state", &LazySlaterReference::state)
+        .def_readonly("rank", &LazySlaterReference::rank)
+        .def_readonly("projectorResidual",
+                      &LazySlaterReference::projectorResidual)
+        .def_readonly("certificate", &LazySlaterReference::certificate);
+
+    py::class_<LazyCovarianceRead>(m, "LazyCovarianceRead",
+        R"doc(Covariance read Gamma_ef = <a_f^dagger a_e>/<psi|psi> over the full
+mode universe (vacuum rows/columns outside the state's support).
+Certificate residual = measured Hermiticity defect (general path) or the
+trace defect |tr Gamma - n| (closed-form Slater path).)doc")
+        .def_readonly("matrix", &LazyCovarianceRead::matrix)
+        .def_readonly("discardedNorm", &LazyCovarianceRead::discardedNorm)
+        .def_readonly("certificate", &LazyCovarianceRead::certificate);
+
+    py::class_<LazyCompatibilityRead>(m, "LazyCompatibilityRead",
+        R"doc(Design-spec 5.7 inductive compatibility read for the vacuum
+embedding: epsilon = ||iota_M U_M - U_{M+1} iota_M|| on the active
+carried subspace (top singular value of the column-stacked defect).)doc")
+        .def_readonly("epsilon", &LazyCompatibilityRead::epsilon)
+        .def_readonly("activeDimension",
+                      &LazyCompatibilityRead::activeDimension)
+        .def_readonly("certificate", &LazyCompatibilityRead::certificate);
+
+    py::class_<LazyFockEngine>(m, "LazyFockEngine",
+        R"doc(The lazy graded Fock oracle and boundary carrier (issue #771).
+
+One-particle mode space h = span{|e>} (one two-level mode per edge, the
+#766 compilation order); global carrier F_-(h) = Lambda* h. States are
+expression DAGs — vacuum, sparse occupation blocks, graded tensor
+products, local unitary/cobordism maps, direct sums by conserved
+occupation/parity sector, antisymmetrized wedges — evaluated lazily: a
+graded tensor partition is expanded ONLY when an applied operation
+crosses it; exact subexpressions are memoized by content hash; block
+sparsity by occupation/parity short-circuits out-of-sector reads.
+
+Exact identities (documented in the C++ header with domains): the Koszul
+graded-tensor amplitude rule (strictly associative — parenthesizations
+agree on the nose); exact even/odd local-operator action through the two
+Koszul signs; Slater-determinant amplitudes, det-Gram norms, and
+Gamma = V (V^dagger V)^{-1} V^dagger covariance; bit-level dGamma with
+the #766 CAR sign rule (direct sums -> graded tensor products, coupling
+blocks -> hopping terms); subset-sum free spectra DELEGATED to #764
+OccupationSpectra; the vacuum embedding iota psi = psi (x) |0> preserving
+every preexisting amplitude, with the spec-5.7 compatibility read.
+
+Exact certification mode by default (algebraically lossless rewrites
+only); optional truncation mode accumulates and reports its discarded
+norm in every scalar read. The quasi-free sector's PRIMARY representation
+is the #780 covariance layer — this engine is the dense/oracle reference
+and the carrier for explicitly non-Gaussian boundary data. Nothing here
+enters the emergence objective, and nothing here classifies particles.)doc")
+        .def(py::init<std::size_t>(), py::arg("modeCount"))
+        .def_static("fromRegistry", &LazyFockEngine::fromRegistry,
+             py::arg("registry"),
+             "Engine over the registry's canonical compilation order.")
+        .def("modeCount", &LazyFockEngine::modeCount)
+        .def_static("stageDimension", &LazyFockEngine::stageDimension,
+             py::arg("stageModeCount"),
+             "dim Lambda* C^m = 2^m (enumerable stages, m <= 63).")
+        .def("setTruncationThreshold",
+             &LazyFockEngine::setTruncationThreshold, py::arg("threshold"),
+             py::arg("normTolerance"),
+             "Enter truncation mode with a stated threshold and declared "
+             "discarded-norm budget.")
+        .def("clearTruncation", &LazyFockEngine::clearTruncation,
+             "Return to exact certification mode.")
+        .def("exactMode", &LazyFockEngine::exactMode)
+        .def("truncationThreshold", &LazyFockEngine::truncationThreshold)
+        .def("truncationNormTolerance",
+             &LazyFockEngine::truncationNormTolerance)
+        .def("setMaxExpansionTerms", &LazyFockEngine::setMaxExpansionTerms,
+             py::arg("maxTerms"))
+        .def("maxExpansionTerms", &LazyFockEngine::maxExpansionTerms)
+        .def("vacuum", &LazyFockEngine::vacuum,
+             "The vacuum over the full mode universe.")
+        .def("vacuumOn", &LazyFockEngine::vacuumOn, py::arg("modes"))
+        .def("occupationState", &LazyFockEngine::occupationState,
+             py::arg("modes"), py::arg("occupations"), py::arg("amplitudes"),
+             "Sparse occupation block from (occupied-mode list, amplitude) "
+             "terms.")
+        .def("wedgeState", &LazyFockEngine::wedgeState, py::arg("modes"),
+             py::arg("orbitals"),
+             "v_1 ^ ... ^ v_n (orbitals |modes| x n; n = 1 is a general "
+             "one-particle state).")
+        .def("slaterFromProjector", &LazyFockEngine::slaterFromProjector,
+             py::arg("modes"), py::arg("projector"), py::arg("tolerance"),
+             "Quasi-free/Slater reference with covariance Gamma = P "
+             "exactly.")
+        .def("gradedTensor", &LazyFockEngine::gradedTensor, py::arg("a"),
+             py::arg("b"),
+             "a (x) b over disjoint (arbitrarily interleaved) mode sets.")
+        .def("sectorSum", &LazyFockEngine::sectorSum, py::arg("children"),
+             py::arg("kind"),
+             "Direct sum of states in distinct conserved sectors.")
+        .def("boundaryProductFixture",
+             &LazyFockEngine::boundaryProductFixture, py::arg("modes"),
+             py::arg("emptyAmplitudes"), py::arg("occupiedAmplitudes"),
+             py::arg("label"),
+             "The LABELED optional product boundary fixture (never the "
+             "global-state ontology).")
+        .def("embedInVacuum", &LazyFockEngine::embedInVacuum,
+             py::arg("state"), py::arg("newModes"),
+             "iota: psi -> psi (x) |0>; preserves every preexisting "
+             "amplitude exactly.")
+        .def("applyLocalMapDense", &LazyFockEngine::applyLocalMapDense,
+             py::arg("state"), py::arg("supportModes"), py::arg("op"),
+             "Apply a local map given dense over the 2^{|support|} support "
+             "Fock basis.")
+        .def("applyLocalMapCOO", &LazyFockEngine::applyLocalMapCOO,
+             py::arg("state"), py::arg("supportModes"), py::arg("rows"),
+             py::arg("cols"), py::arg("values"),
+             "Apply a local map given as COO triplets over the support "
+             "Fock basis.")
+        .def("applyCreation", &LazyFockEngine::applyCreation,
+             py::arg("state"), py::arg("mode"))
+        .def("applyAnnihilation", &LazyFockEngine::applyAnnihilation,
+             py::arg("state"), py::arg("mode"))
+        .def("applyDGamma", &LazyFockEngine::applyDGamma, py::arg("state"),
+             py::arg("supportModes"), py::arg("oneParticle"),
+             "Apply dGamma(L) at the bit level (arbitrary support size; no "
+             "2^{|S|} operator is formed).")
+        .def("materialize", &LazyFockEngine::materialize, py::arg("state"),
+             "Expand to one sparse occupation node (lossless in exact "
+             "mode; drops and accounts |a| <= threshold in truncation "
+             "mode).")
+        .def("permuteModes", &LazyFockEngine::permuteModes, py::arg("state"),
+             py::arg("perm"),
+             "Exact signed mode relabeling (permutationParity per term).")
+        .def("amplitude", &LazyFockEngine::amplitude, py::arg("state"),
+             py::arg("occupiedModes"),
+             "<b|psi> for the basis state occupying exactly occupiedModes.")
+        .def("innerProduct", &LazyFockEngine::innerProduct, py::arg("a"),
+             py::arg("b"), "<a|b> (antilinear in a).")
+        .def("normSquared", &LazyFockEngine::normSquared, py::arg("state"))
+        .def("covarianceMatrix", &LazyFockEngine::covarianceMatrix,
+             py::arg("state"),
+             "Gamma_ef = <a_f^dagger a_e>/norm^2 over the full universe.")
+        .def("denseVector", &LazyFockEngine::denseVector, py::arg("state"),
+             "Full dense Fock vector (n(b) = sum_i b_i 2^i; capped at "
+             "kMaxDenseModes).")
+        .def("freeSpectrum",
+             [](const LazyFockEngine& e, const Eigen::MatrixXcd& l,
+                int particles) {
+                 auto out = e.freeSpectrum(l, particles);
+                 return py::make_tuple(out.values, out.certificate);
+             }, py::arg("oneParticle"), py::arg("particles"),
+             "(values, certificate): free N-particle spectrum of dGamma(L) "
+             "via #764 subset sums.")
+        .def("freeSpectrumFromEigenvalues",
+             [](const LazyFockEngine& e,
+                const std::vector<std::complex<double>>& spec,
+                int particles) {
+                 auto out = e.freeSpectrumFromEigenvalues(spec, particles);
+                 return py::make_tuple(out.values, out.certificate);
+             }, py::arg("oneParticleSpectrum"), py::arg("particles"),
+             "(values, certificate): pure #764 OccupationSpectra "
+             "delegation with an independent-path residual.")
+        .def("inductiveCompatibility",
+             &LazyFockEngine::inductiveCompatibility, py::arg("stageModes"),
+             py::arg("extendedModes"), py::arg("stageSupport"),
+             py::arg("stageOp"), py::arg("extendedSupport"),
+             py::arg("extendedOp"), py::arg("activeBasis"),
+             "epsilon = ||iota U_M - U_{M+1} iota|| on the active carried "
+             "subspace (spec 5.7).")
+        .def("expansionCount", &LazyFockEngine::expansionCount,
+             "Partition crossings that forced a tensor expansion.")
+        .def("memoHits", &LazyFockEngine::memoHits)
+        .def("memoMisses", &LazyFockEngine::memoMisses)
+        .def("memoSize", &LazyFockEngine::memoSize)
+        .def("clearMemo", &LazyFockEngine::clearMemo,
+             "Drop memoized expansions (cold-vs-memoized comparisons).")
+        .def("serialize", &LazyFockEngine::serialize, py::arg("state"),
+             "Strict-JSON DAG checkpoint: shared nodes once (no "
+             "flattening), content hash per node, bit-exact amplitudes.")
+        .def("deserialize", &LazyFockEngine::deserialize, py::arg("json"),
+             "Rebuild a checkpoint; verifies schema, universe, and every "
+             "recomputed content hash.");
 
     // ── The quasi-free covariance layer (#780) ─────────────────────────────
 
