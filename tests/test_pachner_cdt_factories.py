@@ -145,21 +145,21 @@ class TestFactoriesShareRNG(unittest.TestCase):
 
     def test_two_proposeAdd_calls_advance_state(self):
         cdt, st = _make_cdt()
-        # Capture two proposals' touched-vertex IDs.
+        # A proposal succeeds on roughly one attempt in ten, so the
+        # attempt budget is an order of magnitude above the sample.
         proposals = []
-        for _ in range(50):
+        for _ in range(400):
             m = cdt.proposeAdd()
             if m is not None:
                 proposals.append(tuple(sorted(m.touchedVertexIds())))
-            if len(proposals) >= 2:
+            if len(proposals) >= 20:
                 break
         if len(proposals) < 2:
             self.skipTest("Not enough proposals to compare")
-        # Two consecutive proposals are *very likely* different
-        # because they sample different sigmas + spatial faces.  Not
-        # guaranteed, but coincidence is rare.
-        # Allow the test to be loose: just assert at least one of the
-        # first 10 successful proposals differs from the first.
+        # Proposals sample different sigmas + spatial faces, so any
+        # individual pair may coincide; a whole sample of twenty
+        # collapsing to one touched-ID set does not happen unless the
+        # shared RNG has stopped advancing.
         self.assertTrue(
             any(p != proposals[0] for p in proposals[1:]),
             "All consecutive proposals had identical touched-ID sets — "
