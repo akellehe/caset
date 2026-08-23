@@ -3160,6 +3160,11 @@ variance reads, and the refinement-window mass-radius samples.)doc")
       .def_readwrite("rotation", &BaryonCandidateEvidence::rotation,
                      "#772 PhysicalRotation character of the closed 2pi "
                      "total-space cluster-frame cycle.")
+      .def_readwrite("exchange", &BaryonCandidateEvidence::exchange,
+                     "The #772 PARTICLE-EXCHANGE character, when the "
+                     "exchange experiment was run.  REPORT-ONLY: neither "
+                     "the ticket's proton-certificate list nor spec 16.4 "
+                     "has an exchange row, so it gates nothing.")
       .def_readwrite("continuumSpinClaim",
                      &BaryonCandidateEvidence::continuumSpinClaim,
                      "When True the SO(d)->Spin(d) lift is REQUIRED; when "
@@ -3255,6 +3260,14 @@ ALWAYS None.)doc")
       .def_readonly("totalIsospin", &BaryonRead::totalIsospin)
       .def_readonly("rotationCharacterSign",
                     &BaryonRead::rotationCharacterSign)
+      .def_readonly("exchangeCharacter", &BaryonRead::exchangeCharacter,
+                    "The #772 Berry-cancelled exchange character; None "
+                    "unless a certified, correctly tagged exchange read "
+                    "was supplied.  REPORT-ONLY.")
+      .def_readonly("spinStatisticsRatio", &BaryonRead::spinStatisticsRatio,
+                    "chi(exchange) * chi(2pi)^-1 (+1 on a spin-1/2 "
+                    "fixture, each factor separately near -1); None unless "
+                    "BOTH channels certified.  REPORT-ONLY.")
       .def_readonly("spinLiftApplicable", &BaryonRead::spinLiftApplicable)
       .def_readonly("spinLiftAccepted", &BaryonRead::spinLiftAccepted)
       .def_readonly("sharpSpin", &BaryonRead::sharpSpin)

@@ -2020,6 +2020,18 @@ Record BaryonRead::toRecord() const {
   m["flavor_pattern"] = Record(flavorPattern);
   m["total_isospin"] = optionalDouble(totalIsospin);
   m["rotation_character_sign"] = Record(rotationCharacterSign);
+  m["exchange_character_re"] =
+      exchangeCharacter.has_value() ? Record(exchangeCharacter->real())
+                                    : Record();
+  m["exchange_character_im"] =
+      exchangeCharacter.has_value() ? Record(exchangeCharacter->imag())
+                                    : Record();
+  m["spin_statistics_ratio_re"] =
+      spinStatisticsRatio.has_value() ? Record(spinStatisticsRatio->real())
+                                      : Record();
+  m["spin_statistics_ratio_im"] =
+      spinStatisticsRatio.has_value() ? Record(spinStatisticsRatio->imag())
+                                      : Record();
   m["spin_lift_applicable"] = Record(spinLiftApplicable);
   m["spin_lift_accepted"] = Record(spinLiftAccepted);
   m["sharp_spin"] = Record(sharpSpin);
@@ -2072,6 +2084,18 @@ BaryonRead BaryonRead::fromRecord(const Record &record) {
   read.totalIsospin = optionalDoubleFrom(m.at("total_isospin"));
   read.rotationCharacterSign =
       static_cast<int>(m.at("rotation_character_sign").asInt());
+  {
+    const Record &re = m.at("exchange_character_re");
+    const Record &im = m.at("exchange_character_im");
+    if (!re.isNull() && !im.isNull())
+      read.exchangeCharacter = cd(re.asDouble(), im.asDouble());
+  }
+  {
+    const Record &re = m.at("spin_statistics_ratio_re");
+    const Record &im = m.at("spin_statistics_ratio_im");
+    if (!re.isNull() && !im.isNull())
+      read.spinStatisticsRatio = cd(re.asDouble(), im.asDouble());
+  }
   read.spinLiftApplicable = m.at("spin_lift_applicable").asBool();
   read.spinLiftAccepted = m.at("spin_lift_accepted").asBool();
   read.sharpSpin = m.at("sharp_spin").asBool();
@@ -2489,6 +2513,20 @@ BaryonRead ParticleClusters::classifyBaryon(
   }
   passed += gate(rotationCertified && rotation.characterSign == -1,
                  "rotation-character", failed);
+
+  //     REPORT-ONLY reuse of the #772 EXCHANGE channel: neither the
+  //     ticket's proton-certificate list nor spec §16.4 carries an
+  //     exchange row, so the exchange character and the doubly cancelled
+  //     spin-statistics ratio chi(exchange)·chi(2π)^{-1} are reported and
+  //     never gate.  A mislabeled channel is refused, not reinterpreted.
+  if (evidence.exchange.has_value() &&
+      evidence.exchange->certificate.holds() &&
+      evidence.exchange->channel == HolonomyChannel::ParticleExchange) {
+    read.exchangeCharacter = evidence.exchange->character;
+    if (rotationCertified)
+      read.spinStatisticsRatio = ExchangeHolonomy::doublyCancelledRatio(
+          *evidence.exchange, rotation);
+  }
 
   // 12. the SO(d) → Spin(d) lift — demanded ONLY when the caller declares a
   //     continuum spin claim (spec §16.4).

@@ -217,7 +217,12 @@
 //     read (channel `PhysicalRotation`), required at characterSign = −1;
 //     the SO(d) → Spin(d) lift is required only when the caller declares a
 //     CONTINUUM spin claim (spec §16.4: "accepted when a continuum spin
-//     claim is made").
+//     claim is made").  The #772 PARTICLE-EXCHANGE channel is reused as a
+//     REPORT channel only — `exchangeCharacter` and the doubly cancelled
+//     spin-statistics ratio χ̂(exchange)·χ̂(2π)^{-1} travel on the read,
+//     but neither the ticket's proton-certificate list nor spec §16.4
+//     carries an exchange row, so neither gates the verdict.  A read
+//     tagged with the wrong channel is refused, never reinterpreted.
 //   • Verdicts (spec §16.4): "no-baryon" when the structural gates fail;
 //     "certified-proton" when every certificate in the table holds;
 //     "quasi-free-sharp-spin-obstruction" when the ONLY failure is
@@ -1224,6 +1229,14 @@ struct BaryonCandidateEvidence {
   /// total-space 2π cluster-frame cycle against its matched co-moving
   /// non-rotating reference (`ExchangeHolonomy::rotationCharacter`).
   HolonomyCharacterRead rotation{};
+  /// The #772 Berry-cancelled PARTICLE-EXCHANGE character
+  /// (`ExchangeHolonomy::exchangeCharacter`), when the caller ran the
+  /// exchange experiment.  REPORT-ONLY: neither the ticket's proton-
+  /// certificate list nor design spec §16.4 has an exchange row, so it
+  /// gates nothing — it only fills `BaryonRead::exchangeCharacter` and the
+  /// doubly cancelled spin-statistics ratio.  A read tagged with the wrong
+  /// channel is refused (the #772 channels are never interchangeable).
+  std::optional<HolonomyCharacterRead> exchange{};
   /// Whether the caller is making a CONTINUUM spin claim.  When true the
   /// SO(d) → Spin(d) lift is REQUIRED (a missing/obstructed lift fails by
   /// name); when false the lift is not applicable and is never demanded
@@ -1347,6 +1360,14 @@ struct BaryonRead {
   std::optional<double> totalIsospin{};
   /// −1 / +1 when the #772 rotation read emitted a sign; 0 otherwise.
   int rotationCharacterSign = 0;
+  /// The #772 Berry-cancelled PARTICLE-EXCHANGE character, when the caller
+  /// supplied a certified exchange read; EMPTY otherwise.  REPORT-ONLY.
+  std::optional<std::complex<double>> exchangeCharacter{};
+  /// The doubly cancelled spin-statistics ratio
+  /// χ̂(exchange) · χ̂(2π)^{-1} (`ExchangeHolonomy::doublyCancelledRatio`;
+  /// +1 on a spin-½ fixture, each factor separately near −1) — filled only
+  /// when BOTH channels are certified and correctly tagged.  REPORT-ONLY.
+  std::optional<std::complex<double>> spinStatisticsRatio{};
   /// Whether a CONTINUUM spin claim was declared (so the lift was
   /// demanded) and, when demanded, whether it was accepted.
   bool spinLiftApplicable = false;

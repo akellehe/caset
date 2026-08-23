@@ -2246,16 +2246,32 @@ def _rotation_character(turns=1, steps=16, d=4):
     return _ROTATION_CACHE[key]
 
 
-def _exchange_character():
-    """A PARTICLE-EXCHANGE character (the WRONG channel for the proton spin
-    certificate — the #772 channels are never interchangeable)."""
+def _localized_mode(x, n):
+    """A localized unit mode at ring position x (the #772 fixture idiom)."""
+    k = int(math.floor(x)) % n
+    f = x - math.floor(x)
+    v = np.zeros(n, dtype=complex)
+    v[k] += math.cos(f * math.pi / 2.0)
+    v[(k + 1) % n] += math.sin(f * math.pi / 2.0)
+    return v
+
+
+def _exchange_character(steps=8, n=8, distance=4):
+    """A genuine #772 PARTICLE-EXCHANGE character: two localized modes at
+    0 and 4 advancing half an n-cell ring, against the matched
+    non-exchanging reference.  chi_hat = -1 for one exchange.  This is the
+    WRONG channel for the proton rotation certificate — the #772 channels
+    are never interchangeable."""
     EH = obs.ExchangeHolonomy
-    frame0 = EH.transverseSpinorFrame(0, 1, 4)
-    weights = np.ones(4, dtype=complex)
-    loop = EH.loopHolonomy(
-        EH.rotationLoopFrames(frame0, 0, 1, 4, 1, 16), weights)
-    reference = EH.loopHolonomy(EH.referenceLoopFrames(frame0, 16), weights)
-    return EH.exchangeCharacter(loop, reference)
+    frames = []
+    for t in range(steps):
+        x = distance * t / steps
+        frames.append(np.stack([_localized_mode((p + x) % n, n)
+                                for p in (0, 4)], axis=1))
+    weights = np.ones(n, dtype=complex)
+    return EH.exchangeCharacter(
+        EH.loopHolonomy(frames, weights),
+        EH.loopHolonomy([frames[0]] * steps, weights))
 
 
 def _rotation3(axis, theta):
@@ -2414,7 +2430,7 @@ def _binding(**kw):
 def _baryon_evidence(kinds=("u", "u", "d"), spin="sharp", rotation_turns=1,
                      color=None, flux=None, samples=None, binding=None,
                      continuum=False, spin_lift=None, class_variances=None,
-                     dense_j2=None, quarks=None):
+                     dense_j2=None, quarks=None, exchange=None):
     """A complete #775 three-cluster evidence bundle."""
     ev = obs.BaryonCandidateEvidence()
     _groups, _fine, coarse = _modular_hierarchy()
@@ -2431,6 +2447,8 @@ def _baryon_evidence(kinds=("u", "u", "d"), spin="sharp", rotation_turns=1,
     ev.continuumSpinClaim = continuum
     if spin_lift is not None:
         ev.spinLift = spin_lift
+    if exchange is not None:
+        ev.exchange = exchange
     if spin == "sharp":
         ev.spinSquaredRead, ev.spinVarianceRead = _sharp_spin_reads()
     elif spin == "generic":
@@ -3566,3 +3584,75 @@ class TestBaryonGuardsAndBenchmark(unittest.TestCase):
               f"per candidate")
         for cost in (baryon, scale, search):
             self.assertLess(cost, 0.05)
+
+
+class TestExchangeChannelReport(unittest.TestCase):
+    """REPORT-ONLY reuse of the #772 Berry-cancelled exchange channel: the
+    exchange character and the doubly cancelled spin-statistics ratio
+    travel on the read but gate nothing (neither the ticket's
+    proton-certificate list nor design spec 16.4 has an exchange row)."""
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+
+    def test_exchange_character_is_minus_one_on_the_fixture(self):
+        chi = _exchange_character()
+        self.assertEqual(chi.channel, obs.HolonomyChannel.ParticleExchange)
+        self.assertLess(abs(chi.character + 1.0), 1e-12)
+        self.assertTrue(chi.certificate.holds())
+
+    def test_doubly_cancelled_ratio_is_plus_one(self):
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(exchange=_exchange_character()))
+        self.assertLess(abs(read.exchangeCharacter + 1.0), 1e-12)
+        self.assertLess(abs(read.rotationCharacter + 1.0), 1e-12)
+        self.assertLess(abs(read.spinStatisticsRatio - 1.0), 1e-12)
+        self.assertEqual(read.classification, "certified-proton")
+
+    def test_exchange_channel_never_gates(self):
+        # a DOUBLE exchange (chi_hat = +1) leaves the verdict untouched:
+        # the channel is reported, never a certificate.
+        doubled = _exchange_character(steps=16, distance=8)
+        self.assertLess(abs(doubled.character - 1.0), 1e-12)
+        read = self.pc.classifyBaryon(_baryon_evidence(exchange=doubled))
+        self.assertEqual(read.classification, "certified-proton")
+        self.assertEqual(read.failedCertificates, [])
+        self.assertLess(abs(read.spinStatisticsRatio + 1.0), 1e-12)
+
+    def test_absent_exchange_read_is_unknown(self):
+        read = self.pc.classifyBaryon(_baryon_evidence())
+        self.assertIsNone(read.exchangeCharacter)
+        self.assertIsNone(read.spinStatisticsRatio)
+        self.assertEqual(read.classification, "certified-proton")
+
+    def test_mislabeled_channel_is_refused_not_reinterpreted(self):
+        # a ROTATION-tagged read offered as the exchange channel is
+        # ignored: the ratio stays unknown and nothing throws.
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(exchange=_rotation_character()))
+        self.assertIsNone(read.exchangeCharacter)
+        self.assertIsNone(read.spinStatisticsRatio)
+
+    def test_ratio_needs_both_certified_channels(self):
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(rotation_turns=2,
+                             exchange=_exchange_character()))
+        # the 4pi rotation IS certified, so the ratio is still reported
+        self.assertIsNotNone(read.spinStatisticsRatio)
+        self.assertLess(abs(read.spinStatisticsRatio + 1.0), 1e-12)
+        self.assertIn("rotation-character", read.failedCertificates)
+
+    def test_exchange_channels_serialize(self):
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(exchange=_exchange_character()))
+        record = read.toRecord()
+        self.assertAlmostEqual(record["exchange_character_re"], -1.0,
+                               delta=1e-12)
+        self.assertAlmostEqual(record["spin_statistics_ratio_re"], 1.0,
+                               delta=1e-12)
+        back = obs.BaryonRead.fromRecord(record)
+        self.assertEqual(back.exchangeCharacter, read.exchangeCharacter)
+        self.assertEqual(back.spinStatisticsRatio, read.spinStatisticsRatio)
+        blank = self.pc.classifyBaryon(_baryon_evidence()).toRecord()
+        self.assertIsNone(blank["exchange_character_re"])
+        self.assertIsNone(blank["spin_statistics_ratio_im"])
