@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
-"""#778 — the complete recursive baryon simulation, replay, campaign, animation.
+"""#778 — the complete recursive baryon simulation, replay, and animation.
 
 The capstone driver of epic #763. ONE documented command starts from a
 documented NEUTRAL initial complex, runs the unforced joint Regge-Hodge
@@ -89,7 +89,8 @@ Cap parallelism to 8 threads; this box is shared::
       examples/cobordism/recursive_baryon_simulation.py replay --from run.json
 
     OMP_NUM_THREADS=8 .venv-build/bin/python \\
-      examples/cobordism/recursive_baryon_simulation.py campaign --out camp.json
+      examples/cobordism/recursive_baryon_simulation.py campaign \\
+      --out camp.json
 
     OMP_NUM_THREADS=8 .venv-build/bin/python \\
       examples/cobordism/recursive_baryon_simulation.py animate \\
@@ -1028,7 +1029,8 @@ def response_hierarchy_block(readout, config):
     degree = readout.degrees[0]
     try:
         quotient = cob.RecursiveQuotient.overVertexSupports(
-            readout.spacetime, degree, supports, cob.RecursiveQuotient.Options())
+            readout.spacetime, degree, supports,
+            cob.RecursiveQuotient.Options())
     except Exception as error:                            # noqa: BLE001
         out["reason"] = f"{type(error).__name__}: {error}"
         return out
@@ -1349,7 +1351,8 @@ def transports_block(readout):
             "invalidation_reason": winding.invalidationReason or None,
             "certificate_holds": bool(winding.certificate.holds()),
         }
-        if winding.winding is None and not out["winding"]["invalidation_reason"]:
+        if (winding.winding is None
+                and not out["winding"]["invalidation_reason"]):
             out["winding"]["reason"] = "the winding did not certify"
     except Exception as error:                            # noqa: BLE001
         out["winding"] = {"available": False, "winding": None,
@@ -1733,7 +1736,8 @@ def exactness_fixtures():
     _record_fixture(out, "second_quantized_subset_sum", residual,
                     DECLARED_EXACT_TOLERANCE, "exact",
                     {"particles": 2, "terms": len(got),
-                     "reference": "itertools.combinations sums, computed here"})
+                     "reference":
+                         "itertools.combinations sums, computed here"})
 
     # ---- 4. second-quantized hopping block -----------------------------
     block_a = np.diag([1.0, 2.0]).astype(complex)
@@ -1807,7 +1811,8 @@ def exactness_fixtures():
         np.diag([cmath.exp(2j * math.pi * k / samples), 1.0, 1.0]
                 ).astype(complex)) for k in range(samples)]
     omega = cmath.exp(2j * math.pi / 3.0)
-    lifts = [connection.fundamentalLift(family, branch) for branch in (0, 1, 2)]
+    lifts = [connection.fundamentalLift(family, branch)
+             for branch in (0, 1, 2)]
     sectors = {int(lift.centerSector) for lift in lifts}
     base = complex(lifts[0].liftTrace)
     branch_residual = max(
@@ -1843,7 +1848,8 @@ def exactness_fixtures():
                     {"winding": winding.winding,
                      "closure": str(winding.windingClosure),
                      "closure_defect": _finite(winding.closureDefect),
-                     "reference": "one declared turn of the determinant phase"})
+                     "reference":
+                         "one declared turn of the determinant phase"})
 
     # ---- 7. Berry cancellation -----------------------------------------
     cells, steps = DECLARED_EXCHANGE_CELLS, DECLARED_EXCHANGE_STEPS
@@ -2009,8 +2015,8 @@ def run_simulation(config, commit=None, sidecar_path=None, progress=False):
     started = time.time()
     commit = current_commit() if commit is None else commit
     config_hash = config_hash_of(config)
-    submode = (MC.EmergenceSubmode.CERTIFICATES_BLIND_MEAN_FIELD
-               if config["emergence_submode"] == "certificates-blind-mean-field"
+    mean_field = config["emergence_submode"] == "certificates-blind-mean-field"
+    submode = (MC.EmergenceSubmode.CERTIFICATES_BLIND_MEAN_FIELD if mean_field
                else MC.EmergenceSubmode.STRICT)
 
     host = build_neutral_host(config["size"], config["host_seed"])
@@ -2180,8 +2186,8 @@ def run_simulation(config, commit=None, sidecar_path=None, progress=False):
                     "certificates_blind_mean_field sub-mode the one permitted "
                     "coupling is exactly zero; #776 owns the mean-field "
                     "schedule and this run does not exercise it"
-                    if config["emergence_submode"]
-                    == "certificates-blind-mean-field"
+                    if (config["emergence_submode"]
+                    == "certificates-blind-mean-field")
                     else "the strict sub-mode zeroes the coupling weight by "
                          "construction"),
             },
@@ -2482,7 +2488,8 @@ def discrete_verdicts(checkpoint):
         "band_accepted": [f["accepted"] for f in checkpoint["fibers"]],
         "labeled_sum_ranks": [[s["nominal_rank"], s["effective_rank"]]
                               for s in checkpoint["labeled_fiber_sums"]],
-        "transport_accepted": [t["accepted"] for t in checkpoint["transports"]],
+        "transport_accepted": [t["accepted"]
+                               for t in checkpoint["transports"]],
         "transport_ranks": [t["numerical_rank"]
                             for t in checkpoint["transports"]],
         "quark_classifications": [q["classification"]
@@ -3060,7 +3067,8 @@ def _panel_world_tubes(axis, document, layout, raw):
     axis.legend(fontsize=6, loc="upper right", framealpha=0.85)
     axis.set_xlabel(
         f"Q={hierarchy['q']:.3f}  levels={hierarchy['levels']}  "
-        f"next-level components={document['hierarchy']['next_level_components']}",
+        f"next-level components="
+        f"{document['hierarchy']['next_level_components']}",
         fontsize=7)
 
 
@@ -3184,8 +3192,8 @@ def _panel_fibers(axis, document):
                         "ec": "#b00020", "lw": 0.8})
     axis.set_title(
         f"fibers: {fibers['accepted']}/{fibers['total']} accepted, "
-        f"{fibers['rank_three_accepted']} rank-3 anchored ({anchored} anchored "
-        f"quark reads)", fontsize=9)
+        f"{fibers['rank_three_accepted']} rank-3 anchored "
+        f"({anchored} anchored quark reads)", fontsize=9)
 
 
 def _panel_transports(axis, document, layout):
@@ -3334,7 +3342,8 @@ def _panel_certificates(axis, document):
         axis.text(0.98, 0.02,
                   "quark first-failures: " + ", ".join(
                       f"{k} x{v}" for k, v in quark_failures.items()),
-                  transform=axis.transAxes, fontsize=6, ha="right", va="bottom")
+                  transform=axis.transAxes, fontsize=6, ha="right",
+                  va="bottom")
 
 
 def _panel_verdict(axis, document):
@@ -3443,7 +3452,8 @@ def print_run_summary(document, stream=sys.stdout):
           f"{document['spectral_dimension'].get('peak')} against the pinned "
           f"{PINNED_DS_BASELINE} baseline\n")
     inexact = [f["name"] for f in document["exactness"] if not f["exact"]]
-    write(f"  exact fixtures  : {len(document['exactness']) - len(inexact)} of "
+    exact = len(document["exactness"]) - len(inexact)
+    write(f"  exact fixtures  : {exact} of "
           f"{len(document['exactness'])} exact"
           + (f"; FAILED {inexact}" if inexact else "") + "\n")
     certificates = document["certificates"]
@@ -3502,9 +3512,10 @@ def print_campaign_summary(report, stream=sys.stdout):
     write(f"CAMPAIGN — {report['members_ok']} of {report['members_total']} "
           f"members ran\n")
     write("=" * 72 + "\n")
-    if report["members_failed"]:
+    failed = report["members_failed"]
+    if failed:
         write(f"  FAILED members (reported, never dropped): "
-              f"{[(m['size'], m['seed'], m['error']) for m in report['members_failed']]}\n")
+              f"{[(m['size'], m['seed'], m['error']) for m in failed]}\n")
     header = ("  size  cells   wall s    drive s   analysis s  RSS MiB   "
               "hits/miss  inval  rank3  acc.tr  verdicts\n")
     write(header)
@@ -3574,14 +3585,17 @@ fails to reproduce.
 
 def _add_run_arguments(parser):
     parser.add_argument("--size", type=int, default=DECLARED_SIZE_FAST,
-                        help="host refinement count (default: the fast %(default)s)")
+                        help="host refinement count "
+                             "(default: the fast %(default)s)")
     parser.add_argument("--seed", type=int, default=DECLARED_SEED,
-                        help="node seed; a seed LABELS an attempt (default: %(default)s)")
+                        help="node seed; a seed LABELS an attempt "
+                             "(default: %(default)s)")
     parser.add_argument("--host-seed", type=int, default=DECLARED_HOST_SEED,
                         help="host construction seed (default: %(default)s)")
     parser.add_argument("--drive-steps", type=int,
                         default=DECLARED_DRIVE_STEPS_FAST,
-                        help="stage-1 + stage-2 units to drive (default: %(default)s)")
+                        help="stage-1 + stage-2 units to drive "
+                             "(default: %(default)s)")
     parser.add_argument("--large", action="store_true",
                         help=f"the documented larger mode: size "
                              f"{DECLARED_SIZE_LARGE}, "
@@ -3589,9 +3603,11 @@ def _add_run_arguments(parser):
     parser.add_argument("--submode", choices=("strict",
                                               "certificates-blind-mean-field"),
                         default="strict",
-                        help="the labeled emergence sub-mode (default: %(default)s)")
+                        help="the labeled emergence sub-mode "
+                             "(default: %(default)s)")
     parser.add_argument("--no-refine", action="store_true",
-                        help="disable the declared geometry-only refinement rule")
+                        help="disable the declared geometry-only "
+                             "refinement rule")
     parser.add_argument("--fock-oracle", action="store_true",
                         help="build the lazy Fock DAG (oracle / non-Gaussian "
                              "boundary path only)")
@@ -3684,7 +3700,8 @@ def main(argv=None):
         sidecar = args.sidecar or (
             os.path.splitext(args.out)[0] + ".sidecar.npz")
         if not args.quiet:
-            print(f"#778 recursive baryon simulation — size {config['size']}, "
+            print("#778 recursive baryon simulation — "
+                  f"size {config['size']}, "
                   f"seed {config['seed']}, {config['drive_steps']} drive "
                   f"steps, submode {config['emergence_submode']}", flush=True)
         document = run_simulation(config, sidecar_path=sidecar,

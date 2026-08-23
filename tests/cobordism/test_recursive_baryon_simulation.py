@@ -40,7 +40,8 @@ import numpy as np
 import tessera as T
 
 sys.path.insert(0, os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__)))),
     "examples", "cobordism"))
 
 import recursive_baryon_simulation as rbs  # noqa: E402
@@ -104,8 +105,9 @@ class VerdictVocabularyTest(unittest.TestCase):
         self.assertEqual(sorted(rbs.LIBRARY_VERDICTS.values()),
                          sorted(rbs.VERDICTS))
         for hyphenated in rbs.LIBRARY_VERDICTS:
-            self.assertEqual(hyphenated,
-                             rbs.LIBRARY_VERDICTS[hyphenated].replace(" ", "-"))
+            self.assertEqual(
+                hyphenated,
+                rbs.LIBRARY_VERDICTS[hyphenated].replace(" ", "-"))
 
     def test_the_classifier_on_empty_evidence_is_a_verdict_not_a_fault(self):
         """The target-independent path: hand the classifier whatever the run
@@ -1182,7 +1184,8 @@ class ReadoutTest(unittest.TestCase):
     def test_a_correct_domain_refusal_is_not_reported_as_a_failure(self):
         """AMLS on a non-normal operator and an unemitted sheaf realization
         are REFUSALS with named reasons, not certificate failures."""
-        named = {e["name"]: e for e in self.document["certificates"]["entries"]}
+        named = {e["name"]: e
+                 for e in self.document["certificates"]["entries"]}
         amls = named["amls-craig-bampton"]
         if not amls["holds"]:
             self.assertEqual(amls["status"], "refused")
@@ -1191,7 +1194,7 @@ class ReadoutTest(unittest.TestCase):
         if sheaf is not None and not sheaf["holds"]:
             self.assertEqual(sheaf["status"], "refused")
 
-    def test_the_labeled_fiber_sum_gram_regime_is_classified_not_averaged(self):
+    def test_labeled_fiber_sum_gram_regime_is_classified_not_averaged(self):
         for entry in self.document["response_hierarchy"]["labeled_fiber_sums"]:
             if entry.get("gram_defect") is None:
                 continue
