@@ -137,6 +137,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} SpectralFiber.h
 ```
+```{doxygenfile} ExchangeHolonomy.h
+```
 
 ### Emergent-proton readout battery (#593)
 
