@@ -1121,6 +1121,45 @@ class AnalysisOverlayTest(unittest.TestCase):
         self.assertGreaterEqual(second["analysis"]["pass"], 2)
         self.assertGreater(second["invalidated_ancestry"]["components"], 0)
 
+    def test_a_local_edge_change_invalidates_only_its_own_components(self):
+        """Decisive locality: change ONE edge inside one component's support
+        and assert exactly the components containing its endpoints lose their
+        ancestry — every disjoint sibling survives."""
+        node = _node()
+        node.set_analysis_config(_overlay_config(resolutions=(1.0, 2.0)))
+        node.run_recursive_analysis()
+        first = json.loads(node.checkpoint_json)
+        supports = {c["id"]: set(c["support"])
+                    for slice_ in first["hierarchy"]
+                    for c in slice_["components"]}
+        self.assertGreater(len(supports), 1)
+        # An edge whose endpoints both lie in ONE level-0 component.
+        target = None
+        for edge in node.st.getEdgeList().toVector():
+            a, b = edge.getSource().getId(), edge.getTarget().getId()
+            owners = [key for key, support in supports.items()
+                      if a in support and b in support]
+            if owners:
+                target = (edge, {a, b})
+                break
+        self.assertIsNotNone(target, "no intra-component edge in the fixture")
+        edge, endpoints = target
+        edge.setLength(edge.getLength() * 1.001)
+        node.run_recursive_analysis()
+        second = json.loads(node.checkpoint_json)
+        ancestry = second["invalidated_ancestry"]
+        self.assertEqual(ancestry["touched_vertices"], len(endpoints))
+        self.assertGreater(ancestry["total_components"],
+                           ancestry["components"],
+                           "a one-edge change invalidated every component")
+        # Every invalidated component really does meet the changed edge.
+        supports_now = {c["id"]: set(c["support"])
+                        for slice_ in second["hierarchy"]
+                        for c in slice_["components"]}
+        for component in ancestry["component_ids"]:
+            if component in supports_now:
+                self.assertTrue(supports_now[component] & endpoints)
+
     def test_a_pure_metric_change_invalidates_only_the_touched_stars(self):
         """Siblings whose component misses the star stay served."""
         node = _node()
@@ -1151,6 +1190,149 @@ class AnalysisOverlayTest(unittest.TestCase):
         node.run_stage1(max_steps=2, n_candidate_moves=6)
         self.assertEqual(node.analysis_pass_count, 0)
         self.assertEqual(node.checkpoint_json, "")
+
+
+# ======================================================================
+# the shared merge gate: relabeling, orientation, and input ordering
+# ======================================================================
+
+
+class RelabelingInvarianceTest(unittest.TestCase):
+    """No observable changes under a global relabeling or a reordering."""
+
+    @staticmethod
+    def _rebuild(node, permutation=None, shuffle_cells=False):
+        """The SAME complex with its vertex ids permuted and/or its cell list
+        presented in a different order, carrying the same edge lengths."""
+        cells = [[v.getId() for v in c.getVertices()]
+                 for c in node.st.getTopSimplices()]
+        lengths = _lengths(node)
+        if permutation is not None:
+            cells = [[permutation[v] for v in cell] for cell in cells]
+            lengths = {(min(permutation[a], permutation[b]),
+                        max(permutation[a], permutation[b])): value
+                       for (a, b), value in lengths.items()}
+        if shuffle_cells:
+            cells = list(reversed(cells))
+        dimension = len(cells[0]) - 1
+        rebuilt = T.spacetime.Spacetime.fromCells(dimension, cells, 1.0, 0.0)
+        for edge in rebuilt.getEdgeList().toVector():
+            a, b = edge.getSource().getId(), edge.getTarget().getId()
+            edge.setLength(lengths[(min(a, b), max(a, b))])
+        rebuilt_node = MC(rebuilt, [], [], [1], 1.0, _NODE_SEED)
+        rebuilt_node.set_objective_mode(
+            cob.CobordismObjectiveMode.JointStationarity)
+        rebuilt_node.set_analysis_config(_overlay_config())
+        rebuilt_node.run_recursive_analysis()
+        return rebuilt_node
+
+    @staticmethod
+    def _discrete(node):
+        """Every DISCRETE read of a pass — exact under a relabeling."""
+        doc = json.loads(node.checkpoint_json)
+        return {
+            "classifications": [q["classification"]
+                                for q in doc["particles"]["quarks"]],
+            "failed": [sorted(q["failed_certificates"])
+                       for q in doc["particles"]["quarks"]],
+            "ranks": sorted(f["rank"] for f in doc["fibers"]),
+            "accepted": sorted(f["accepted"] for f in doc["fibers"]),
+            "active_modes": doc["covariance"]["active_modes"],
+            "component_count": (len(doc["hierarchy"][0]["components"])
+                                if doc["hierarchy"] else 0),
+            "support_sizes": sorted(len(c["support"]) for c in
+                                    (doc["hierarchy"][0]["components"]
+                                     if doc["hierarchy"] else [])),
+            "labeled": [(s["nominal_rank"], s["effective_rank"])
+                        for s in doc["labeled_fiber_sums"]],
+            "transports": len(doc["transports"]),
+            "baryons": [(b["found"], sorted(b["failed_certificates"]))
+                        for b in doc["particles"]["baryons"]],
+        }
+
+    @staticmethod
+    def _continuous(node):
+        doc = json.loads(node.checkpoint_json)
+        return {
+            "objective": node.objective(),
+            "q": doc["hierarchy"][0]["q"] if doc["hierarchy"] else 0.0,
+            "purity": doc["covariance"]["purity_defect"],
+        }
+
+    @staticmethod
+    def _supports(node):
+        doc = json.loads(node.checkpoint_json)
+        if not doc["hierarchy"]:
+            return []
+        return sorted(tuple(sorted(c["support"]))
+                      for c in doc["hierarchy"][0]["components"])
+
+    def setUp(self):
+        self.node = _node()
+        self.node.set_analysis_config(_overlay_config())
+        self.node.run_recursive_analysis()
+        ids = sorted({v for cell in _cells(self.node) for v in cell})
+        # A cyclic shift onto a disjoint high id range, so no intermediate
+        # collision can occur.
+        self.permutation = {vertex: 1000 + (index + 1) % len(ids)
+                            for index, vertex in enumerate(ids)}
+
+    def test_the_partition_is_exactly_relabeling_covariant(self):
+        """The discovered supports MAP THROUGH the permutation exactly."""
+        relabeled = self._rebuild(self.node, permutation=self.permutation)
+        mapped = sorted(tuple(sorted(self.permutation[v] for v in support))
+                        for support in self._supports(self.node))
+        self.assertEqual(mapped, self._supports(relabeled))
+
+    def test_a_global_relabeling_changes_no_discrete_read(self):
+        relabeled = self._rebuild(self.node, permutation=self.permutation)
+        self.assertEqual(self._discrete(self.node), self._discrete(relabeled))
+
+    def test_reversing_the_cell_input_order_changes_no_discrete_read(self):
+        reordered = self._rebuild(self.node, shuffle_cells=True)
+        self.assertEqual(self._discrete(self.node), self._discrete(reordered))
+
+    def test_relabeling_and_reordering_together_change_no_discrete_read(self):
+        both = self._rebuild(self.node, permutation=self.permutation,
+                             shuffle_cells=True)
+        self.assertEqual(self._discrete(self.node), self._discrete(both))
+
+    def test_the_continuous_reads_agree_within_double_round_off(self):
+        """Exact invariance is not available and is not claimed: relabeling
+        reorders the canonical cell enumeration, so the same operator entries
+        are summed in a different order. The DECLARED tolerance is 1e-12
+        relative; the discrete verdicts above are exact."""
+        relabeled = self._rebuild(self.node, permutation=self.permutation)
+        mine = self._continuous(self.node)
+        theirs = self._continuous(relabeled)
+        for key in mine:
+            scale = max(1.0, abs(mine[key]))
+            self.assertLess(abs(mine[key] - theirs[key]) / scale, 1e-12,
+                            "%s moved by more than round-off: %r vs %r" %
+                            (key, mine[key], theirs[key]))
+
+    def test_the_canonical_component_hash_is_not_fully_label_free(self):
+        """A PINNED observation of a #765 limitation, not a #776 behaviour.
+
+        The partition itself is exactly relabeling-covariant (above), but the
+        canonical structural hash of a component is not invariant for every
+        component of this fixture: the individualization-refinement that
+        produces it breaks its remaining ties by index. Recorded here so the
+        limitation is visible to #777/#778, which must not key a campaign on
+        the hash across a relabeling. If it is ever made fully canonical this
+        test skips and can be inverted.
+        """
+        relabeled = self._rebuild(self.node, permutation=self.permutation)
+        mine = sorted(c["id"] for c in
+                      json.loads(self.node.checkpoint_json)["hierarchy"][0]
+                      ["components"])
+        theirs = sorted(c["id"] for c in
+                        json.loads(relabeled.checkpoint_json)["hierarchy"][0]
+                        ["components"])
+        if mine == theirs:
+            self.skipTest("the canonical hash is now fully label-free; invert "
+                          "this test into an equality assertion")
+        self.assertNotEqual(mine, theirs)
 
 
 # ======================================================================

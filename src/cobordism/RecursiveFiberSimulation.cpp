@@ -976,6 +976,11 @@ void MultiCobordism::runRecursiveAnalysisOn(
   const ScanReport report = modularity.scanResolutions(modularityConfig);
   const auto invalidated =
       PersistentModularity::invalidatedAncestry(report, touchedCells);
+  // Every component at every hierarchy level of every slice — the denominator
+  // the invalidated count is local WITH RESPECT TO.
+  std::size_t totalComponents = 0;
+  for (const auto &slice : report.slices)
+    for (const auto &level : slice.hierarchy) totalComponents += level.size();
 
   std::vector<ComponentRead> components;
   std::vector<ComponentRead> nextLevelComponents;
@@ -1371,6 +1376,15 @@ void MultiCobordism::runRecursiveAnalysisOn(
            {"components",
             Json::integer(
                 static_cast<long long>(invalidated.components.size()))},
+           {"component_ids",
+            Json::array(invalidated.components,
+                        [](const ::tessera::observables::ComponentId &id) {
+                          return Json::str(id.canonicalHash());
+                        })},
+           {"total_components", Json::integer(
+                                    static_cast<long long>(totalComponents))},
+           {"touched_vertices",
+            Json::integer(static_cast<long long>(touchedCells.size()))},
            {"tracks",
             Json::integer(static_cast<long long>(invalidated.tracks.size()))},
        })},

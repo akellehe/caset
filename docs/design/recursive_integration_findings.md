@@ -132,7 +132,21 @@ Besides being the correct reading, this collapsed the pass from $O(\text{bands}^
 to $O(\text{candidates}^2)$ derived transports — 663 to 6 at 62 cells, 1.23 s to
 0.043 s.
 
-**6. On the current fixtures no candidate is certified.** Every emitted quark
+**6. The canonical component hash is not fully label-free (#765).** Under a
+global vertex relabeling the discovered PARTITION is exactly covariant — the
+supports map through the permutation with no tolerance at all, and every
+discrete read (classification, named failed certificates, band ranks, band
+acceptance, active modes, component count, labeled-sum ranks, transport count,
+baryon verdicts) is identical. The continuous reads agree to double round-off
+(declared and measured at $10^{-12}$ relative; the canonical cell enumeration
+is reordered, so the same operator entries are summed in a different order).
+But the canonical structural hash of a component is NOT invariant for every
+component of the closed-S⁴ fixture: the individualization-refinement that
+produces it breaks its remaining ties by index. #777 and #778 must not key a
+campaign on the hash across a relabeling. The observation is pinned by a test
+that skips itself if the hash is ever made fully canonical.
+
+**7. On the current fixtures no candidate is certified.** Every emitted quark
 read comes back `classification: "none"` with its gaps NAMED — most often the
 missing lifetime-transport family, the missing determinant winding, and an
 unanchored band. That is the designed behaviour of a rigorous negative result,
