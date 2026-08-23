@@ -137,6 +137,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} SpectralFiber.h
 ```
+```{doxygenfile} ExchangeHolonomy.h
+```
 ```{doxygenfile} FiberConnection.h
 ```
 
@@ -254,6 +256,10 @@ exclusions to see the entire interface.
 ```{doxygenfile} QuantumVertex.hpp
 ```
 ```{doxygenfile} GradedFock.h
+```
+```{doxygenfile} LazyFock.h
+```
+```{doxygenfile} CovarianceState.h
 ```
 
 ## Graph

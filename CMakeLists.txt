@@ -217,6 +217,11 @@ list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX
 # (quantum/GradedFock.h, #766), so it belongs in tessera_quantum too.
 list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX
     "/src/observables/ColorFiber\\.cpp$")
+# ExchangeHolonomy (#772) likewise: it lives in src/observables/ but its
+# structural parities delegate to quantum/GradedFock.h (#766), so it
+# compiles in tessera_quantum.
+list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX
+    "/src/observables/ExchangeHolonomy\\.cpp$")
 # FiberConnection (#770) likewise lives in src/observables/ but delegates its
 # rank-three center/adjoint conventions to ColorFiber (#767), which compiles
 # in tessera_quantum — so it follows ColorFiber there.
@@ -404,6 +409,9 @@ list(APPEND TESSERA_QUANTUM_SOURCES
 # delegates to quantum/GradedFock.h (#766), so it compiles here.
 list(APPEND TESSERA_QUANTUM_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/observables/ColorFiber.cpp")
+# ExchangeHolonomy (#772): same layout, same #766 delegation.
+list(APPEND TESSERA_QUANTUM_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/observables/ExchangeHolonomy.cpp")
 # FiberConnection (#770) delegates its rank-three center/adjoint conventions
 # to ColorFiber (#767), so it compiles beside it.
 list(APPEND TESSERA_QUANTUM_SOURCES
