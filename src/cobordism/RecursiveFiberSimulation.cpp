@@ -463,9 +463,16 @@ std::string MultiCobordism::submodeName(EmergenceSubmode submode) {
 void MultiCobordism::setCarriedState(
     const std::vector<std::vector<std::uint64_t>> &modeCells, int degree,
     const std::vector<complexd> &covariance) {
-  if (degree < 0)
+  // Degree ONE and above. At degree zero the Hodge operator is the graph
+  // Laplacian over vertices in sorted-id order rather than the canonical
+  // ChainComplex cell order, so a mode cell would be located against the
+  // wrong index; and `laplacianGradient` — the coupling's exact derivative —
+  // is defined only for k >= 1 anyway. Refusing loudly beats mis-mapping.
+  if (degree < 1)
     throw std::invalid_argument(
-        "MultiCobordism::setCarriedState: degree must be non-negative");
+        "MultiCobordism::setCarriedState: the carried degree must be at least "
+        "one (the metric Hodge operator and its exact gradient are defined "
+        "there)");
   const std::size_t modeCount = modeCells.size();
   if (covariance.size() != modeCount * modeCount)
     throw std::invalid_argument(
@@ -810,7 +817,9 @@ int MultiCobordism::refineGeometry(int maxCells) {
   const std::size_t cellsAfter = spacetime_ ? spacetime_->getTopSimplices().size() : 0;
   const int committed =
       cellsAfter > cellsBefore ? static_cast<int>(cellsAfter - cellsBefore) : 0;
-  if (committed > 0) noteAcceptedMove();
+  // Each committed refinement cell is an accepted move, so the cadence counts
+  // it as one — the same bookkeeping a stage-1 commit gets.
+  for (int cell = 0; cell < committed; ++cell) noteAcceptedMove();
   return committed;
 }
 

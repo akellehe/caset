@@ -671,6 +671,40 @@ class EmergenceSubmodeTest(unittest.TestCase):
             self.assertLess(node.carried_state_purity_defect(), 1e-12)
             self.assertTrue(node.carried_state_purity_holds())
 
+    def test_a_degree_zero_carried_state_is_refused(self):
+        """Degree zero would locate a mode cell against the wrong index (the
+        graph Laplacian is ordered by sorted vertex id, not by the canonical
+        cell order) and has no exact gradient. Refuse loudly."""
+        node = _node()
+        cells = cob.ChainComplex.fromSpacetime(node.st).kSimplexVertices(0)[:2]
+        with self.assertRaises(ValueError):
+            node.set_carried_state(cells, 0, [1 + 0j, 0j, 0j, 0j])
+
+    def test_a_malformed_carried_covariance_is_refused(self):
+        node = _node()
+        cells = cob.ChainComplex.fromSpacetime(node.st).kSimplexVertices(1)[:3]
+        with self.assertRaises(ValueError):
+            node.set_carried_state(cells, 1, [1 + 0j, 0j])
+
+    def test_clearing_the_carried_state_zeroes_the_term(self):
+        node = _node()
+        node.set_simulation_mode(MC.SimulationMode.EMERGENCE,
+                                 MC.EmergenceSubmode.CERTIFICATES_BLIND_MEAN_FIELD)
+        self._carried(node)
+        node.set_carried_state_energy_weight(1.0)
+        self.assertNotEqual(node.objective_terms().carried_state_energy, 0.0)
+        node.clear_carried_state()
+        self.assertFalse(node.has_carried_state)
+        self.assertEqual(node.objective_terms().carried_state_energy, 0.0)
+
+    def test_synthesis_mode_carries_no_state_energy_coupling(self):
+        node = _node()
+        node.set_simulation_mode(MC.SimulationMode.SYNTHESIS)
+        self._carried(node)
+        with self.assertRaises(ValueError):
+            node.set_carried_state_energy_weight(1.0)
+        self.assertEqual(node.objective_terms().carried_state_energy, 0.0)
+
     def test_no_carried_state_reports_an_unknown_purity_not_a_zero(self):
         node = _node()
         self.assertTrue(math.isnan(node.carried_state_purity_defect()))
@@ -816,6 +850,30 @@ class RefinementIndependenceTest(unittest.TestCase):
         # The gate ran: the result is still a valid dual complex.
         self.assertTrue(cob.ChainComplex.fromSpacetime(node.st)
                         .boundaryComposesToZero())
+
+    def test_a_committed_refinement_cell_counts_as_an_accepted_move(self):
+        node = _node()
+        node.set_analysis_config(_overlay_config())
+        thresholds = MC.RefinementIndicators()
+        thresholds.mesh_quality = 0.0
+        thresholds.regge_stationarity_residual = 0.0
+        thresholds.hodge_stationarity_residual = 0.0
+        thresholds.solver_error = 0.0
+        thresholds.curvature_concentration = \
+            node.refinement_indicators().curvature_concentration * 0.5
+        node.set_refinement_thresholds(thresholds)
+        before_moves = node.accepted_move_count
+        before_passes = node.analysis_pass_count
+        committed = node.refine_geometry(1)
+        self.assertEqual(node.accepted_move_count, before_moves + committed)
+        self.assertEqual(node.analysis_pass_count, before_passes + committed)
+
+    def test_the_analysis_cadence_must_be_at_least_one(self):
+        node = _node()
+        config = _overlay_config()
+        config.cadence = 0
+        with self.assertRaises(ValueError):
+            node.set_analysis_config(config)
 
     def test_refinement_thresholds_take_no_analysis_argument(self):
         """`refinement_decision_of` accepts exactly two indicator records."""
