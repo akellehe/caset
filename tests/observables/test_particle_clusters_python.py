@@ -1625,6 +1625,10 @@ class TestGluonClassification(unittest.TestCase):
         self.assertEqual(read.baryonFlux, 0.0)
         self.assertAlmostEqual(read.occupationTotal, 2.0, delta=MACHINE)
         self.assertAlmostEqual(read.casimir, 3.0, delta=1e-12)
+        # C2(3bar) = 4/3: the flat consumed-scalar summary (one source of
+        # truth -- the full OctetBilinearRead travels on the evidence)
+        self.assertAlmostEqual(read.casimirExpectation, 4.0 / 3.0,
+                               delta=1e-12)
         self.assertLessEqual(read.octetProjectorResidual, 1e-14)
         self.assertEqual(read.windingClosure, "closed-family")
         self.assertTrue(read.certificate.holds())
@@ -1678,6 +1682,8 @@ class TestGluonClassification(unittest.TestCase):
         self.assertIn("octet-excitation", read.failedCertificates)
         self.assertIn("octet-purity", read.failedCertificates)
         self.assertTrue(math.isnan(read.casimir))
+        self.assertTrue(math.isnan(read.casimirExpectation))
+        self.assertTrue(math.isnan(read.octetWeight))
 
     def test_vacuum_carries_no_excitation(self):
         vacuum = qm.CovarianceState(np.zeros((3, 3), dtype=complex))

@@ -665,12 +665,15 @@ struct GluonRead {
   int exteriorParity = 0;
   /// ⟨N⟩ of the whole carried state (NaN when unmeasured).
   double occupationTotal = std::numeric_limits<double>::quiet_NaN();
-  /// The embedded quasi-free octet read the verdict consumed.
-  OctetBilinearRead octet{};
-  /// Flat report copies of the octet read's decision channels (NaN when
-  /// missing): the adjoint Casimir, the octet-projector residual, and the
-  /// 1 ⊕ 8 Frobenius weights.
+  /// Flat consumed-scalar summaries of the octet evidence (the QuarkRead
+  /// anchor-profile convention — ONE source of truth: the full
+  /// `OctetBilinearRead` travels on the EVIDENCE and serializes itself;
+  /// the read carries only the consumed decision/report scalars, NaN when
+  /// missing): the adjoint Casimir, the quartic-Wick color Casimir
+  /// expectation, the octet-projector residual, and the 1 ⊕ 8 Frobenius
+  /// weights.
   double casimir = std::numeric_limits<double>::quiet_NaN();
+  double casimirExpectation = std::numeric_limits<double>::quiet_NaN();
   double octetProjectorResidual = std::numeric_limits<double>::quiet_NaN();
   double octetWeight = std::numeric_limits<double>::quiet_NaN();
   double singletWeight = std::numeric_limits<double>::quiet_NaN();

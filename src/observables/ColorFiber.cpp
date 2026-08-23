@@ -6,6 +6,7 @@
 #include "quantum/GradedFock.h"
 
 #include <Eigen/Eigenvalues>
+#include <unsupported/Eigen/KroneckerProduct>
 
 #include <algorithm>
 #include <bit>
@@ -238,26 +239,23 @@ Eigen::MatrixXcd ColorFiber::octetBilinear(std::size_t i, std::size_t j) {
 
 Eigen::MatrixXcd ColorFiber::adjointCasimirMatrix() {
     // C = Σ_a K_a², K_a = I ⊗ (λ_a/2) − (λ_a/2)ᵀ ⊗ I acting on the
-    // column-major vec(M): K_a vec(M) = vec([λ_a/2, M]).
-    Eigen::MatrixXcd casimir = Eigen::MatrixXcd::Zero(9, 9);
-    const Eigen::Matrix3cd id = Eigen::Matrix3cd::Identity();
-    for (int a = 1; a <= 8; ++a) {
-        const Eigen::Matrix3cd half = 0.5 * gellMann(a);
-        Eigen::MatrixXcd k = Eigen::MatrixXcd::Zero(9, 9);
-        // vec(A M B) = (Bᵀ ⊗ A) vec(M): [X, M] = X M I − I M X.
-        for (Eigen::Index p = 0; p < 3; ++p) {
-            for (Eigen::Index q = 0; q < 3; ++q) {
-                for (Eigen::Index r = 0; r < 3; ++r) {
-                    for (Eigen::Index s = 0; s < 3; ++s) {
-                        // block (q, s) entry (p, r) of Bᵀ ⊗ A is B(s, q) A(p, r)
-                        k(p + 3 * q, r + 3 * s) =
-                            id(s, q) * half(p, r) - half(s, q) * id(p, r);
-                    }
-                }
-            }
+    // column-major vec(M): K_a vec(M) = vec([λ_a/2, M]), by the Kronecker
+    // rule vec(A M B) = (Bᵀ ⊗ A) vec(M).  A constant of the algebra —
+    // generated once (the colorAlgebra() precedent) as the INDEPENDENT
+    // commutator-sum construction; verifyConstantAlgebra cross-checks it
+    // against 3 P₈, where that independence is load-bearing.
+    static const Eigen::MatrixXcd casimir = [] {
+        Eigen::MatrixXcd sum = Eigen::MatrixXcd::Zero(9, 9);
+        const Eigen::Matrix3cd id = Eigen::Matrix3cd::Identity();
+        for (int a = 1; a <= 8; ++a) {
+            const Eigen::Matrix3cd half = 0.5 * gellMann(a);
+            const Eigen::MatrixXcd k =
+                Eigen::kroneckerProduct(id, half) -
+                Eigen::kroneckerProduct(half.transpose(), id);
+            sum += k * k;
         }
-        casimir += k * k;
-    }
+        return sum;
+    }();
     return casimir;
 }
 
@@ -266,9 +264,9 @@ double ColorFiber::adjointCasimir(const Eigen::Matrix3cd& m) {
     if (norm2 == 0.0) {
         return std::numeric_limits<double>::quiet_NaN();
     }
-    const Eigen::VectorXcd v = Eigen::Map<const Eigen::VectorXcd>(m.data(), 9);
-    const Complex quad = v.dot(adjointCasimirMatrix() * v);
-    return quad.real() / norm2;
+    // Evaluated through the EXACT identity C = 3 P₈: the quadratic form
+    // ⟨vec M, C vec M⟩ equals 3 ‖P₈ vec M‖² = 3 ‖M − (Tr M/3) I‖_F².
+    return 3.0 * tracelessPart(m).squaredNorm() / norm2;
 }
 
 ColorFiber::Complex ColorFiber::omega() {

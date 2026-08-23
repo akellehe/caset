@@ -2802,10 +2802,12 @@ every gap is NAMED in failedCertificates ("parity-even",
       .def_readonly("exteriorParity", &GluonRead::exteriorParity,
                     "+1 even / -1 odd / 0 unknown.")
       .def_readonly("occupationTotal", &GluonRead::occupationTotal)
-      .def_readonly("octet", &GluonRead::octet,
-                    "The embedded octet bilinear read the verdict "
-                    "consumed.")
-      .def_readonly("casimir", &GluonRead::casimir)
+      .def_readonly("casimir", &GluonRead::casimir,
+                    "Flat consumed-scalar summary of the octet evidence "
+                    "(one source of truth: the full OctetBilinearRead "
+                    "travels on the evidence).")
+      .def_readonly("casimirExpectation", &GluonRead::casimirExpectation,
+                    "The quartic-Wick color Casimir expectation consumed.")
       .def_readonly("octetProjectorResidual",
                     &GluonRead::octetProjectorResidual)
       .def_readonly("octetWeight", &GluonRead::octetWeight)

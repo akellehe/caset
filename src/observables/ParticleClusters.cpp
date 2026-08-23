@@ -204,6 +204,129 @@ double maxFinite(double current, double candidate) {
   return std::max(current, candidate);
 }
 
+/// 3×3 complex matrix <-> record (the FiberConnection matrixToRecord
+/// convention, fixed shape).
+void matrix3ToRecord(Record::Map &m, const std::string &name,
+                     const Eigen::Matrix3cd &matrix) {
+  std::vector<cd> flat(9);
+  for (Eigen::Index r = 0; r < 3; ++r)
+    for (Eigen::Index c = 0; c < 3; ++c)
+      flat[static_cast<std::size_t>(r * 3 + c)] = matrix(r, c);
+  Record::splitComplex(m, name, flat);
+}
+
+Eigen::Matrix3cd matrix3FromRecord(const Record::Map &m,
+                                   const std::string &name) {
+  const auto &re = m.at(name + "_re").asList();
+  const auto &im = m.at(name + "_im").asList();
+  if (re.size() != 9 || im.size() != 9)
+    throw std::invalid_argument(
+        "ParticleClusters: 3x3 matrix record payload size mismatch");
+  Eigen::Matrix3cd matrix;
+  for (Eigen::Index r = 0; r < 3; ++r)
+    for (Eigen::Index c = 0; c < 3; ++c) {
+      const auto i = static_cast<std::size_t>(r * 3 + c);
+      matrix(r, c) = cd(re[i].asDouble(), im[i].asDouble());
+    }
+  return matrix;
+}
+
+/// Component identity <-> record key pair.
+void componentToRecord(Record::Map &m, const std::string &prefix,
+                       const ComponentId &component) {
+  m[prefix + "_hash"] = Record(component.canonicalHash());
+  m[prefix + "_level"] =
+      Record(static_cast<std::int64_t>(component.level()));
+}
+
+ComponentId componentFromRecord(const Record::Map &m,
+                                const std::string &prefix) {
+  return ComponentId(
+      m.at(prefix + "_hash").asString(),
+      static_cast<std::size_t>(m.at(prefix + "_level").asInt()));
+}
+
+/// Sign extraction of a certified ±1-valued Wick read: +1 / −1 within
+/// `tolerance` when the certificate holds, 0 (unknown) otherwise — an
+/// uncertified read never emits a sign (the #772 characterSign convention).
+int certifiedSign(const quantum::WickCertificateRead &read, double tolerance) {
+  if (!read.certificate.holds()) return 0;
+  if (std::abs(read.value - cd(1.0, 0.0)) <= tolerance) return +1;
+  if (std::abs(read.value - cd(-1.0, 0.0)) <= tolerance) return -1;
+  return 0;
+}
+
+/// Residual/tolerance accumulation over the certificates a verdict CONSUMED
+/// — the shared trailer of every classifier (quark, gluon, meson, diquark;
+/// #775 reuses it): an accepted verdict is StructureExact GIVEN the
+/// consumed held certificates, residual/tolerance their maxima, regime and
+/// conditioning from the designated donor certificate; a refused verdict is
+/// HeuristicDiscovery in the donor regime.
+class ConsumedCertificates {
+ public:
+  void consume(const Certificate &cert) {
+    residual_ = maxFinite(residual_, cert.residual());
+    tolerance_ = std::max(tolerance_, cert.tolerance());
+  }
+  /// Fold an extra measured residual channel (e.g. |Im| leakage of a
+  /// real-by-construction sum).
+  void consumeResidual(double value) {
+    residual_ = maxFinite(residual_, value);
+  }
+  [[nodiscard]] double residual() const { return residual_; }
+  /// The residual with the nothing-measured NaN collapsed to 0 (for
+  /// AlgebraicallyExact assemblies whose consumed reads always measure).
+  [[nodiscard]] double residualOrZero() const {
+    return std::isnan(residual_) ? 0.0 : residual_;
+  }
+  [[nodiscard]] double tolerance() const { return tolerance_; }
+  [[nodiscard]] Certificate verdict(bool accepted,
+                                    const Certificate &donor) const {
+    if (!accepted) {
+      return Certificate::heuristicDiscovery(CertificateDomain::Static,
+                                             donor.regime());
+    }
+    return Certificate::structureExact(CertificateDomain::Static,
+                                       donor.regime(), residual_,
+                                       donor.conditioning(), tolerance_);
+  }
+
+ private:
+  double residual_ = std::numeric_limits<double>::quiet_NaN();
+  double tolerance_ = 0.0;
+};
+
+/// The exact graded composite parity of two constituent reads: the product
+/// of the certified constituent parities, 0 (unknown) when either is
+/// uncertified (whitepaper parity table — parity adds mod 2).
+int compositeParity(const QuarkRead &first, const QuarkRead &second) {
+  if (first.exteriorParity == 0 || second.exteriorParity == 0) return 0;
+  return first.exteriorParity * second.exteriorParity;
+}
+
+/// A constituent QuarkRead with the given certified verdict.
+bool certifiedConstituent(const QuarkRead &read, const char *verdict) {
+  return read.classification == verdict && read.certificate.holds();
+}
+
+/// Shared composite report channels (occupation, transports, lifetime).
+template <typename ReadT>
+void fillCompositeReports(ReadT &read,
+                          const CompositeCandidateEvidence &evidence) {
+  read.bindingComponent = evidence.bindingComponent;
+  read.firstConstituent = evidence.first.component;
+  read.secondConstituent = evidence.second.component;
+  read.occupationTotal = evidence.occupationRead.certificate.holds()
+                             ? evidence.occupationRead.value.real()
+                             : kNaN;
+  read.transportCount = evidence.lifetimeTransports.size();
+  double maxLeakage = kNaN;
+  for (const FiberTransportRead &transport : evidence.lifetimeTransports)
+    maxLeakage = maxFinite(maxLeakage, transport.leakage);
+  read.transportLeakageMax = maxLeakage;
+  read.persistenceLifetime = evidence.persistenceLifetime;
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -579,27 +702,16 @@ QuarkRead ParticleClusters::classifyQuark(
   // The graded claim: an accepted verdict is an exact boolean combination
   // GIVEN the consumed held certificates (StructureExact); residual and
   // tolerance are their maxima, so holds() follows from theirs.
-  if (read.classification != "none") {
-    double residual = kNaN;
-    double tolerance = 0.0;
-    const auto consume = [&](const Certificate &cert) {
-      residual = maxFinite(residual, cert.residual());
-      tolerance = std::max(tolerance, cert.tolerance());
-    };
-    consume(band.certificate);
-    consume(anchor.certificate);
-    for (const FiberTransportRead &transport : evidence.lifetimeTransports)
-      consume(transport.certificate);
-    consume(winding.certificate);
-    consume(parity.certificate);
-    consume(occupation.certificate);
-    read.certificate = Certificate::structureExact(
-        CertificateDomain::Static, band.certificate.regime(), residual,
-        band.certificate.conditioning(), tolerance);
-  } else {
-    read.certificate = Certificate::heuristicDiscovery(
-        CertificateDomain::Static, band.certificate.regime());
-  }
+  ConsumedCertificates consumed;
+  consumed.consume(band.certificate);
+  consumed.consume(anchor.certificate);
+  for (const FiberTransportRead &transport : evidence.lifetimeTransports)
+    consumed.consume(transport.certificate);
+  consumed.consume(winding.certificate);
+  consumed.consume(parity.certificate);
+  consumed.consume(occupation.certificate);
+  read.certificate =
+      consumed.verdict(read.classification != "none", band.certificate);
   return read;
 }
 
@@ -1019,64 +1131,9 @@ std::vector<FiberMatchRead> ParticleClusters::trackCandidates(
 
 // ===========================================================================
 // #774 even sectors: the quasi-free octet bilinear read and the gluon /
-// meson / diquark candidate classifiers.
+// meson / diquark candidate classifiers.  File-local helpers live in the
+// single anonymous namespace at the top of this file.
 // ===========================================================================
-
-namespace {
-
-/// 3×3 complex matrix <-> record (the FiberConnection matrixToRecord
-/// convention, fixed shape).
-void matrix3ToRecord(Record::Map &m, const std::string &name,
-                     const Eigen::Matrix3cd &matrix) {
-  std::vector<cd> flat(9);
-  for (Eigen::Index r = 0; r < 3; ++r)
-    for (Eigen::Index c = 0; c < 3; ++c)
-      flat[static_cast<std::size_t>(r * 3 + c)] = matrix(r, c);
-  Record::splitComplex(m, name, flat);
-}
-
-Eigen::Matrix3cd matrix3FromRecord(const Record::Map &m,
-                                   const std::string &name) {
-  const auto &re = m.at(name + "_re").asList();
-  const auto &im = m.at(name + "_im").asList();
-  if (re.size() != 9 || im.size() != 9)
-    throw std::invalid_argument(
-        "ParticleClusters: 3x3 matrix record payload size mismatch");
-  Eigen::Matrix3cd matrix;
-  for (Eigen::Index r = 0; r < 3; ++r)
-    for (Eigen::Index c = 0; c < 3; ++c) {
-      const auto i = static_cast<std::size_t>(r * 3 + c);
-      matrix(r, c) = cd(re[i].asDouble(), im[i].asDouble());
-    }
-  return matrix;
-}
-
-/// Component identity <-> record key pair.
-void componentToRecord(Record::Map &m, const std::string &prefix,
-                       const ComponentId &component) {
-  m[prefix + "_hash"] = Record(component.canonicalHash());
-  m[prefix + "_level"] =
-      Record(static_cast<std::int64_t>(component.level()));
-}
-
-ComponentId componentFromRecord(const Record::Map &m,
-                                const std::string &prefix) {
-  return ComponentId(
-      m.at(prefix + "_hash").asString(),
-      static_cast<std::size_t>(m.at(prefix + "_level").asInt()));
-}
-
-/// Sign extraction of a certified ±1-valued Wick read: +1 / −1 within
-/// `tolerance` when the certificate holds, 0 (unknown) otherwise — an
-/// uncertified read never emits a sign (the #772 characterSign convention).
-int certifiedSign(const quantum::WickCertificateRead &read, double tolerance) {
-  if (!read.certificate.holds()) return 0;
-  if (std::abs(read.value - cd(1.0, 0.0)) <= tolerance) return +1;
-  if (std::abs(read.value - cd(-1.0, 0.0)) <= tolerance) return -1;
-  return 0;
-}
-
-}  // namespace
 
 // ---------------------------------------------------------------------------
 // OctetBilinearRead
@@ -1172,12 +1229,7 @@ OctetBilinearRead ParticleClusters::octetBilinearRead(
   read.colorModes = colorModes;
 
   // Residual/tolerance accumulation over every CONSUMED #780 Wick read.
-  double residual = kNaN;
-  double tolerance = 0.0;
-  const auto consume = [&](const Certificate &cert) {
-    residual = maxFinite(residual, cert.residual());
-    tolerance = std::max(tolerance, cert.tolerance());
-  };
+  ConsumedCertificates consumed;
 
   // The bilinear matrix M_ij = ⟨a_i†a_j⟩ = Γ_{m_j m_i} on the declared
   // modes (Γ_ij = ⟨a_j†a_i⟩ — the #780 storage convention).
@@ -1199,16 +1251,16 @@ OctetBilinearRead ParticleClusters::octetBilinearRead(
       const quantum::WickCertificateRead occ = state.wickOccupation(mode);
       certified = certified && occ.certificate.holds();
       total += occ.value;
-      consume(occ.certificate);
+      consumed.consume(occ.certificate);
     }
-    residual = maxFinite(residual, std::abs(total.imag()));
+    consumed.consumeResidual(std::abs(total.imag()));
     read.occupation = certified ? total.real() : kNaN;
   }
 
   // Subset parity ⟨(−1)^{N_S}⟩ = det(I_S − 2Γ_S).
   const quantum::WickCertificateRead parity =
       state.wickSubsetParity(colorModes);
-  consume(parity.certificate);
+  consumed.consume(parity.certificate);
   read.subsetParity = certifiedSign(parity, cfg_.parityTolerance);
 
   // The exact 1 ⊕ 8 resolution — DELEGATED to the #767 kernel.
@@ -1221,10 +1273,10 @@ OctetBilinearRead ParticleClusters::octetBilinearRead(
   if (octetNorm > 0.0) {
     const Eigen::VectorXcd vec =
         Eigen::Map<const Eigen::VectorXcd>(read.octetComponent.data(), 9);
-    const Eigen::MatrixXcd complement =
-        Eigen::MatrixXcd::Identity(9, 9) -
-        ColorFiber::adjointOctetProjector();
-    read.octetProjectorResidual = (complement * vec).norm() / octetNorm;
+    // The singlet complement IS the #767 projector — the bitwise
+    // P₁ + P₈ = I₉ contract stays single-sourced.
+    read.octetProjectorResidual =
+        (ColorFiber::adjointSingletProjector() * vec).norm() / octetNorm;
     read.casimir = ColorFiber::adjointCasimir(read.octetComponent);
   }
 
@@ -1252,9 +1304,9 @@ OctetBilinearRead ParticleClusters::octetBilinearRead(
           state.wickBilinearMoment({embedded, embedded});
       certified = certified && moment.certificate.holds();
       total += moment.value;
-      consume(moment.certificate);
+      consumed.consume(moment.certificate);
     }
-    residual = maxFinite(residual, std::abs(total.imag()));
+    consumed.consumeResidual(std::abs(total.imag()));
     read.casimirExpectation = certified ? total.real() : kNaN;
   }
 
@@ -1265,13 +1317,13 @@ OctetBilinearRead ParticleClusters::octetBilinearRead(
     read.gellMannComponents.push_back(
         0.5 * (ColorFiber::gellMann(a) * read.bilinear).trace());
 
-  read.residual = residual;
+  read.residual = consumed.residual();
   // Exact Wick algebra on the covariance: AlgebraicallyExact in the
   // verified regime of the consumed reads, graded by the measured
   // residual against the #780 read tolerance.
   read.certificate = Certificate::algebraicallyExact(
       CertificateDomain::Static, parity.certificate.regime(),
-      std::isnan(residual) ? 0.0 : residual, tolerance);
+      consumed.residualOrZero(), consumed.tolerance());
   return read;
 }
 
@@ -1338,8 +1390,8 @@ Record GluonRead::toRecord() const {
   m["classification"] = Record(classification);
   m["exterior_parity"] = Record(exteriorParity);
   m["occupation_total"] = Record(occupationTotal);
-  m["octet"] = octet.toRecord();
   m["casimir"] = Record(casimir);
+  m["casimir_expectation"] = Record(casimirExpectation);
   m["octet_projector_residual"] = Record(octetProjectorResidual);
   m["octet_weight"] = Record(octetWeight);
   m["singlet_weight"] = Record(singletWeight);
@@ -1369,8 +1421,8 @@ GluonRead GluonRead::fromRecord(const Record &record) {
   read.classification = m.at("classification").asString();
   read.exteriorParity = static_cast<int>(m.at("exterior_parity").asInt());
   read.occupationTotal = m.at("occupation_total").asDouble();
-  read.octet = OctetBilinearRead::fromRecord(m.at("octet"));
   read.casimir = m.at("casimir").asDouble();
+  read.casimirExpectation = m.at("casimir_expectation").asDouble();
   read.octetProjectorResidual =
       m.at("octet_projector_residual").asDouble();
   read.octetWeight = m.at("octet_weight").asDouble();
@@ -1397,8 +1449,11 @@ GluonRead ParticleClusters::classifyGluon(
   read.component = evidence.component;
   read.bindingComponent = evidence.bindingComponent;
   read.thresholds = cfg_;
-  read.octet = evidence.octet;
+  // Flat consumed-scalar summaries of the octet evidence (the QuarkRead
+  // anchor-profile convention: ONE source of truth — the full
+  // OctetBilinearRead lives on the evidence and serializes itself).
   read.casimir = evidence.octet.casimir;
+  read.casimirExpectation = evidence.octet.casimirExpectation;
   read.octetProjectorResidual = evidence.octet.octetProjectorResidual;
   read.octetWeight = evidence.octet.octetWeight;
   read.singletWeight = evidence.octet.singletWeight;
@@ -1471,25 +1526,14 @@ GluonRead ParticleClusters::classifyGluon(
   read.classification = (passed == kGates) ? "gluon-candidate" : "none";
   read.failedCertificates = std::move(failed);
 
-  if (read.classification != "none") {
-    double residual = kNaN;
-    double tolerance = 0.0;
-    const auto consume = [&](const Certificate &cert) {
-      residual = maxFinite(residual, cert.residual());
-      tolerance = std::max(tolerance, cert.tolerance());
-    };
-    consume(evidence.parityRead.certificate);
-    consume(evidence.octet.certificate);
-    for (const FiberTransportRead &transport : evidence.lifetimeTransports)
-      consume(transport.certificate);
-    consume(winding.certificate);
-    read.certificate = Certificate::structureExact(
-        CertificateDomain::Static, evidence.octet.certificate.regime(),
-        residual, evidence.octet.certificate.conditioning(), tolerance);
-  } else {
-    read.certificate = Certificate::heuristicDiscovery(
-        CertificateDomain::Static, evidence.octet.certificate.regime());
-  }
+  ConsumedCertificates consumed;
+  consumed.consume(evidence.parityRead.certificate);
+  consumed.consume(evidence.octet.certificate);
+  for (const FiberTransportRead &transport : evidence.lifetimeTransports)
+    consumed.consume(transport.certificate);
+  consumed.consume(winding.certificate);
+  read.certificate = consumed.verdict(read.classification != "none",
+                                      evidence.octet.certificate);
   return read;
 }
 
@@ -1643,33 +1687,6 @@ DiquarkRead DiquarkRead::fromRecord(const Record &record) {
   return read;
 }
 
-namespace {
-
-/// A constituent QuarkRead with the given certified verdict.
-bool certifiedConstituent(const QuarkRead &read, const char *verdict) {
-  return read.classification == verdict && read.certificate.holds();
-}
-
-/// Shared composite report channels (occupation, transports, lifetime).
-template <typename ReadT>
-void fillCompositeReports(ReadT &read,
-                          const CompositeCandidateEvidence &evidence) {
-  read.bindingComponent = evidence.bindingComponent;
-  read.firstConstituent = evidence.first.component;
-  read.secondConstituent = evidence.second.component;
-  read.occupationTotal = evidence.occupationRead.certificate.holds()
-                             ? evidence.occupationRead.value.real()
-                             : kNaN;
-  read.transportCount = evidence.lifetimeTransports.size();
-  double maxLeakage = kNaN;
-  for (const FiberTransportRead &transport : evidence.lifetimeTransports)
-    maxLeakage = maxFinite(maxLeakage, transport.leakage);
-  read.transportLeakageMax = maxLeakage;
-  read.persistenceLifetime = evidence.persistenceLifetime;
-}
-
-}  // namespace
-
 MesonRead ParticleClusters::classifyMeson(
     const CompositeCandidateEvidence &evidence) const {
   MesonRead read;
@@ -1692,10 +1709,7 @@ MesonRead ParticleClusters::classifyMeson(
 
   // 3. even composite parity: the EXACT graded product of the certified
   //    constituent parities (whitepaper parity table — parity adds mod 2).
-  if (evidence.first.exteriorParity != 0 &&
-      evidence.second.exteriorParity != 0)
-    read.exteriorParity =
-        evidence.first.exteriorParity * evidence.second.exteriorParity;
+  read.exteriorParity = compositeParity(evidence.first, evidence.second);
   passed += gate(read.exteriorParity == +1, "parity-even", failed);
 
   // 4. color singlet: the exact 1 ⊕ 8 split of the pair bilinear
@@ -1728,22 +1742,11 @@ MesonRead ParticleClusters::classifyMeson(
   read.classification = (passed == kGates) ? "meson-candidate" : "none";
   read.failedCertificates = std::move(failed);
 
-  if (read.classification != "none") {
-    double residual = kNaN;
-    double tolerance = 0.0;
-    const auto consume = [&](const Certificate &cert) {
-      residual = maxFinite(residual, cert.residual());
-      tolerance = std::max(tolerance, cert.tolerance());
-    };
-    consume(evidence.first.certificate);
-    consume(evidence.second.certificate);
-    read.certificate = Certificate::structureExact(
-        CertificateDomain::Static, evidence.first.certificate.regime(),
-        residual, evidence.first.certificate.conditioning(), tolerance);
-  } else {
-    read.certificate = Certificate::heuristicDiscovery(
-        CertificateDomain::Static, CertificateRegime::NonNormal);
-  }
+  ConsumedCertificates consumed;
+  consumed.consume(evidence.first.certificate);
+  consumed.consume(evidence.second.certificate);
+  read.certificate = consumed.verdict(read.classification != "none",
+                                      evidence.first.certificate);
   return read;
 }
 
@@ -1764,10 +1767,7 @@ DiquarkRead ParticleClusters::classifyDiquark(
 
   // 2. even composite parity (exact graded product; two odd clusters
   //    compose even).
-  if (evidence.first.exteriorParity != 0 &&
-      evidence.second.exteriorParity != 0)
-    read.exteriorParity =
-        evidence.first.exteriorParity * evidence.second.exteriorParity;
+  read.exteriorParity = compositeParity(evidence.first, evidence.second);
   passed += gate(read.exteriorParity == +1, "parity-even", failed);
 
   // 3. the certified Λ²C³ anti-triplet wedge occupation (#780 Gram
@@ -1794,23 +1794,12 @@ DiquarkRead ParticleClusters::classifyDiquark(
   read.classification = (passed == kGates) ? "diquark-candidate" : "none";
   read.failedCertificates = std::move(failed);
 
-  if (read.classification != "none") {
-    double residual = kNaN;
-    double tolerance = 0.0;
-    const auto consume = [&](const Certificate &cert) {
-      residual = maxFinite(residual, cert.residual());
-      tolerance = std::max(tolerance, cert.tolerance());
-    };
-    consume(evidence.first.certificate);
-    consume(evidence.second.certificate);
-    consume(wedge.certificate);
-    read.certificate = Certificate::structureExact(
-        CertificateDomain::Static, evidence.first.certificate.regime(),
-        residual, evidence.first.certificate.conditioning(), tolerance);
-  } else {
-    read.certificate = Certificate::heuristicDiscovery(
-        CertificateDomain::Static, CertificateRegime::NonNormal);
-  }
+  ConsumedCertificates consumed;
+  consumed.consume(evidence.first.certificate);
+  consumed.consume(evidence.second.certificate);
+  consumed.consume(wedge.certificate);
+  read.certificate = consumed.verdict(read.classification != "none",
+                                      evidence.first.certificate);
   return read;
 }
 

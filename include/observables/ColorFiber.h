@@ -301,7 +301,10 @@ class ColorFiber {
     /// The adjoint-Casimir Rayleigh quotient
     /// ⟨vec M, C vec M⟩ / ‖M‖_F² ∈ [0, 3] of a 3×3 bilinear: exactly 3 for
     /// a traceless (pure octet) M, exactly 0 for M ∝ I, and 3 × (octet
-    /// weight fraction) in between — by C = 3 P₈.  NaN for M = 0 (an
+    /// weight fraction) in between.  Evaluated through the EXACT identity
+    /// C = 3 P₈ as 3 ‖tracelessPart(M)‖_F² / ‖M‖_F² (the independent
+    /// commutator-sum construction stays in adjointCasimirMatrix, where
+    /// verifyConstantAlgebra cross-checks it).  NaN for M = 0 (an
     /// undefined quotient is reported unknown, never zero).  (#774)
     [[nodiscard]] static double adjointCasimir(const Eigen::Matrix3cd& m);
 
