@@ -3473,5 +3473,20 @@ evidence.)doc")
            "complete proton certificate (design spec 16.2-16.4).  Returns "
            "'no-baryon', 'baryon-candidate', 'certified-proton', or "
            "'quasi-free-sharp-spin-obstruction' with every failed or "
-           "unknown certificate NAMED.");
+           "unknown certificate NAMED.")
+      .def("classifyBoundSupercomponents",
+           &ParticleClusters::classifyBoundSupercomponents,
+           py::arg("bindings"), py::arg("constituentReads"),
+           py::arg("boundLifetimes") = std::vector<double>{},
+           "classifyBaryon over the boundSupercomponentSearch result: one "
+           "BaryonRead per binding that grouped EXACTLY three certified "
+           "constituents, in bindings order.  A binding that grouped a "
+           "different number emits NOTHING -- a three-cluster verdict is "
+           "never assembled by padding the missing legs.  Only the "
+           "binding, the three QuarkReads (quarkIndices indexes "
+           "constituentReads) and the bound component's persistence "
+           "lifetime travel; the colour columns, the octet flux, the #772 "
+           "rotation character, the #780 spin reads, the swept "
+           "covariance-only class and the refinement window are left "
+           "ABSENT, so each gap is NAMED rather than presumed.");
 }

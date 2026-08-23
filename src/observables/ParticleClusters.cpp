@@ -2615,4 +2615,40 @@ BaryonRead ParticleClusters::classifyBaryon(
   return read;
 }
 
+std::vector<BaryonRead> ParticleClusters::classifyBoundSupercomponents(
+    const std::vector<BoundSupercomponentRead> &bindings,
+    const std::vector<QuarkRead> &constituentReads,
+    const std::vector<double> &boundLifetimes) const {
+  if (!boundLifetimes.empty() && boundLifetimes.size() != bindings.size())
+    throw std::invalid_argument(
+        "ParticleClusters::classifyBoundSupercomponents: boundLifetimes must "
+        "be empty or one entry per binding");
+  std::vector<BaryonRead> out;
+  for (std::size_t index = 0; index < bindings.size(); ++index) {
+    const BoundSupercomponentRead &binding = bindings[index];
+    // EXACTLY three certified constituents.  `quarkIndices` lists the
+    // CERTIFIED contained candidates only (the search never counts an
+    // uncertified one), so this is the three-cluster condition itself.
+    if (binding.quarkIndices.size() != 3) continue;
+    BaryonCandidateEvidence evidence;
+    evidence.boundComponent = binding.boundComponent;
+    evidence.binding = binding;
+    for (std::size_t leg = 0; leg < 3; ++leg) {
+      const std::size_t candidate = binding.quarkIndices[leg];
+      if (candidate >= constituentReads.size())
+        throw std::invalid_argument(
+            "ParticleClusters::classifyBoundSupercomponents: a binding "
+            "indexes a constituent outside the supplied read list");
+      evidence.quarks[leg] = constituentReads[candidate];
+    }
+    evidence.persistenceLifetime =
+        boundLifetimes.empty() ? kNaN : boundLifetimes[index];
+    // Everything else stays default-constructed: absent evidence, which
+    // `classifyBaryon` reports as a NAMED failed certificate.  Nothing is
+    // filled in on the caller's behalf.
+    out.push_back(classifyBaryon(evidence));
+  }
+  return out;
+}
+
 }  // namespace tessera::observables
