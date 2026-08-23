@@ -1009,15 +1009,14 @@ FlavorDoubletRead ParticleClusters::flavorDoubletSearch(
   for (std::size_t t = 0; t < frames.size(); ++t) {
     const SpectralBandCertificate &cert =
         frames[t].fibers[winner.positions[t]].certificate();
-    minIsolation = std::min(minIsolation,
-                            std::min(cert.lowerGap, cert.upperGap));
+    minIsolation = std::min(minIsolation, cert.nearestDiscardedSeparation);
   }
   out.minIsolation = minIsolation;
   out.doublet = doublet;
   out.certificate = Certificate::certifiedNumerical(
       CertificateDomain::BandWindow, doublet.certificate().certificate.regime(),
       /*residual=*/1.0 - winner.minOverlap,
-      /*conditioning=*/doublet.certificate().conditionNumber,
+      /*conditioning=*/doublet.certificate().projectorNorm,
       /*tolerance=*/1.0 - cfg_.doubletOverlapThreshold);
   return out;
 }

@@ -1300,11 +1300,17 @@ void MultiCobordism::runRecursiveAnalysisOn(
           {"self_adjoint", Json::boolean(certificate.selfAdjoint)},
           {"lower_gap", Json::number(certificate.lowerGap)},
           {"upper_gap", Json::number(certificate.upperGap)},
+          {"nearest_discarded_separation",
+           Json::number(certificate.nearestDiscardedSeparation)},
           {"localization", Json::number(certificate.localization)},
+          {"localization_support_fraction",
+           Json::number(certificate.localizationSupportFraction)},
           {"projector_residual", Json::number(certificate.projectorResidual)},
           {"eigen_residual", Json::number(certificate.eigenResidual)},
           {"gram_defect", Json::number(certificate.gramDefect)},
-          {"condition_number", Json::number(certificate.conditionNumber)},
+          {"projector_norm", Json::number(certificate.projectorNorm)},
+          {"frame_condition_number",
+           Json::number(certificate.frameConditionNumber)},
           {"band_center", Json::complexPair(fiber.bandCenter())},
       });
     }

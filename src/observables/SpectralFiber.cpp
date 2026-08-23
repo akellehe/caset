@@ -43,7 +43,15 @@ namespace {
 
 constexpr double kInf = std::numeric_limits<double>::infinity();
 constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
-constexpr int kSchemaVersion = 1;
+// Schema 2 (#808) adds the separately named acceptance quantities:
+// `nearest_discarded_separation`, `localization_support_fraction`,
+// `projector_norm` (schema 1's `condition_number`), and
+// `frame_condition_number`.  Schema 1 stays READABLE: its projector norm is
+// carried over verbatim, its support fraction is UNKNOWN (the certificate
+// alone does not carry the operator dimension), and so are the separation
+// and the frame conditioning — unknown is NaN, never zero.
+constexpr int kSchemaVersion = 2;
+constexpr int kOldestReadableSchema = 1;
 
 // ---------------------------------------------------------------------------
 // small helpers
@@ -107,6 +115,13 @@ CertificateDomain domainFromName(const std::string &name) {
   throw std::invalid_argument("SpectralFiber: unknown domain '" + name + "'");
 }
 
+// A double leaf that older schemas may not carry: absent = UNKNOWN (NaN),
+// never zero.
+double optionalDouble(const Record::Map &m, const char *key) {
+  const auto it = m.find(key);
+  return it == m.end() ? kNaN : it->second.asDouble();
+}
+
 Record certificateToRecord(const Certificate &cert) {
   Record::Map m;
   m["grade"] = Record(gradeName(cert.grade()));
@@ -152,12 +167,15 @@ Record bandCertificateToRecord(const SpectralBandCertificate &c) {
   m["rank"] = Record(static_cast<std::int64_t>(c.rank));
   m["lower_gap"] = Record(c.lowerGap);
   m["upper_gap"] = Record(c.upperGap);
+  m["nearest_discarded_separation"] = Record(c.nearestDiscardedSeparation);
   m["localization"] = Record(c.localization);
+  m["localization_support_fraction"] = Record(c.localizationSupportFraction);
   m["projector_residual"] = Record(c.projectorResidual);
   m["eigen_residual"] = Record(c.eigenResidual);
   m["left_residual"] = Record(c.leftResidual);
   m["gram_defect"] = Record(c.gramDefect);
-  m["condition_number"] = Record(c.conditionNumber);
+  m["projector_norm"] = Record(c.projectorNorm);
+  m["frame_condition_number"] = Record(c.frameConditionNumber);
   m["positive_signature"] = Record(c.positiveSignature);
   m["negative_signature"] = Record(c.negativeSignature);
   m["frequency_lower"] = Record(c.frequencyLower);
@@ -175,12 +193,20 @@ SpectralBandCertificate bandCertificateFromRecord(const Record &record) {
   c.rank = static_cast<std::size_t>(m.at("rank").asInt());
   c.lowerGap = m.at("lower_gap").asDouble();
   c.upperGap = m.at("upper_gap").asDouble();
+  c.nearestDiscardedSeparation =
+      optionalDouble(m, "nearest_discarded_separation");
   c.localization = m.at("localization").asDouble();
+  c.localizationSupportFraction =
+      optionalDouble(m, "localization_support_fraction");
   c.projectorResidual = m.at("projector_residual").asDouble();
   c.eigenResidual = m.at("eigen_residual").asDouble();
   c.leftResidual = m.at("left_residual").asDouble();
   c.gramDefect = m.at("gram_defect").asDouble();
-  c.conditionNumber = m.at("condition_number").asDouble();
+  // Schema 1 named the projector norm `condition_number`.
+  c.projectorNorm = m.count("projector_norm")
+                        ? m.at("projector_norm").asDouble()
+                        : optionalDouble(m, "condition_number");
+  c.frameConditionNumber = optionalDouble(m, "frame_condition_number");
   c.positiveSignature = static_cast<int>(m.at("positive_signature").asInt());
   c.negativeSignature = static_cast<int>(m.at("negative_signature").asInt());
   c.frequencyLower = m.at("frequency_lower").asDouble();
@@ -254,7 +280,9 @@ std::vector<cd> complexListFromRecord(const Record::Map &m,
 void requireSchema(const Record::Map &m, const char *type) {
   const auto version = m.find("schema_version");
   if (version == m.end() ||
-      version->second.asInt() != static_cast<std::int64_t>(kSchemaVersion))
+      version->second.asInt() <
+          static_cast<std::int64_t>(kOldestReadableSchema) ||
+      version->second.asInt() > static_cast<std::int64_t>(kSchemaVersion))
     throw std::invalid_argument(
         "SpectralFiber: unknown schema_version (reader rejects unknown "
         "checkpoint schemas)");
@@ -288,6 +316,26 @@ double productSpectralNorm(const Eigen::MatrixXcd &A,
   return std::sqrt(std::max(0.0, best));
 }
 
+// Riesz condition number of one FRAME in the |W| metric:
+// sqrt(lambda_max / lambda_min) of X^dagger |W| X.  Exactly 1 for a
+// |W|-orthonormal frame (the self-adjoint path), +infinity for a
+// |W|-degenerate one, NaN when there is no frame to condition.  A property
+// of the frame, not of its range: an in-band basis change moves it.
+double frameCondition(const Eigen::MatrixXcd &X, const Eigen::VectorXcd &W) {
+  if (X.rows() == 0 || X.cols() == 0) return kNaN;
+  Eigen::VectorXcd absW(X.rows());
+  for (Eigen::Index i = 0; i < X.rows(); ++i) absW[i] = cd(std::abs(W[i]), 0.0);
+  Eigen::MatrixXcd G = X.adjoint() * (absW.asDiagonal() * X);
+  G = (0.5 * (G + G.adjoint())).eval();
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> es(G);
+  if (es.info() != Eigen::Success) return kNaN;
+  const double lo = es.eigenvalues().minCoeff();
+  const double hi = es.eigenvalues().maxCoeff();
+  if (!(hi > 0.0)) return kNaN;
+  if (!(lo > 0.0)) return kInf;
+  return std::sqrt(hi / lo);
+}
+
 // Thin orthonormal basis of the column span (columns with relative singular
 // value above tol are kept) — the gauge-invariant subspace representative.
 Eigen::MatrixXcd thinOrthonormal(const Eigen::MatrixXcd &A,
@@ -315,13 +363,15 @@ std::string SpectralBandCertificate::describe() const {
   if (rank >= 2)
     out << " (degenerate; multiplicity reported without interpretation)";
   out << ", window [" << frequencyLower << ", " << frequencyUpper << "]"
-      << ", gaps (" << lowerGap << ", " << upperGap << ")"
+      << ", sort-order gaps (" << lowerGap << ", " << upperGap << ")"
+      << ", nearest-discarded separation " << nearestDiscardedSeparation
       << ", signature (+" << positiveSignature << ", -" << negativeSignature
       << ")"
-      << ", localization " << localization << ", residuals (eig "
-      << eigenResidual << ", left " << leftResidual << ", proj "
-      << projectorResidual << ", gram " << gramDefect << "), cond "
-      << conditionNumber << ", "
+      << ", localization " << localization << " (support fraction "
+      << localizationSupportFraction << "), residuals (eig " << eigenResidual
+      << ", left " << leftResidual << ", proj " << projectorResidual
+      << ", gram " << gramDefect << "), projector norm " << projectorNorm
+      << ", frame condition " << frameConditionNumber << ", "
       << (selfAdjoint ? "self-adjoint" : "general") << " path";
   return out.str();
 }
@@ -1090,6 +1140,10 @@ void SpectralFiberTracker::buildFibers(const RestrictedOperator &op,
         spread = std::max(spread,
                           std::abs(out.eigenvalues[i] - out.eigenvalues[j]));
 
+    // Sort-order neighbour gaps: REPORTED diagnostics.  The (Re, Im) sort
+    // supplies the band GROUPING; it does not supply the isolation, because
+    // with a genuinely complex spectrum the sorted neighbour need not be the
+    // nearest eigenvalue in the plane.
     cert.lowerGap = a > 0
                         ? std::abs(out.eigenvalues[a] - out.eigenvalues[a - 1])
                         : kInf;
@@ -1100,6 +1154,29 @@ void SpectralFiberTracker::buildFibers(const RestrictedOperator &op,
     } else {
       cert.upperGap = read.truncated ? kNaN : kInf;
     }
+
+    // The whitepaper's band gap: the distance IN THE COMPLEX PLANE to the
+    // nearest DISCARDED eigenvalue, over every discarded mode on either
+    // side.  On a truncated sparse read the uncovered top is bounded by the
+    // shield value; without a shield that side is UNKNOWN (NaN), never a
+    // silently generous +infinity.
+    double separation = kInf;
+    for (std::size_t i = a; i < b; ++i) {
+      for (std::size_t j = 0; j < covered; ++j) {
+        if (j >= a && j < b) continue;
+        separation =
+            std::min(separation, std::abs(out.eigenvalues[i] -
+                                          out.eigenvalues[j]));
+      }
+    }
+    if (b == covered) {
+      if (std::isfinite(out.shield))
+        separation = std::min(separation,
+                              out.shield - out.eigenvalues[b - 1].real());
+      else if (read.truncated)
+        separation = kNaN;
+    }
+    cert.nearestDiscardedSeparation = separation;
 
     // Frames.
     Eigen::MatrixXcd Phi = out.right.middleCols(static_cast<Eigen::Index>(a),
@@ -1216,7 +1293,13 @@ void SpectralFiberTracker::buildFibers(const RestrictedOperator &op,
         B);
     const double idemDefect = productFrobenius(Phi, E, B);
     cert.projectorResidual = idemDefect / std::max(1.0, pNorm);
-    cert.conditionNumber = productSpectralNorm(Phi, B);
+    // Two SEPARATELY NAMED conditioning quantities: the gauge-invariant
+    // projector norm ||P||_2 (Kato), and the FRAME condition number the
+    // whitepaper asks for in the non-normal regime — the Riesz condition of
+    // the reported matched frames in the |W| metric.
+    cert.projectorNorm = productSpectralNorm(Phi, B);
+    cert.frameConditionNumber =
+        std::max(frameCondition(Phi, W), frameCondition(Psi, W));
 
     // Localization: IPR of the projector's diagonal density (gauge- and
     // relabeling-invariant; never an eigenvector read).  Rowwise:
@@ -1235,12 +1318,18 @@ void SpectralFiberTracker::buildFibers(const RestrictedOperator &op,
         diagSq += pi * pi;
       }
       cert.localization = diagSq;
+      // n_eff / n: 1 exactly for a uniform (perfectly delocalized)
+      // projector diagonal, rank/n for a band living on `rank` cells.
+      cert.localizationSupportFraction =
+          1.0 / (static_cast<double>(n) * diagSq);
     }
 
-    // Certification: isolation + dominance + residuals + Gram + conditioning.
-    const auto gapOk = [&](double gap) {
+    // Certification: isolation from the nearest DISCARDED eigenvalue,
+    // LOCALIZATION (the whitepaper conjunct), residuals, Gram defect, and
+    // the gauge-invariant projector conditioning.
+    const auto separationOk = [&](double gap) {
       if (std::isnan(gap)) return false;
-      if (!std::isfinite(gap)) return true;  // no neighbor on that side
+      if (!std::isfinite(gap)) return true;  // nothing was discarded
       return gap >= cfg_.minRelativeGap * scale &&
              gap >= cfg_.gapDominance * spread;
     };
@@ -1248,14 +1337,17 @@ void SpectralFiberTracker::buildFibers(const RestrictedOperator &op,
         cert.eigenResidual <= cfg_.residualTolerance &&
         cert.leftResidual <= cfg_.residualTolerance &&
         cert.projectorResidual <= cfg_.residualTolerance;
-    cert.accepted = gapOk(cert.lowerGap) && gapOk(cert.upperGap) &&
-                    residualsOk &&
+    const bool localizedOk =
+        std::isfinite(cert.localizationSupportFraction) &&
+        cert.localizationSupportFraction <= cfg_.maxLocalizationSupportFraction;
+    cert.accepted = separationOk(cert.nearestDiscardedSeparation) &&
+                    localizedOk && residualsOk &&
                     cert.gramDefect <= cfg_.gramDefectTolerance &&
-                    cert.conditionNumber <= cfg_.conditionNumberCap;
+                    cert.projectorNorm <= cfg_.projectorNormCap;
     if (cert.accepted) {
       cert.certificate = Certificate::certifiedNumerical(
           CertificateDomain::BandWindow, op.regime, cert.eigenResidual,
-          cert.conditionNumber, cfg_.residualTolerance);
+          cert.projectorNorm, cfg_.residualTolerance);
       cert.certificate.setDenseReferenceError(
           read.solveCertificate.denseReferenceError());
     } else {

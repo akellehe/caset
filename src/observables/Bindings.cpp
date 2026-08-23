@@ -521,9 +521,14 @@ no recomputation.)doc");
       .def_readwrite("gramDefectTolerance",
                      &SpectralFiberConfig::gramDefectTolerance,
                      "Cap on ||Phi^dagger W Phi - J||.")
-      .def_readwrite("conditionNumberCap",
-                     &SpectralFiberConfig::conditionNumberCap,
-                     "Cap on the band condition number ||P||_2.")
+      .def_readwrite("projectorNormCap",
+                     &SpectralFiberConfig::projectorNormCap,
+                     "Cap on the band projector norm ||P||_2.")
+      .def_readwrite("maxLocalizationSupportFraction",
+                     &SpectralFiberConfig::maxLocalizationSupportFraction,
+                     "Cap on the band's effective support fraction n_eff/n "
+                     "-- the localization acceptance conjunct.  1.0 accepts "
+                     "any measured localization.")
       .def_readwrite("denseCrossover", &SpectralFiberConfig::denseCrossover,
                      "Dimension at/above which the self-adjoint path goes "
                      "sparse.")
@@ -564,14 +569,27 @@ quantities are NaN, never zero.)doc")
       .def_readonly("rank", &SpectralBandCertificate::rank)
       .def_readonly("lowerGap", &SpectralBandCertificate::lowerGap)
       .def_readonly("upperGap", &SpectralBandCertificate::upperGap)
+      .def_readonly("nearestDiscardedSeparation",
+                    &SpectralBandCertificate::nearestDiscardedSeparation,
+                    "Distance in the complex plane to the nearest DISCARDED "
+                    "eigenvalue -- the isolation acceptance conjunct.")
       .def_readonly("localization", &SpectralBandCertificate::localization)
+      .def_readonly("localizationSupportFraction",
+                    &SpectralBandCertificate::localizationSupportFraction,
+                    "Effective support fraction n_eff/n in [rank/n, 1]; 1 "
+                    "exactly for a perfectly delocalized band.")
       .def_readonly("projectorResidual",
                     &SpectralBandCertificate::projectorResidual)
       .def_readonly("eigenResidual", &SpectralBandCertificate::eigenResidual)
       .def_readonly("leftResidual", &SpectralBandCertificate::leftResidual)
       .def_readonly("gramDefect", &SpectralBandCertificate::gramDefect)
-      .def_readonly("conditionNumber",
-                    &SpectralBandCertificate::conditionNumber)
+      .def_readonly("projectorNorm", &SpectralBandCertificate::projectorNorm,
+                    "||P||_2, Kato's condition number of the spectral "
+                    "projector (gauge-invariant).")
+      .def_readonly("frameConditionNumber",
+                    &SpectralBandCertificate::frameConditionNumber,
+                    "The FRAME condition number: max Riesz conditioning of "
+                    "the reported matched frames in the |W| metric.")
       .def_readonly("positiveSignature",
                     &SpectralBandCertificate::positiveSignature)
       .def_readonly("negativeSignature",
@@ -2110,13 +2128,13 @@ lift path.)doc")
                     &FiberTransportRead::fromPositiveSignature)
       .def_readonly("fromNegativeSignature",
                     &FiberTransportRead::fromNegativeSignature)
-      .def_readonly("toConditionNumber",
-                    &FiberTransportRead::toConditionNumber)
-      .def_readonly("fromConditionNumber",
-                    &FiberTransportRead::fromConditionNumber)
+      .def_readonly("toProjectorNorm", &FiberTransportRead::toProjectorNorm)
+      .def_readonly("fromProjectorNorm",
+                    &FiberTransportRead::fromProjectorNorm)
       .def_readonly("frameConditionNumber",
                     &FiberTransportRead::frameConditionNumber,
-                    "max of the endpoint condition numbers (spec 6.6).")
+                    "max of the endpoints' FRAME condition numbers "
+                    "(spec 6.6) -- distinct from the projector norms.")
       .def_readonly("regime", &FiberTransportRead::regime)
       .def_readonly("unitaryMap", &FiberTransportRead::unitaryMap,
                     "The emitted U(r)/pseudo-unitary factor; EMPTY when "

@@ -184,8 +184,10 @@ struct FiberConnectionConfig {
   /// Cap on the regime-appropriate isometry leakage η before a unitary /
   /// pseudo-unitary factor may be emitted (spec §5.5).
   double leakageTolerance = 1e-6;
-  /// Cap on frame/overlap conditioning: each endpoint band's certified
-  /// condition number and the overlap's σ_max/σ_min must stay below it.
+  /// Cap on projector/overlap conditioning: each endpoint band's certified
+  /// PROJECTOR NORM ‖P‖₂ and the overlap's σ_max/σ_min must stay below it.
+  /// The endpoints' FRAME condition numbers are reported, not capped: they
+  /// depend on the in-band basis choice, the projector norm does not.
   double conditionNumberCap = 1e8;
   /// Absolute floor on each endpoint band's isolation min(lowerGap,
   /// upperGap).  0 = rely on the bands' own certification.
@@ -244,11 +246,17 @@ struct FiberTransportRead {
   int fromPositiveSignature = 0;
   /// Krein inertia q of the source band.
   int fromNegativeSignature = 0;
-  /// Destination band condition number (‖P‖₂ from its certificate).
-  double toConditionNumber = std::numeric_limits<double>::quiet_NaN();
-  /// Source band condition number (‖P‖₂ from its certificate).
-  double fromConditionNumber = std::numeric_limits<double>::quiet_NaN();
-  /// max of the endpoint condition numbers — the spec §6.6 field.
+  /// Destination band PROJECTOR NORM ‖P‖₂ from its certificate (Kato's
+  /// condition number of the spectral projector — the gauge-invariant
+  /// conditioning `FiberConnectionConfig::conditionNumberCap` caps).
+  double toProjectorNorm = std::numeric_limits<double>::quiet_NaN();
+  /// Source band projector norm ‖P‖₂ from its certificate.
+  double fromProjectorNorm = std::numeric_limits<double>::quiet_NaN();
+  /// max of the endpoints' FRAME condition numbers
+  /// (`SpectralBandCertificate::frameConditionNumber`) — the spec §6.6
+  /// field, and a DIFFERENT quantity from the projector norms above
+  /// (#808): the Riesz conditioning of the reported frames, not of their
+  /// ranges.  NaN when an endpoint certificate predates the measurement.
   double frameConditionNumber = std::numeric_limits<double>::quiet_NaN();
   /// The metric regime this transport was computed in (the paired
   /// endpoint regimes; NonNormal whenever either endpoint is).
