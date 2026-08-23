@@ -2553,15 +2553,17 @@ BaryonRead ParticleClusters::classifyBaryon(
   // ── the accepted covariance-only class (the obstruction premise) ─────
 
   bool classSwept = !evidence.classVarianceReads.empty();
-  double floor = kNaN;
+  double varianceFloor = kNaN;
   for (const quantum::WickCertificateRead &variance :
        evidence.classVarianceReads) {
     classSwept = classSwept && variance.certificate.holds();
     const double magnitude = std::abs(variance.value);
-    floor = std::isnan(floor) ? magnitude : std::min(floor, magnitude);
+    varianceFloor = std::isnan(varianceFloor)
+                        ? magnitude
+                        : std::min(varianceFloor, magnitude);
   }
   read.quasiFreeClassSwept = classSwept;
-  read.classVarianceFloor = classSwept ? floor : kNaN;
+  read.classVarianceFloor = classSwept ? varianceFloor : kNaN;
 
   // ── the four-way verdict ─────────────────────────────────────────────
 
