@@ -30,9 +30,11 @@ Fixtures are built by composing the MERGED public APIs (#765 ComponentId,
 reads, and the existing EigenstateSynthesis.gaussLawCharge) — the
 classifier consumes them; nothing is faked past its own public surface.
 """
+import itertools
 import math
 import time
 import unittest
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -1765,6 +1767,36 @@ class TestGluonClassification(unittest.TestCase):
         self.assertEqual(obs.ObservableGates.report_delta(
             base.toRecord(), shifted.toRecord()), 0.0)
 
+    def test_simplex_reorientation_preserves_the_verdict(self):
+        # the ORIENTATION channel: a common row sign flip (reversing a
+        # cell's orientation flips its cochain component on every column
+        # alike).  det C picks up det(S) = +-1 and the SINGLET certificate
+        # |det C|^2 is exactly invariant.
+        base = self.pc.classifyBaryon(_baryon_evidence())
+        for signs in ([1, 1, -1], [-1, -1, -1], [-1, 1, -1]):
+            columns = np.diag(signs).astype(complex) @ _color_triad()
+            read = self.pc.classifyBaryon(_baryon_evidence(color=columns))
+            self.assertEqual(read.classification, base.classification)
+            self.assertAlmostEqual(read.colorGramDeterminant,
+                                   base.colorGramDeterminant, delta=MACHINE)
+            expected = base.colorWedge * float(np.prod(signs))
+            self.assertLess(abs(read.colorWedge - expected), 1e-13)
+
+    def test_refinement_sample_order_does_not_change_stability(self):
+        samples = _scale_samples()
+        forward = self.pc.scaleProfile(samples)
+        backward = self.pc.scaleProfile(list(reversed(samples)))
+        self.assertEqual(forward.stable, backward.stable)
+        self.assertEqual(forward.radiusRatioSpread,
+                         backward.radiusRatioSpread)
+        self.assertEqual(forward.profileMaxDeviation,
+                         backward.profileMaxDeviation)
+        drifting = _scale_samples(drift=0.05)
+        self.assertEqual(
+            self.pc.scaleProfile(drifting).failedCertificates,
+            self.pc.scaleProfile(list(reversed(drifting)))
+            .failedCertificates)
+
     def test_cold_replay_is_deterministic(self):
         a = self.pc.classifyGluon(_gluon_evidence())
         b = obs.ParticleClusters().classifyGluon(_gluon_evidence())
@@ -2082,3 +2114,1602 @@ class TestEvenSectorGuardsAndBenchmark(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# =========================================================================== #
+# #775 — three-quark baryons and the complete proton certificate
+#
+# Design spec sections 16.2 (bound-supercomponent search), 16.3 (color
+# singlet), 16.4 (proton classifier) and 5.12 (sharp spin); whitepaper "The
+# proton as the maximally informative baryon".  Every fixture below is
+# composed from MERGED public APIs — #765 PersistentModularity discovery,
+# #767 ColorFiber, #770 FiberConnection, #772 ExchangeHolonomy, #780
+# CovarianceState Wick reads, and the existing #575/#566/#593 mass-radius
+# battery through RegisterContext.
+# =========================================================================== #
+
+BARYON_STRUCTURAL = ["constituent-quarks", "bound-supercomponent"]
+BARYON_PROTON = ["color-singlet", "color-flux-zero", "baryon-flux-unit",
+                 "composite-parity-odd", "flavor-uud", "electric-flux-unit",
+                 "spin-expectation", "sharp-spin", "rotation-character",
+                 "spin-lift", "finite-radius", "profile-stability"]
+BARYON_GATES = BARYON_STRUCTURAL + BARYON_PROTON
+
+_UD_CACHE = {}
+
+
+def _ud_quark(kind):
+    """A CERTIFIED #773 u or d quark: nu = +1, odd parity, I3 = +-1/2 under
+    the recorded doublet orientation, and a Gauss-consistent electric flux
+    (the merged #773 fixtures, memoized -- each rebuild solves a Gauss
+    least-squares problem)."""
+    if kind not in _UD_CACHE:
+        _UD_CACHE[kind] = obs.ParticleClusters().classifyQuark(
+            _certified_evidence(
+                with_flavor=True,
+                occupancy=[1.0, 0.0] if kind == "u" else [0.0, 1.0],
+                with_charge=2.0 / 3.0 if kind == "u" else -1.0 / 3.0))
+    return _UD_CACHE[kind]
+
+
+def _relabel_quark(read, level=1, tag="cd"):
+    """The same certified read carried by a DIFFERENT label-free component
+    identity (the relabeling channel: identity is a hash, never a name)."""
+    record = read.toRecord()
+    record["component_hash"] = tag * 16
+    record["component_level"] = int(level)
+    return obs.QuarkRead.fromRecord(record)
+
+
+def _pauli_over_sites(n_sites):
+    """J_alpha = direct sum over sites of sigma_alpha/2 on 2*n modes (the
+    #780 fixture convention: modes ordered site-major)."""
+    sx = np.array([[0, 1], [1, 0]], dtype=complex) / 2
+    sy = np.array([[0, -1j], [1j, 0]], dtype=complex) / 2
+    sz = np.diag([1.0, -1.0]).astype(complex) / 2
+
+    def blocks(s):
+        out = np.zeros((2 * n_sites, 2 * n_sites), dtype=complex)
+        for k in range(n_sites):
+            out[2 * k:2 * k + 2, 2 * k:2 * k + 2] = s
+        return out
+    return blocks(sx), blocks(sy), blocks(sz)
+
+
+def _sharp_spin_reads():
+    """The exact J^2 = 3/4 EIGENSTATE: one particle in one spin-1/2
+    doublet.  <J^2> = 3/4 and Var(J^2) = 0, both exact Wick sums."""
+    js = _pauli_over_sites(1)
+    state = qm.CovarianceState.fromOccupations(np.array([1.0, 0.0]))
+    return (state.wickSpinSquaredExpectation(*js),
+            state.wickSpinSquaredVariance(*js))
+
+
+def _generic_slater_spin_reads():
+    """The GENERIC Slater fixture: <J^2> = 3/4 EXACTLY but Var = 15/16 > 0
+    (design spec 5.12 — expectation alone is not a sharp spin).  A spin-0
+    singlet mode plus a standard spin-1 triplet, one particle in
+    sqrt(5/8)|singlet> + sqrt(3/8)|m=1>."""
+    s = 1 / np.sqrt(2.0)
+    sx1 = np.array([[0, s, 0], [s, 0, s], [0, s, 0]], dtype=complex)
+    sy1 = np.array([[0, -1j * s, 0], [1j * s, 0, -1j * s],
+                    [0, 1j * s, 0]], dtype=complex)
+    sz1 = np.diag([1.0, 0.0, -1.0]).astype(complex)
+
+    def pad(m3):
+        out = np.zeros((4, 4), dtype=complex)
+        out[1:, 1:] = m3
+        return out
+    js = (pad(sx1), pad(sy1), pad(sz1))
+    orbital = np.zeros((4, 1), dtype=complex)
+    orbital[0, 0] = np.sqrt(5.0 / 8.0)
+    orbital[1, 0] = np.sqrt(3.0 / 8.0)
+    state = qm.CovarianceState.fromSlaterFrame(orbital)
+    return (state.wickSpinSquaredExpectation(*js),
+            state.wickSpinSquaredVariance(*js))
+
+
+def _delta_spin_reads():
+    """The Delta oracle: three aligned spins, J^2 = 15/4 with Var = 0 (a
+    SHARP spin that is simply not 3/4)."""
+    js = _pauli_over_sites(3)
+    orbitals = np.zeros((6, 3), dtype=complex)
+    for k in range(3):
+        orbitals[2 * k, k] = 1.0
+    state = qm.CovarianceState.fromSlaterFrame(orbitals)
+    return (state.wickSpinSquaredExpectation(*js),
+            state.wickSpinSquaredVariance(*js))
+
+
+_ROTATION_CACHE = {}
+
+
+def _rotation_character(turns=1, steps=16, d=4):
+    """The #772 executable total-space 2pi cluster-frame cycle against its
+    matched co-moving non-rotating reference: chi_hat(2pi) = -1 for one
+    turn, +1 for two.  ONE global rotation of the whole carried frame —
+    never a product of per-hole Bloch vectors."""
+    key = (turns, steps, d)
+    if key not in _ROTATION_CACHE:
+        EH = obs.ExchangeHolonomy
+        frame0 = EH.transverseSpinorFrame(0, 1, d)
+        weights = np.ones(d, dtype=complex)
+        loop = EH.loopHolonomy(
+            EH.rotationLoopFrames(frame0, 0, 1, d, turns, steps), weights)
+        reference = EH.loopHolonomy(
+            EH.referenceLoopFrames(frame0, steps), weights)
+        _ROTATION_CACHE[key] = EH.rotationCharacter(loop, reference)
+    return _ROTATION_CACHE[key]
+
+
+def _localized_mode(x, n):
+    """A localized unit mode at ring position x (the #772 fixture idiom)."""
+    k = int(math.floor(x)) % n
+    f = x - math.floor(x)
+    v = np.zeros(n, dtype=complex)
+    v[k] += math.cos(f * math.pi / 2.0)
+    v[(k + 1) % n] += math.sin(f * math.pi / 2.0)
+    return v
+
+
+def _exchange_character(steps=8, n=8, distance=4):
+    """A genuine #772 PARTICLE-EXCHANGE character: two localized modes at
+    0 and 4 advancing half an n-cell ring, against the matched
+    non-exchanging reference.  chi_hat = -1 for one exchange.  This is the
+    WRONG channel for the proton rotation certificate — the #772 channels
+    are never interchangeable."""
+    EH = obs.ExchangeHolonomy
+    frames = []
+    for t in range(steps):
+        x = distance * t / steps
+        frames.append(np.stack([_localized_mode((p + x) % n, n)
+                                for p in (0, 4)], axis=1))
+    weights = np.ones(n, dtype=complex)
+    return EH.exchangeCharacter(
+        EH.loopHolonomy(frames, weights),
+        EH.loopHolonomy([frames[0]] * steps, weights))
+
+
+def _rotation3(axis, theta):
+    """A plane rotation of SO(3) about `axis` (the #772 Cech fixture idiom)."""
+    c, s = math.cos(theta), math.sin(theta)
+    out = np.eye(3)
+    a, b = [i for i in range(3) if i != axis]
+    out[a, a] = c
+    out[b, b] = c
+    out[a, b] = -s
+    out[b, a] = s
+    return out
+
+
+def _accepted_spin_lift():
+    """A tetrahedron of SO(3) transition data from a global vertex frame:
+    the cocycle is exact and the lift EXISTS (no w2 obstruction)."""
+    EH = obs.ExchangeHolonomy
+    frames = {v: _rotation3(v % 3, 0.3 + 0.17 * v) for v in range(4)}
+    edges = [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
+    rotations = [frames[i] @ frames[j].T for i, j in edges]
+    triangles = [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]]
+    return EH.spinLift(edges, rotations, triangles, 3)
+
+
+def _obstructed_spin_lift():
+    """The pillowcase class: two triangles glued along three pi-rotation
+    edges — w2 evaluates 1 and the lift is REJECTED (#772 fixture)."""
+    EH = obs.ExchangeHolonomy
+    edges = [(0, 1), (1, 2), (2, 0)]
+    rotations = [_rotation3(0, math.pi), _rotation3(1, math.pi),
+                 _rotation3(2, math.pi)]
+    return EH.spinLift(edges, rotations, [[0, 1, 2], [0, 2, 1]], 3)
+
+
+def _color_triad():
+    """An ORTHONORMAL anchored color triad: the exact #767 Fourier frame F3
+    (assembled from the algebraic omega table), |det F3| = 1 exactly."""
+    return np.asarray(obs.ColorFiber.fourierFrame())
+
+
+def _su3_element(theta=0.7):
+    """A g in SU(3) (certified by ColorFiber.isSpecialUnitary): a plane
+    rotation with unit determinant."""
+    c, s = math.cos(theta), math.sin(theta)
+    g = np.eye(3, dtype=complex)
+    g[0, 0] = c
+    g[1, 1] = c
+    g[0, 1] = -s
+    g[1, 0] = s
+    return g
+
+
+def _filled_triplet_flux():
+    """The bound object's octet bilinear on a FULLY OCCUPIED color triplet:
+    M = I, so the traceless (net-color-flux) weight is EXACTLY zero."""
+    state = qm.CovarianceState(np.eye(3, dtype=complex))
+    return obs.ParticleClusters().octetBilinearRead(state, [0, 1, 2])
+
+
+def _polarized_flux(hole=(0.0, 0.0, 1.0)):
+    """A color-POLARIZED (anti-triplet) carried state: nonzero net color
+    flux -- octet weight 2/3."""
+    return obs.ParticleClusters().octetBilinearRead(_rank2_state(hole),
+                                                    [0, 1, 2])
+
+
+def _scale_samples(count=3, radius=0.75, cross=0.5, mass=2.25,
+                   localization=0.8, profile=(0.6, 0.3, 0.1), drift=0.0,
+                   profile_drift=0.0):
+    """A refinement window of the existing mass-radius battery's channels."""
+    out = []
+    for k in range(count):
+        sample = obs.ScaleProfileSample()
+        sample.radius = radius + drift * k
+        sample.radiusCrossCheck = cross
+        sample.spectralMass = mass
+        sample.localization = localization
+        sample.radialWeightProfile = [p + profile_drift * k for p in profile]
+        out.append(sample)
+    return out
+
+
+def _clique_edges(vertices, src, tgt):
+    for i in range(len(vertices)):
+        for j in range(i + 1, len(vertices)):
+            src.append(vertices[i])
+            tgt.append(vertices[j])
+
+
+_HIERARCHY_CACHE = {}
+
+
+def _modular_hierarchy():
+    """A REAL two-level #765 hierarchy: three planted K6 cliques bridged
+    into one coarse community.  gamma = 1 resolves the three cliques
+    (level 1); gamma = 0.05 merges them into ONE level-2 supercomponent —
+    exactly the "next modular level" of design spec 16.2."""
+    if "h" not in _HIERARCHY_CACHE:
+        groups = [list(range(0, 6)), list(range(10, 16)),
+                  list(range(20, 26))]
+        src, tgt = [], []
+        for group in groups:
+            _clique_edges(group, src, tgt)
+        for a, b in ((0, 10), (10, 20), (20, 0)):
+            src.append(a)
+            tgt.append(b)
+        graph = obs.PersistentModularity.fromWeightedEdges(
+            src, tgt, [1.0] * len(src))
+        cfg = tessera.PersistentModularityConfig()
+        cfg.restarts = 4
+        cfg.baseSeed = 0
+        cfg.overlapThreshold = 0.5
+        cfg.resolutions = [1.0]
+        fine = graph.discover(1.0, cfg)
+        cfg.resolutions = [0.05]
+        coarse = graph.discover(0.05, cfg)
+        _HIERARCHY_CACHE["h"] = (groups, fine, coarse)
+    return _HIERARCHY_CACHE["h"]
+
+
+def _bound_candidates(kinds=("u", "u", "d"), lifetimes=None, supports=None,
+                      leakage_ok=True, transports=True, levels=None,
+                      quarks=None):
+    """Three #775 bound-supercomponent candidates: certified #773 quark
+    verdicts, the planted level-0 supports, overlapping #765 lifetime
+    windows, and accepted #770 mutual transports.  `quarks` overrides the
+    constituent reads (so the binding stays COHERENT with an evidence
+    bundle that carries custom legs)."""
+    groups, _fine, coarse = _modular_hierarchy()
+    super_level = coarse.components[0].id.level()
+    conn = obs.FiberConnection()
+    A, B = _unit_fiber(1, 3), _unit_fiber(11, 3)
+    good = _phase_link(conn, A, B, 0.3)
+    leaky = conn.transport(A, B, np.diag([0.5, 1.0, 1.0]).astype(complex))
+    kinds = kinds if quarks is None else tuple(range(len(quarks)))
+    out = []
+    for i, kind in enumerate(kinds):
+        cand = obs.BoundCandidateEvidence()
+        level = super_level - 1 if levels is None else levels[i]
+        cand.quark = (quarks[i] if quarks is not None
+                      else _relabel_quark(_ud_quark(kind), level=level,
+                                          tag="%02x" % (0xa0 + i)))
+        cand.support = (list(groups[i % len(groups)]) if supports is None
+                        else list(supports[i]))
+        cand.lifetime = ((2, 6) if lifetimes is None else lifetimes[i])
+        if transports:
+            cand.mutualTransports = [good if leakage_ok else leaky]
+        out.append(cand)
+    return out
+
+
+def _binding(**kw):
+    """The certified bound-supercomponent read of the planted hierarchy."""
+    _groups, _fine, coarse = _modular_hierarchy()
+    reads = obs.ParticleClusters().boundSupercomponentSearch(
+        coarse.components, _bound_candidates(**kw))
+    return reads[0]
+
+
+def _baryon_evidence(kinds=("u", "u", "d"), spin="sharp", rotation_turns=1,
+                     color=None, flux=None, samples=None, binding=None,
+                     continuum=False, spin_lift=None, class_variances=None,
+                     dense_j2=None, quarks=None, exchange=None):
+    """A complete #775 three-cluster evidence bundle."""
+    ev = obs.BaryonCandidateEvidence()
+    _groups, _fine, coarse = _modular_hierarchy()
+    ev.boundComponent = coarse.components[0].id
+    if quarks is None:
+        candidates = _bound_candidates(kinds=kinds)
+        ev.quarks = [c.quark for c in candidates]
+    else:
+        ev.quarks = list(quarks)
+    if binding is not None:
+        ev.binding = binding
+    elif quarks is None:
+        ev.binding = _binding(kinds=kinds)
+    else:
+        # the binding stays COHERENT with the supplied legs: the read must
+        # contain exactly these three label-free identities.
+        ev.binding = _binding(quarks=list(quarks))
+    ev.colorColumns = _color_triad() if color is None else np.asarray(color)
+    ev.colorFlux = _filled_triplet_flux() if flux is None else flux
+    ev.rotation = _rotation_character(turns=rotation_turns)
+    ev.continuumSpinClaim = continuum
+    if spin_lift is not None:
+        ev.spinLift = spin_lift
+    if exchange is not None:
+        ev.exchange = exchange
+    if spin == "sharp":
+        ev.spinSquaredRead, ev.spinVarianceRead = _sharp_spin_reads()
+    elif spin == "generic":
+        ev.spinSquaredRead, ev.spinVarianceRead = _generic_slater_spin_reads()
+    elif spin == "delta":
+        ev.spinSquaredRead, ev.spinVarianceRead = _delta_spin_reads()
+    elif spin == "expectation-only":
+        ev.spinSquaredRead, _v = _sharp_spin_reads()
+    elif spin == "none":
+        pass
+    if class_variances is not None:
+        ev.classVarianceReads = list(class_variances)
+    if dense_j2 is not None:
+        ev.totalSpaceJ2 = dense_j2
+    ev.scaleSamples = _scale_samples() if samples is None else samples
+    ev.persistenceLifetime = 4.0
+    return ev
+
+
+class TestColorSingletCertificate(unittest.TestCase):
+    """Design spec 16.3 / whitepaper: S_ABC = det[c_A c_B c_C] and the Gram
+    determinant det(C^dag C), with the three-mode wedge built exactly ONCE."""
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+
+    def test_orthonormal_triad_gives_unit_gram_determinant(self):
+        read = self.pc.classifyBaryon(_baryon_evidence())
+        self.assertAlmostEqual(read.colorGramDeterminant, 1.0, delta=MACHINE)
+        self.assertAlmostEqual(abs(read.colorWedge), 1.0, delta=MACHINE)
+        self.assertNotIn("color-singlet", read.failedCertificates)
+
+    def test_gram_is_the_color_fiber_singlet_gram(self):
+        # the delegation is PINNED: |det C|^2 read off the single wedge
+        # equals the #767 kernel's own det(C^dag C).
+        columns = _color_triad()
+        read = self.pc.classifyBaryon(_baryon_evidence(color=columns))
+        self.assertAlmostEqual(read.colorGramDeterminant,
+                               obs.ColorFiber.singletGram(columns),
+                               delta=MACHINE)
+        self.assertAlmostEqual(
+            abs(read.colorWedge - obs.ColorFiber.colorWedge(columns)),
+            0.0, delta=MACHINE)
+
+    def test_wedge_is_su3_invariant(self):
+        g = _su3_element()
+        self.assertTrue(obs.ColorFiber.isSpecialUnitary(g))
+        base = self.pc.classifyBaryon(_baryon_evidence())
+        rotated = self.pc.classifyBaryon(
+            _baryon_evidence(color=g @ _color_triad()))
+        self.assertLess(abs(base.colorWedge - rotated.colorWedge), 1e-14)
+        self.assertAlmostEqual(base.colorGramDeterminant,
+                               rotated.colorGramDeterminant, delta=MACHINE)
+        self.assertEqual(base.classification, rotated.classification)
+
+    def test_duplicate_color_modes_fail_the_singlet_certificate(self):
+        columns = _color_triad()
+        columns[:, 2] = columns[:, 0]        # duplicated color mode
+        read = self.pc.classifyBaryon(_baryon_evidence(color=columns))
+        self.assertLess(abs(read.colorGramDeterminant), 1e-25)
+        self.assertLess(abs(read.colorWedge), 1e-13)
+        self.assertIn("color-singlet", read.failedCertificates)
+        self.assertEqual(read.classification, "baryon-candidate")
+
+    def test_wedge_is_built_once_no_extra_fermion_sign(self):
+        # A transposition of two color columns flips det C (the epsilon is
+        # ALREADY inside the determinant) and leaves the SINGLET certificate
+        # |det C|^2 exactly invariant.  No second fermion sign is applied:
+        # the composite statistics come from the constituent parities.
+        columns = _color_triad()
+        swapped = columns[:, [1, 0, 2]]
+        a = self.pc.classifyBaryon(_baryon_evidence(color=columns))
+        b = self.pc.classifyBaryon(_baryon_evidence(color=swapped))
+        self.assertLess(abs(a.colorWedge + b.colorWedge), 1e-14)
+        self.assertAlmostEqual(a.colorGramDeterminant,
+                               b.colorGramDeterminant, delta=MACHINE)
+        self.assertEqual(a.exteriorParity, b.exteriorParity)
+        self.assertEqual(a.classification, b.classification)
+
+    def test_missing_color_evidence_is_unknown_never_zero(self):
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(color=np.zeros((3, 3), dtype=complex)))
+        self.assertTrue(math.isnan(read.colorGramDeterminant))
+        self.assertTrue(math.isnan(read.colorWedge.real))
+        self.assertIn("color-singlet", read.failedCertificates)
+
+    def test_unnormalized_columns_are_normalized_once(self):
+        # scaling a column is a frame convention, not physics: the singlet
+        # certificate is unchanged because normalization happens once,
+        # before the single wedge.
+        columns = _color_triad()
+        columns[:, 0] *= 7.5
+        read = self.pc.classifyBaryon(_baryon_evidence(color=columns))
+        self.assertAlmostEqual(read.colorGramDeterminant, 1.0, delta=MACHINE)
+        self.assertEqual(read.classification, "certified-proton")
+
+    def test_collinear_columns_are_degenerate(self):
+        columns = _color_triad()
+        columns[:, 1] = columns[:, 0] + columns[:, 2]
+        read = self.pc.classifyBaryon(_baryon_evidence(color=columns))
+        self.assertLess(read.colorGramDeterminant, 1e-25)
+        self.assertIn("color-singlet", read.failedCertificates)
+
+
+class TestNetColorFluxDiagnostic(unittest.TestCase):
+    """The INDEPENDENT vanishing net-color-flux check (never on its own a
+    proof of confinement on a finite complex)."""
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+
+    def test_filled_triplet_carries_zero_net_color_flux(self):
+        flux = _filled_triplet_flux()
+        self.assertEqual(flux.octetWeight, 0.0)
+        self.assertAlmostEqual(flux.singletWeight, 3.0, delta=MACHINE)
+        read = self.pc.classifyBaryon(_baryon_evidence(flux=flux))
+        self.assertEqual(read.colorFlux, 0.0)
+        self.assertNotIn("color-flux-zero", read.failedCertificates)
+
+    def test_polarized_color_state_fails_flux_zero(self):
+        flux = _polarized_flux()
+        self.assertAlmostEqual(flux.octetWeight, 2.0 / 3.0, delta=MACHINE)
+        read = self.pc.classifyBaryon(_baryon_evidence(flux=flux))
+        self.assertAlmostEqual(read.colorFlux, 2.0 / 3.0, delta=MACHINE)
+        self.assertIn("color-flux-zero", read.failedCertificates)
+        self.assertEqual(read.classification, "baryon-candidate")
+
+    def test_missing_octet_read_fails_by_name(self):
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(flux=obs.OctetBilinearRead()))
+        self.assertTrue(math.isnan(read.colorFlux))
+        self.assertIn("color-flux-zero", read.failedCertificates)
+
+    def test_flux_is_independent_of_the_gram_certificate(self):
+        # unit Gram columns with a POLARIZED carried state: the singlet
+        # certificate passes and the flux diagnostic refuses on its own.
+        read = self.pc.classifyBaryon(_baryon_evidence(flux=_polarized_flux()))
+        self.assertAlmostEqual(read.colorGramDeterminant, 1.0, delta=MACHINE)
+        self.assertNotIn("color-singlet", read.failedCertificates)
+        self.assertIn("color-flux-zero", read.failedCertificates)
+
+
+class TestBoundSupercomponentSearch(unittest.TestCase):
+    """Design spec 16.2: the next modular level, three lifetime-overlapping
+    quark candidates, containment, and bounded mutual transport."""
+
+    GATES = ["supercomponent-level", "quark-count", "support-containment",
+             "lifetime-overlap", "transport-containment"]
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+        self.groups, self.fine, self.coarse = _modular_hierarchy()
+
+    def test_planted_hierarchy_has_two_modular_levels(self):
+        # the real #765 discovery: three level-1 cliques, ONE level-2
+        # community containing all of them.
+        self.assertEqual(len(self.fine.components), 3)
+        self.assertEqual(len(self.coarse.components), 1)
+        self.assertEqual(
+            sorted(tuple(c.support) for c in self.fine.components),
+            sorted(tuple(g) for g in self.groups))
+        self.assertGreater(self.coarse.components[0].id.level(),
+                           self.fine.components[0].id.level())
+
+    def test_certified_bound_supercomponent(self):
+        read = self.pc.boundSupercomponentSearch(self.coarse.components,
+                                                 _bound_candidates())
+        self.assertEqual(len(read), 1)
+        self.assertTrue(read[0].found)
+        self.assertEqual(read[0].failedCertificates, [])
+        self.assertEqual(len(read[0].quarks), 3)
+        self.assertEqual(read[0].quarkIndices, [0, 1, 2])
+        self.assertEqual(read[0].lifetimeWindow, (2, 6))
+        self.assertEqual(read[0].lifetimeOverlap, 5.0)
+        self.assertEqual(read[0].minContainment, 1.0)
+        self.assertTrue(read[0].certificate.holds())
+
+    def test_same_level_is_not_the_next_modular_level(self):
+        level = self.coarse.components[0].id.level()
+        read = self.pc.boundSupercomponentSearch(
+            self.coarse.components,
+            _bound_candidates(levels=[level] * 3))[0]
+        self.assertFalse(read.found)
+        self.assertIn("supercomponent-level", read.failedCertificates)
+
+    def test_two_candidates_fail_the_quark_count(self):
+        read = self.pc.boundSupercomponentSearch(
+            self.coarse.components, _bound_candidates(kinds=("u", "d")))[0]
+        self.assertFalse(read.found)
+        self.assertIn("quark-count", read.failedCertificates)
+        self.assertEqual(len(read.quarks), 2)
+
+    def test_four_candidates_fail_the_quark_count(self):
+        read = self.pc.boundSupercomponentSearch(
+            self.coarse.components,
+            _bound_candidates(kinds=("u", "u", "d", "d")))[0]
+        self.assertFalse(read.found)
+        self.assertIn("quark-count", read.failedCertificates)
+        self.assertEqual(len(read.quarks), 4)
+
+    def test_uncertified_candidate_is_not_a_quark_candidate(self):
+        candidates = _bound_candidates()
+        # an antiquark leg: a certified read, but not a "quark" verdict
+        candidates[2].quark = self.pc.classifyQuark(
+            _certified_evidence(turns=-1))
+        read = self.pc.boundSupercomponentSearch(self.coarse.components,
+                                                 candidates)[0]
+        self.assertEqual(len(read.quarks), 2)
+        self.assertIn("quark-count", read.failedCertificates)
+
+    def test_support_escaping_the_supercomponent_fails_containment(self):
+        supports = [list(self.groups[0]), list(self.groups[1]),
+                    list(self.groups[2]) + [999]]
+        read = self.pc.boundSupercomponentSearch(
+            self.coarse.components,
+            _bound_candidates(supports=supports))[0]
+        self.assertFalse(read.found)
+        self.assertIn("support-containment", read.failedCertificates)
+        self.assertAlmostEqual(read.minContainment, 6.0 / 7.0, delta=MACHINE)
+
+    def test_disjoint_lifetimes_fail_the_overlap(self):
+        read = self.pc.boundSupercomponentSearch(
+            self.coarse.components,
+            _bound_candidates(lifetimes=[(0, 1), (2, 3), (4, 5)]))[0]
+        self.assertFalse(read.found)
+        self.assertIn("lifetime-overlap", read.failedCertificates)
+        self.assertEqual(read.lifetimeOverlap, 0.0)
+        self.assertIsNone(read.lifetimeWindow)
+
+    def test_missing_lifetime_is_unknown_never_presumed(self):
+        read = self.pc.boundSupercomponentSearch(
+            self.coarse.components,
+            _bound_candidates(lifetimes=[(2, 6), None, (2, 6)]))[0]
+        self.assertFalse(read.found)
+        self.assertIn("lifetime-overlap", read.failedCertificates)
+        self.assertIsNone(read.lifetimeWindow)
+
+    def test_partial_lifetime_overlap_is_measured(self):
+        read = self.pc.boundSupercomponentSearch(
+            self.coarse.components,
+            _bound_candidates(lifetimes=[(0, 4), (3, 9), (2, 6)]))[0]
+        self.assertTrue(read.found)
+        self.assertEqual(read.lifetimeWindow, (3, 4))
+        self.assertEqual(read.lifetimeOverlap, 2.0)
+
+    def test_leaky_mutual_transport_fails_containment(self):
+        read = self.pc.boundSupercomponentSearch(
+            self.coarse.components,
+            _bound_candidates(leakage_ok=False))[0]
+        self.assertFalse(read.found)
+        self.assertIn("transport-containment", read.failedCertificates)
+
+    def test_missing_transports_fail_by_name(self):
+        read = self.pc.boundSupercomponentSearch(
+            self.coarse.components, _bound_candidates(transports=False))[0]
+        self.assertFalse(read.found)
+        self.assertIn("transport-containment", read.failedCertificates)
+        self.assertEqual(read.transportCount, 0)
+        self.assertTrue(math.isnan(read.transportLeakageMax))
+
+    def test_components_without_candidates_emit_no_read(self):
+        candidates = _bound_candidates(
+            supports=[[900], [901], [902]])
+        self.assertEqual(
+            self.pc.boundSupercomponentSearch(self.coarse.components,
+                                              candidates), [])
+
+    def test_fine_components_are_not_supercomponents(self):
+        # each level-1 clique contains exactly ONE candidate: three reads,
+        # none of them bound.
+        reads = self.pc.boundSupercomponentSearch(self.fine.components,
+                                                  _bound_candidates())
+        self.assertEqual(len(reads), 3)
+        for read in reads:
+            self.assertFalse(read.found)
+            self.assertIn("quark-count", read.failedCertificates)
+
+    def test_thresholds_and_describe_travel(self):
+        read = self.pc.boundSupercomponentSearch(self.coarse.components,
+                                                 _bound_candidates())[0]
+        self.assertEqual(read.thresholds.minSupportContainment, 1.0)
+        self.assertIn("bound", read.describe())
+
+    def test_candidate_order_does_not_change_the_verdict(self):
+        candidates = _bound_candidates()
+        a = self.pc.boundSupercomponentSearch(self.coarse.components,
+                                              candidates)[0]
+        b = self.pc.boundSupercomponentSearch(
+            self.coarse.components, list(reversed(candidates)))[0]
+        self.assertEqual(a.found, b.found)
+        self.assertEqual(a.lifetimeOverlap, b.lifetimeOverlap)
+        self.assertEqual(sorted(q.canonicalHash() for q in a.quarks),
+                         sorted(q.canonicalHash() for q in b.quarks))
+
+
+class TestScaleProfile(unittest.TestCase):
+    """The refinement-window read over the EXISTING #575/#566/#593
+    mass-radius battery: a finite radius plus refinement-stable
+    DIMENSIONLESS channels.  Nothing here is a form factor (see the header
+    banner) and no dimensionful mass is ever emitted."""
+
+    GATES = ["refinement-window", "finite-radius", "radius-ratio-stability",
+             "spectral-mass-stability", "localization-stability",
+             "profile-stability"]
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+
+    def test_stable_window_certifies(self):
+        read = self.pc.scaleProfile(_scale_samples())
+        self.assertTrue(read.stable)
+        self.assertEqual(read.failedCertificates, [])
+        self.assertEqual(read.sampleCount, 3)
+        self.assertEqual(read.radius, 0.75)
+        self.assertTrue(read.radiusFinite)
+        self.assertAlmostEqual(read.radiusRatio, 1.5, delta=MACHINE)
+        self.assertEqual(read.spectralMass, 2.25)
+        self.assertEqual(read.radiusRatioSpread, 0.0)
+        self.assertEqual(read.spectralMassSpread, 0.0)
+        self.assertEqual(read.profileMaxDeviation, 0.0)
+        self.assertEqual(read.profileShells, 3)
+        self.assertTrue(read.certificate.holds())
+        self.assertEqual(read.certificate.grade,
+                         cob.CertificateGrade.CertifiedNumerical)
+
+    def test_single_sample_cannot_measure_stability(self):
+        read = self.pc.scaleProfile(_scale_samples(count=1))
+        self.assertFalse(read.stable)
+        self.assertIn("refinement-window", read.failedCertificates)
+        # every stability channel is UNMEASURED (NaN), never zero
+        self.assertTrue(math.isnan(read.radiusRatioSpread))
+        self.assertTrue(math.isnan(read.profileMaxDeviation))
+        self.assertTrue(read.radiusFinite)   # the radius itself is finite
+
+    def test_empty_window_is_not_stable(self):
+        read = self.pc.scaleProfile([])
+        self.assertFalse(read.stable)
+        self.assertFalse(read.radiusFinite)
+        self.assertEqual(sorted(read.failedCertificates), sorted(self.GATES))
+
+    def test_infinite_radius_fails(self):
+        samples = _scale_samples()
+        samples[1].radius = float("inf")
+        read = self.pc.scaleProfile(samples)
+        self.assertFalse(read.radiusFinite)
+        self.assertIn("finite-radius", read.failedCertificates)
+
+    def test_nan_radius_fails(self):
+        samples = _scale_samples()
+        samples[0].radius = NAN
+        read = self.pc.scaleProfile(samples)
+        self.assertFalse(read.radiusFinite)
+        self.assertIn("finite-radius", read.failedCertificates)
+
+    def test_nonpositive_radius_fails(self):
+        samples = _scale_samples(radius=0.0)
+        read = self.pc.scaleProfile(samples)
+        self.assertFalse(read.radiusFinite)
+        self.assertIn("finite-radius", read.failedCertificates)
+
+    def test_drifting_radius_ratio_fails(self):
+        read = self.pc.scaleProfile(_scale_samples(drift=0.05))
+        self.assertFalse(read.stable)
+        self.assertIn("radius-ratio-stability", read.failedCertificates)
+        # ratios 1.5/1.6/1.7 (cross = 0.5): (max - min)/max(|mean|, 1)
+        # = 0.2/1.6 = 0.125 exactly.
+        self.assertAlmostEqual(read.radiusRatioSpread, 0.125, delta=1e-12)
+
+    def test_drifting_spectral_mass_fails(self):
+        samples = _scale_samples()
+        samples[2].spectralMass = 2.30
+        read = self.pc.scaleProfile(samples)
+        self.assertFalse(read.stable)
+        self.assertIn("spectral-mass-stability", read.failedCertificates)
+
+    def test_drifting_localization_fails(self):
+        samples = _scale_samples()
+        samples[1].localization = 0.4
+        read = self.pc.scaleProfile(samples)
+        self.assertFalse(read.stable)
+        self.assertIn("localization-stability", read.failedCertificates)
+
+    def test_drifting_radial_profile_fails(self):
+        read = self.pc.scaleProfile(_scale_samples(profile_drift=0.01))
+        self.assertFalse(read.stable)
+        self.assertIn("profile-stability", read.failedCertificates)
+        self.assertAlmostEqual(read.profileMaxDeviation, 0.02, delta=1e-12)
+
+    def test_missing_radial_profile_fails_by_name(self):
+        # no shell seeds: the radial profile is UNKNOWN, never "stable at
+        # zero" (the honest reading of an unavailable channel).
+        read = self.pc.scaleProfile(_scale_samples(profile=()))
+        self.assertFalse(read.stable)
+        self.assertIn("profile-stability", read.failedCertificates)
+        self.assertTrue(math.isnan(read.profileMaxDeviation))
+        self.assertEqual(read.profileShells, 0)
+
+    def test_shell_count_mismatch_fails(self):
+        samples = _scale_samples()
+        samples[1].radialWeightProfile = [0.5, 0.5]
+        read = self.pc.scaleProfile(samples)
+        self.assertFalse(read.stable)
+        self.assertIn("profile-stability", read.failedCertificates)
+        self.assertTrue(math.isnan(read.profileMaxDeviation))
+
+    def test_physical_mass_is_always_unknown(self):
+        # keeping any dimensionful mass UNKNOWN until a physical scale is
+        # independently established (ticket scope, stated verbatim).
+        read = self.pc.scaleProfile(_scale_samples())
+        self.assertTrue(read.stable)
+        self.assertIsNone(read.physicalMass)
+
+    def test_describe_names_the_failures(self):
+        read = self.pc.scaleProfile(_scale_samples(count=1))
+        self.assertIn("refinement-window", read.describe())
+        self.assertIn("physical mass unknown", read.describe())
+
+
+class TestScaleProfileFromTheExistingBattery(unittest.TestCase):
+    """The adapter over RegisterContext.interiorHinges — the same reader
+    EmergentRadius / EmergentMass use, on the hand-checkable closed forms."""
+
+    @staticmethod
+    def _boundary_delta5():
+        st = tessera.Spacetime.fromCells(
+            4, [list(c) for c in itertools.combinations(range(6), 5)],
+            1.0, 0.0)
+        st.materializeFacets()
+        return st
+
+    @staticmethod
+    def _star_of_apex():
+        st = tessera.Spacetime.fromCells(
+            4, [list(c) for c in itertools.combinations(range(6), 5)
+                if 5 in c], 1.0, 0.0)
+        st.materializeFacets()
+        return st
+
+    def test_closed_s4_sample_matches_the_closed_forms(self):
+        # dDelta^5: every deficit is 2pi - 3*arccos(1/4) and the six unit
+        # pentatopes have total 4-volume 6*sqrt(5)/96 (the #575 anchors).
+        deficit = 2.0 * math.pi - 3.0 * math.acos(0.25)
+        volume = 6.0 * math.sqrt(5.0) / 96.0
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            ctx = obs.RegisterContext(self._boundary_delta5(), 0, 3,
+                                      cob.Proton.singlet())
+        sample = obs.ParticleClusters.scaleProfileSample(ctx)
+        self.assertAlmostEqual(sample.radius, volume ** 0.25, places=12)
+        self.assertAlmostEqual(sample.radiusCrossCheck, volume ** 0.25,
+                               places=12)
+        self.assertAlmostEqual(sample.spectralMass, deficit, places=9)
+        self.assertAlmostEqual(sample.localization, 1.0, places=9)
+        # no register holes seed the BFS: the radial profile is UNKNOWN
+        self.assertEqual(sample.radialWeightProfile, [])
+
+    def test_closed_s4_window_is_stable_but_has_no_radial_profile(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            ctx = obs.RegisterContext(self._boundary_delta5(), 0, 3,
+                                      cob.Proton.singlet())
+        sample = obs.ParticleClusters.scaleProfileSample(ctx)
+        read = obs.ParticleClusters().scaleProfile([sample, sample])
+        self.assertTrue(read.radiusFinite)
+        self.assertEqual(read.radiusRatioSpread, 0.0)
+        self.assertEqual(read.spectralMassSpread, 0.0)
+        self.assertFalse(read.stable)
+        self.assertEqual(read.failedCertificates, ["profile-stability"])
+
+    def test_hole_seeded_star_carries_a_radial_profile(self):
+        # the dropped pentatope {0..4} is the register hole seeding the BFS
+        # shells: one shell carrying the whole curvature weight.
+        ctx = obs.RegisterContext(self._star_of_apex(), [[0, 1, 2, 3, 4]], 1,
+                                  3, cob.Proton.singlet())
+        sample = obs.ParticleClusters.scaleProfileSample(ctx)
+        self.assertEqual(sample.radialWeightProfile, [1.0])
+        deficit = 2.0 * math.pi - 3.0 * math.acos(0.25)
+        self.assertAlmostEqual(sample.spectralMass, deficit, places=9)
+        self.assertGreater(sample.radius, 0.0)
+        read = obs.ParticleClusters().scaleProfile([sample, sample])
+        self.assertTrue(read.stable)
+        self.assertEqual(read.profileShells, 1)
+        self.assertEqual(read.profileMaxDeviation, 0.0)
+
+    def test_sample_is_read_only_on_the_context(self):
+        st = self._star_of_apex()
+        ctx = obs.RegisterContext(st, [[0, 1, 2, 3, 4]], 1, 3,
+                                  cob.Proton.singlet())
+        before = (len(st.getTopSimplices()), len(st.getSimplices()))
+        a = obs.ParticleClusters.scaleProfileSample(ctx)
+        b = obs.ParticleClusters.scaleProfileSample(ctx)
+        self.assertEqual(before,
+                         (len(st.getTopSimplices()), len(st.getSimplices())))
+        self.assertEqual(a.radius, b.radius)
+        self.assertEqual(a.radialWeightProfile, b.radialWeightProfile)
+
+
+class TestBaryonClassification(unittest.TestCase):
+    """Design spec 16.4: the complete proton certificate and the four-way
+    verdict."""
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+
+    def test_certified_proton(self):
+        read = self.pc.classifyBaryon(_baryon_evidence())
+        self.assertEqual(read.classification, "certified-proton")
+        self.assertEqual(read.failedCertificates, [])
+        self.assertEqual(read.confidence, 1.0)
+        # every row of the spec 16.4 table
+        self.assertAlmostEqual(read.colorGramDeterminant, 1.0, delta=MACHINE)
+        self.assertEqual(read.colorFlux, 0.0)
+        self.assertEqual(read.totalWinding, 3)
+        self.assertAlmostEqual(read.baryonFlux, 1.0, delta=MACHINE)
+        self.assertEqual(read.flavorPattern, "uud")
+        self.assertAlmostEqual(read.totalIsospin, 0.5, delta=MACHINE)
+        self.assertAlmostEqual(read.electricFlux, 1.0, delta=1e-9)
+        self.assertAlmostEqual(read.totalJ2, 0.75, delta=1e-14)
+        self.assertLess(abs(read.totalJ2Variance), 1e-13)
+        self.assertTrue(read.sharpSpin)
+        self.assertEqual(read.rotationCharacterSign, -1)
+        self.assertLess(abs(read.rotationCharacter + 1.0), 1e-12)
+        self.assertEqual(read.exteriorParity, -1)
+        self.assertTrue(read.radiusFinite)
+        self.assertTrue(read.profileStable)
+        self.assertTrue(read.certificate.holds())
+        self.assertEqual(read.certificate.grade,
+                         cob.CertificateGrade.StructureExact)
+
+    def test_delta_oracle_is_a_baryon_but_never_a_proton(self):
+        # J^2 = 15/4 with Var = 0: a SHARP spin that is simply not 3/4.
+        read = self.pc.classifyBaryon(_baryon_evidence(spin="delta"))
+        self.assertEqual(read.classification, "baryon-candidate")
+        self.assertNotEqual(read.classification, "certified-proton")
+        self.assertAlmostEqual(read.totalJ2, 15.0 / 4.0, delta=1e-13)
+        self.assertLess(abs(read.totalJ2Variance), 1e-13)
+        self.assertTrue(read.sharpSpin)          # sharp, but at 15/4
+        self.assertEqual(read.failedCertificates, ["spin-expectation"])
+
+    def test_delta_dense_772_oracle_is_a_baryon_but_never_a_proton(self):
+        # the #772 dense total-space oracle: |uuu> -> 15/4 (the exact
+        # measuring stick), consulted when no quasi-free read certified.
+        dense = obs.ExchangeHolonomy.totalJSquared(
+            np.array([1, 0, 0, 0, 0, 0, 0, 0], dtype=complex))
+        self.assertEqual(dense, 15.0 / 4.0)
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(spin="none", dense_j2=dense))
+        self.assertEqual(read.classification, "baryon-candidate")
+        self.assertEqual(read.totalJ2, 15.0 / 4.0)
+        self.assertIsNone(read.totalJ2Variance)
+        self.assertIn("spin-expectation", read.failedCertificates)
+        self.assertIn("sharp-spin", read.failedCertificates)
+
+    def test_dense_772_proton_eigenstate_still_needs_a_variance(self):
+        # 2|uud> - |udu> - |duu> -> 3/4 exactly, but a DENSE expectation
+        # supplies no variance: expectation alone is never a sharp spin.
+        state = np.zeros(8, dtype=complex)
+        state[0b001], state[0b010], state[0b100] = 2.0, -1.0, -1.0
+        self.assertAlmostEqual(obs.ExchangeHolonomy.totalJSquared(state),
+                               0.75, delta=1e-14)
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(spin="none", dense_j2=0.75))
+        self.assertEqual(read.totalJ2, 0.75)
+        self.assertIsNone(read.totalJ2Variance)
+        self.assertFalse(read.sharpSpin)
+        self.assertEqual(read.failedCertificates, ["sharp-spin"])
+        self.assertEqual(read.classification, "baryon-candidate")
+
+    def test_generic_slater_expectation_without_sharp_variance(self):
+        # THE ticket's scientific point: <J^2> = 3/4 EXACTLY with
+        # Var = 15/16 > 0 is NOT a certified proton.
+        read = self.pc.classifyBaryon(_baryon_evidence(spin="generic"))
+        self.assertAlmostEqual(read.totalJ2, 0.75, delta=1e-13)
+        self.assertAlmostEqual(read.totalJ2Variance, 15.0 / 16.0,
+                               delta=1e-12)
+        self.assertFalse(read.sharpSpin)
+        self.assertNotIn("spin-expectation", read.failedCertificates)
+        self.assertIn("sharp-spin", read.failedCertificates)
+        self.assertNotEqual(read.classification, "certified-proton")
+
+    def test_exact_eigenstate_passes_the_sharp_certificate(self):
+        # the other half of the pair: an exact J^2 eigenstate has Var = 0.
+        read = self.pc.classifyBaryon(_baryon_evidence(spin="sharp"))
+        self.assertAlmostEqual(read.totalJ2, 0.75, delta=1e-14)
+        self.assertLess(abs(read.totalJ2Variance), 1e-13)
+        self.assertTrue(read.sharpSpin)
+        self.assertEqual(read.classification, "certified-proton")
+
+    def test_missing_variance_read_is_unknown_never_zero(self):
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(spin="expectation-only"))
+        self.assertAlmostEqual(read.totalJ2, 0.75, delta=1e-14)
+        self.assertIsNone(read.totalJ2Variance)
+        self.assertFalse(read.sharpSpin)
+        self.assertIn("sharp-spin", read.failedCertificates)
+
+    def test_no_baryon_without_three_certified_quarks(self):
+        quarks = list(_baryon_evidence().quarks)
+        quarks[2] = self.pc.classifyQuark(_certified_evidence(turns=-1))
+        read = self.pc.classifyBaryon(_baryon_evidence(quarks=quarks))
+        self.assertEqual(read.classification, "no-baryon")
+        self.assertIn("constituent-quarks", read.failedCertificates)
+
+    def test_no_baryon_without_a_bound_supercomponent(self):
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(binding=obs.BoundSupercomponentRead()))
+        self.assertEqual(read.classification, "no-baryon")
+        self.assertIn("bound-supercomponent", read.failedCertificates)
+
+    def test_no_baryon_dominates_a_full_proton_certificate(self):
+        # the structural gates decide "no baryon" even when every proton
+        # certificate below them holds.
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(binding=_binding(transports=False)))
+        self.assertEqual(read.classification, "no-baryon")
+        self.assertEqual(read.failedCertificates, ["bound-supercomponent"])
+
+    def test_wrong_baryon_flux_is_named(self):
+        quarks = list(_baryon_evidence().quarks)
+        quarks[2] = self.pc.classifyQuark(_certified_evidence(turns=1))
+        quarks[2] = obs.QuarkRead.fromRecord(quarks[2].toRecord())
+        ev = _baryon_evidence()
+        # replace one leg with an UNCERTIFIED winding: nu is unknown
+        broken = _certified_evidence()
+        conn = obs.FiberConnection()
+        A, B = _unit_fiber(1, 3), _unit_fiber(11, 3)
+        broken.winding = conn.openSegmentWinding(
+            [_phase_link(conn, A, B, p) for p in (0.0, 0.4, 0.8)],
+            obs.WindingClosureSpec())
+        legs = list(ev.quarks)
+        legs[2] = self.pc.classifyQuark(broken)
+        read = self.pc.classifyBaryon(_baryon_evidence(quarks=legs))
+        self.assertIsNone(read.totalWinding)
+        self.assertIsNone(read.baryonFlux)   # UNKNOWN, never zero
+        self.assertIn("baryon-flux-unit", read.failedCertificates)
+
+    def test_flavor_pattern_uuu_is_not_a_proton(self):
+        read = self.pc.classifyBaryon(_baryon_evidence(kinds=("u", "u", "u")))
+        self.assertEqual(read.flavorPattern, "uuu")
+        self.assertAlmostEqual(read.totalIsospin, 1.5, delta=MACHINE)
+        self.assertIn("flavor-uud", read.failedCertificates)
+        self.assertIn("electric-flux-unit", read.failedCertificates)
+        self.assertEqual(read.classification, "baryon-candidate")
+
+    def test_flavor_pattern_udd_is_not_a_proton(self):
+        read = self.pc.classifyBaryon(_baryon_evidence(kinds=("u", "d", "d")))
+        self.assertEqual(read.flavorPattern, "udd")
+        self.assertAlmostEqual(read.electricFlux, 0.0, delta=1e-9)
+        self.assertIn("flavor-uud", read.failedCertificates)
+        self.assertIn("electric-flux-unit", read.failedCertificates)
+
+    def test_color_singlet_fixture_with_unknown_flavor_is_partial(self):
+        # a color-singlet three-cluster candidate whose constituents have NO
+        # certified doublet: flavor AND charge stay unknown and the read is
+        # a partial candidate naming exactly those gaps.
+        plain = self.pc.classifyQuark(_certified_evidence())
+        legs = [_relabel_quark(plain, level=1, tag="%02x" % (0xb0 + i))
+                for i in range(3)]
+        read = self.pc.classifyBaryon(_baryon_evidence(quarks=legs))
+        self.assertEqual(read.classification, "baryon-candidate")
+        self.assertAlmostEqual(read.colorGramDeterminant, 1.0, delta=MACHINE)
+        self.assertEqual(read.flavorPattern, "")
+        self.assertIsNone(read.totalIsospin)
+        self.assertIsNone(read.electricFlux)
+        self.assertEqual(sorted(read.failedCertificates),
+                         ["electric-flux-unit", "flavor-uud"])
+        # the certified channels are still reported
+        self.assertEqual(read.totalWinding, 3)
+        self.assertAlmostEqual(read.baryonFlux, 1.0, delta=MACHINE)
+
+    def test_even_composite_parity_is_named(self):
+        legs = list(_baryon_evidence().quarks)
+        legs[1] = self.pc.classifyQuark(
+            _certified_evidence(occupations=(1.0, 1.0, 0.0)))
+        read = self.pc.classifyBaryon(_baryon_evidence(quarks=legs))
+        self.assertNotEqual(read.exteriorParity, -1)
+        self.assertIn("composite-parity-odd", read.failedCertificates)
+
+    def test_uncertified_constituent_parity_is_unknown(self):
+        legs = list(_baryon_evidence().quarks)
+        blank = _certified_evidence()
+        blank.parityRead = qm.WickCertificateRead()
+        legs[0] = self.pc.classifyQuark(blank)
+        read = self.pc.classifyBaryon(_baryon_evidence(quarks=legs))
+        self.assertEqual(read.exteriorParity, 0)
+        self.assertIn("composite-parity-odd", read.failedCertificates)
+
+    def test_rotation_character_plus_one_fails(self):
+        # the 4pi cycle: chi_hat = +1, a vector-like cycle, not spin 1/2.
+        read = self.pc.classifyBaryon(_baryon_evidence(rotation_turns=2))
+        self.assertEqual(read.rotationCharacterSign, +1)
+        self.assertIn("rotation-character", read.failedCertificates)
+        self.assertNotEqual(read.classification, "certified-proton")
+
+    def test_exchange_channel_is_never_the_rotation_certificate(self):
+        # the #772 channels are not interchangeable: an exchange-tagged
+        # character leaves the rotation certificate UNKNOWN.
+        ev = _baryon_evidence()
+        ev.rotation = _exchange_character()
+        read = self.pc.classifyBaryon(ev)
+        self.assertIsNone(read.rotationCharacter)
+        self.assertEqual(read.rotationCharacterSign, 0)
+        self.assertIn("rotation-character", read.failedCertificates)
+
+    def test_uncertified_rotation_read_never_emits_a_sign(self):
+        # a TIMING mismatch voids the cancellation premise: the #772 read is
+        # uncertified, so the certificate is unknown rather than a sign.
+        EH = obs.ExchangeHolonomy
+        frame0 = EH.transverseSpinorFrame(0, 1, 4)
+        weights = np.ones(4, dtype=complex)
+        loop = EH.loopHolonomy(
+            EH.rotationLoopFrames(frame0, 0, 1, 4, 1, 16), weights)
+        mistimed = EH.loopHolonomy(
+            EH.referenceLoopFrames(frame0, 8), weights)
+        ev = _baryon_evidence()
+        ev.rotation = EH.rotationCharacter(loop, mistimed)
+        self.assertFalse(ev.rotation.certificate.holds())
+        read = self.pc.classifyBaryon(ev)
+        self.assertIsNone(read.rotationCharacter)
+        self.assertEqual(read.rotationCharacterSign, 0)
+        self.assertIn("rotation-character", read.failedCertificates)
+
+    def test_spin_lift_is_not_demanded_without_a_continuum_claim(self):
+        read = self.pc.classifyBaryon(_baryon_evidence())
+        self.assertFalse(read.spinLiftApplicable)
+        self.assertFalse(read.spinLiftAccepted)
+        self.assertNotIn("spin-lift", read.failedCertificates)
+        self.assertEqual(read.classification, "certified-proton")
+
+    def test_continuum_claim_accepts_a_certified_lift(self):
+        lift = _accepted_spin_lift()
+        self.assertTrue(lift.liftExists)
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(continuum=True, spin_lift=lift))
+        self.assertTrue(read.spinLiftApplicable)
+        self.assertTrue(read.spinLiftAccepted)
+        self.assertEqual(read.classification, "certified-proton")
+
+    def test_continuum_claim_without_a_lift_fails_by_name(self):
+        read = self.pc.classifyBaryon(_baryon_evidence(continuum=True))
+        self.assertTrue(read.spinLiftApplicable)
+        self.assertFalse(read.spinLiftAccepted)
+        self.assertEqual(read.failedCertificates, ["spin-lift"])
+
+    def test_obstructed_lift_fails_the_continuum_claim(self):
+        lift = _obstructed_spin_lift()
+        self.assertTrue(lift.obstructed)
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(continuum=True, spin_lift=lift))
+        self.assertFalse(read.spinLiftAccepted)
+        self.assertIn("spin-lift", read.failedCertificates)
+
+    def test_missing_radius_is_not_certified(self):
+        samples = _scale_samples()
+        samples[1].radius = float("inf")
+        read = self.pc.classifyBaryon(_baryon_evidence(samples=samples))
+        self.assertFalse(read.radiusFinite)
+        self.assertIn("finite-radius", read.failedCertificates)
+        self.assertNotEqual(read.classification, "certified-proton")
+
+    def test_unstable_profile_is_not_certified(self):
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(samples=_scale_samples(profile_drift=0.01)))
+        self.assertFalse(read.profileStable)
+        self.assertAlmostEqual(read.profileMaxDeviation, 0.02, delta=1e-12)
+        self.assertIn("profile-stability", read.failedCertificates)
+        self.assertNotIn("finite-radius", read.failedCertificates)
+
+    def test_no_scale_evidence_fails_both_scale_gates(self):
+        read = self.pc.classifyBaryon(_baryon_evidence(samples=[]))
+        self.assertTrue(math.isnan(read.radius))
+        self.assertIn("finite-radius", read.failedCertificates)
+        self.assertIn("profile-stability", read.failedCertificates)
+
+    def test_physical_mass_is_always_unknown_on_the_read(self):
+        read = self.pc.classifyBaryon(_baryon_evidence())
+        self.assertEqual(read.classification, "certified-proton")
+        self.assertIsNone(read.physicalMass)
+        self.assertAlmostEqual(read.spectralMass, 2.25, delta=MACHINE)
+
+    def test_confidence_is_the_passed_fraction(self):
+        read = self.pc.classifyBaryon(_baryon_evidence(spin="generic"))
+        self.assertAlmostEqual(read.confidence, 13.0 / 14.0, delta=MACHINE)
+        self.assertEqual(len(read.failedCertificates), 1)
+
+    def test_thresholds_are_recorded(self):
+        cfg = obs.ParticleClustersConfig()
+        cfg.spinVarianceTolerance = 2.0     # a class that tolerates anything
+        read = obs.ParticleClusters(cfg).classifyBaryon(
+            _baryon_evidence(spin="generic"))
+        self.assertEqual(read.thresholds.spinVarianceTolerance, 2.0)
+        self.assertTrue(read.sharpSpin)
+        self.assertEqual(read.classification, "certified-proton")
+
+    def test_reported_identities_travel(self):
+        read = self.pc.classifyBaryon(_baryon_evidence())
+        self.assertEqual(read.persistence, 4.0)
+        self.assertEqual(read.lifetimeOverlap, 5.0)
+        self.assertEqual(len(read.quarks), 3)
+        self.assertEqual(read.boundComponent.canonicalHash(),
+                         _modular_hierarchy()[2].components[0]
+                         .id.canonicalHash())
+
+    def test_describe_names_the_verdict_and_gaps(self):
+        read = self.pc.classifyBaryon(_baryon_evidence(spin="generic"))
+        text = read.describe()
+        self.assertIn("baryon-candidate", text)
+        self.assertIn("sharp-spin", text)
+
+
+class TestQuasiFreeSharpSpinObstruction(unittest.TestCase):
+    """The fourth verdict: every other certificate passes but Var(J^2) fails
+    to converge to zero ACROSS the accepted covariance-only class."""
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+        self._generic = _generic_slater_spin_reads()
+
+    def _class(self, n=4):
+        """The swept covariance-only class: n certified Var(J^2) reads that
+        all sit at 15/16, never approaching zero."""
+        return [self._generic[1]] * n
+
+    def test_obstruction_verdict(self):
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(spin="generic", class_variances=self._class()))
+        self.assertEqual(read.classification,
+                         "quasi-free-sharp-spin-obstruction")
+        self.assertEqual(read.failedCertificates, ["sharp-spin"])
+        self.assertTrue(read.quasiFreeClassSwept)
+        self.assertAlmostEqual(read.classVarianceFloor, 15.0 / 16.0,
+                               delta=1e-12)
+        self.assertAlmostEqual(read.totalJ2, 0.75, delta=1e-13)
+
+    def test_obstruction_is_reported_never_held(self):
+        # a branch point mandating an explicit non-Gaussian mechanism, not a
+        # held claim and not a refutation of the geometry.
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(spin="generic", class_variances=self._class()))
+        self.assertFalse(read.certificate.holds())
+        self.assertEqual(read.certificate.grade,
+                         cob.CertificateGrade.HeuristicDiscovery)
+
+    def test_unswept_class_is_a_plain_candidate(self):
+        read = self.pc.classifyBaryon(_baryon_evidence(spin="generic"))
+        self.assertEqual(read.classification, "baryon-candidate")
+        self.assertFalse(read.quasiFreeClassSwept)
+        self.assertTrue(math.isnan(read.classVarianceFloor))
+
+    def test_uncertified_class_member_is_not_a_sweep(self):
+        variances = self._class() + [qm.WickCertificateRead()]
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(spin="generic", class_variances=variances))
+        self.assertFalse(read.quasiFreeClassSwept)
+        self.assertEqual(read.classification, "baryon-candidate")
+
+    def test_class_reaching_zero_is_not_an_obstruction(self):
+        # one accepted member of the class IS an exact eigenstate: the
+        # variance converges, so nothing is obstructed.
+        sharp = _sharp_spin_reads()[1]
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(spin="generic",
+                             class_variances=self._class() + [sharp]))
+        self.assertTrue(read.quasiFreeClassSwept)
+        self.assertLess(read.classVarianceFloor, 1e-13)
+        self.assertEqual(read.classification, "baryon-candidate")
+
+    def test_unmeasured_own_variance_is_not_an_obstruction(self):
+        # the class does not converge, but THIS candidate's own Var(J^2)
+        # was never measured: unknown is not an obstruction.
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(spin="expectation-only",
+                             class_variances=self._class()))
+        self.assertIsNone(read.totalJ2Variance)
+        self.assertTrue(read.quasiFreeClassSwept)
+        self.assertEqual(read.failedCertificates, ["sharp-spin"])
+        self.assertEqual(read.classification, "baryon-candidate")
+
+    def test_obstruction_requires_every_other_certificate(self):
+        # the Delta-like case: the expectation ALSO fails, so this is a
+        # plain baryon candidate, never the obstruction branch.
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(spin="delta", class_variances=self._class()))
+        self.assertEqual(read.classification, "baryon-candidate")
+
+    def test_obstruction_requires_a_bound_baryon(self):
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(spin="generic", class_variances=self._class(),
+                             binding=obs.BoundSupercomponentRead()))
+        self.assertEqual(read.classification, "no-baryon")
+
+    def test_obstruction_survives_a_second_failing_certificate(self):
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(spin="generic", class_variances=self._class(),
+                             flux=_polarized_flux()))
+        self.assertEqual(read.classification, "baryon-candidate")
+        self.assertEqual(sorted(read.failedCertificates),
+                         ["color-flux-zero", "sharp-spin"])
+
+
+class TestBaryonInvarianceAndReplay(unittest.TestCase):
+    """Relabeling, in-band rotation, constituent permutation, and cold
+    replay preserve the verdict (the shared #763 merge gates)."""
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+
+    def test_relabeling_preserves_the_verdict(self):
+        base = self.pc.classifyBaryon(_baryon_evidence())
+        legs = [_relabel_quark(q, level=1, tag="%02x" % (0xe0 + i))
+                for i, q in enumerate(_baryon_evidence().quarks)]
+        relabelled = self.pc.classifyBaryon(_baryon_evidence(quarks=legs))
+        self.assertEqual(base.classification, relabelled.classification)
+        self.assertEqual(base.confidence, relabelled.confidence)
+        self.assertEqual(base.totalWinding, relabelled.totalWinding)
+        self.assertEqual(base.flavorPattern, relabelled.flavorPattern)
+        self.assertEqual(base.colorGramDeterminant,
+                         relabelled.colorGramDeterminant)
+        self.assertNotEqual(base.quarks[0].canonicalHash(),
+                            relabelled.quarks[0].canonicalHash())
+
+    def test_in_band_su3_rotation_preserves_the_verdict(self):
+        base = self.pc.classifyBaryon(_baryon_evidence())
+        for theta in (0.3, 1.1, 2.7):
+            g = _su3_element(theta)
+            rotated = self.pc.classifyBaryon(
+                _baryon_evidence(color=g @ _color_triad()))
+            self.assertEqual(rotated.classification, base.classification)
+            self.assertLess(abs(rotated.colorWedge - base.colorWedge), 1e-13)
+
+    def test_constituent_permutation_preserves_the_verdict(self):
+        ev = _baryon_evidence()
+        legs = list(ev.quarks)
+        permuted = _baryon_evidence(quarks=[legs[2], legs[0], legs[1]],
+                                    color=_color_triad()[:, [2, 0, 1]])
+        a = self.pc.classifyBaryon(ev)
+        b = self.pc.classifyBaryon(permuted)
+        self.assertEqual(a.classification, b.classification)
+        # the flavor PATTERN is canonical: a permutation cannot change it
+        self.assertEqual(a.flavorPattern, b.flavorPattern)
+        self.assertEqual(a.totalWinding, b.totalWinding)
+        self.assertEqual(a.exteriorParity, b.exteriorParity)
+        # an EVEN color-column permutation leaves even the wedge alone
+        self.assertLess(abs(a.colorWedge - b.colorWedge), 1e-13)
+
+    def test_cold_replay_is_deterministic(self):
+        first = self.pc.classifyBaryon(_baryon_evidence()).toRecord()
+        for _ in range(3):
+            again = obs.ParticleClusters().classifyBaryon(
+                _baryon_evidence()).toRecord()
+            self.assertEqual(
+                obs.ObservableGates.report_delta(first, again), 0.0)
+            self.assertEqual(first["classification"],
+                             again["classification"])
+            self.assertEqual(first["failed_certificates"],
+                             again["failed_certificates"])
+
+    def test_record_roundtrip_is_exact(self):
+        read = self.pc.classifyBaryon(_baryon_evidence())
+        back = obs.BaryonRead.fromRecord(read.toRecord())
+        self.assertEqual(back.classification, read.classification)
+        self.assertEqual(back.colorGramDeterminant, read.colorGramDeterminant)
+        self.assertEqual(back.colorWedge, read.colorWedge)
+        self.assertEqual(back.totalWinding, read.totalWinding)
+        self.assertEqual(back.baryonFlux, read.baryonFlux)
+        self.assertEqual(back.electricFlux, read.electricFlux)
+        self.assertEqual(back.totalJ2, read.totalJ2)
+        self.assertEqual(back.totalJ2Variance, read.totalJ2Variance)
+        self.assertEqual(back.rotationCharacter, read.rotationCharacter)
+        self.assertEqual(back.flavorPattern, read.flavorPattern)
+        self.assertEqual(back.confidence, read.confidence)
+        self.assertEqual(back.failedCertificates, read.failedCertificates)
+        self.assertEqual(back.thresholds.spinVarianceTolerance,
+                         read.thresholds.spinVarianceTolerance)
+        self.assertEqual(back.certificate.holds(), read.certificate.holds())
+        self.assertEqual(obs.ObservableGates.report_delta(
+            read.toRecord(), back.toRecord()), 0.0)
+
+    def test_record_null_semantics(self):
+        # unknown values serialize as null, never as zero.
+        EH = obs.ExchangeHolonomy
+        frame0 = EH.transverseSpinorFrame(0, 1, 4)
+        weights = np.ones(4, dtype=complex)
+        ev = _baryon_evidence(spin="none", quarks=[
+            self.pc.classifyQuark(_certified_evidence())] * 3)
+        ev.rotation = EH.rotationCharacter(
+            EH.loopHolonomy(EH.rotationLoopFrames(frame0, 0, 1, 4, 1, 16),
+                            weights),
+            EH.loopHolonomy(EH.referenceLoopFrames(frame0, 8), weights))
+        read = self.pc.classifyBaryon(ev)
+        record = read.toRecord()
+        for key in ("total_j2", "total_j2_variance", "electric_flux",
+                    "physical_mass", "rotation_character_re",
+                    "rotation_character_im", "total_isospin"):
+            self.assertIsNone(record[key], key)
+        back = obs.BaryonRead.fromRecord(record)
+        self.assertIsNone(back.totalJ2)
+        self.assertIsNone(back.totalJ2Variance)
+        self.assertIsNone(back.physicalMass)
+        self.assertIsNone(back.rotationCharacter)
+
+    def test_from_record_rejects_unknown_schema(self):
+        record = self.pc.classifyBaryon(_baryon_evidence()).toRecord()
+        record["schema_version"] = 99
+        with self.assertRaises(ValueError):
+            obs.BaryonRead.fromRecord(record)
+
+    def test_from_record_rejects_a_foreign_record_type(self):
+        record = self.pc.classifyQuark(_certified_evidence()).toRecord()
+        with self.assertRaises(ValueError):
+            obs.BaryonRead.fromRecord(record)
+
+    def test_verdict_surface_is_stable_for_wave_four(self):
+        # #776/#777/#778 consume the verdict unchanged, serialized through
+        # the existing Record convention and stable under replay.
+        record = self.pc.classifyBaryon(_baryon_evidence()).toRecord()
+        self.assertEqual(record["record_type"], "baryon_read")
+        self.assertEqual(record["classification"], "certified-proton")
+        for key in ("quark0_hash", "quark1_hash", "quark2_hash",
+                    "bound_component_hash", "color_gram_determinant",
+                    "color_flux", "baryon_flux", "electric_flux", "total_j2",
+                    "total_j2_variance", "failed_certificates", "confidence",
+                    "thresholds", "certificate"):
+            self.assertIn(key, record)
+
+
+class TestBaryonGuardsAndBenchmark(unittest.TestCase):
+    """Shared #763 merge gates for the three-cluster sector."""
+
+    def test_no_baryon_quantity_enters_the_emergence_objective(self):
+        objective_homes = [REPO_ROOT / "src" / "cobordism",
+                           REPO_ROOT / "include" / "cobordism",
+                           REPO_ROOT / "src" / "rl",
+                           REPO_ROOT / "include" / "rl",
+                           REPO_ROOT / "src" / "simulations",
+                           REPO_ROOT / "include" / "simulations"]
+        needles = ("BaryonRead", "BaryonCandidateEvidence", "classifyBaryon",
+                   "BoundSupercomponentRead", "boundSupercomponentSearch",
+                   "ScaleProfileRead", "scaleProfile")
+        offenders = []
+        for home in objective_homes:
+            if not home.exists():
+                continue
+            for path in home.rglob("*"):
+                if path.suffix not in (".h", ".cpp", ".cu", ".hpp"):
+                    continue
+                text = path.read_text(errors="ignore")
+                if any(needle in text for needle in needles):
+                    offenders.append(str(path))
+        self.assertEqual(offenders, [])
+
+    def test_no_target_proton_wavefunction_is_introduced(self):
+        # ticket out-of-scope: nothing here supplies or optimizes toward a
+        # target proton state -- the classifier only READS evidence.
+        source = (REPO_ROOT / "src" / "observables" /
+                  "ParticleClusters.cpp").read_text()
+        for needle in ("targetProton", "protonTarget", "targetWavefunction"):
+            self.assertNotIn(needle, source)
+
+    def test_new_thresholds_enter_the_evidence_fingerprint(self):
+        ev = _certified_evidence()
+        base = obs.ParticleClusters()
+        for name, value in (("colorGramTolerance", 0.5),
+                            ("colorFluxTolerance", 0.5),
+                            ("spinExpectationTolerance", 0.5),
+                            ("spinVarianceTolerance", 0.5),
+                            ("minSupportContainment", 0.5),
+                            ("minLifetimeOverlap", 3.0),
+                            ("minRadius", 0.5),
+                            ("maxProfileDeviation", 0.5)):
+            cfg = obs.ParticleClustersConfig()
+            setattr(cfg, name, value)
+            self.assertNotEqual(base.evidenceFingerprint(ev),
+                                obs.ParticleClusters(cfg)
+                                .evidenceFingerprint(ev), name)
+
+    def test_old_threshold_records_still_rehydrate(self):
+        # pre-#775 checkpoints lack the new threshold keys: the reader falls
+        # back to the defaults instead of rejecting.
+        pc = obs.ParticleClusters()
+        record = pc.classifyQuark(_certified_evidence()).toRecord()
+        keys = ("color_gram_tolerance", "color_flux_tolerance",
+                "spin_expectation_tolerance", "spin_variance_tolerance",
+                "min_support_containment", "min_lifetime_overlap",
+                "min_radius", "max_profile_deviation")
+        for key in keys:
+            self.assertIn(key, record["thresholds"])
+            del record["thresholds"][key]
+        back = obs.QuarkRead.fromRecord(record)
+        defaults = obs.ParticleClustersConfig()
+        self.assertEqual(back.thresholds.colorGramTolerance,
+                         defaults.colorGramTolerance)
+        self.assertEqual(back.thresholds.maxProfileDeviation,
+                         defaults.maxProfileDeviation)
+
+    def test_cached_color_flux_read_gives_an_identical_verdict(self):
+        # the cached-versus-cold merge gate on the one CACHED read the
+        # baryon certificate consumes (#764 AnalyticCache contract).
+        pc = obs.ParticleClusters()
+        cache = cob.AnalyticCache(_from_simplices(7, _TETRA_CHAIN,
+                                                  timelike=False))
+        state = qm.CovarianceState(np.eye(3, dtype=complex))
+        cold = pc.octetBilinearRead(state, [0, 1, 2])
+        warm = pc.octetBilinearReadCached(cache, [1, 2, 3], state, [0, 1, 2])
+        cached = pc.octetBilinearReadCached(cache, [1, 2, 3], state, [0, 1, 2])
+        self.assertGreaterEqual(cache.hits, 1)
+        self.assertEqual(obs.ObservableGates.report_delta(
+            cold.toRecord(), warm.toRecord()), 0.0)
+        self.assertEqual(obs.ObservableGates.report_delta(
+            cold.toRecord(), cached.toRecord()), 0.0)
+        a = pc.classifyBaryon(_baryon_evidence(flux=cold))
+        b = pc.classifyBaryon(_baryon_evidence(flux=cached))
+        self.assertEqual(obs.ObservableGates.report_delta(
+            a.toRecord(), b.toRecord()), 0.0)
+        self.assertEqual(a.classification, "certified-proton")
+        self.assertEqual(b.classification, "certified-proton")
+
+    def test_classification_cost_per_candidate(self):
+        # merge-gate benchmark: three-cluster classification cost (numbers
+        # reported in the PR body).
+        pc = obs.ParticleClusters()
+        evidence = _baryon_evidence()
+        samples = _scale_samples()
+        candidates = _bound_candidates()
+        components = _modular_hierarchy()[2].components
+        n = 200
+        t0 = time.perf_counter()
+        for _ in range(n):
+            pc.classifyBaryon(evidence)
+        baryon = (time.perf_counter() - t0) / n
+        t0 = time.perf_counter()
+        for _ in range(n):
+            pc.scaleProfile(samples)
+        scale = (time.perf_counter() - t0) / n
+        t0 = time.perf_counter()
+        for _ in range(n):
+            pc.boundSupercomponentSearch(components, candidates)
+        search = (time.perf_counter() - t0) / n
+        print(f"\n[benchmark] classifyBaryon: {baryon * 1e6:.1f} us; "
+              f"scaleProfile: {scale * 1e6:.1f} us; "
+              f"boundSupercomponentSearch: {search * 1e6:.1f} us "
+              f"per candidate")
+        for cost in (baryon, scale, search):
+            self.assertLess(cost, 0.05)
+
+
+class TestExchangeChannelReport(unittest.TestCase):
+    """REPORT-ONLY reuse of the #772 Berry-cancelled exchange channel: the
+    exchange character and the doubly cancelled spin-statistics ratio
+    travel on the read but gate nothing (neither the ticket's
+    proton-certificate list nor design spec 16.4 has an exchange row)."""
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+
+    def test_exchange_character_is_minus_one_on_the_fixture(self):
+        chi = _exchange_character()
+        self.assertEqual(chi.channel, obs.HolonomyChannel.ParticleExchange)
+        self.assertLess(abs(chi.character + 1.0), 1e-12)
+        self.assertTrue(chi.certificate.holds())
+
+    def test_doubly_cancelled_ratio_is_plus_one(self):
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(exchange=_exchange_character()))
+        self.assertLess(abs(read.exchangeCharacter + 1.0), 1e-12)
+        self.assertLess(abs(read.rotationCharacter + 1.0), 1e-12)
+        self.assertLess(abs(read.spinStatisticsRatio - 1.0), 1e-12)
+        self.assertEqual(read.classification, "certified-proton")
+
+    def test_exchange_channel_never_gates(self):
+        # a DOUBLE exchange (chi_hat = +1) leaves the verdict untouched:
+        # the channel is reported, never a certificate.
+        doubled = _exchange_character(steps=16, distance=8)
+        self.assertLess(abs(doubled.character - 1.0), 1e-12)
+        read = self.pc.classifyBaryon(_baryon_evidence(exchange=doubled))
+        self.assertEqual(read.classification, "certified-proton")
+        self.assertEqual(read.failedCertificates, [])
+        self.assertLess(abs(read.spinStatisticsRatio + 1.0), 1e-12)
+
+    def test_absent_exchange_read_is_unknown(self):
+        read = self.pc.classifyBaryon(_baryon_evidence())
+        self.assertIsNone(read.exchangeCharacter)
+        self.assertIsNone(read.spinStatisticsRatio)
+        self.assertEqual(read.classification, "certified-proton")
+
+    def test_mislabeled_channel_is_refused_not_reinterpreted(self):
+        # a ROTATION-tagged read offered as the exchange channel is
+        # ignored: the ratio stays unknown and nothing throws.
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(exchange=_rotation_character()))
+        self.assertIsNone(read.exchangeCharacter)
+        self.assertIsNone(read.spinStatisticsRatio)
+
+    def test_ratio_needs_both_certified_channels(self):
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(rotation_turns=2,
+                             exchange=_exchange_character()))
+        # the 4pi rotation IS certified, so the ratio is still reported
+        self.assertIsNotNone(read.spinStatisticsRatio)
+        self.assertLess(abs(read.spinStatisticsRatio + 1.0), 1e-12)
+        self.assertIn("rotation-character", read.failedCertificates)
+
+    def test_exchange_channels_serialize(self):
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(exchange=_exchange_character()))
+        record = read.toRecord()
+        self.assertAlmostEqual(record["exchange_character_re"], -1.0,
+                               delta=1e-12)
+        self.assertAlmostEqual(record["spin_statistics_ratio_re"], 1.0,
+                               delta=1e-12)
+        back = obs.BaryonRead.fromRecord(record)
+        self.assertEqual(back.exchangeCharacter, read.exchangeCharacter)
+        self.assertEqual(back.spinStatisticsRatio, read.spinStatisticsRatio)
+        blank = self.pc.classifyBaryon(_baryon_evidence()).toRecord()
+        self.assertIsNone(blank["exchange_character_re"])
+        self.assertIsNone(blank["spin_statistics_ratio_im"])
+
+
+class TestBindingCoherence(unittest.TestCase):
+    """The whitepaper's "one persistent bound supercluster CONTAINING THEM":
+    the binding read's contained-candidate set must be exactly the three
+    constituents' label-free identities."""
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+
+    def test_coherent_binding_certifies(self):
+        read = self.pc.classifyBaryon(_baryon_evidence())
+        self.assertEqual(read.classification, "certified-proton")
+        self.assertEqual(
+            sorted(q.canonicalHash()
+                   for q in _baryon_evidence().binding.quarks),
+            sorted(q.canonicalHash() for q in read.quarks))
+
+    def test_binding_for_other_components_is_refused(self):
+        # a CERTIFIED binding read of three DIFFERENT constituents is not
+        # this candidate's supercomponent: the gate refuses rather than
+        # accepting an incoherent bundle.
+        strangers = [_relabel_quark(_ud_quark(k), level=1,
+                                    tag="%02x" % (0xf0 + i))
+                     for i, k in enumerate(("u", "u", "d"))]
+        foreign = _binding(quarks=strangers)
+        self.assertTrue(foreign.found)
+        read = self.pc.classifyBaryon(_baryon_evidence(binding=foreign))
+        self.assertEqual(read.classification, "no-baryon")
+        self.assertEqual(read.failedCertificates, ["bound-supercomponent"])
+
+    def test_binding_order_does_not_matter(self):
+        # the comparison is an order-insensitive SET statement.
+        ev = _baryon_evidence()
+        legs = list(ev.quarks)
+        permuted = _baryon_evidence(
+            quarks=[legs[2], legs[0], legs[1]],
+            color=_color_triad()[:, [2, 0, 1]], binding=ev.binding)
+        read = self.pc.classifyBaryon(permuted)
+        self.assertEqual(read.classification, "certified-proton")
