@@ -467,11 +467,13 @@ void MultiCobordism::setCarriedState(
   // ChainComplex cell order, so a mode cell would be located against the
   // wrong index; and `laplacianGradient` — the coupling's exact derivative —
   // is defined only for k >= 1 anyway. Refusing loudly beats mis-mapping.
+  // A DECLARED domain for the carried state, not a capability limit: since
+  // #805 L_0 and its exact gradient exist too (a degree-zero carried state
+  // would put the modes on VERTICES, which is a separate design decision).
   if (degree < 1)
     throw std::invalid_argument(
-        "MultiCobordism::setCarriedState: the carried degree must be at least "
-        "one (the metric Hodge operator and its exact gradient are defined "
-        "there)");
+        "MultiCobordism::setCarriedState: the carried state is declared over "
+        "degrees >= 1; got degree " + std::to_string(degree));
   const std::size_t modeCount = modeCells.size();
   if (covariance.size() != modeCount * modeCount)
     throw std::invalid_argument(
@@ -580,7 +582,9 @@ std::vector<complexd> MultiCobordism::carriedStateEnergyGradient(
   if (simulationMode_ != SimulationMode::Emergence ||
       emergenceSubmode_ != EmergenceSubmode::CertificatesBlindMeanField)
     return gradient;
-  if (carriedStateDegree_ < 1) return gradient;  // no ∂L/∂z below degree one
+  // No degree guard: setCarriedState already declares the carried degree's
+  // domain, and laplacianGradient is exact at every degree it admits --
+  // including zero since #805, where L_0 = d_1 W_1^-1 d_1^T is holomorphic in z.
 
   const auto chainComplex = ChainComplex::fromSpacetime(*spacetime);
   const auto cells = chainComplex.kSimplexVertices(carriedStateDegree_);

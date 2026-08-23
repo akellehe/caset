@@ -110,9 +110,10 @@ def laplacian_of(st):
 
 def shifted(flat, n, shift):
     """The static response operator L + shift * I (the design-spec 5.3
-    resolvent pencil at -shift). The bare k = 0 graph Laplacian is exactly
-    singular (constant/gauge kernel), so the meaningful repeated solve is
-    the shifted one; the shift cancels in the update factors."""
+    resolvent pencil at -shift). The bare degree-zero Hodge operator
+    L_0 = d_1 W_1^-1 d_1^T is exactly singular (its row sums vanish, so the
+    constant is always in the kernel), which is why the meaningful repeated
+    solve is the shifted one; the shift cancels in the update factors."""
     out = list(flat)
     for i in range(n):
         out[i * n + i] += shift

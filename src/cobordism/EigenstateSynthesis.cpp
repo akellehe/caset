@@ -892,9 +892,12 @@ std::vector<cd> EigenstateSynthesis::bulkMinusBoundaryHarmonicMatrix(
 
 std::vector<cd> EigenstateSynthesis::readoutLaplacian() const {
   // k = 0 scores the U(1) CONNECTION operator, k >= 1 the Hodge L_k (#805).
-  const HodgeLaplacian hodge(st_);
-  return k_ == 0 ? hodge.connectionLaplacian()
-                 : hodge.laplacian(k_, /*metric=*/true);
+  // Read through the CAPTURED operator: its vertex/cell ordering is the one
+  // cellOrdering_ was built from, and neither entry point consults a spectral
+  // cache (both reassemble from the live edges on every call), so repeated
+  // perturb-then-query stays honest.
+  return k_ == 0 ? laplacian_.connectionLaplacian()
+                 : laplacian_.laplacian(k_, /*metric=*/true);
 }
 
 std::vector<cd> EigenstateSynthesis::readoutHarmonicMatrix() const {
