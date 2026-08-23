@@ -37,3 +37,9 @@ third_party/itensor_tdvp/
 campaign-geometry
 proton_dumps/
 dumps
+
+# #778 example run artifacts (never committed; see the issue-attachments release)
+recursive_baryon_run*.json
+recursive_baryon_campaign*.json
+recursive_baryon_sidecar*.npz
+recursive_baryon_overlay*.png
