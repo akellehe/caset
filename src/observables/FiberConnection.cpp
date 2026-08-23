@@ -877,8 +877,17 @@ WilsonHolonomyRead FiberConnection::holonomy(
   read.determinant = h.determinant();
   const double traceAbs = std::abs(h.trace());
   read.adjointTrace = cd(traceAbs * traceAbs - 1.0, 0.0);
-  read.unitarityResidual = spectralNorm(
-      h.adjoint() * h - Eigen::MatrixXcd::Identity(rank, rank));
+  // Metric-appropriate isometry defect: ||H^dagger H - I|| in the positive
+  // regime, the base-point J-isometry defect ||H^dagger J H - J|| on a
+  // Krein loop (a pseudo-unitary product is exactly J-unitary, never
+  // silently graded against the Euclidean metric).
+  Eigen::MatrixXcd jBase = Eigen::MatrixXcd::Identity(rank, rank);
+  if (regime == CertificateRegime::HermitianIndefinite &&
+      links.front().toPositiveSignature + links.front().toNegativeSignature ==
+          rank)
+    jBase = signatureMatrix(links.front().toPositiveSignature,
+                            links.front().toNegativeSignature);
+  read.unitarityResidual = spectralNorm(h.adjoint() * jBase * h - jBase);
   if (rank == 3) read.adjointMatrix = adjointRepresentation(h);
   if (unitary) residual = fmaxAccumulate(residual, read.unitarityResidual);
   read.certificate = Certificate::certifiedNumerical(
@@ -1007,6 +1016,10 @@ FundamentalLiftRead FiberConnection::fundamentalLift(
     if (link.unitaryMap.size() == 0)
       return invalid("link " + std::to_string(i) +
                      " carries only a GL transport (no unitary factor)");
+    if (link.regime != CertificateRegime::PositiveSemidefinite)
+      return invalid("link " + std::to_string(i) +
+                     " is outside the positive regime (an SU(3) lift is "
+                     "never emitted from a pseudo-unitary factor)");
     const cd det = link.unitaryMap.determinant();
     if (!(std::abs(det) > 0.0))
       return invalid("vanishing link determinant");

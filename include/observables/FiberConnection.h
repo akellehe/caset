@@ -325,7 +325,11 @@ struct WilsonHolonomyRead {
   /// M ↦ H M H† restricted to the traceless octet by
   /// `ColorFiber::adjointOctetProjector` (empty at other ranks).
   Eigen::MatrixXcd adjointMatrix{};
-  /// ‖H†H − I‖₂.
+  /// Metric-appropriate isometry defect of the product: ‖H†H − I‖₂ in the
+  /// positive regime (and reported for GL products), the base-point
+  /// J-isometry defect ‖H†J H − J‖₂ on a Krein loop — a pseudo-unitary
+  /// product is exactly J-unitary and is never graded against the
+  /// Euclidean metric.
   double unitarityResidual = std::numeric_limits<double>::quiet_NaN();
   /// True when every link supplied a unitary/pseudo-unitary factor.
   bool unitary = false;
@@ -602,9 +606,11 @@ class FiberConnection {
 
     /// Continue a cube-root branch along `links` from the declared base
     /// branch and RECORD the accumulated Z₃ center sector (file banner
-    /// for the exact lift identity).  Requires rank three and unitary
-    /// links; an invalid request reports `valid = false` with the reason
-    /// — SU(3) is never emitted at generic rank or from a GL transport.
+    /// for the exact lift identity).  Requires rank three, unitary links,
+    /// and the POSITIVE regime; an invalid request reports
+    /// `valid = false` with the reason — SU(3) is never emitted at
+    /// generic rank, from a GL transport, or from a pseudo-unitary
+    /// (Krein) factor outside U(3).
     /// @throws std::invalid_argument when `baseBranch` ∉ {0, 1, 2} or
     ///   `links` is empty.
     [[nodiscard]] FundamentalLiftRead fundamentalLift(

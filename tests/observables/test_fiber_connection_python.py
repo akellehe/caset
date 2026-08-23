@@ -1001,6 +1001,34 @@ class TestKreinAndNonNormal(unittest.TestCase):
                                    rtol=0, atol=1e-10)
         np.testing.assert_allclose(h, np.eye(3), rtol=0, atol=1e-10)
 
+    def test_krein_loop_is_graded_against_its_own_metric(self):
+        # a NON-cancelling pseudo-unitary loop: exactly J-unitary, far from
+        # Euclidean-unitary — the residual is the J-isometry defect, so the
+        # certificate holds instead of failing against the wrong metric
+        conn = obs.FiberConnection()
+        t = np.diag(1.0 / self.W) @ self._boost(0.5)
+        a = self._krein_fiber(1)
+        read = conn.holonomy([conn.transport(a, a, t)])
+        h = np.asarray(read.holonomy)
+        self.assertLess(read.unitarityResidual, 1e-10)  # J-defect
+        self.assertGreater(np.linalg.norm(h.conj().T @ h - np.eye(3), 2),
+                           0.1)  # Euclidean defect is real and large
+        self.assertTrue(read.certificate.holds())
+        self.assertEqual(read.certificate.regime,
+                         cob.CertificateRegime.HermitianIndefinite)
+
+    def test_lift_refuses_pseudo_unitary_links(self):
+        # a Krein link carries a J-unitary factor, not a U(3) one: the
+        # SU(3) lift refuses outside the positive regime
+        conn = obs.FiberConnection()
+        t = np.diag(1.0 / self.W) @ self._boost(0.4)
+        a = self._krein_fiber(1)
+        link = conn.transport(a, a, t)
+        self.assertTrue(link.accepted)
+        lift = conn.fundamentalLift([link])
+        self.assertFalse(lift.valid)
+        self.assertIn("positive regime", lift.invalidReason)
+
     def _nonnormal_fiber(self, base, seed=13):
         rng = np.random.default_rng(seed)
         phi = np.eye(3) + 0.3 * rng.normal(size=(3, 3))
