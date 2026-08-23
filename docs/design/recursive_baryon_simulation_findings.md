@@ -56,10 +56,10 @@ OMP_NUM_THREADS=8 .venv-build/bin/python \
 
 | command | what it does | MEASURED wall time (32-core box, 8 threads) |
 |---|---|---|
-| `run` (fast default) | size 12, 2 drive steps, 54 top cells | **7.2 s** |
+| `run` (fast default) | size 12, 2 drive steps, 54 top cells | **7.5 s** (median of three: 7.40 / 7.52 / 8.41) |
 | `run --animate overlay.gif` | the same plus the 2-frame overlay | **10.7 s** |
 | `run --large` | size 30, 4 drive steps, 122 top cells | **50 s** |
-| `replay --from run.json` | cold-cache replay of both frames | **0.11 s** |
+| `replay --from run.json` | cold-cache replay of both frames | **0.11 s** (median of three) |
 | `campaign` (declared default) | 3 sizes × 2 seeds = 6 members | **44 s** |
 | `campaign --sizes 6,12,20,30 --seeds 7,11,13` | 4 sizes × 3 seeds = 12 members | **155 s** |
 | `fixtures` | the eleven exactness fixtures alone | **0.15 s** |
@@ -68,7 +68,7 @@ OMP_NUM_THREADS=8 .venv-build/bin/python \
 the SOFTWARE ran, never whether the physics obliged. `replay` exits non-zero
 only when a stored verdict or content hash fails to reproduce.
 
-Every number in §§2–8 comes from the fast-default run at commit `933d365`,
+Every number in §§2–8 comes from the fast-default run at commit `53cd5ed`,
 config hash `5e7ada57efad6aa2aea6c9a1855cf088`; §7 comes from the 12-member
 campaign at the same commit.
 
@@ -473,7 +473,7 @@ The machine-readable documents (run schema version 1) carry the full config,
 its hash, the commit, every embedded schema-3 checkpoint, every persisted
 layer, the certificate ledger, the exactness fixtures and the verdict with
 its named reasons. Reproduce every number above with the commands in §1 at
-commit `933d365`; the fast run's emitted `config_hash` must be
+commit `53cd5ed`; the fast run's emitted `config_hash` must be
 `5e7ada57efad6aa2aea6c9a1855cf088`.
 
 Per the repository convention that issue artifacts do not live in the

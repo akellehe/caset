@@ -628,8 +628,17 @@ class RecursiveReadout:
                 self.band_reads.append(
                     self.tracker.enumerateBands(component.support, degree))
                 self.band_component.append(index)
-        self.candidate = [self._first_accepted(read) for read in
-                          self.band_reads]
+        # The candidate band of each component read: the FIRST accepted one,
+        # the band every downstream read is assembled around. Its POSITION is
+        # recorded beside it so a consumer identifies it by index rather than
+        # by object identity through the binding.
+        self.candidate = []
+        self.candidate_index = []
+        for read in self.band_reads:
+            position = self._first_accepted_index(read)
+            self.candidate_index.append(position)
+            self.candidate.append(None if position < 0
+                                  else read.fibers[position])
 
         # the pure Slater covariance of each accepted candidate band
         self.states = []
@@ -648,11 +657,11 @@ class RecursiveReadout:
         self._build_bindings()
 
     @staticmethod
-    def _first_accepted(band_read):
-        for fiber in band_read.fibers:
+    def _first_accepted_index(band_read):
+        for position, fiber in enumerate(band_read.fibers):
             if fiber.accepted():
-                return fiber
-        return None
+                return position
+        return -1
 
     def _build_transports(self):
         self.transports = []
@@ -1194,7 +1203,7 @@ def fibers_block(readout, sidecar):
             # downstream read is assembled around, so its projector is the
             # one the record has to carry. Persisting all of them would be
             # bulk, not evidence.
-            if fiber is readout.candidate[index]:
+            if position == readout.candidate_index[index]:
                 band["candidate"] = True
                 band["projector"] = sidecar.store(
                     f"projector_read_{index}_band_{position}",
@@ -1279,7 +1288,6 @@ def transports_block(readout):
 
     try:
         holonomy = readout.connection.holonomy(accepted)
-        matrix = np.array(holonomy.holonomy)
         out["full"] = {
             "available": True,
             "closed": bool(holonomy.closed),
@@ -2612,10 +2620,11 @@ def replay_document(document, directory=None, progress=False):
     try:
         rebuilt = _spacetime_from_raw(document["raw_geometry"])
         readout = RecursiveReadout(rebuilt, config, config["seed"])
-        verdict["replayed"] = verdict_block(readout)["verdict"]
+        recomputed = verdict_block(readout)
+        verdict["replayed"] = recomputed["verdict"]
         verdict["match"] = verdict["replayed"] == verdict["stored"]
         verdict["failed_certificates_match"] = (
-            list(verdict_block(readout)["failed_certificates"])
+            list(recomputed["failed_certificates"])
             == list(document["verdict"]["failed_certificates"]))
     except Exception as error:                            # noqa: BLE001
         verdict["reason"] = f"{type(error).__name__}: {error}"
