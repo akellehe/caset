@@ -5,6 +5,7 @@
 #include <pybind11/stl.h>
 #include <pybind11/options.h>
 #include <pybind11/complex.h>
+#include <pybind11/eigen.h>
 #include <pybind11/functional.h>
 #include <pybind11/chrono.h>
 
@@ -24,7 +25,9 @@
 #include "mesh/SimplexFilter.h"
 #include "observables/ModularityOptimizer.h"
 #include "observables/PersistentModularity.h"
+#include "observables/SpectralFiber.h"
 #include "observables/SparseGraph.h"
+#include "cobordism/AnalyticCache.h"
 #include "observables/VolumeProfile.h"
 #include "observables/WilsonLoop.h"
 #include "observables/Spectral.h"
@@ -40,6 +43,7 @@
 #include "observables/PairLoopFlavor.h"
 #include "observables/ObservableGates.h"
 #include "observables/DualVolumeSigns.h"
+#include "observables/ColorFiber.h"
 #include "cobordism/Proton.h"
 #include "spacetime/Spacetime.h"
 #include "ForceLayout.h"
@@ -480,6 +484,285 @@ ticket supplies the projectors.)doc")
 whose support intersects the touched level-0 cells, plus the affected
 tracks.  Siblings with disjoint support remain valid.  Pure bookkeeping —
 no recomputation.)doc");
+
+  // ========================================
+  // SpectralFiber (#769): localized spectral bands and their certificates
+  // ========================================
+  py::class_<SpectralFiberConfig>(m, "SpectralFiberConfig",
+      "Configuration of the spectral-band detector/tracker (ticket #769, "
+      "design spec section 9).  Thresholds select which bands are "
+      "CERTIFIED, never which eigenvalues exist; no threshold is a "
+      "Betti-number oracle and no rank is ever requested.")
+      .def(py::init<>())
+      .def_readwrite("degrees", &SpectralFiberConfig::degrees,
+                     "Form degrees enumerated by enumerateOnComponents.")
+      .def_readwrite("groupingTolerance",
+                     &SpectralFiberConfig::groupingTolerance,
+                     "Relative band-grouping width (fraction of the "
+                     "spectral scale).")
+      .def_readwrite("minRelativeGap", &SpectralFiberConfig::minRelativeGap,
+                     "Isolation floor: certified bands need both gaps >= "
+                     "minRelativeGap * scale (a closing gap returns an "
+                     "uncertified band).")
+      .def_readwrite("gapDominance", &SpectralFiberConfig::gapDominance,
+                     "Certified gaps must exceed this multiple of the "
+                     "in-band spread.")
+      .def_readwrite("residualTolerance",
+                     &SpectralFiberConfig::residualTolerance,
+                     "Cap on the relative eigen/left/projector residuals.")
+      .def_readwrite("gramDefectTolerance",
+                     &SpectralFiberConfig::gramDefectTolerance,
+                     "Cap on ||Phi^dagger W Phi - J||.")
+      .def_readwrite("conditionNumberCap",
+                     &SpectralFiberConfig::conditionNumberCap,
+                     "Cap on the band condition number ||P||_2.")
+      .def_readwrite("denseCrossover", &SpectralFiberConfig::denseCrossover,
+                     "Dimension at/above which the self-adjoint path goes "
+                     "sparse.")
+      .def_readwrite("requestedEigenpairs",
+                     &SpectralFiberConfig::requestedEigenpairs,
+                     "Lowest eigenpairs the sparse block path computes.")
+      .def_readwrite("oversample", &SpectralFiberConfig::oversample,
+                     "Extra Ritz vectors beyond requestedEigenpairs.")
+      .def_readwrite("maxSolverIterations",
+                     &SpectralFiberConfig::maxSolverIterations)
+      .def_readwrite("solverTolerance", &SpectralFiberConfig::solverTolerance)
+      .def_readwrite("solverSeed", &SpectralFiberConfig::solverSeed,
+                     "Seed of the deterministic sparse start block.")
+      .def_readwrite("trackOverlapThreshold",
+                     &SpectralFiberConfig::trackOverlapThreshold,
+                     "Minimum subspace overlap for a certified track "
+                     "continuation.")
+      .def_readwrite("crossValidateDense",
+                     &SpectralFiberConfig::crossValidateDense,
+                     "Cross-check solves below the crossover against the "
+                     "independent DenseReference kernel and record the "
+                     "deviation on the certificate.");
+
+  py::class_<SpectralBandCertificate>(m, "SpectralBandCertificate",
+      R"doc(Certification record of one whole spectral band (design spec
+section 6.3): degree, rank, lower/upper gap, localization (projector-
+diagonal inverse participation ratio), projector/eigen/left residuals,
+weighted Gram/signature defect ||Phi^dagger W Phi - J||, band condition
+number ||P||_2, Krein inertia (p, q), frequency window, self-adjointness
+flag, and the graded #764 Certificate (BandWindow domain; an uncertified
+band carries HeuristicDiscovery, which never holds).
+
+A degenerate band is one object of rank >= 2; an unexplained multiplicity
+is reported exactly as its rank and never labeled.  Negative signature is
+a certificate, never an automatic antiparticle identification.  Unmeasured
+quantities are NaN, never zero.)doc")
+      .def_readonly("degree", &SpectralBandCertificate::degree)
+      .def_readonly("rank", &SpectralBandCertificate::rank)
+      .def_readonly("lowerGap", &SpectralBandCertificate::lowerGap)
+      .def_readonly("upperGap", &SpectralBandCertificate::upperGap)
+      .def_readonly("localization", &SpectralBandCertificate::localization)
+      .def_readonly("projectorResidual",
+                    &SpectralBandCertificate::projectorResidual)
+      .def_readonly("eigenResidual", &SpectralBandCertificate::eigenResidual)
+      .def_readonly("leftResidual", &SpectralBandCertificate::leftResidual)
+      .def_readonly("gramDefect", &SpectralBandCertificate::gramDefect)
+      .def_readonly("conditionNumber",
+                    &SpectralBandCertificate::conditionNumber)
+      .def_readonly("positiveSignature",
+                    &SpectralBandCertificate::positiveSignature)
+      .def_readonly("negativeSignature",
+                    &SpectralBandCertificate::negativeSignature)
+      .def_readonly("frequencyLower",
+                    &SpectralBandCertificate::frequencyLower)
+      .def_readonly("frequencyUpper",
+                    &SpectralBandCertificate::frequencyUpper)
+      .def_readonly("selfAdjoint", &SpectralBandCertificate::selfAdjoint)
+      .def_readonly("accepted", &SpectralBandCertificate::accepted)
+      .def_readonly("certificate", &SpectralBandCertificate::certificate)
+      .def("describe", &SpectralBandCertificate::describe)
+      .def("__repr__", &SpectralBandCertificate::describe);
+
+  py::class_<FiberOverlapRead>(m, "FiberOverlapRead",
+      "Principal-angle / support comparison of two fibers: cells matched "
+      "by sorted vertex-id tuple (gauge- and relabeling-invariant).")
+      .def_readonly("supportOverlap", &FiberOverlapRead::supportOverlap)
+      .def_readonly("sharedCells", &FiberOverlapRead::sharedCells)
+      .def_readonly("principalAngles", &FiberOverlapRead::principalAngles)
+      .def_readonly("subspaceOverlap", &FiberOverlapRead::subspaceOverlap);
+
+  py::class_<SpectralFiber>(m, "SpectralFiber",
+      R"doc(One whole isolated spectral band of a component-restricted Hodge
+operator (design spec section 6.3): right/left frames, band projector
+P = Phi Psi^dagger W with Psi^dagger W Phi = I, eigenvalues, and the
+SpectralBandCertificate.  The band is represented by its PROJECTOR —
+individual eigenvectors are a gauge choice and never determine an identity
+or a downstream observable.)doc")
+      .def("degree", &SpectralFiber::degree)
+      .def("rank", &SpectralFiber::rank)
+      .def("accepted", &SpectralFiber::accepted)
+      .def("rightFrame", &SpectralFiber::rightFrame,
+           "Right frame Phi (cells x rank).")
+      .def("leftFrame", &SpectralFiber::leftFrame,
+           "Left frame Psi (cells x rank), Psi^dagger W Phi = I.")
+      .def("projector", &SpectralFiber::projector,
+           "The band projector P = Phi Psi^dagger W (cells x cells).")
+      .def("weightDiagonal", &SpectralFiber::weightDiagonal,
+           "Diagonal inner-product weights W restricted to the band's "
+           "cells.")
+      .def("eigenvalues", &SpectralFiber::eigenvalues,
+           "Band eigenvalues (with multiplicity), sorted by (Re, Im).")
+      .def("bandCenter", &SpectralFiber::bandCenter)
+      .def("cellVertices", &SpectralFiber::cellVertices,
+           "The k-cells carrying the band, as sorted vertex-id tuples in "
+           "frame row order.")
+      .def("certificate", &SpectralFiber::certificate,
+           py::return_value_policy::copy)
+      .def_static("overlap", &SpectralFiber::overlap, py::arg("a"),
+                  py::arg("b"),
+                  "Principal-angle / support comparison (cells matched by "
+                  "vertex-id tuple).")
+      .def("toRecord",
+           [](const SpectralFiber &self) {
+             return recordToPython(self.toRecord());
+           },
+           "Checkpoint serialization: the JSON-able record of the fiber "
+           "(schema-versioned; complex leaves split _re/_im).")
+      .def_static("fromRecord",
+                  [](const py::handle &record) {
+                    return SpectralFiber::fromRecord(pythonToRecord(record));
+                  },
+                  py::arg("record"),
+                  "Rehydrate from toRecord() output; rejects an unknown "
+                  "schema_version (ValueError).");
+
+  py::class_<SpectralBandWindow>(m, "SpectralBandWindow",
+      "An accepted band's frequency window as PLAIN DATA for the response "
+      "consumer (#768): lower/upper frequency bounds plus the band "
+      "certificate.  Carries no operator, frame, or quotient reference.")
+      .def_readonly("degree", &SpectralBandWindow::degree)
+      .def_readonly("rank", &SpectralBandWindow::rank)
+      .def_readonly("frequencyLower", &SpectralBandWindow::frequencyLower)
+      .def_readonly("frequencyUpper", &SpectralBandWindow::frequencyUpper)
+      .def_readonly("certificate", &SpectralBandWindow::certificate);
+
+  py::class_<FiberMatchRead>(m, "FiberMatchRead",
+      "One matched fiber pair across frames or resolutions.  A certified "
+      "continuation needs both endpoint bands accepted, equal ranks, and "
+      "subspace overlap above the threshold — an endpoint whose gap closed "
+      "is reported but never certified (no discontinuous identity flip).")
+      .def_readonly("fromIndex", &FiberMatchRead::fromIndex)
+      .def_readonly("toIndex", &FiberMatchRead::toIndex)
+      .def_readonly("degree", &FiberMatchRead::degree)
+      .def_readonly("overlap", &FiberMatchRead::overlap)
+      .def_readonly("ranksEqual", &FiberMatchRead::ranksEqual)
+      .def_readonly("certifiedContinuation",
+                    &FiberMatchRead::certifiedContinuation);
+
+  py::class_<ComponentBandRead>(m, "ComponentBandRead",
+      "The band enumeration of one (component, degree) pair: the restricted "
+      "operator's cells, verified regime, solver path, covered eigenvalues, "
+      "every enumerated band (certified or not), and the solve certificate.")
+      .def_readonly("support", &ComponentBandRead::support)
+      .def_readonly("degree", &ComponentBandRead::degree)
+      .def_readonly("dimension", &ComponentBandRead::dimension)
+      .def_readonly("cellVertices", &ComponentBandRead::cellVertices)
+      .def_readonly("regime", &ComponentBandRead::regime)
+      .def_readonly("solverPath", &ComponentBandRead::solverPath)
+      .def_readonly("truncated", &ComponentBandRead::truncated)
+      .def_readonly("coveredEigenvalues",
+                    &ComponentBandRead::coveredEigenvalues)
+      .def_readonly("fibers", &ComponentBandRead::fibers)
+      .def_readonly("solveCertificate", &ComponentBandRead::solveCertificate)
+      .def("toRecord",
+           [](const ComponentBandRead &self) {
+             return recordToPython(self.toRecord());
+           },
+           "Checkpoint serialization of the whole read (fibers included).")
+      .def_static("fromRecord",
+                  [](const py::handle &record) {
+                    return ComponentBandRead::fromRecord(
+                        pythonToRecord(record));
+                  },
+                  py::arg("record"),
+                  "Rehydrate; rejects an unknown schema_version "
+                  "(ValueError).");
+
+  py::class_<SpectralFiberTracker>(m, "SpectralFiberTracker",
+      R"doc(Extraction and tracking of whole isolated localized Hodge bands
+on persistent components (ticket #769; design spec section 9, Algorithm B).
+
+Identity: for a component support S the tracker assembles the weighted
+Hodge operator of the full induced subcomplex on S (the same boundary maps,
+canonical cell order, and diagonal inner-product weights as the
+whole-complex HodgeLaplacian, consumed read-only), so support = all
+vertices reproduces HodgeLaplacian.laplacian(k) entry for entry.  Regimes
+are VERIFIED, never assumed: positive -> self-adjoint solves (exact dense
+below the crossover, deterministic sparse block shift-invert at/above);
+real signed weights -> W-self-adjointness verified, Krein inertia of
+Phi^dagger W Phi recorded and normalized to diag(I_p, -I_q); complex
+weights -> matched biorthogonal right/left subspaces with
+Psi^dagger W Phi = I.  Bands are grouped by a relative gap rule and every
+band is reported with its projector and certificate; a closing gap yields
+an uncertified band, never a different identity.  The detector never
+requests rank three and no eigenvalue threshold is a Betti oracle.
+
+Read-only observable: never calls a solver on the spacetime, never mutates
+it, and nothing here enters any emergence objective.)doc")
+      .def(py::init([](std::shared_ptr<Spacetime> st,
+                       const SpectralFiberConfig &cfg,
+                       const py::object &weights) {
+             const auto convention =
+                 weights.is_none()
+                     ? tessera::cobordism::HodgeLaplacian::
+                           defaultWeightConvention()
+                     : weights
+                           .cast<tessera::cobordism::HodgeLaplacian::
+                                     WeightConvention>();
+             return SpectralFiberTracker(std::move(st), cfg, convention);
+           }),
+           py::arg("spacetime"), py::arg("config") = SpectralFiberConfig{},
+           py::arg("weights") = py::none(),
+           "Bind to the spacetime to read; weights=None follows the "
+           "process-wide HodgeLaplacian.defaultWeightConvention() at call "
+           "time.")
+      .def("config", &SpectralFiberTracker::config,
+           py::return_value_policy::copy)
+      .def("weightConvention", &SpectralFiberTracker::weightConvention)
+      .def("enumerateBands",
+           [](const SpectralFiberTracker &self,
+              const std::vector<std::uint64_t> &support, int degree) {
+             py::gil_scoped_release release;
+             return self.enumerateBands(support, degree);
+           },
+           py::arg("support"), py::arg("degree"),
+           "Enumerate the bands of one component (vertex-id support) at "
+           "one form degree.")
+      .def("enumerateOnComponents",
+           [](const SpectralFiberTracker &self,
+              const std::vector<ComponentRead> &components) {
+             py::gil_scoped_release release;
+             return self.enumerateOnComponents(components);
+           },
+           py::arg("components"),
+           "Enumerate every configured degree on every #765 component.")
+      .def("enumerateBandsCached",
+           [](const SpectralFiberTracker &self,
+              tessera::cobordism::AnalyticCache &cache,
+              const std::vector<std::uint64_t> &support, int degree) {
+             py::gil_scoped_release release;
+             return self.enumerateBandsCached(cache, support, degree);
+           },
+           py::arg("cache"), py::arg("support"), py::arg("degree"),
+           "enumerateBands through the #764 AnalyticCache contract "
+           "(touched-star invalidation; served while the component is "
+           "untouched).")
+      .def_static("acceptedWindows", &SpectralFiberTracker::acceptedWindows,
+                  py::arg("reads"),
+                  "The accepted bands' frequency windows as plain data for "
+                  "the response consumer (#768).")
+      .def_static("matchFibers", &SpectralFiberTracker::matchFibers,
+                  py::arg("fromFibers"), py::arg("toFibers"),
+                  py::arg("overlapThreshold") = 0.5,
+                  "Track fibers across frames/resolutions by principal "
+                  "angles and component overlap.")
+      .def_readonly_static("CACHE_KIND", &SpectralFiberTracker::kCacheKind);
+
   // ========================================
   // ModularityOptimizer
   // ========================================
@@ -1148,4 +1431,280 @@ Measures only: changes no geometry and enforces nothing.)doc")
       .def("compute", &DualVolumeSigns::compute, py::arg("spacetime"),
            "Fraction of audited, non-degenerate simplices whose star ratio is "
            "negative. Zero means the diagonal star is positive everywhere.");
+
+  // ==========================================================================
+  // ColorFiber / ColorAnchor (#767): the exact three-edge SU(3) color kernel
+  // and the calibrated weighted oriented-triangle anchor.  Pure reads over
+  // caller-supplied data; nothing enters the emergence objective.
+  // ==========================================================================
+  py::class_<OrientedTriangle>(m, "OrientedTriangle",
+      R"doc(One oriented 2-simplex descriptor for the anchoring kernel: the
+three boundary edge indices in the cyclic order induced by the triangle's
+orientation (rows of the caller's frame), with their incidence signs (+1 /
+-1).  det A_tau is invariant under cyclic rotation of (edges, signs) and
+negates under an odd permutation (the opposite orientation).)doc")
+      .def(py::init([](std::array<Eigen::Index, 3> edges,
+                       std::array<int, 3> signs) {
+             return OrientedTriangle{edges, signs};
+           }),
+           py::arg("edges"),
+           py::arg("signs") = std::array<int, 3>{+1, +1, +1})
+      .def_readwrite("edges", &OrientedTriangle::edges)
+      .def_readwrite("signs", &OrientedTriangle::signs);
+
+  py::class_<AnchorProfile>(m, "AnchorProfile",
+      R"doc(The reported anchor datum -- the PROFILE, not only the score:
+the calibrated atlas score a^2 = sum_tau w_tau |det A_tau|^2, the per-
+triangle terms, the maximal term, the participation ratio of the term
+distribution, the determinant phases with their circular coherence /
+dispersion on overlapping oriented triangles (NaN when no determinant is
+nonzero -- unknown is never encoded as zero), the per-triangle Krein
+signatures (n+, n0, n-) of the restricted weight blocks (reported
+separately from the |W_tau|-restricted score), the frame-normalization
+residual, the numerically-checked calibration margin, and the pre-declared
+convex weighting that produced the score.)doc")
+      .def_readonly("score", &AnchorProfile::score)
+      .def_readonly("terms", &AnchorProfile::terms)
+      .def_readonly("max_term", &AnchorProfile::maxTerm)
+      .def_readonly("max_term_index", &AnchorProfile::maxTermIndex)
+      .def_readonly("participation_ratio", &AnchorProfile::participationRatio)
+      .def_readonly("det_phases", &AnchorProfile::detPhases)
+      .def_readonly("phase_coherence", &AnchorProfile::phaseCoherence)
+      .def_readonly("phase_dispersion", &AnchorProfile::phaseDispersion)
+      .def_readonly("krein_signatures", &AnchorProfile::kreinSignatures)
+      .def_readonly("positive_regime", &AnchorProfile::positiveRegime)
+      .def_readonly("frame_gram_residual", &AnchorProfile::frameGramResidual)
+      .def_readonly("calibration_margin", &AnchorProfile::calibrationMargin)
+      .def_readonly("weighting_id", &AnchorProfile::weightingId)
+      .def_readonly("weights", &AnchorProfile::weights)
+      .def_readonly("certificate", &AnchorProfile::certificate,
+          "The #764 tessera.cobordism.Certificate grading the calibrated "
+          "score: StructureExact on the diagonal (decoupled) weight path, "
+          "CertifiedNumerical on the general Hermitian-matrix path; regime "
+          "PositiveSemidefinite / HermitianIndefinite per the Krein read; "
+          "residual = max(frame_gram_residual, max(0, calibration_margin)) "
+          "against the evaluate gram tolerance.");
+
+  py::class_<ColorFiber::SectorWeights>(m, "SectorWeights",
+      "Occupation-sector weights ||P_N psi||^2 of an 8-dimensional Fock "
+      "vector over the three edge modes: vacuum (N=0), quark / fundamental "
+      "triplet (N=1), anti-triplet / diquark (N=2), top-wedge color singlet "
+      "(N=3).  Sector READS only -- never a particle classification.")
+      .def_readonly("vacuum", &ColorFiber::SectorWeights::vacuum)
+      .def_readonly("quark", &ColorFiber::SectorWeights::quark)
+      .def_readonly("anti_triplet", &ColorFiber::SectorWeights::antiTriplet)
+      .def_readonly("singlet", &ColorFiber::SectorWeights::singlet);
+
+  py::class_<ColorFiber::OctetRead>(m, "OctetRead",
+      "Frobenius split of a 3x3 bilinear under 3 (x) 3bar = 1 (+) 8: "
+      "octet = ||M - (tr M / 3) I||_F^2, singlet = |tr M|^2 / 3; their sum "
+      "is ||M||_F^2 exactly.")
+      .def_readonly("octet", &ColorFiber::OctetRead::octet)
+      .def_readonly("singlet", &ColorFiber::OctetRead::singlet);
+
+  py::class_<ColorFiber>(m, "ColorFiber",
+      R"doc(The exact three-edge SU(3) color kernel (#767, design spec
+section 11 "Algorithm D"): the constant color-sector algebra of three
+oriented edge modes, Lambda* C^3 = 1 (+) 3 (+) 3bar (+) 1, layered over the
+#766 exterior-algebra primitives (sector projectors and CAR matrices are
+delegated to tessera.quantum.ExteriorAlgebra, never reimplemented).
+
+All members are static; Fock operators are dense 8x8 matrices on the
+occupation basis n(b) = sum_i b_i 2^i, and the one-occupation (triplet)
+sector is spanned by Fock indices (1, 2, 4).  Exact identities (tested to
+double round-off): F3^dag F3 = I, |det F3| = 1; lambda_a Hermitian,
+traceless, Tr(lambda_a lambda_b) = 2 delta_ab; [E_ij, E_kl] = delta_jk E_il
+- delta_il E_kj on both representations; det(gC) = det(C) for g in SU(3);
+||v1 ^ v2 ^ v3||^2 = det[<v_i, v_j>].  Pure constants and reads -- no
+solver call, no mutation, nothing enters the emergence objective.)doc")
+      .def_static("sectorProjector", &ColorFiber::sectorProjector,
+                  py::arg("occupation"),
+                  "The 8x8 projector onto total occupation N (0..3; zero "
+                  "matrix above 3).  Delegates to "
+                  "quantum.ExteriorAlgebra.sectorProjector on three modes.")
+      .def_static("vacuumProjector", &ColorFiber::vacuumProjector,
+                  "Lambda^0: the even vacuum singlet (N=0).")
+      .def_static("tripletProjector", &ColorFiber::tripletProjector,
+                  "Lambda^1: the odd fundamental color triplet 3 (N=1).")
+      .def_static("antiTripletProjector", &ColorFiber::antiTripletProjector,
+                  "Lambda^2: the even antisymmetric anti-triplet 3bar (N=2).")
+      .def_static("singletProjector", &ColorFiber::singletProjector,
+                  "Lambda^3: the odd top-wedge color singlet (N=3).")
+      .def_static("creationMatrix", &ColorFiber::creationMatrix,
+                  py::arg("mode"), "The 8x8 creation matrix a_i^dag.")
+      .def_static("annihilationMatrix", &ColorFiber::annihilationMatrix,
+                  py::arg("mode"), "The 8x8 annihilation matrix a_i.")
+      .def_static("hoppingMatrix", &ColorFiber::hoppingMatrix,
+                  py::arg("i"), py::arg("j"),
+                  "The 8x8 bilinear E_ij = a_i^dag a_j (exact gl(3) "
+                  "commutation relations on the whole Fock space).")
+      .def_static("tripletBasisIndices", &ColorFiber::tripletBasisIndices,
+                  "The Fock indices (1, 2, 4) identifying the N=1 sector "
+                  "with C^3.")
+      .def_static("restrictToTriplet", &ColorFiber::restrictToTriplet,
+                  py::arg("op"),
+                  "Restrict an 8x8 Fock operator to the one-occupation "
+                  "sector as a 3x3 matrix; restrictToTriplet(dGamma(M)) = M "
+                  "exactly.")
+      .def_static("matrixUnit", &ColorFiber::matrixUnit,
+                  py::arg("i"), py::arg("j"),
+                  "The 3x3 matrix unit E_ij on the one-occupation sector.")
+      .def_static("dGamma", &ColorFiber::dGamma, py::arg("m"),
+                  "Second quantization dGamma(M) = sum_ij M_ij a_i^dag a_j "
+                  "of a 3x3 one-particle matrix (8x8).")
+      .def_static("gellMann", &ColorFiber::gellMann, py::arg("a"),
+                  "lambda_a for a in 1..8, assembled from the matrix units "
+                  "(lambda_3 = E11-E22, lambda_8 = (E11+E22-2E33)/sqrt(3)).")
+      .def_static("adjointOctetProjector", &ColorFiber::adjointOctetProjector,
+                  "The 9x9 orthogonal projector onto the traceless "
+                  "(adjoint-octet) part of a 3x3 bilinear, acting on "
+                  "column-major vec(M).")
+      .def_static("tracelessPart", &ColorFiber::tracelessPart, py::arg("m"),
+                  "M - (tr M / 3) I: the octet component of a bilinear.")
+      .def_static("omega", &ColorFiber::omega,
+                  "The primitive cube root of unity as its algebraic value "
+                  "(-1 + i sqrt(3))/2 (never exp), so 1 + omega + omega^2 "
+                  "cancels exactly in floating point.")
+      .def_static("fourierFrame", &ColorFiber::fourierFrame,
+                  "The exact unitary Fourier frame F3 with entries "
+                  "omega^{jk}/sqrt(3), assembled from the algebraic table "
+                  "{1, omega, omega^2} by exponent jk mod 3.")
+      .def_static("fourierBasisVector", &ColorFiber::fourierBasisVector,
+                  py::arg("k"),
+                  "Column k of F3: the Z3 character vector "
+                  "(1, omega^k, omega^{2k})/sqrt(3).")
+      .def_static("omegaPhaseState", &ColorFiber::omegaPhaseState,
+                  "The existing phase pattern (1, omega, omega^2)/sqrt(3), "
+                  "identified as ONE color basis vector "
+                  "(fourierBasisVector(1)); its cyclic orbit under pointwise "
+                  "Z3 powers is the exact orthonormal triad = the columns of "
+                  "F3.")
+      .def_static("perimeter", &ColorFiber::perimeter, py::arg("z"),
+                  "The triangle perimeter sum_i |z_i|^{1/2} of three stored "
+                  "complex SQUARED lengths (the L1 geometric datum).")
+      .def_static("perimeterNormalized", &ColorFiber::perimeterNormalized,
+                  py::arg("z"),
+                  "Rescale the squared lengths so the perimeter is one -- a "
+                  "GEOMETRIC SCALE GAUGE (L1), never a state normalization.")
+      .def_static("hilbertNorm", &ColorFiber::hilbertNorm, py::arg("z"),
+                  "The Hilbert L2 norm ||z||_2.")
+      .def_static("hilbertNormalized", &ColorFiber::hilbertNormalized,
+                  py::arg("z"),
+                  "z / ||z||_2 with <c|c> = 1 -- the STATE normalization, "
+                  "distinct from the perimeter gauge.")
+      .def_static("colorVector", &ColorFiber::colorVector, py::arg("z"),
+                  "The color vector from the stored complex squared "
+                  "lengths: c = z / ||z||_2.")
+      .def_static("colorWedge",
+                  py::overload_cast<const Eigen::Matrix3cd&>(
+                      &ColorFiber::colorWedge),
+                  py::arg("c"),
+                  "The color-wedge (singlet) amplitude det C = eps_ijk C_i1 "
+                  "C_j2 C_k3; det(gC) = det(C) for g in SU(3).")
+      .def_static("colorWedgeColumns",
+                  py::overload_cast<const Eigen::Vector3cd&,
+                                    const Eigen::Vector3cd&,
+                                    const Eigen::Vector3cd&>(
+                      &ColorFiber::colorWedge),
+                  py::arg("a"), py::arg("b"), py::arg("c"),
+                  "colorWedge of three explicit color columns.")
+      .def_static("singletGram", &ColorFiber::singletGram, py::arg("c"),
+                  "det(C^dag C) = |det C|^2 = ||c1 ^ c2 ^ c3||^2: exactly "
+                  "zero for duplicate color modes, exactly one for an "
+                  "orthonormal triad.")
+      .def_static("isSpecialUnitary", &ColorFiber::isSpecialUnitary,
+                  py::arg("g"), py::arg("tol") = 1e-12,
+                  "Certify g in SU(3): ||g^dag g - I||_max <= tol and "
+                  "|det g - 1| <= tol.")
+      .def_static("sectorWeights", &ColorFiber::sectorWeights,
+                  py::arg("state"),
+                  "The four occupation-sector weights of an 8-dimensional "
+                  "Fock vector (their sum is ||psi||^2 exactly).")
+      .def_static("octetRead", &ColorFiber::octetRead, py::arg("m"),
+                  "The octet/singlet Frobenius weights of a 3x3 bilinear.")
+      .def_static("verifyConstantAlgebra", &ColorFiber::verifyConstantAlgebra,
+                  "Re-derive every constant-algebra identity and return the "
+                  "maximum absolute residual (run at startup in debug "
+                  "builds; callable in every build).")
+      .def_static("constantAlgebraCertificate",
+                  &ColorFiber::constantAlgebraCertificate,
+                  "The #764 AlgebraicallyExact certificate of the constant "
+                  "algebra (measured verifyConstantAlgebra residual against "
+                  "the startup tolerance 1e-12).");
+
+  py::class_<ColorAnchor>(m, "ColorAnchor",
+      R"doc(The calibrated weighted oriented-triangle anchoring kernel for
+an abstract rank-three band (#767; whitepaper "Quarks as modular
+clusters"): A_tau = |W_tau|^{1/2} R_tau Phi per declared oriented triangle,
+atlas score a^2 = sum_tau w_tau |det A_tau|^2 with the convex weighting
+DECLARED BEFORE the data are examined (post-hoc re-weighting raises).
+
+Exact identity and domain: with the frame |W|-orthonormal (verified per
+evaluate and reported as frame_gram_residual) and |W| triangle-decoupled
+(any diagonal per-edge metric -- the production DEC/Hodge case), each
+|det A_tau|^2 = det(A_tau^dag A_tau) <= 1 because R_tau^dag |W_tau| R_tau
+is dominated by |W|, so the score is calibrated to [0, 1] with value one
+exactly at full concentration on the weighted edge span.  A single literal
+triangle is the exact oracle; an extended anchored fiber is the production
+case.  For a general Hermitian (coupled) weight the <= 1 bound is CHECKED
+(calibration_margin), never assumed.  Signed sectors restrict with
+|W_tau|^{1/2} and report each restricted block's Krein signature
+separately.
+
+Operates only on caller-supplied inputs (frame over oriented edges, edge
+weight data, oriented-triangle descriptors); mutates nothing; never enters
+the emergence objective; contains no transport code.)doc")
+      .def(py::init<std::vector<OrientedTriangle>>(), py::arg("triangles"),
+           "Declare the atlas with the UNIFORM convex weighting 1/T.")
+      .def(py::init<std::vector<OrientedTriangle>, std::vector<double>>(),
+           py::arg("triangles"), py::arg("weights"),
+           "Declare the atlas with an EXPLICIT convex weighting (each >= 0, "
+           "summing to one within 1e-12).")
+      .def("triangles", &ColorAnchor::triangles,
+           "The declared oriented triangles (immutable).")
+      .def("weights", &ColorAnchor::weights, "The declared convex weights.")
+      .def("weightingId", &ColorAnchor::weightingId,
+           "'uniform' or 'declared'.")
+      .def("sealed", &ColorAnchor::sealed,
+           "True once any data have been evaluated (weighting sealed).")
+      .def("declareWeights", &ColorAnchor::declareWeights, py::arg("weights"),
+           "Replace the declared convex weighting -- allowed ONLY before "
+           "the first evaluate(); afterwards post-hoc weight selection is "
+           "rejected (raises).")
+      .def("evaluate",
+           py::overload_cast<const Eigen::MatrixXcd&, const Eigen::VectorXd&,
+                             double>(&ColorAnchor::evaluate),
+           py::arg("frame"), py::arg("edge_weights"),
+           py::arg("gram_tolerance") = 1e-9,
+           "Evaluate against a DIAGONAL (possibly signed) per-edge weight "
+           "vector -- the domain where the [0,1] calibration bound is "
+           "exact.  The frame must be |W|-orthonormal within "
+           "gram_tolerance (use orthonormalizeFrame).")
+      .def("evaluateMatrix",
+           py::overload_cast<const Eigen::MatrixXcd&, const Eigen::MatrixXcd&,
+                             double>(&ColorAnchor::evaluate),
+           py::arg("frame"), py::arg("weight"),
+           py::arg("gram_tolerance") = 1e-9,
+           "Evaluate against a general Hermitian ExE weight matrix; the "
+           "calibration bound is checked (calibration_margin), not "
+           "assumed.")
+      .def_static("anchorMatrix", &ColorAnchor::anchorMatrix,
+                  py::arg("frame"), py::arg("edge_weights"), py::arg("tri"),
+                  "The raw 3x3 weighted anchor matrix A_tau = |W_tau|^{1/2} "
+                  "R_tau Phi of one triangle (diagonal weights; no "
+                  "normalization check).")
+      .def_static("orthonormalizeFrame",
+                  py::overload_cast<const Eigen::MatrixXcd&,
+                                    const Eigen::VectorXd&>(
+                      &ColorAnchor::orthonormalizeFrame),
+                  py::arg("frame"), py::arg("edge_weights"),
+                  "The |W|-orthonormalized frame Phi (Phi^dag |W| "
+                  "Phi)^{-1/2} for a diagonal per-edge weight vector.")
+      .def_static("orthonormalizeFrameMatrix",
+                  py::overload_cast<const Eigen::MatrixXcd&,
+                                    const Eigen::MatrixXcd&>(
+                      &ColorAnchor::orthonormalizeFrame),
+                  py::arg("frame"), py::arg("weight"),
+                  "Matrix-weight overload of orthonormalizeFrame (Hermitian "
+                  "W; uses the eigen-modulus |W|).");
 }

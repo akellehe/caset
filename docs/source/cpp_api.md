@@ -133,6 +133,10 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} SparseGraph.h
 ```
+```{doxygenfile} ColorFiber.h
+```
+```{doxygenfile} SpectralFiber.h
+```
 
 ### Emergent-proton readout battery (#593)
 
