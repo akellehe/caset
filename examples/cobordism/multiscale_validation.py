@@ -56,10 +56,13 @@ Cap parallelism to 8 threads; this box is shared::
       BLIS_NUM_THREADS=8 .venv-build/bin/python \\
       examples/cobordism/multiscale_validation.py --quick --out quick.json
 
-``--quick`` runs a reduced ensemble (3 sizes x 2 seeds) in about a minute so
+``--quick`` runs a reduced ensemble (3 sizes x 2 seeds), MEASURED at 30 s, so
 the harness itself is exercisable in CI-adjacent time. The full study (5 sizes
-x 5 seeds) is the default and takes roughly ten minutes on a 16-core box; the
-measured wall time is recorded in the output under ``runtime``.
+x 5 seeds) is the default and was MEASURED at 246 s on a 16-core box at 8
+threads — 9.5 +- 7.7 s per member, dominated by the stage-2 relaxation, which
+grows from 1.7 s at size 6 to 20 s at size 44. Both modes run every negative
+control, every analytic invariant, the threshold ladder and the cold-replay
+check. Each run's own wall time is recorded in the output under ``runtime``.
 
 Reproducibility, exactly
 ------------------------
@@ -2326,12 +2329,11 @@ def main(argv=None):
                              "a published run MUST include them)")
     parser.add_argument("--no-replay", action="store_true",
                         help="skip the cold checkpoint replay check")
-    parser.add_argument("--embed-checkpoints", action="store_true",
-                        help="keep the full schema-3 checkpoint of every run "
-                             "in the output (large; on by default for the "
-                             "reproducibility guarantee)")
     parser.add_argument("--drop-checkpoints", action="store_true",
-                        help="drop the embedded checkpoints from the output")
+                        help="drop the embedded schema-3 checkpoints from the "
+                             "output. They are embedded by default and are "
+                             "what makes a plotted point exactly replayable, "
+                             "so a published run keeps them")
     args = parser.parse_args(argv)
 
     config = make_config(args.quick, args.sizes, args.seeds)
