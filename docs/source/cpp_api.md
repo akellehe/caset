@@ -139,6 +139,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} ExchangeHolonomy.h
 ```
+```{doxygenfile} FiberConnection.h
+```
 
 ### Emergent-proton readout battery (#593)
 

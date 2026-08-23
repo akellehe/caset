@@ -222,6 +222,11 @@ list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX
 # compiles in tessera_quantum.
 list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX
     "/src/observables/ExchangeHolonomy\\.cpp$")
+# FiberConnection (#770) likewise lives in src/observables/ but delegates its
+# rank-three center/adjoint conventions to ColorFiber (#767), which compiles
+# in tessera_quantum — so it follows ColorFiber there.
+list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX
+    "/src/observables/FiberConnection\\.cpp$")
 # bindings.cpp is the pybind11 entry point — goes into _tessera, not tessera_core.
 list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX "/src/bindings\\.cpp$")
 # Per-subsystem Bindings.cpp files also belong to _tessera, not tessera_core
@@ -407,6 +412,10 @@ list(APPEND TESSERA_QUANTUM_SOURCES
 # ExchangeHolonomy (#772): same layout, same #766 delegation.
 list(APPEND TESSERA_QUANTUM_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/observables/ExchangeHolonomy.cpp")
+# FiberConnection (#770) delegates its rank-three center/adjoint conventions
+# to ColorFiber (#767), so it compiles beside it.
+list(APPEND TESSERA_QUANTUM_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/observables/FiberConnection.cpp")
 # bindings.cpp uses pybind11 + Python.h and goes into _tessera, not the
 # pybind-free static lib.
 list(FILTER TESSERA_QUANTUM_SOURCES EXCLUDE REGEX "/src/quantum/Bindings\\.cpp$")
