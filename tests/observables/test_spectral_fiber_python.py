@@ -1192,5 +1192,207 @@ class TestSparseVsDense(unittest.TestCase):
             plain.solveCertificate.denseReferenceError))
 
 
+# --------------------------------------------------------------------------- #
+# #808 negative controls: the acceptance conjuncts the whitepaper NAMES are
+# enforced on the quantity it names
+# --------------------------------------------------------------------------- #
+class TestLocalizationConjunct(unittest.TestCase):
+    """The whitepaper lists "a localized spectral projector with stable rank"
+    as a conjunct of FIBER ACCEPTANCE.  It is enforced there (#808), on the
+    rank-normalized localization excess."""
+
+    def test_perfectly_delocalized_band_is_rejected(self):
+        # C12 is vertex-transitive: every band projector has a UNIFORM
+        # diagonal, so n_eff = n and the excess is exactly 1 -- perfectly
+        # delocalized.  Every OTHER conjunct passes with room to spare, so
+        # localization is the only reason each band is uncertified.
+        read = _tracker(_ring(12)).enumerateBands(list(range(12)), 0)
+        self.assertEqual(len(read.fibers), 7)
+        for f in read.fibers:
+            c = f.certificate()
+            self.assertAlmostEqual(c.localization, 1.0 / 12.0, delta=MACHINE)
+            self.assertAlmostEqual(c.localizationSupportFraction, 1.0,
+                                   delta=MACHINE)
+            self.assertAlmostEqual(c.localizationExcess, 1.0, delta=MACHINE)
+            # the other conjuncts hold:
+            self.assertGreater(c.nearestDiscardedSeparation, 0.26)
+            self.assertLess(c.gramDefect, 1e-12)
+            self.assertLess(c.eigenResidual, 1e-12)
+            self.assertLess(c.projectorResidual, 1e-12)
+            self.assertLess(c.projectorNorm, 1.0 + 1e-12)
+            # ... and the band is REJECTED anyway.
+            self.assertFalse(c.accepted)
+            self.assertFalse(c.certificate.holds())
+
+    def test_the_permissive_cap_restores_the_pre_gate_acceptance(self):
+        read = _tracker(_ring(12), **ANY_LOCALIZATION).enumerateBands(
+            list(range(12)), 0)
+        self.assertTrue(all(f.accepted() for f in read.fibers))
+
+    def test_a_localized_band_certifies(self):
+        # The jittered holed surface breaks the transitivity: about half its
+        # degree-one bands sit below the default cap and certify, and a band
+        # is accepted EXACTLY when its excess clears the cap -- the gate
+        # discriminates, it does not reject everything.
+        st, _, _, _ = holed_surface(degree=1, jitter=True)
+        read = _tracker(st).enumerateBands(_all_vertices(st), 1)
+        accepted = [f for f in read.fibers if f.accepted()]
+        self.assertGreater(len(accepted), 5)
+        self.assertLess(len(accepted), len(read.fibers))
+        cap = obs.SpectralFiberConfig().maxLocalizationExcess
+        self.assertEqual(cap, 0.5)
+        for f in read.fibers:
+            c = f.certificate()
+            self.assertEqual(c.accepted, c.localizationExcess <= cap)
+
+    def test_excess_is_rank_normalized_and_relabeling_invariant(self):
+        # The bare IPR of a rank-r band cannot exceed 1/r, so the RAW
+        # fraction is not comparable across ranks; the excess is.  Both are
+        # projector reads, so both survive a vertex relabeling.
+        st, _, _, _ = holed_surface(degree=1, jitter=True)
+        ids = _all_vertices(st)
+        base = _tracker(st).enumerateBands(ids, 1)
+        for f in base.fibers:
+            c = f.certificate()
+            self.assertGreaterEqual(c.localization,
+                                    1.0 / base.dimension - 1e-12)
+            self.assertLessEqual(c.localization, 1.0 / c.rank + 1e-12)
+            self.assertGreaterEqual(c.localizationExcess, 0.0)
+            self.assertLessEqual(c.localizationExcess, 1.0)
+        shifted = _tracker(st).enumerateBands(list(reversed(ids)), 1)
+        for a, b in zip(base.fibers, shifted.fibers):
+            self.assertAlmostEqual(a.certificate().localizationExcess,
+                                   b.certificate().localizationExcess,
+                                   delta=MACHINE)
+
+    def test_a_full_space_band_is_not_called_delocalized(self):
+        # A band spanning the WHOLE operator (n == rank) leaves no room to
+        # be localized in: the excess is 0 by definition, never 1.  The
+        # single isolated vertex is the smallest such case.
+        read = _tracker(_triangle()).enumerateBands([0], 0)
+        c = read.fibers[0].certificate()
+        self.assertEqual(read.dimension, 1)
+        self.assertEqual(c.rank, 1)
+        self.assertEqual(c.localizationSupportFraction, 1.0)
+        self.assertEqual(c.localizationExcess, 0.0)
+        self.assertTrue(c.accepted)
+
+
+class TestBandSeparationIsMeasuredInThePlane(unittest.TestCase):
+    """The whitepaper's conjunct is "a nonzero band gap separating it from
+    discarded modes".  With a genuinely complex spectrum the (Re, Im)-sorted
+    neighbour need not be the nearest eigenvalue in the plane (#808)."""
+
+    def _content_read(self, alpha, **cfg_kwargs):
+        cfg = obs.SpectralFiberConfig()
+        cfg.maxLocalizationExcess = 1.0     # subject: the isolation rule
+        for k, v in cfg_kwargs.items():
+            setattr(cfg, k, v)
+        tracker = obs.SpectralFiberTracker(
+            _triangle(alpha=alpha), cfg, cob.HodgeWeightConvention.Content)
+        return tracker.enumerateBands([0, 1, 2], 1)
+
+    def test_nearest_eigenvalue_is_not_the_sort_adjacent_one(self):
+        # Content weights at alpha = 1/2: spec(L_1) = {0, 1 - 4i, 3}.
+        # Sorted by (Re, Im) the neighbour of the band at 3 is 1 - 4i, at
+        # distance |2 + 4i| = sqrt(20) -- but the NEAREST discarded
+        # eigenvalue in the plane is 0, at distance 3.
+        read = self._content_read(0.5)
+        self.assertEqual(read.regime, cob.CertificateRegime.NonNormal)
+        top = max(read.fibers, key=lambda f: f.eigenvalues()[0].real)
+        c = top.certificate()
+        self.assertAlmostEqual(c.lowerGap, math.sqrt(20.0), delta=1e-9)
+        self.assertAlmostEqual(c.nearestDiscardedSeparation, 3.0, delta=1e-9)
+        self.assertLess(c.nearestDiscardedSeparation, c.lowerGap)
+        bottom = min(read.fibers, key=lambda f: f.eigenvalues()[0].real)
+        cb = bottom.certificate()
+        self.assertAlmostEqual(cb.upperGap, math.sqrt(17.0), delta=1e-9)
+        self.assertAlmostEqual(cb.nearestDiscardedSeparation, 3.0, delta=1e-9)
+
+    def test_the_isolation_gate_reads_the_true_separation(self):
+        # scale = max|lambda| = |1 - 4i| = sqrt(17).  A floor of 0.9 * scale
+        # = 3.71 sits BETWEEN the true separation (3) and the sort-order gap
+        # (4.47): the outer bands are rejected on the separation the paper
+        # names, where the sort-order rule would have certified them.
+        loose = self._content_read(0.5, minRelativeGap=0.5)
+        self.assertTrue(all(f.accepted() for f in loose.fibers))
+        tight = self._content_read(0.5, minRelativeGap=0.9)
+        verdicts = {round(f.eigenvalues()[0].real, 6): f.accepted()
+                    for f in tight.fibers}
+        self.assertFalse(verdicts[0.0])
+        self.assertFalse(verdicts[3.0])
+        self.assertTrue(verdicts[1.0])   # its own nearest neighbour is 4.12
+
+
+class TestFrameConditionIsNotTheProjectorNorm(unittest.TestCase):
+    """The whitepaper asks for the FRAME condition number in the non-normal
+    regime; the code reported the projector spectral norm under that name.
+    Both are now measured and reported separately (#808)."""
+
+    def test_the_two_conditionings_are_separate_quantities(self):
+        # The defective Krein crossing at alpha = sqrt(2): the near-zero
+        # rank-2 band's frames are nearly parallel, so their Riesz
+        # conditioning explodes (1e8) while the PROJECTOR norm stays near 1.
+        st = _triangle(alpha=math.sqrt(2.0))
+        read = _tracker(st, groupingTolerance=1e-6,
+                        **ANY_LOCALIZATION).enumerateBands([0, 1, 2], 1)
+        degenerate = max(read.fibers, key=lambda f: f.rank())
+        c = degenerate.certificate()
+        self.assertEqual(c.rank, 2)
+        self.assertLess(c.projectorNorm, 2.0)
+        self.assertGreater(c.frameConditionNumber, 1e6)
+        self.assertNotAlmostEqual(c.projectorNorm, c.frameConditionNumber,
+                                  delta=1.0)
+
+    def test_a_w_orthonormal_frame_is_perfectly_conditioned(self):
+        # On the self-adjoint path Phi^dagger W Phi = I exactly, so the
+        # frame condition number is 1 -- the value the substitute happened
+        # to coincide with, and the reason the divergence was invisible.
+        read = _tracker(_ring(12), **ANY_LOCALIZATION).enumerateBands(
+            list(range(12)), 0)
+        for f in read.fibers:
+            c = f.certificate()
+            self.assertAlmostEqual(c.frameConditionNumber, 1.0, delta=1e-9)
+            self.assertAlmostEqual(c.projectorNorm, 1.0, delta=1e-9)
+
+    def test_both_travel_through_the_checkpoint(self):
+        st = _triangle(alpha=math.sqrt(2.0))
+        read = _tracker(st, groupingTolerance=1e-6,
+                        **ANY_LOCALIZATION).enumerateBands([0, 1, 2], 1)
+        for f in read.fibers:
+            rec = f.toRecord()
+            self.assertEqual(rec["schema_version"], 2)
+            back = obs.SpectralFiber.fromRecord(rec).certificate()
+            self.assertEqual(back.projectorNorm, f.certificate().projectorNorm)
+            self.assertEqual(back.frameConditionNumber,
+                             f.certificate().frameConditionNumber)
+            self.assertEqual(back.nearestDiscardedSeparation,
+                             f.certificate().nearestDiscardedSeparation)
+
+    def test_a_schema_one_record_leaves_the_new_leaves_unknown(self):
+        # Backwards compatibility: schema 1 carried `condition_number`, the
+        # projector norm.  It still reads, the projector norm survives, and
+        # the quantities it never measured are NaN -- never zero.
+        st = _triangle()
+        fiber = _tracker(st, **ANY_LOCALIZATION).enumerateBands(
+            [0, 1, 2], 0).fibers[0]
+        rec = dict(fiber.toRecord())
+        cert = dict(rec["certificate"])
+        cert["condition_number"] = cert.pop("projector_norm")
+        for key in ("frame_condition_number", "nearest_discarded_separation",
+                    "localization_support_fraction", "localization_excess"):
+            cert.pop(key)
+        rec["certificate"] = cert
+        rec["schema_version"] = 1
+        back = obs.SpectralFiber.fromRecord(rec).certificate()
+        self.assertEqual(back.projectorNorm,
+                         fiber.certificate().projectorNorm)
+        for value in (back.frameConditionNumber,
+                      back.nearestDiscardedSeparation,
+                      back.localizationSupportFraction,
+                      back.localizationExcess):
+            self.assertTrue(math.isnan(value))
+
+
 if __name__ == "__main__":
     unittest.main()

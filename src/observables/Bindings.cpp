@@ -1755,6 +1755,13 @@ the emergence objective; contains no transport code.)doc")
       .def("weights", &ColorAnchor::weights, "The declared convex weights.")
       .def("weightingId", &ColorAnchor::weightingId,
            "'uniform' or 'declared'.")
+      .def("overlapsAnother", &ColorAnchor::overlapsAnother, py::arg("index"),
+           "Whether declared triangle `index` shares a boundary EDGE with "
+           "another declared triangle -- the overlap relation the "
+           "determinant-phase coherence is recorded on.")
+      .def("overlappingTriangleCount", &ColorAnchor::overlappingTriangleCount,
+           "How many declared triangles overlap another (0 on a disjoint "
+           "atlas, where the coherence is UNKNOWN).")
       .def("sealed", &ColorAnchor::sealed,
            "True once any data have been evaluated (weighting sealed).")
       .def("declareWeights", &ColorAnchor::declareWeights, py::arg("weights"),

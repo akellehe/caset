@@ -164,6 +164,12 @@ def _overlap_frame(terms=(0.98, 0.02), weights=_ANCHOR_WEIGHTS):
     n = np.zeros(4, dtype=complex)
     n[3] = np.sqrt(terms[0])   # omit row 3 -> the (0, 1, 2) term
     n[2] = np.sqrt(terms[1])   # omit row 2 -> the (0, 1, 3) term
+    # The four 3-row minors sum to one (Cauchy-Binet), so any weight the two
+    # declared triangles do not claim goes to the two undeclared subsets.
+    rest = 1.0 - terms[0] - terms[1]
+    assert rest >= -1e-12, "declared anchor terms must not exceed one"
+    n[0] = np.sqrt(max(0.0, rest) / 2.0)
+    n[1] = n[0]
     _, _, vh = np.linalg.svd(n.reshape(1, 4).conj())
     psi = vh.conj().T[:, 1:]
     return np.diag(1.0 / np.sqrt(weights)) @ psi
@@ -4141,3 +4147,139 @@ class TestClassifyBoundSupercomponents(unittest.TestCase):
                          "quasi-free-sharp-spin-obstruction")
         self.assertEqual(read.failedCertificates, ["sharp-spin"])
         self.assertTrue(read.quasiFreeClassSwept)
+# =========================================================================== #
+# #808 negative controls: the conditions the whitepaper calls STABLE are
+# compared ACROSS FRAMES, and the coherence is an OVERLAP datum
+# =========================================================================== #
+class TestStabilityIsAcrossFrames(unittest.TestCase):
+    """Whitepaper quark conditions two and three: "its selected color fiber
+    has STABLE rank three" and "its calibrated triangle-anchor profile and
+    determinant-line coherence are STABLE".  A single frame cannot establish
+    either."""
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+
+    def _read(self, ev):
+        return self.pc.classifyQuark(ev)
+
+    def test_a_stable_candidate_certifies(self):
+        read = self._read(_certified_evidence())
+        self.assertEqual(read.classification, "quark")
+        self.assertEqual(read.stabilityFrames, 3)
+        self.assertEqual(read.anchorScoreSpread, 0.0)
+        self.assertEqual(read.anchorCoherenceSpread, 0.0)
+        self.assertAlmostEqual(read.bandContinuationOverlap, 1.0,
+                               delta=MACHINE)
+
+    def test_a_band_that_loses_rank_three_at_the_next_frame_is_rejected(self):
+        # Stable at frame 0, rank two at frame 1: the condition holds at ONE
+        # frame and fails across them, which is exactly what "stable" is
+        # supposed to catch.
+        ev = _certified_evidence()
+        first = ev.colorBandFrames[0]
+        ev.colorBandFrames = [first, _unit_fiber(1, 2)]
+        read = self._read(ev)
+        self.assertEqual(read.classification, "none")
+        self.assertIn("color-rank-stability", read.failedCertificates)
+        self.assertNotIn("color-rank-three", read.failedCertificates)
+
+    def test_a_band_uncertified_at_the_next_frame_is_rejected(self):
+        ev = _certified_evidence()
+        first = ev.colorBandFrames[0]
+        ev.colorBandFrames = [first, _unit_fiber(1, 3, accepted=False)]
+        read = self._read(ev)
+        self.assertEqual(read.classification, "none")
+        self.assertIn("color-rank-stability", read.failedCertificates)
+
+    def test_frames_must_be_certified_continuations(self):
+        # Two accepted rank-three bands on DISJOINT cells are two different
+        # bands, not one stable band: the continuation is never certified.
+        ev = _certified_evidence()
+        first = ev.colorBandFrames[0]
+        ev.colorBandFrames = [first, _unit_fiber(500, 3)]
+        read = self._read(ev)
+        self.assertEqual(read.classification, "none")
+        self.assertIn("color-rank-stability", read.failedCertificates)
+        self.assertEqual(read.bandContinuationOverlap, 0.0)
+
+    def test_one_frame_never_establishes_stability(self):
+        ev = _certified_evidence()
+        ev.colorBandFrames = [ev.colorBandFrames[0]]
+        ev.anchorFrames = [ev.anchorFrames[0]]
+        read = self._read(ev)
+        self.assertEqual(read.classification, "none")
+        self.assertIn("color-rank-stability", read.failedCertificates)
+        self.assertIn("anchor-stability", read.failedCertificates)
+        # the single-frame conditions themselves still pass -- it is the
+        # ACROSS-FRAME comparison that is missing, and it is named
+        self.assertNotIn("color-rank-three", read.failedCertificates)
+        self.assertNotIn("anchor", read.failedCertificates)
+        self.assertEqual(read.stabilityFrames, 1)
+        self.assertTrue(math.isnan(read.anchorScoreSpread))
+
+    def test_missing_stability_windows_fail_by_name(self):
+        ev = _certified_evidence()
+        ev.colorBandFrames = []
+        ev.anchorFrames = []
+        read = self._read(ev)
+        self.assertEqual(read.stabilityFrames, 0)
+        self.assertIn("color-rank-stability", read.failedCertificates)
+        self.assertIn("anchor-stability", read.failedCertificates)
+
+    def test_an_anchor_that_decays_at_the_next_frame_is_rejected(self):
+        # Same atlas, a frame where the anchor score falls below the floor:
+        # the profile is not stable, and the spread is reported.
+        ev = _certified_evidence()
+        good = ev.anchorFrames[0]
+        weak = _anchor_profile(terms=(0.4, 0.02))
+        self.assertLess(weak.score, obs.ParticleClustersConfig().minAnchorScore)
+        ev.anchorFrames = [good, weak]
+        read = self._read(ev)
+        self.assertEqual(read.classification, "none")
+        self.assertIn("anchor-stability", read.failedCertificates)
+        self.assertNotIn("anchor", read.failedCertificates)
+        self.assertGreater(read.anchorScoreSpread, 0.3)
+
+    def test_stability_frames_are_configurable(self):
+        cfg = obs.ParticleClustersConfig()
+        cfg.minStabilityFrames = 4          # more frames than supplied
+        read = obs.ParticleClusters(cfg).classifyQuark(_certified_evidence())
+        self.assertIn("color-rank-stability", read.failedCertificates)
+        self.assertIn("anchor-stability", read.failedCertificates)
+
+
+class TestOverlapRestrictedCoherenceGatesTheAnchor(unittest.TestCase):
+    """The classifier gates on the determinant-phase coherence, which is an
+    OVERLAP datum (#808): a disjoint atlas has none."""
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+
+    def test_a_disjoint_atlas_fails_the_anchor_certificate(self):
+        disjoint = _disjoint_anchor_profile()
+        self.assertEqual(disjoint.overlapping_triangles, 0)
+        self.assertTrue(math.isnan(disjoint.phase_coherence))
+        self.assertAlmostEqual(disjoint.score, 0.98, delta=1e-9)
+        ev = _certified_evidence(anchor=disjoint)
+        ev.anchorFrames = [disjoint, disjoint, disjoint]
+        read = self.pc.classifyQuark(ev)
+        # the SCORE clears its floor and the certificate still fails: the
+        # missing quantity is the overlap coherence, and it is named
+        self.assertGreater(read.triangleAnchorScore,
+                           read.thresholds.minAnchorScore)
+        self.assertTrue(math.isnan(read.anchorPhaseCoherence))
+        self.assertEqual(read.classification, "none")
+        self.assertIn("anchor", read.failedCertificates)
+        self.assertIn("anchor-stability", read.failedCertificates)
+
+    def test_an_overlapping_atlas_carries_the_coherence(self):
+        overlapping = _anchor_profile()
+        self.assertEqual(overlapping.overlapping_triangles, 2)
+        self.assertEqual(overlapping.overlap_relation, "shared-edge")
+        read = self.pc.classifyQuark(_certified_evidence(anchor=overlapping))
+        self.assertGreater(read.anchorPhaseCoherence,
+                           read.thresholds.minPhaseCoherence)
+        self.assertEqual(read.classification, "quark")
+
+
