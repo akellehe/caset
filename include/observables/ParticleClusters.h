@@ -355,7 +355,7 @@ struct ParticleClustersConfig {
   /// Band-localization floor (inverse participation ratio of the color
   /// band, ∈ [1/n, 1/rank]).  The whitepaper's localization conjunct is
   /// enforced UPSTREAM, in fiber acceptance
-  /// (`SpectralFiberConfig::maxLocalizationSupportFraction`), so a
+  /// (`SpectralFiberConfig::maxLocalizationExcess`), so a
   /// delocalized band never arrives here accepted; this floor remains as
   /// an additional analysis knob and its default 0 adds nothing beyond the
   /// upstream conjunct (an unmeasured NaN still fails).

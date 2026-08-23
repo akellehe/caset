@@ -446,7 +446,7 @@ struct ComponentBandRead {
 /// ISOLATION FROM THE NEAREST DISCARDED EIGENVALUE IN THE COMPLEX PLANE
 /// (sorting supplies the grouping, never the isolation measurement),
 /// LOCALIZATION (the whitepaper conjunct, capped by
-/// `maxLocalizationSupportFraction`), residuals, Gram defect, and
+/// `maxLocalizationExcess`), residuals, Gram defect, and
 /// projector conditioning — a closing gap yields an uncertified band,
 /// never a different identity.  The detector enumerates ranks; it NEVER
 /// requests rank three, and no eigenvalue threshold is used as a

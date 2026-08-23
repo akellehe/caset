@@ -613,7 +613,7 @@ QuarkRead ParticleClusters::classifyQuark(
 
   // 2. localization (from the color band's own certificate).  The
   //    whitepaper conjunct itself is enforced UPSTREAM, in fiber
-  //    acceptance (SpectralFiberConfig::maxLocalizationSupportFraction),
+  //    acceptance (SpectralFiberConfig::maxLocalizationExcess),
   //    so a delocalized band is already uncertified when it arrives here;
   //    this gate keeps the classifier's own floor.
   const SpectralBandCertificate &band = evidence.colorBand.certificate();

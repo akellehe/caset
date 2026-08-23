@@ -942,7 +942,7 @@ ScanReport PersistentModularity::scanResolutions(
   return report;
 }
 
-// ───────────────────────── matching and invalidation ────────────────────
+// ──────────────── tracking, matching, and invalidation ──────────────────
 
 std::vector<PersistentModularity::Chain> PersistentModularity::chainTracks(
     const std::vector<const std::vector<ComponentRead> *> &steps,

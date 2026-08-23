@@ -45,11 +45,10 @@ constexpr double kInf = std::numeric_limits<double>::infinity();
 constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 // Schema 2 (#808) adds the separately named acceptance quantities:
 // `nearest_discarded_separation`, `localization_support_fraction`,
-// `projector_norm` (schema 1's `condition_number`), and
-// `frame_condition_number`.  Schema 1 stays READABLE: its projector norm is
-// carried over verbatim, its support fraction is UNKNOWN (the certificate
-// alone does not carry the operator dimension), and so are the separation
-// and the frame conditioning — unknown is NaN, never zero.
+// `localization_excess`, `projector_norm` (schema 1's `condition_number`),
+// and `frame_condition_number`.  Schema 1 stays READABLE: its projector
+// norm is carried over verbatim and every quantity it never measured reads
+// back UNKNOWN — NaN, never zero.
 constexpr int kSchemaVersion = 2;
 constexpr int kOldestReadableSchema = 1;
 
