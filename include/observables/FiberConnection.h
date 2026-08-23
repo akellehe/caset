@@ -157,6 +157,7 @@
 #include "cobordism/Certificate.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/RecursiveQuotient.h"
+#include "observables/Record.h"
 #include "observables/SpectralFiber.h"
 
 // === tessera subsystem ns fwd-decls ===
@@ -275,6 +276,17 @@ struct FiberTransportRead {
 
   /// One-line human-readable summary (direction, rank, leakage, gates).
   [[nodiscard]] std::string describe() const;
+
+  /// Checkpoint serialization (design spec section 20, the `transports`
+  /// array): the JSON-able :class:`Record` of the read — at rank three the
+  /// full U(3) factor, det V (U(1)), and thereby the PU(3) class (the
+  /// class is `[V]` = V modulo center, determined by the serialized V) all
+  /// travel; complex leaves split `{name}_re`/`{name}_im` per #580.
+  [[nodiscard]] Record toRecord() const;
+  /// Rehydrate from `toRecord()` output; rejects an unknown
+  /// `schema_version` (std::invalid_argument) per the checkpoint-reader
+  /// contract.
+  [[nodiscard]] static FiberTransportRead fromRecord(const Record &record);
 };
 
 /// # WilsonHolonomyRead
@@ -349,6 +361,13 @@ struct FundamentalLiftRead {
   std::string invalidReason{};
   /// CertifiedNumerical against `detResidual` when valid.
   cobordism::Certificate certificate{};
+
+  /// Checkpoint serialization: the lift matrix and its ACCUMULATED center
+  /// sector travel together (the ticket's "continuously chosen SU(3) lift
+  /// with its accumulated center sector").
+  [[nodiscard]] Record toRecord() const;
+  /// Rehydrate; rejects an unknown `schema_version`.
+  [[nodiscard]] static FundamentalLiftRead fromRecord(const Record &record);
 };
 
 /// The declared closure of an open-segment determinant winding (design
@@ -419,6 +438,13 @@ struct DeterminantWindingRead {
   /// CertifiedNumerical/BandWindow with residual = closure defect and the
   /// step margin as conditioning; HeuristicDiscovery when invalidated.
   cobordism::Certificate certificate{};
+
+  /// Checkpoint serialization: the closure SPECIFICATION travels with the
+  /// integer (spec section 5.11 — the closure is part of the certificate);
+  /// an unknown winding serializes as unknown, never as zero.
+  [[nodiscard]] Record toRecord() const;
+  /// Rehydrate; rejects an unknown `schema_version`.
+  [[nodiscard]] static DeterminantWindingRead fromRecord(const Record &record);
 };
 
 /// # FiberConnection

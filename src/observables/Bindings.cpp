@@ -1803,7 +1803,21 @@ lift path.)doc")
       .def_readonly("rejectionReason", &FiberTransportRead::rejectionReason)
       .def_readonly("certificate", &FiberTransportRead::certificate)
       .def("describe", &FiberTransportRead::describe)
-      .def("__repr__", &FiberTransportRead::describe);
+      .def("__repr__", &FiberTransportRead::describe)
+      .def("toRecord",
+           [](const FiberTransportRead &self) {
+             return recordToPython(self.toRecord());
+           },
+           "Checkpoint serialization (design spec section 20 `transports`): "
+           "at rank three the full U(3) factor, det V, and thereby the "
+           "PU(3) class travel.")
+      .def_static("fromRecord",
+                  [](const py::handle &record) {
+                    return FiberTransportRead::fromRecord(
+                        pythonToRecord(record));
+                  },
+                  py::arg("record"),
+                  "Rehydrate; rejects an unknown schema_version.");
 
   py::class_<WilsonHolonomyRead>(m, "WilsonHolonomyRead",
       R"doc(The product of accepted transports around a loop (design spec
@@ -1848,7 +1862,20 @@ Rank three only -- SU(3) is never hard-coded at generic rank.)doc")
       .def_readonly("detResidual", &FundamentalLiftRead::detResidual)
       .def_readonly("valid", &FundamentalLiftRead::valid)
       .def_readonly("invalidReason", &FundamentalLiftRead::invalidReason)
-      .def_readonly("certificate", &FundamentalLiftRead::certificate);
+      .def_readonly("certificate", &FundamentalLiftRead::certificate)
+      .def("toRecord",
+           [](const FundamentalLiftRead &self) {
+             return recordToPython(self.toRecord());
+           },
+           "Checkpoint serialization: the lift and its accumulated center "
+           "sector travel together.")
+      .def_static("fromRecord",
+                  [](const py::handle &record) {
+                    return FundamentalLiftRead::fromRecord(
+                        pythonToRecord(record));
+                  },
+                  py::arg("record"),
+                  "Rehydrate; rejects an unknown schema_version.");
 
   py::class_<WindingClosureSpec> windingClosure(m, "WindingClosureSpec",
       R"doc(The declared closure of an open-segment determinant winding
@@ -1893,7 +1920,21 @@ was declared -- never a silently wrong integer.)doc")
       .def_readonly("closureDefect", &DeterminantWindingRead::closureDefect)
       .def_readonly("invalidationReason",
                     &DeterminantWindingRead::invalidationReason)
-      .def_readonly("certificate", &DeterminantWindingRead::certificate);
+      .def_readonly("certificate", &DeterminantWindingRead::certificate)
+      .def("toRecord",
+           [](const DeterminantWindingRead &self) {
+             return recordToPython(self.toRecord());
+           },
+           "Checkpoint serialization: the closure specification travels "
+           "with the integer; an unknown winding serializes as unknown, "
+           "never as zero.")
+      .def_static("fromRecord",
+                  [](const py::handle &record) {
+                    return DeterminantWindingRead::fromRecord(
+                        pythonToRecord(record));
+                  },
+                  py::arg("record"),
+                  "Rehydrate; rejects an unknown schema_version.");
 
   py::class_<FiberConnection>(m, "FiberConnection",
       R"doc(Derived spectral-frame transport and Wilson observables (#770;

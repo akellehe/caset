@@ -147,6 +147,141 @@ std::int64_t chainedParameter(int degree, int convention,
 /// NaN-ignoring running max (std::fmax semantics) for certificate rollups.
 double fmaxAccumulate(double acc, double value) { return std::fmax(acc, value); }
 
+// --- Record serialization helpers ------------------------------------------
+// The grade/domain/regime name tables and the Certificate (sub-)record follow
+// the #769 checkpoint conventions verbatim (SpectralFiber.cpp keeps its own
+// file-local copy; consolidating these next to Certificate/Record is a noted
+// follow-up), so `transports` checkpoint entries stay uniform.
+
+constexpr int kRecordSchemaVersion = 1;
+
+std::string regimeName(CertificateRegime regime) {
+  switch (regime) {
+    case CertificateRegime::PositiveSemidefinite:
+      return "positive-semidefinite";
+    case CertificateRegime::HermitianIndefinite:
+      return "hermitian-indefinite";
+    case CertificateRegime::NonNormal:
+      return "non-normal";
+  }
+  return "non-normal";
+}
+
+CertificateRegime regimeFromName(const std::string &name) {
+  if (name == "positive-semidefinite")
+    return CertificateRegime::PositiveSemidefinite;
+  if (name == "hermitian-indefinite")
+    return CertificateRegime::HermitianIndefinite;
+  if (name == "non-normal") return CertificateRegime::NonNormal;
+  throw std::invalid_argument("FiberConnection: unknown regime '" + name + "'");
+}
+
+std::string gradeName(cobordism::CertificateGrade grade) {
+  switch (grade) {
+    case cobordism::CertificateGrade::AlgebraicallyExact:
+      return "algebraically-exact";
+    case cobordism::CertificateGrade::StructureExact:
+      return "structure-exact";
+    case cobordism::CertificateGrade::CertifiedNumerical:
+      return "certified-numerical";
+    case cobordism::CertificateGrade::HeuristicDiscovery:
+      return "heuristic-discovery";
+  }
+  return "heuristic-discovery";
+}
+
+std::string domainName(CertificateDomain domain) {
+  return domain == CertificateDomain::Static ? "static" : "band-window";
+}
+
+CertificateDomain domainFromName(const std::string &name) {
+  if (name == "static") return CertificateDomain::Static;
+  if (name == "band-window") return CertificateDomain::BandWindow;
+  throw std::invalid_argument("FiberConnection: unknown domain '" + name + "'");
+}
+
+Record certificateToRecord(const Certificate &cert) {
+  Record::Map m;
+  m["grade"] = Record(gradeName(cert.grade()));
+  m["domain"] = Record(domainName(cert.domain()));
+  m["regime"] = Record(regimeName(cert.regime()));
+  m["residual"] = Record(cert.residual());
+  m["conditioning"] = Record(cert.conditioning());
+  m["dense_reference_error"] = Record(cert.denseReferenceError());
+  m["tolerance"] = Record(cert.tolerance());
+  return Record(std::move(m));
+}
+
+Certificate certificateFromRecord(const Record &record) {
+  const auto &m = record.asMap();
+  const std::string grade = m.at("grade").asString();
+  const CertificateDomain domain = domainFromName(m.at("domain").asString());
+  const CertificateRegime regime = regimeFromName(m.at("regime").asString());
+  const double residual = m.at("residual").asDouble();
+  const double conditioning = m.at("conditioning").asDouble();
+  const double tolerance = m.at("tolerance").asDouble();
+  Certificate cert;
+  if (grade == "algebraically-exact") {
+    cert = Certificate::algebraicallyExact(domain, regime, residual, tolerance);
+  } else if (grade == "structure-exact") {
+    cert = Certificate::structureExact(domain, regime, residual, conditioning,
+                                       tolerance);
+  } else if (grade == "certified-numerical") {
+    cert = Certificate::certifiedNumerical(domain, regime, residual,
+                                           conditioning, tolerance);
+  } else if (grade == "heuristic-discovery") {
+    cert = Certificate::heuristicDiscovery(domain, regime);
+  } else {
+    throw std::invalid_argument(
+        "FiberConnection: unknown certificate grade '" + grade + "'");
+  }
+  cert.setDenseReferenceError(m.at("dense_reference_error").asDouble());
+  return cert;
+}
+
+void matrixToRecord(Record::Map &m, const std::string &name,
+                    const Eigen::MatrixXcd &matrix) {
+  m[name + "_rows"] = Record(static_cast<std::int64_t>(matrix.rows()));
+  m[name + "_cols"] = Record(static_cast<std::int64_t>(matrix.cols()));
+  std::vector<cd> flat(static_cast<std::size_t>(matrix.size()));
+  for (Eigen::Index r = 0; r < matrix.rows(); ++r)
+    for (Eigen::Index c = 0; c < matrix.cols(); ++c)
+      flat[static_cast<std::size_t>(r * matrix.cols() + c)] = matrix(r, c);
+  Record::splitComplex(m, name, flat);
+}
+
+Eigen::MatrixXcd matrixFromRecord(const Record::Map &m,
+                                  const std::string &name) {
+  const auto rows = m.at(name + "_rows").asInt();
+  const auto cols = m.at(name + "_cols").asInt();
+  const auto &re = m.at(name + "_re").asList();
+  const auto &im = m.at(name + "_im").asList();
+  if (re.size() != im.size() ||
+      re.size() != static_cast<std::size_t>(rows * cols))
+    throw std::invalid_argument(
+        "FiberConnection: matrix record payload size mismatch");
+  Eigen::MatrixXcd matrix(rows, cols);
+  for (std::int64_t r = 0; r < rows; ++r)
+    for (std::int64_t c = 0; c < cols; ++c) {
+      const auto i = static_cast<std::size_t>(r * cols + c);
+      matrix(r, c) = cd(re[i].asDouble(), im[i].asDouble());
+    }
+  return matrix;
+}
+
+void requireSchema(const Record::Map &m, const char *type) {
+  const auto version = m.find("schema_version");
+  if (version == m.end() ||
+      version->second.asInt() != static_cast<std::int64_t>(kRecordSchemaVersion))
+    throw std::invalid_argument(
+        "FiberConnection: unknown schema_version (reader rejects unknown "
+        "checkpoint schemas)");
+  const auto rt = m.find("record_type");
+  if (rt == m.end() || rt->second.asString() != type)
+    throw std::invalid_argument(std::string("FiberConnection: expected a '") +
+                                type + "' record");
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -175,6 +310,158 @@ std::string FiberTransportRead::describe() const {
     out << "; REJECTED: " << rejectionReason;
   }
   return out.str();
+}
+
+Record FiberTransportRead::toRecord() const {
+  Record::Map m;
+  m["schema_version"] = Record(kRecordSchemaVersion);
+  m["record_type"] = Record("fiber_transport");
+  m["to_key"] = Record(static_cast<std::int64_t>(toKey));
+  m["from_key"] = Record(static_cast<std::int64_t>(fromKey));
+  m["degree"] = Record(degree);
+  m["rank"] = Record(rank);
+  matrixToRecord(m, "raw_map", rawMap);
+  Record::List sigma;
+  sigma.reserve(singularValues.size());
+  for (const double s : singularValues) sigma.emplace_back(s);
+  m["singular_values"] = Record(std::move(sigma));
+  m["numerical_rank"] = Record(numericalRank);
+  m["leakage"] = Record(leakage);
+  m["overlap_condition_number"] = Record(overlapConditionNumber);
+  m["to_gap"] = Record(toGap);
+  m["from_gap"] = Record(fromGap);
+  m["to_positive_signature"] = Record(toPositiveSignature);
+  m["to_negative_signature"] = Record(toNegativeSignature);
+  m["from_positive_signature"] = Record(fromPositiveSignature);
+  m["from_negative_signature"] = Record(fromNegativeSignature);
+  m["to_condition_number"] = Record(toConditionNumber);
+  m["from_condition_number"] = Record(fromConditionNumber);
+  m["frame_condition_number"] = Record(frameConditionNumber);
+  m["regime"] = Record(regimeName(regime));
+  matrixToRecord(m, "unitary_map", unitaryMap);
+  Record::splitComplex(m, "determinant_phase", determinantPhase);
+  m["polar_residual"] = Record(polarResidual);
+  m["determinant_residual"] = Record(determinantResidual);
+  m["projective_only"] = Record(projectiveOnly);
+  m["accepted"] = Record(accepted);
+  m["rejection_reason"] = Record(rejectionReason);
+  m["certificate"] = certificateToRecord(certificate);
+  return Record(std::move(m));
+}
+
+FiberTransportRead FiberTransportRead::fromRecord(const Record &record) {
+  const auto &m = record.asMap();
+  requireSchema(m, "fiber_transport");
+  FiberTransportRead read;
+  read.toKey = static_cast<std::uint64_t>(m.at("to_key").asInt());
+  read.fromKey = static_cast<std::uint64_t>(m.at("from_key").asInt());
+  read.degree = static_cast<int>(m.at("degree").asInt());
+  read.rank = static_cast<int>(m.at("rank").asInt());
+  read.rawMap = matrixFromRecord(m, "raw_map");
+  for (const Record &s : m.at("singular_values").asList())
+    read.singularValues.push_back(s.asDouble());
+  read.numericalRank = static_cast<int>(m.at("numerical_rank").asInt());
+  read.leakage = m.at("leakage").asDouble();
+  read.overlapConditionNumber = m.at("overlap_condition_number").asDouble();
+  read.toGap = m.at("to_gap").asDouble();
+  read.fromGap = m.at("from_gap").asDouble();
+  read.toPositiveSignature =
+      static_cast<int>(m.at("to_positive_signature").asInt());
+  read.toNegativeSignature =
+      static_cast<int>(m.at("to_negative_signature").asInt());
+  read.fromPositiveSignature =
+      static_cast<int>(m.at("from_positive_signature").asInt());
+  read.fromNegativeSignature =
+      static_cast<int>(m.at("from_negative_signature").asInt());
+  read.toConditionNumber = m.at("to_condition_number").asDouble();
+  read.fromConditionNumber = m.at("from_condition_number").asDouble();
+  read.frameConditionNumber = m.at("frame_condition_number").asDouble();
+  read.regime = regimeFromName(m.at("regime").asString());
+  read.unitaryMap = matrixFromRecord(m, "unitary_map");
+  read.determinantPhase = cd(m.at("determinant_phase_re").asDouble(),
+                             m.at("determinant_phase_im").asDouble());
+  read.polarResidual = m.at("polar_residual").asDouble();
+  read.determinantResidual = m.at("determinant_residual").asDouble();
+  read.projectiveOnly = m.at("projective_only").asBool();
+  read.accepted = m.at("accepted").asBool();
+  read.rejectionReason = m.at("rejection_reason").asString();
+  read.certificate = certificateFromRecord(m.at("certificate"));
+  return read;
+}
+
+Record FundamentalLiftRead::toRecord() const {
+  Record::Map m;
+  m["schema_version"] = Record(kRecordSchemaVersion);
+  m["record_type"] = Record("fundamental_lift");
+  m["rank"] = Record(rank);
+  m["base_branch"] = Record(baseBranch);
+  matrixToRecord(m, "lift", lift);
+  Record::splitComplex(m, "lift_trace", liftTrace);
+  m["center_sector"] = Record(centerSector);
+  m["accumulated_determinant_phase"] = Record(accumulatedDeterminantPhase);
+  m["max_determinant_phase_step"] = Record(maxDeterminantPhaseStep);
+  m["det_residual"] = Record(detResidual);
+  m["valid"] = Record(valid);
+  m["invalid_reason"] = Record(invalidReason);
+  m["certificate"] = certificateToRecord(certificate);
+  return Record(std::move(m));
+}
+
+FundamentalLiftRead FundamentalLiftRead::fromRecord(const Record &record) {
+  const auto &m = record.asMap();
+  requireSchema(m, "fundamental_lift");
+  FundamentalLiftRead read;
+  read.rank = static_cast<int>(m.at("rank").asInt());
+  read.baseBranch = static_cast<int>(m.at("base_branch").asInt());
+  read.lift = matrixFromRecord(m, "lift");
+  read.liftTrace = cd(m.at("lift_trace_re").asDouble(),
+                      m.at("lift_trace_im").asDouble());
+  read.centerSector = static_cast<int>(m.at("center_sector").asInt());
+  read.accumulatedDeterminantPhase =
+      m.at("accumulated_determinant_phase").asDouble();
+  read.maxDeterminantPhaseStep =
+      m.at("max_determinant_phase_step").asDouble();
+  read.detResidual = m.at("det_residual").asDouble();
+  read.valid = m.at("valid").asBool();
+  read.invalidReason = m.at("invalid_reason").asString();
+  read.certificate = certificateFromRecord(m.at("certificate"));
+  return read;
+}
+
+Record DeterminantWindingRead::toRecord() const {
+  Record::Map m;
+  m["schema_version"] = Record(kRecordSchemaVersion);
+  m["record_type"] = Record("determinant_winding");
+  // An unknown winding serializes as unknown — never as zero.
+  m["winding_known"] = Record(winding.has_value());
+  m["winding"] = winding.has_value() ? Record(*winding) : Record();
+  m["winding_closure"] = Record(windingClosure);
+  m["winding_reference_id"] = Record(windingReferenceId);
+  m["accumulated_phase"] = Record(accumulatedPhase);
+  m["max_phase_step"] = Record(maxPhaseStep);
+  m["phase_step_margin"] = Record(phaseStepMargin);
+  m["closure_defect"] = Record(closureDefect);
+  m["invalidation_reason"] = Record(invalidationReason);
+  m["certificate"] = certificateToRecord(certificate);
+  return Record(std::move(m));
+}
+
+DeterminantWindingRead DeterminantWindingRead::fromRecord(
+    const Record &record) {
+  const auto &m = record.asMap();
+  requireSchema(m, "determinant_winding");
+  DeterminantWindingRead read;
+  if (m.at("winding_known").asBool())
+    read.winding = static_cast<int>(m.at("winding").asInt());
+  read.windingClosure = m.at("winding_closure").asString();
+  read.windingReferenceId = m.at("winding_reference_id").asString();
+  read.accumulatedPhase = m.at("accumulated_phase").asDouble();
+  read.maxPhaseStep = m.at("max_phase_step").asDouble();
+  read.phaseStepMargin = m.at("phase_step_margin").asDouble();
+  read.closureDefect = m.at("closure_defect").asDouble();
+  read.invalidationReason = m.at("invalidation_reason").asString();
+  read.certificate = certificateFromRecord(m.at("certificate"));
+  return read;
 }
 
 // ---------------------------------------------------------------------------

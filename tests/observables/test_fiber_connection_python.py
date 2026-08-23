@@ -1321,5 +1321,82 @@ class TestCaching(unittest.TestCase):
         self._assert_reads_equal(read, cold)
 
 
+# =========================================================================== #
+# checkpoint serialization (design spec section 20, `transports`)
+# =========================================================================== #
+class TestRecordSerialization(unittest.TestCase):
+    """Round-trips through the repository's NaN-aware every-channel record
+    gate (two NaNs agree; any numeric drift, shape, or status change is a
+    flagged channel)."""
+    _delta = staticmethod(obs.ObservableGates.report_delta)
+
+    def setUp(self):
+        self.conn = obs.FiberConnection()
+        self.A = _unit_fiber(1, 3)
+        self.B = _unit_fiber(11, 3)
+
+    def test_accepted_transport_round_trip(self):
+        u = _random_unitary(np.random.default_rng(2), 3)
+        read = self.conn.transport(self.A, self.B, u)
+        rec = read.toRecord()
+        back = obs.FiberTransportRead.fromRecord(rec)
+        self.assertEqual(self._delta(rec, back.toRecord()), 0.0)
+        np.testing.assert_allclose(np.asarray(back.unitaryMap),
+                                   np.asarray(read.unitaryMap),
+                                   rtol=0, atol=0)
+        self.assertEqual(back.toKey, read.toKey)
+        self.assertEqual(back.accepted, True)
+        # the rank-three quartet travels: full U(3) factor + det V (and
+        # thereby the PU(3) class, which V alone determines)
+        np.testing.assert_allclose(
+            np.asarray(obs.FiberConnection.projectiveRepresentative(
+                np.asarray(back.unitaryMap))),
+            np.asarray(obs.FiberConnection.projectiveRepresentative(
+                np.asarray(read.unitaryMap))), rtol=0, atol=0)
+
+    def test_rejected_transport_round_trip(self):
+        read = self.conn.transport(self.A, self.B, np.diag([0.5, 2.0, 1.0]))
+        back = obs.FiberTransportRead.fromRecord(read.toRecord())
+        self.assertEqual(self._delta(read.toRecord(), back.toRecord()), 0.0)
+        self.assertFalse(back.accepted)
+        self.assertEqual(back.rejectionReason, read.rejectionReason)
+        self.assertEqual(back.unitaryMap.size, 0)
+        self.assertFalse(back.certificate.holds())
+
+    def test_lift_round_trip_carries_the_center_sector(self):
+        links = [_phase_link(self.conn, self.A, self.B, TWO_PI / 3.0)
+                 for _ in range(3)]
+        lift = self.conn.fundamentalLift(links, 2)
+        back = obs.FundamentalLiftRead.fromRecord(lift.toRecord())
+        self.assertEqual(self._delta(lift.toRecord(), back.toRecord()), 0.0)
+        self.assertEqual(back.centerSector, 1)
+        self.assertEqual(back.baseBranch, 2)
+        np.testing.assert_allclose(np.asarray(back.lift),
+                                   np.asarray(lift.lift), rtol=0, atol=0)
+
+    def test_winding_round_trip_known_and_unknown(self):
+        family = [_phase_link(self.conn, self.A, self.B, TWO_PI * k / 8)
+                  for k in range(8)]
+        known = self.conn.closedFamilyWinding(family)
+        back = obs.DeterminantWindingRead.fromRecord(known.toRecord())
+        self.assertEqual(self._delta(known.toRecord(), back.toRecord()), 0.0)
+        self.assertEqual(back.winding, 1)
+        # unknown stays unknown — never rehydrated as zero
+        unknown = self.conn.openSegmentWinding(family,
+                                               obs.WindingClosureSpec())
+        back_u = obs.DeterminantWindingRead.fromRecord(unknown.toRecord())
+        self.assertIsNone(back_u.winding)
+        self.assertEqual(back_u.windingClosure, "none")
+
+    def test_unknown_schema_version_is_rejected(self):
+        read = self.conn.transport(self.A, self.B, np.eye(3))
+        rec = read.toRecord()
+        rec["schema_version"] = 99
+        with self.assertRaises(ValueError):
+            obs.FiberTransportRead.fromRecord(rec)
+        with self.assertRaises(ValueError):
+            obs.FundamentalLiftRead.fromRecord(rec)
+
+
 if __name__ == "__main__":
     unittest.main()
