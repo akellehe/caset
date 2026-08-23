@@ -1864,6 +1864,18 @@ class TestMesonClassification(unittest.TestCase):
                          ev.first.exteriorParity * ev.second.exteriorParity)
         self.assertEqual(read.exteriorParity, +1)
 
+    def test_composite_transport_leakage_is_reported(self):
+        # the ticket's report set: transport leakage travels on the read
+        # (report-only for the two-cluster composites -- never a gate)
+        ev = _meson_evidence()
+        conn = obs.FiberConnection()
+        A, B = _unit_fiber(1, 3), _unit_fiber(11, 3)
+        ev.lifetimeTransports = [_phase_link(conn, A, B, 0.1)]
+        read = self.pc.classifyMeson(ev)
+        self.assertEqual(read.transportCount, 1)
+        self.assertLessEqual(read.transportLeakageMax, 1e-9)
+        self.assertEqual(read.classification, "meson-candidate")
+
     def test_record_roundtrip_and_describe(self):
         read = self.pc.classifyMeson(_meson_evidence())
         rec = read.toRecord()
