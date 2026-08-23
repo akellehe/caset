@@ -1504,6 +1504,23 @@ RecursiveQuotient::LabeledFiberSumRead RecursiveQuotient::labeledFiberSum()
   }
 
   const int total = static_cast<int>(columns.size());
+  // An EMPTY labeled sum is a legitimate reduction, not a malformed one: a
+  // partition with a single component covering every cell has no interface
+  // cell to keep, and a component whose interior block has no kernel retains
+  // no mode either. The empty sum is trivially an exact isometry — but the
+  // spectral norm and the SVD below are undefined at size zero, so it is
+  // REPORTED here rather than computed. (Found by the #776 overlay at
+  // modularity resolution gamma = 0.5, where the whole complex is one
+  // component; the zero-size JacobiSVD faulted in a Release build.)
+  if (total == 0) {
+    read.nominalRank = 0;
+    read.effectiveRank = 0;
+    read.gramDefect = 0.0;
+    read.quotientNullity = 0;
+    read.certificate = Certificate::algebraicallyExact(
+        CertificateDomain::Static, regime_, 0.0, options_.tolerance);
+    return read;
+  }
   Eigen::MatrixXcd embedding(dim_, total);
   for (int j = 0; j < total; ++j) {
     Eigen::VectorXcd columnVector = columns[static_cast<std::size_t>(j)];

@@ -1010,6 +1010,19 @@ class ProtonAnimator:
         })
         if self.status:
             print(f"  checkpoint -> {path}", flush=True)
+        # #776: the recursive-analysis checkpoint (design spec section 20,
+        # schema 3) beside the geometry state, and ONLY when the overlay is
+        # selected — `checkpoint_json` is empty otherwise, so nothing extra is
+        # written on the path this example has always taken.
+        analysis = node.checkpoint_json
+        if analysis:
+            analysis_path = os.path.join(
+                directory,
+                f"analysis_{frame + 1:04d}{self._runSuffix()}.json")
+            with open(analysis_path, "w") as handle:
+                handle.write(analysis)
+            if self.status:
+                print(f"  analysis   -> {analysis_path}", flush=True)
 
     def _print_status(self, node, frame, phase, tries):
         """One line per frame on stdout: where the drive is, and what is
@@ -2413,11 +2426,41 @@ class ProtonAnimator:
             raise state["error"]
 
 
+def _select_recursive_analysis(node, cadence=1, degrees=None, resolutions=None,
+                               fock_oracle=False, submode="strict",
+                               provenance_hash=""):
+    """Select the #776 post-hoc recursive-analysis overlay on `node`.
+
+    OPT-IN. Nothing here changes the drive: the overlay runs AFTER a move is
+    committed, reads the accepted geometry, and writes only its checkpoint.
+    With the overlay unselected this function is never called and the
+    animation behaves exactly as it did before #776.
+    """
+    config = cob.MultiCobordism.AnalysisConfig()
+    config.enabled = True
+    config.cadence = max(1, int(cadence))
+    config.degrees = list(degrees) if degrees else [1]
+    config.resolutions = list(resolutions) if resolutions else [1.0]
+    config.fock_oracle = bool(fock_oracle)
+    node.set_analysis_config(config)
+    node.set_simulation_mode(
+        cob.MultiCobordism.SimulationMode.EMERGENCE,
+        cob.MultiCobordism.EmergenceSubmode.CERTIFICATES_BLIND_MEAN_FIELD
+        if submode == "certificates-blind-mean-field"
+        else cob.MultiCobordism.EmergenceSubmode.STRICT)
+    node.set_provenance(provenance_hash, "")
+    return node
+
+
 def build_proton_nodes(seed=3, precone=0, precone_timelike=False, gamma=50.0,
                        balanced_edges=False, singular_value_ratio=False,
                        degree=3, einstein_hilbert=True,
                        objective_mode="joint-stationarity",
-                       entropy_weight=1.0, ignore_complex_phase=False):
+                       entropy_weight=1.0, ignore_complex_phase=False,
+                       recursive_analysis=False, analysis_cadence=1,
+                       analysis_degrees=None, analysis_resolutions=None,
+                       analysis_fock_oracle=False,
+                       emergence_submode="strict", provenance_hash=""):
     """The single one-step `MultiCobordism` node the animation drives, as a 1-element
     list: `Proton.direct_node` — the three bare quarks `{1}`, `{ω}`, `{ω²}` plus their
     three anti-quarks (three q-q̄ pairs) as inputs and the proton singlet as the single
@@ -2444,6 +2487,15 @@ def build_proton_nodes(seed=3, precone=0, precone_timelike=False, gamma=50.0,
         cob.HodgeEntropyPhaseMode.IgnoreComplexPhase
         if ignore_complex_phase
         else cob.HodgeEntropyPhaseMode.IncludeComplexPhase)
+    # #776: the recursive-analysis overlay is OPT-IN. Unselected, the node is
+    # byte-for-byte the node this example has always built.
+    if recursive_analysis:
+        _select_recursive_analysis(node, cadence=analysis_cadence,
+                                   degrees=analysis_degrees,
+                                   resolutions=analysis_resolutions,
+                                   fock_oracle=analysis_fock_oracle,
+                                   submode=emergence_submode,
+                                   provenance_hash=provenance_hash)
     return [
         (node, "Proton — 3 q-q̄ pairs → singlet {1, ω, ω²} (one step)"),
     ]
@@ -2833,6 +2885,38 @@ def main():
                     help="silence the per-frame status line (F, its change, "
                          "the objective's two terms, cell/Betti/hole counts, "
                          "and the stage-1/stage-2 obstruction signals)")
+    # --- #776: the post-hoc recursive-analysis overlay (OPT-IN) ---
+    ap.add_argument("--recursive-analysis", action="store_true",
+                    dest="recursive_analysis",
+                    help="run the #776 post-hoc recursive component/fiber/"
+                         "transport/covariance/particle analysis after every "
+                         "accepted move and write its versioned checkpoint "
+                         "beside the geometry state. OFF by default: the drive "
+                         "is unchanged either way — the overlay reads the "
+                         "accepted geometry and can never influence a move")
+    ap.add_argument("--analysis-cadence", type=_positive_int, default=1,
+                    dest="analysis_cadence",
+                    help="run one analysis pass every N accepted moves "
+                         "(default 1)")
+    ap.add_argument("--analysis-degrees", default="1",
+                    dest="analysis_degrees",
+                    help="comma-separated Hodge degrees the spectral bands are "
+                         "enumerated at (default 1)")
+    ap.add_argument("--analysis-resolutions", default="1.0",
+                    dest="analysis_resolutions",
+                    help="comma-separated modularity resolution sequence "
+                         "scanned per pass (default 1.0)")
+    ap.add_argument("--analysis-fock-oracle", action="store_true",
+                    dest="analysis_fock_oracle",
+                    help="build the lazy Fock expression as well (oracle / "
+                         "explicit non-Gaussian boundary data only — never the "
+                         "quasi-free production representation)")
+    ap.add_argument("--emergence-submode",
+                    choices=("strict", "certificates-blind-mean-field"),
+                    default="strict", dest="emergence_submode",
+                    help="the labeled Gaussian-closed emergence sub-mode "
+                         "stamped in provenance. `strict` (default): the "
+                         "carried state never acts back on the geometry")
     ap.add_argument("--spectra-every", type=_positive_int,
                     default=_SPECTRA_REFRESH_EVERY,
                     dest="spectra_every",
@@ -2931,7 +3015,19 @@ def main():
                                einstein_hilbert=args.einstein_hilbert,
                                objective_mode=args.objective,
                                entropy_weight=args.entropy_weight,
-                               ignore_complex_phase=args.ignore_complex_phase)
+                               ignore_complex_phase=args.ignore_complex_phase,
+                               recursive_analysis=args.recursive_analysis,
+                               analysis_cadence=args.analysis_cadence,
+                               analysis_degrees=[
+                                   int(part) for part in
+                                   args.analysis_degrees.split(",") if part],
+                               analysis_resolutions=[
+                                   float(part) for part in
+                                   args.analysis_resolutions.split(",")
+                                   if part],
+                               analysis_fock_oracle=args.analysis_fock_oracle,
+                               emergence_submode=args.emergence_submode,
+                               provenance_hash=" ".join(sys.argv[1:]))
     result = run_build(nodes, visualize=args.live, save=args.save, init_steps=args.init,
                        evolve_steps=args.evolve,
                        init_chunk=args.init_chunk, evolve_chunk=args.evolve_chunk,
