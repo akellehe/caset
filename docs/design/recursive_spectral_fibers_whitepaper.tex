@@ -159,7 +159,10 @@ Three kinds of statement are deliberately distinguished:
 The governing constraint is parsimony. The ontology is limited to:
 \begin{itemize}
   \item an oriented simplicial complex and its cobordisms;
-  \item a complex squared length and one two-level occupation mode on each edge;
+  \item on each edge, a complex squared length and a complex
+    $\mathbb{C}^{*}$ connection phase --- two distinct fields, because the
+    connection is gauge-variant and the geometry is not --- together with one
+    two-level occupation mode;
   \item incidence, Hodge, and Regge operators derived from that data;
   \item a generally entangled boundary/Fock state on those modes; and
   \item simplicial gluing followed by fermionic second quantization.
@@ -204,7 +207,9 @@ identification.}
 Two existing results motivate the construction.
 
 First, the state-operation-cobordism experiments show that the Hodge-carried
-register is an isometry to machine precision and that its spectral value
+register is a scaled isometry to machine precision --- its Gram is the
+identity once one global scale is fixed by the anchor --- and that its spectral
+value
 reproduces the quantum transition amplitude for every operation that the tested
 geometry actually carries. Generic fixed-complexity operations can remain
 obstructed, and the obstruction is visible both as a residual floor and as
@@ -239,12 +244,50 @@ the complex squared length
 \begin{equation*}
   z_{e}=\rho_{e}e^{i\theta_{e}}\in\mathbb{C}
 \end{equation*}
+and, separately, the connection phase
+\begin{equation*}
+  \varphi_{e}\in\mathbb{C},
+\end{equation*}
 and attach the two-level occupation factor
-$\HK_{e}=\operatorname{span}\{\lvert 0\rangle_{e},\lvert 1\rangle_{e}\}$. The
-phase of $z_{e}$ is not a second link field; it is part of the existing complex
-edge geometry. Saying that an edge ``carries a qubit'' means that it carries
-this local mode algebra, not that the global state is forced to be a product of
-normalized vectors $q_{e}$.
+$\HK_{e}=\operatorname{span}\{\lvert 0\rangle_{e},\lvert 1\rangle_{e}\}$.
+
+The two edge fields are distinct, and the reason is gauge invariance. The
+connection transforms as $\varphi\mapsto\varphi+d\chi$ while the geometry must
+not: were $\varphi_{e}$ taken to be $\arg z_{e}$, a gauge transformation would
+change the squared length --- that is, it would change the metric. So the phase
+is carried as its own field and enters the metric weight multiplicatively,
+\begin{equation*}
+  w_{e}=z_{e}\,e^{i\varphi_{e}},
+\end{equation*}
+the discrete magnetic coupling: geometry times a link phase. Saying that an edge
+``carries a qubit'' means that it carries the local mode algebra above, not that
+the global state is forced to be a product of normalized vectors $q_{e}$.
+
+Because $\varphi_{e}$ is complex,
+$e^{i\varphi}=e^{i\operatorname{Re}\varphi}e^{-\operatorname{Im}\varphi}$, and
+the structure group is $\mathbb{C}^{*}=U(1)\times\mathbb{R}^{+}$: a compact part
+and a non-compact one. Only the compact part has winding, so only the compact
+part quantizes; the non-compact part acts as a local scale and carries no
+quantum number. Four consequences follow and are used throughout:
+\begin{itemize}
+  \item $L$ is generically \emph{non-normal}, not merely Krein-indefinite, so
+    matched left and right frames with $\Psi^{\dagger}W\Phi=I$ are mandatory
+    rather than a fallback;
+  \item eigenvalues are properly complex, so band isolation must be measured as
+    separation in the complex plane and never to a sort-order neighbour;
+  \item band projectors are oblique, so $\Gamma=P$ is the covariance of an actual
+    state only where the restricted metric is definite --- a Krein-definite band
+    --- while an indefinite band admits no state at all; and
+  \item under a similarity $L\mapsto SLS^{-1}$ eigenvalues are invariant while
+    eigenvectors are only covariant, so observables must be spectral or
+    holonomy-valued. This strengthens rather than weakens the discipline the rest
+    of the paper already imposes on Wilson loops and the determinant line.
+\end{itemize}
+
+The edge data are not the state. They parameterize the operator; the state is
+the spectral data of $L(z,\varphi)$ --- its eigenvalues and its selected
+eigenspaces, entering below as band projectors. An edge datum is a coordinate on
+the space of operators, not an amplitude.
 
 Writing $\hh_{K}=\operatorname{span}\{\lvert e\rangle : e\in K_{1}\}$ for the
 one-particle edge space, the microscopic quantum carrier is
@@ -1049,10 +1092,12 @@ motion after comparison with the reference loop. The algebraic wedge sign is
 exact; the interferometric holonomy is the dynamical certificate.
 
 A physical $2\pi$ rotation uses the same reference normalization, and the
-rotation path is not left abstract: it is the documented total-space spin
-holonomy cycle already used for the $J^{2}$ readout
-(\code{joint\_proton\_spin\_findings.md}), executed as a closed loop and
-normalized against its own co-moving, non-rotating reference. If an emergent
+rotation path is not left abstract: it is a closed loop constructed here on
+the total-space frame, normalized against its own co-moving, non-rotating
+reference. It acts on the $J^{2}$ operator whose oracle values are recorded in
+\code{joint\_proton\_spin\_findings.md}; that document supplies the operator
+and its values, not the cycle, and records the total-space spin readout as an
+open item. If an emergent
 manifold-like regime supplies tangent frames, a continuum spinor claim
 additionally requires a lift of the frame holonomy from $SO(d)$ to
 $\mathrm{Spin}(d)$; obstruction by the second Stiefel--Whitney class is then a
@@ -1146,6 +1191,112 @@ not an unexplained bug \cite{becherjoos1982,buttcatterall2021}. Any observed
 near-fourfold cluster in the present model is reported as an empirical
 degeneracy until that stronger operator identification is made.
 
+% ================================================================ 12b
+\section{Mass, charge, and form factor from world-tube
+crossings}\label{sec:readout}
+
+The certificates below need a mass, a charge, a radius, and a form factor. This
+section specifies them. They are read from the same object --- a band world tube
+crossing a surface --- and differ only in how the crossings are summed.
+
+\subsection{The surfaces are supplied by the cobordism}
+
+A cobordism has $\partial W=M_{0}\sqcup M_{1}$, so it supplies its own reference
+surface without any choice of slicing. Let $\tau(x)$ be the Lorentzian distance
+from the incoming boundary $M_{0}$ and let
+\begin{equation*}
+  \Sigma_{t}=\{x : \tau(x)=t\}
+\end{equation*}
+be its level sets. Nothing here is a preferred foliation: $\tau$ is fixed by the
+cobordism rather than by a coordinate, and no slicing is prescribed for the bulk.
+$M_{0}$ additionally serves as the reference state, which is what makes the
+readouts below differences rather than absolutes.
+
+\subsection{The crossing decomposition}
+
+A persistent band (Section~\ref{sec:fibers}) tracked across cobordism frames
+sweeps a world tube. Where a tube crosses $\Sigma_{t}$, decompose it against the
+surface: let $\pi_{\perp}$ be the component along the timelike normal and
+$\pi_{\parallel}$ the component within the surface. Both are complex, since the
+edge data are.
+
+A crossing is admissible only if the band is Krein-definite --- an indefinite
+band carries no state (Section~\ref{sec:state}) --- and only if the crossing is
+timelike. A spacelike or null crossing has no particle reading at all, and the
+readout refuses and names the reason rather than labelling it.
+
+\subsection{Mass and charge are one sum taken two ways}
+
+Over the admissible crossings of $\Sigma_{t}$, relative to $M_{0}$:
+\begin{equation*}
+  m(\Sigma_{t})=\sum_{c}\lvert\pi_{\perp}(c)\rvert,
+  \qquad
+  B(\Sigma_{t})=\sum_{c}\operatorname{sgn}\pi_{\perp}(c).
+\end{equation*}
+Mass is the \emph{incoherent} sum: moduli, nothing cancels. Charge is the
+\emph{coherent} sum: signs, opposites cancel. That single difference reproduces
+the observed behaviour of the two quantities. A particle-antiparticle pair
+carries twice the mass of one constituent and zero net charge, because the
+moduli add while the signs cancel. Mass is continuous, additive and strictly
+positive; charge is an integer count of net orientation, signed and cancelling,
+and its quantization is a consequence of counting rather than an assumption.
+
+The sign is the physical content of $\pi_{\perp}$. A past-directed crossing is
+an antiparticle --- the kinematic reading of the orientation reversal already
+used in Section~\ref{sec:quarks}, where reversing a tube sends
+$B=+1/3$ to $B=-1/3$. The same sign therefore appears twice, once as the
+crossing orientation and once as the determinant-line winding of
+Section~\ref{sec:transport}. They must agree on every certified tube. Their
+agreement is a cross-check, not a redundancy: a tube on which they disagree is a
+defect signal.
+
+Whether a negative Krein signature marks an antiparticle or an unphysical sector
+is deliberately left open. It is to be settled by measuring whether the Krein
+sign tracks the crossing sign, not by decree.
+
+\subsection{Orientation gives baryon number; electric charge needs flavor}
+
+The coherent sum counts tube orientations, so it is baryon number. It is not by
+itself electric charge: an up and a down quark are both forward tubes with
+$B=+1/3$ and differ in $Q$. Electric charge follows from the relation already
+stated in Section~\ref{sec:quarks},
+\begin{equation*}
+  Q=I_{3}+\frac{B}{2},
+\end{equation*}
+once the isospin doublet is certified, and is cross-checked against the
+Gauss-flux read on nested enclosing surfaces. Two independent routes to $Q$,
+required to agree.
+
+\subsection{Momentum, radius, and the form factor}
+
+The tangential component $\pi_{\parallel}$ carries the spatial content:
+momentum, and with it the extent of the crossing set on $\Sigma_{t}$, which is
+the radius.
+
+Localizing charge gives the form factor. Each admissible crossing contributes
+its signed unit at its position on $\Sigma_{t}$, so the crossings define a
+charge density $\rho$ on the surface. Expand $\rho$ in the eigenbasis
+$\{\psi_{\lambda}\}$ of the Laplacian of $\Sigma_{t}$ and read the coefficients
+as a function of eigenvalue:
+\begin{equation*}
+  F(\lambda)=\frac{\langle\psi_{\lambda},\rho\rangle}
+                  {\langle\psi_{0},\rho\rangle}.
+\end{equation*}
+The slice Laplacian is the discrete $-\nabla^{2}$, so its eigenvalue is the
+squared momentum transfer: $\lambda$ plays $q^{2}$ honestly rather than by
+analogy. The normalization fixes $F(0)=1$, recovering total charge, and the
+charge radius is the small-$\lambda$ slope,
+\begin{equation*}
+  \langle r^{2}\rangle=-6\,\frac{dF}{d\lambda}\bigg|_{\lambda=0},
+\end{equation*}
+the textbook definition read on the discrete spectrum.
+
+Every quantity here is a difference against $M_{0}$, never an absolute. A curved
+complex carries curvature and flux in its ground state; an absolute reading
+would fold that background into the excitation, and a background-dependent mass
+is exactly the kind of definition-sensitivity that makes a dimensionful number
+unquotable.
+
 % ================================================================ 13
 \section{The proton as the maximally informative baryon}\label{sec:proton}
 
@@ -1185,7 +1336,9 @@ proposed proton certificate is the conjunction:
       =\langle (J^{2})^{2}\rangle-\langle J^{2}\rangle^{2}\approx 0$,
     a reference-normalized $2\pi\mapsto -1$, and, where applicable, an
     accepted spin lift;
-  \item finite radius and stable spectral mass/form-factor readouts; and
+  \item finite radius, and stable spectral mass and form-factor readouts, in the
+    world-tube-crossing sense of Section~\ref{sec:readout} --- every one of them
+    a difference against $M_{0}$, never an absolute; and
   \item stability of every dimensionless certificate under refinement.
 \end{itemize}
 
@@ -1513,9 +1666,12 @@ transport, and closure of the quasi-free class under every generator the model
 currently possesses. That last identity organizes the programme. Classical or
 mean-field geometry backreaction does not leave the Gaussian manifold, so the
 covariance matrix is not an approximation tier: it is the exact state
-representation of the present theory, and every particle certificate ---
-including $\langle J^{2}\rangle$ and its variance --- is a finite Wick sum over
-it.
+representation of the present theory, and every \emph{polynomial} certificate
+on it --- including $\langle J^{2}\rangle$ and its variance --- is a finite Wick
+sum. The certificates that are not polynomial in the mode operators --- the
+determinant winding, the Gauss flux, the rotation character, the spin lift, the
+anchor, and the crossing readouts of Section~\ref{sec:readout} --- are read from
+geometry and holonomy instead, and are no less exact for it.
 
 What remains genuinely open is whether Tessera's unforced Regge--Hodge dynamics
 produces the required anchored clusters, low-leakage holonomies, relative
