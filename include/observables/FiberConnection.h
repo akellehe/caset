@@ -227,16 +227,21 @@ struct FiberTransportRead {
   double leakage = std::numeric_limits<double>::quiet_NaN();
   /// σ_max/σ_min of the overlap (∞ when singular).
   double overlapConditionNumber = std::numeric_limits<double>::quiet_NaN();
-  /// Endpoint band isolation min(lowerGap, upperGap) of A / B.
+  /// Endpoint band isolation min(lowerGap, upperGap) of the destination A.
   double toGap = std::numeric_limits<double>::infinity();
+  /// Endpoint band isolation min(lowerGap, upperGap) of the source B.
   double fromGap = std::numeric_limits<double>::infinity();
-  /// Endpoint Krein inertia (p, q) of A / B, from the band certificates.
+  /// Krein inertia p of the destination band (from its certificate).
   int toPositiveSignature = 0;
+  /// Krein inertia q of the destination band.
   int toNegativeSignature = 0;
+  /// Krein inertia p of the source band.
   int fromPositiveSignature = 0;
+  /// Krein inertia q of the source band.
   int fromNegativeSignature = 0;
-  /// Endpoint band condition numbers (‖P‖₂ from the band certificates).
+  /// Destination band condition number (‖P‖₂ from its certificate).
   double toConditionNumber = std::numeric_limits<double>::quiet_NaN();
+  /// Source band condition number (‖P‖₂ from its certificate).
   double fromConditionNumber = std::numeric_limits<double>::quiet_NaN();
   /// max of the endpoint condition numbers — the spec §6.6 field.
   double frameConditionNumber = std::numeric_limits<double>::quiet_NaN();
@@ -374,6 +379,7 @@ struct FundamentalLiftRead {
 /// spec §5.11): HOW the open composite is closed is part of the
 /// certificate.  With `Mode::None` the winding is left unknown.
 struct WindingClosureSpec {
+  /// The declared closure convention.
   enum class Mode {
     /// No closure declared — the winding is reported UNKNOWN (a raw
     /// endpoint phase difference is never promoted to an integer).
@@ -388,6 +394,7 @@ struct WindingClosureSpec {
     /// T₀ → V(0) → … → V(n−1) → T₁ → T₀ close the phase path exactly.
     EndpointTrivialization,
   };
+  /// The declared closure mode (see `Mode`).
   Mode mode = Mode::None;
   /// Caller-supplied identifier of the reference specification, recorded
   /// verbatim on the read.
@@ -396,9 +403,11 @@ struct WindingClosureSpec {
   /// samples, same orientation as the segment (traversed backwards by the
   /// closure).
   std::vector<Eigen::MatrixXcd> referenceTransports{};
-  /// EndpointTrivialization: the register-supplied r×r frames at the
-  /// start / end of the segment.
+  /// EndpointTrivialization: the register-supplied r×r frame at the START
+  /// of the segment.
   Eigen::MatrixXcd startTrivialization{};
+  /// EndpointTrivialization: the register-supplied r×r frame at the END
+  /// of the segment.
   Eigen::MatrixXcd endTrivialization{};
 };
 
@@ -461,8 +470,10 @@ class FiberConnection {
     /// `AnalyticCache` kind string of a cached Wilson loop product.
     static constexpr const char *kHolonomyCacheKind = "wilson-product";
 
+    /// Bind the gate thresholds this connection derives transports under.
     explicit FiberConnection(FiberConnectionConfig cfg = {});
 
+    /// The threshold configuration this instance gates with.
     [[nodiscard]] const FiberConnectionConfig &config() const noexcept {
       return cfg_;
     }
