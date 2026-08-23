@@ -2141,19 +2141,15 @@ _UD_CACHE = {}
 def _ud_quark(kind):
     """A CERTIFIED #773 u or d quark: nu = +1, odd parity, I3 = +-1/2 under
     the recorded doublet orientation, and a Gauss-consistent electric flux
-    (the merged #773 fixtures, memoized — each rebuild solves a Gauss
+    (the merged #773 fixtures, memoized -- each rebuild solves a Gauss
     least-squares problem)."""
     if kind not in _UD_CACHE:
-        occupancy = [1.0, 0.0] if kind == "u" else [0.0, 1.0]
-        charge = 2.0 / 3.0 if kind == "u" else -1.0 / 3.0
-        _UD_CACHE[kind] = ParticleClusters_ud(occupancy, charge)
+        _UD_CACHE[kind] = obs.ParticleClusters().classifyQuark(
+            _certified_evidence(
+                with_flavor=True,
+                occupancy=[1.0, 0.0] if kind == "u" else [0.0, 1.0],
+                with_charge=2.0 / 3.0 if kind == "u" else -1.0 / 3.0))
     return _UD_CACHE[kind]
-
-
-def ParticleClusters_ud(occupancy, charge):
-    return obs.ParticleClusters().classifyQuark(
-        _certified_evidence(with_flavor=True, occupancy=occupancy,
-                            with_charge=charge))
 
 
 def _relabel_quark(read, level=1, tag="cd"):

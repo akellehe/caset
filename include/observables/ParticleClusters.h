@@ -888,7 +888,8 @@ struct GluonRead {
 /// # CompositeCandidateEvidence
 ///
 /// The assembled evidence bundle of ONE two-cluster composite (#774 meson
-/// and diquark candidates; three-cluster composites belong to #775).  The
+/// and diquark candidates; the THREE-cluster bundle is the #775
+/// `BaryonCandidateEvidence` below).  The
 /// constituents are #773 `QuarkRead`s CONSUMED VERBATIM — their windings,
 /// parities, and certificates are never recomputed here; the composite
 /// channels (carried-state occupation, the pair color bilinear, the
@@ -1164,7 +1165,10 @@ struct ScaleProfileRead {
   /// Whether every sample's radius is finite and above `minRadius`.
   bool radiusFinite = false;
   /// The dimensionless radius ratio r_dual / r_primal of the first
-  /// sample, and its relative spread (max − min)/|mean| over the window.
+  /// sample, and its normalized spread (max − min)/max(|mean|, 1) over the
+  /// window — RELATIVE for O(1)-and-larger channels, ABSOLUTE for channels
+  /// near zero (so a near-zero channel is never reported as infinitely
+  /// unstable).  Every spread below uses the same normalization.
   double radiusRatio = std::numeric_limits<double>::quiet_NaN();
   double radiusRatioSpread = std::numeric_limits<double>::quiet_NaN();
   /// The dimensionless spectral-mass channel of the first sample and its
