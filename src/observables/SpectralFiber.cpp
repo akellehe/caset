@@ -530,9 +530,12 @@ SpectralFiberTracker::assembleRestricted(
                                                   op.support.end());
 
   if (degree == 0) {
-    // Induced-subgraph Hermitian U(1) graph Laplacian, under exactly the
-    // whole-complex HodgeLaplacian k=0 conventions: A_ij = sum l^2 e^{i phase}
-    // (stored source->target carries +phase), D_ii = sum |l^2|, L = D - A.
+    // Induced-subgraph Hermitian U(1) CONNECTION Laplacian, under exactly
+    // HodgeLaplacian::connectionLaplacian's conventions: A_ij = sum l^2
+    // e^{i phase} (stored source->target carries +phase), D_ii = sum |l^2|,
+    // L = D - A. NOT the Hodge laplacian(0) = d_1 W_1^-1 d_1^T (#805): a
+    // degree-0 spectral band tracks Aharonov-Bohm structure, which only the
+    // connection operator carries.
     std::vector<std::uint64_t> ids;
     for (const auto &v : st_->getVertexList()->toVector()) {
       if (v == nullptr) continue;
@@ -569,6 +572,12 @@ SpectralFiberTracker::assembleRestricted(
     const double norm = op.L.norm();
     const double hermDefect = (op.L - op.L.adjoint()).norm();
     if (hermDefect <= 1e-12 * std::max(1.0, norm)) {
+      // PSD by Gershgorin, and the derivation holds for every complex/signed
+      // edge weight: the diagonal is sum_e |l^2_e| over the SAME induced edge
+      // set the off-diagonals sum over, and |sum_e z_e e^{i theta}| <=
+      // sum_e |z_e|, so the operator is Hermitian and diagonally dominant with
+      // a non-negative diagonal. This is a property of the CONNECTION operator
+      // only; it does not transfer to the Hodge L_0 (#805).
       op.positive = true;
       op.regime = CertificateRegime::PositiveSemidefinite;
       op.S = op.L.sparseView();

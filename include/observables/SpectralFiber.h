@@ -358,9 +358,12 @@ struct ComponentBandRead {
 /// W-orthonormal similarity `B_k^T B_k + B_{k+1} B_{k+1}^T` with the
 /// identical spectrum, and the frames are mapped back to cochain
 /// coordinates (`Phi = W^{-1/2} U`), so the same resolution identity
-/// holds.  At degree 0 it is the induced-subgraph Hermitian U(1) graph
-/// Laplacian under exactly the whole-complex conventions
-/// (A_ij = sum l^2 e^{i phase}, magnitude degree).  A `(k+1)`-cell with a
+/// holds.  At degree 0 it is the induced-subgraph Hermitian U(1) CONNECTION
+/// graph Laplacian under exactly `HodgeLaplacian::connectionLaplacian`'s
+/// conventions (A_ij = sum l^2 e^{i phase}, magnitude degree) — NOT the Hodge
+/// `laplacian(0)`, which is d_1 W_1^-1 d_1^T and a different operator (#805).
+/// The band structure a degree-0 fiber tracks is the Aharonov-Bohm one, which
+/// only the connection operator carries.  A `(k+1)`-cell with a
 /// vertex outside `S` does not contribute (the component is read as a
 /// complex in its own right).
 ///

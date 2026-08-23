@@ -174,12 +174,9 @@ std::vector<cd> EigenstateSynthesis::apply(const std::vector<cd> &psi) const {
         std::to_string(psi.size()) + ", expected " + std::to_string(N));
   std::vector<cd> out(N, cd(0.0, 0.0));
   if (N == 0) return out;
-  // L_k reassembled from the live edges on each call: at k=0 the k=0 magnitude
-  // convention L = D - A; at k>=1 the symmetric metric Hodge Laplacian whose
-  // volume weights W_k are read live from the edge squared-lengths. The matrix
-  // path does not consult the eigendecomposition cache, so repeated
-  // perturb-then-query is honest.
-  const std::vector<cd> L = laplacian_.laplacian(k_);
+  // Reassembled from the live edges on each call (see readoutLaplacian): the
+  // U(1) connection L = D - A at k=0, the Hodge L_k at k>=1.
+  const std::vector<cd> L = readoutLaplacian();
   for (std::size_t i = 0; i < N; ++i) {
     cd acc(0.0, 0.0);
     for (std::size_t j = 0; j < N; ++j) acc += L[i * N + j] * psi[j];
@@ -893,6 +890,28 @@ std::vector<cd> EigenstateSynthesis::bulkMinusBoundaryHarmonicMatrix(
   return out;
 }
 
+std::vector<cd> EigenstateSynthesis::readoutLaplacian() const {
+  // k = 0 scores the U(1) CONNECTION operator, k >= 1 the Hodge L_k (#805).
+  // Read through the CAPTURED operator: its vertex/cell ordering is the one
+  // cellOrdering_ was built from, and neither entry point consults a spectral
+  // cache (both reassemble from the live edges on every call), so repeated
+  // perturb-then-query stays honest.
+  return k_ == 0 ? laplacian_.connectionLaplacian()
+                 : laplacian_.laplacian(k_, /*metric=*/true);
+}
+
+std::vector<cd> EigenstateSynthesis::readoutHarmonicMatrix() const {
+  // k = 0 reads the U(1) CONNECTION operator, k >= 1 the Hodge L_k (#805).
+  // The degree-zero register's content is the U(1) flux carried around a hole:
+  // ker L_0 = b_0 at any weights, so L_0's harmonics can carry no flux and a
+  // degree-zero readout taken from them would be identically gauge-flat. The
+  // connection operator is indexed over the full sorted vertex order, which is
+  // exactly cellOrdering_ at k = 0.
+  const HodgeLaplacian hodge(st_);
+  return k_ == 0 ? hodge.connectionHarmonicMatrix(1e-9)
+                 : hodge.harmonicMatrix(k_, 1e-9, /*metric=*/true);
+}
+
 EigenstateSynthesis::RegisterReadout EigenstateSynthesis::assembleRegisterReadout(
     const std::vector<std::vector<std::uint64_t>> &holes) const {
   const auto joinIds = [](const std::vector<std::uint64_t> &c) {
@@ -908,7 +927,7 @@ EigenstateSynthesis::RegisterReadout EigenstateSynthesis::assembleRegisterReadou
   const std::size_t n = order_;
   // Harmonics fresh from the live complex — surgery between calls moves them,
   // and the operator's own spectral cache is keyed to construction time.
-  out.H = HodgeLaplacian(st_).harmonicMatrix(k_, 1e-9, /*metric=*/true);
+  out.H = readoutHarmonicMatrix();
   if (n == 0) {
     if (!holes.empty())
       throw std::runtime_error(
@@ -1216,7 +1235,7 @@ EigenstateSynthesis::RegisterReadout EigenstateSynthesis::assembleReadoutOverLoo
     const std::vector<EdgeLoop> &loops) const {
   RegisterReadout out;
   const std::size_t n = order_;
-  out.H = HodgeLaplacian(st_).harmonicMatrix(k_, 1e-9, /*metric=*/true);
+  out.H = readoutHarmonicMatrix();
   if (n == 0) {
     if (!loops.empty())
       throw std::runtime_error(
@@ -1590,9 +1609,10 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
 std::vector<double> EigenstateSynthesis::periodGradientGeneral(
     const std::vector<std::vector<std::uint64_t>> &holes,
     const std::vector<cd> &targetPeriods) const {
-  // k = 0 is a different operator, not a different weight: L_0 = D - A is
-  // genuinely complex Hermitian (full l^2 + U(1) phases), so it gets its own
-  // complex core rather than the laplacian(k).real() projection below (#589).
+  // k = 0 reads a different operator, not a different weight: the U(1)
+  // connection L^U(1) = D - A is genuinely complex Hermitian (full l^2 +
+  // U(1) phases), so it gets its own complex core rather than the
+  // laplacian(k).real() projection below (#589).
   if (k_ == 0) return periodGradientDegreeZero(holes, targetPeriods);
   // Arbitrary-degree exact d r_U / d l^2 over the removed-(k+1)-cell holes. M = L_k,
   // the per-edge dL_k/dl^2 (HodgeLaplacian::laplacianGradient, on Simplex::volumeGradient)
@@ -1741,15 +1761,19 @@ std::vector<double> EigenstateSynthesis::periodGradientDegreeZero(
     const std::vector<cd> &targetPeriods) const {
   // Exact d r_U / d l^2 at k = 0, against the operator residualForPeriods
   // actually scores: the genuinely COMPLEX Hermitian vertex operator
-  // L_0 = D - A (HodgeLaplacian::assemble — D_ii = sum_e |l^2_e|,
-  // A_ij = l^2_e e^{i phase_e}). Structure mirrors periodGradientGeneral in
-  // complex arithmetic; the product rule d||rho||^2 = 2 Re(rho^dagger d rho)
-  // is complex-safe as-is. Differences from the k >= 1 core, both forced by
-  // the operator:
-  //   * dL_0 per edge has exactly four entries — dL_ii = dL_jj = d|w|/dw
+  // L^U(1) = D - A (HodgeLaplacian::connectionLaplacian — D_ii = sum_e |l^2_e|,
+  // A_ij = l^2_e e^{i phase_e}). That is the U(1) CONNECTION Laplacian, NOT the
+  // Hodge L_0 = d_1 W_1^-1 d_1^T (#805): the degree-zero register carries U(1)
+  // flux, and ker L_0 is always b_0, so an L_0 readout would be identically
+  // gauge-flat and carry nothing. readoutHarmonicMatrix() picks the same
+  // operator, so value and gradient agree.
+  // Structure mirrors periodGradientGeneral in complex arithmetic; the product
+  // rule d||rho||^2 = 2 Re(rho^dagger d rho) is complex-safe as-is. Differences
+  // from the k >= 1 core, both forced by the operator:
+  //   * dL^U(1) per edge has exactly four entries — dL_ii = dL_jj = d|w|/dw
   //     evaluated along the real axis (Re w / |w|; the manifold is real
   //     signed l^2), dL_ij = -e^{i phase}, dL_ji = -e^{-i phase} — no volume
-  //     weights (W_0 = I).
+  //     weights.
   //   * The least-squares fit uses the SVD pseudo-inverse and its
   //     constant-rank derivative (Golub–Pereyra): at k = 0 a globally
   //     gauge-flat harmonic has zero period on every hole, so A = Q U_n is
@@ -1757,13 +1781,13 @@ std::vector<double> EigenstateSynthesis::periodGradientDegreeZero(
   //     (A^dagger A)^{-1} would be singular. The SVD fit is exactly what the
   //     functional's lstsqOverReadout applies, so the gradient differentiates
   //     the value actually returned.
-  // Euler identity: L_0(s l^2) = s L_0(l^2) for s > 0 (degree +1), so
+  // Euler identity: L^U(1)(s l^2) = s L^U(1)(l^2) for s > 0 (degree +1), so
   // Sum_e l^2_e d r_U/d l^2_e = +2 r_U (the k >= 1 metric L_k is degree -1,
   // giving -r_U there).
   using Eigen::Index;
   using Eigen::MatrixXcd;
   using Eigen::VectorXcd;
-  const std::size_t n0 = order_;  // # vertices (rows/cols of L_0)
+  const std::size_t n0 = order_;  // # vertices (rows/cols of L^U(1))
   const ChainComplex cc = ChainComplex::fromSpacetime(*st_);
   const std::vector<std::vector<std::uint64_t>> edges1 = cc.kSimplexVertices(1);
   std::vector<double> grad(edges1.size(), 0.0);  // d r_U / d l^2_e, 1-cell order
@@ -1777,8 +1801,8 @@ std::vector<double> EigenstateSynthesis::periodGradientDegreeZero(
   static constexpr double kNullTol = 1e-7;
   const Index N = static_cast<Index>(n0);
 
-  // ---- M = L_0 (Hermitian complex; the full l^2 and U(1) phases) ----
-  const std::vector<cd> Lflat = HodgeLaplacian(st_).laplacian(0);
+  // ---- M = L^U(1) (Hermitian complex; the full l^2 and U(1) phases) ----
+  const std::vector<cd> Lflat = readoutLaplacian();
   MatrixXcd M(N, N);
   for (std::size_t i = 0; i < n0; ++i)
     for (std::size_t j = 0; j < n0; ++j)
@@ -1875,7 +1899,7 @@ std::vector<double> EigenstateSynthesis::periodGradientDegreeZero(
     edgeOf[{std::min(e->getSource()->getId(), e->getTarget()->getId()),
             std::max(e->getSource()->getId(), e->getTarget()->getId())}] = e;
 
-  // ---- per-edge analytic gradient: the four-entry dL_0, dense perturbation ----
+  // ---- per-edge analytic gradient: the four-entry dL^U(1), dense perturbation ----
   for (std::size_t je = 0; je < edges1.size(); ++je) {
     const auto eIt = edgeOf.find({std::min(edges1[je][0], edges1[je][1]),
                                   std::max(edges1[je][0], edges1[je][1])});
@@ -2158,14 +2182,16 @@ std::vector<cd> EigenstateSynthesis::periodGapForPeriodsGradient(
     const std::vector<cd> &targetPeriods) const {
   // Route by degree, exactly as residualForPeriodsGradient does (#630): the
   // fast low-rank edge-loop core at k = 1, the degree-generic core at k >= 2.
-  // k = 0 is a DIFFERENT operator (L_0 = D - A, genuinely complex Hermitian),
-  // not a weight variant of L_k, so it has no period-gap core at all — the
-  // contract is stated here, at the entry point, rather than deeper in.
+  // k = 0 reads a DIFFERENT operator (the U(1) connection L^U(1) = D - A,
+  // genuinely complex Hermitian), not a weight variant of L_k, so it has no
+  // period-gap core at all — the contract is stated here, at the entry point,
+  // rather than deeper in.
   if (k_ == 0)
     throw std::runtime_error(
         "EigenstateSynthesis::periodGapForPeriodsGradient: the period gap has "
-        "no core at degree 0 — L_0 = D - A is a different (complex Hermitian) "
-        "operator, not a weight variant of L_k; this synthesis is degree " +
+        "no core at degree 0 — the U(1) connection L = D - A it reads is a "
+        "different (complex Hermitian) operator, not a weight variant of "
+        "L_k; this synthesis is degree " +
         std::to_string(k_) + ".");
   if (k_ == 1)
     return periodGapForLoopsGradient(
@@ -2216,8 +2242,9 @@ std::vector<cd> EigenstateSynthesis::periodGapGradientOverHoles(
   if (k_ == 0)
     throw std::runtime_error(
         "EigenstateSynthesis::periodGapGradientOverHoles: no period-gap core at "
-        "degree 0 — L_0 = D - A is a different (complex Hermitian) operator, "
-        "not a weight variant of L_k; this synthesis is degree " +
+        "degree 0 — the U(1) connection L = D - A it reads is a different "
+        "(complex Hermitian) operator, not a weight variant of L_k; this "
+        "synthesis is degree " +
         std::to_string(k_) + ".");
   static constexpr double kNullTol = 1e-9;   // harmonicMatrix's tolerance: this
                                              // must differentiate the harmonic

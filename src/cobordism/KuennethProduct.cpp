@@ -132,13 +132,18 @@ Certificate KuennethProduct::productCertificate(
     pairSeen[static_cast<std::size_t>(kron)] = true;
   }
 
-  // k = 0 weighted graph Laplacians (Hermitian by construction).
+  // The U(1) CONNECTION graph Laplacians D - A, indexed over the full sorted
+  // vertex order the pairing is expressed in -- NOT the Hodge L_0 (#805). The
+  // domain of this rule is a weighted 1-SKELETON that is the Cartesian product
+  // of the factors', with the factor edges' complex weights and phases; that is
+  // the connection operator's subject, and its Hermitian PSD regime below is a
+  // property of it, not of L_0.
   const HodgeLaplacian hodgeProduct(product);
   const HodgeLaplacian hodgeA(factorA);
   const HodgeLaplacian hodgeB(factorB);
-  const std::vector<cd> laplacianProduct = hodgeProduct.laplacian(0);
-  const std::vector<cd> sum =
-      kroneckerSum(hodgeA.laplacian(0), dimA, hodgeB.laplacian(0), dimB);
+  const std::vector<cd> laplacianProduct = hodgeProduct.connectionLaplacian();
+  const std::vector<cd> sum = kroneckerSum(
+      hodgeA.connectionLaplacian(), dimA, hodgeB.connectionLaplacian(), dimB);
 
   double scale = 0.0;
   for (const cd &value : laplacianProduct)
@@ -156,8 +161,12 @@ Certificate KuennethProduct::productCertificate(
   if (scale > 0.0)
     residual /= scale;
 
-  // The k=0 operator is Hermitian and diagonally dominant with
-  // |A_ij|-magnitude degrees, hence positive semidefinite (Gershgorin).
+  // The U(1) connection operator is Hermitian and diagonally dominant with
+  // |A_ij|-magnitude degrees, hence positive semidefinite by Gershgorin -- a
+  // derivation valid for EVERY complex/signed edge weight, since
+  // |sum_e z_e e^{i theta}| <= sum_e |z_e| entrywise. It is a claim about this
+  // operator only: the Hodge L_0 is routinely indefinite on a Lorentzian
+  // complex and carries no such bound.
   return Certificate::algebraicallyExact(CertificateDomain::Static,
                                          CertificateRegime::PositiveSemidefinite,
                                          residual, tolerance);

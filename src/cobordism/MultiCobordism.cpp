@@ -649,12 +649,17 @@ double MultiCobordism::hodgeEntropyStationarity() const {
 }
 
 void MultiCobordism::setObjectiveMode(ObjectiveMode mode) {
+  // A DECLARED domain restriction on the objective, not a capability limit.
+  // Since #805 the degree-zero L_0 = d_1 W_1^-1 d_1^T is holomorphic in z and
+  // spectralEntropyGradient(0) is exact, so the gradient exists there; widening
+  // the joint objective's domain to degree zero is a separate decision about
+  // the objective, taken deliberately or not at all.
   if (mode == ObjectiveMode::JointStationarity)
     for (int degree : registerDegrees_)
       if (degree < 1)
         throw std::invalid_argument(
-            "MultiCobordism: joint Hodge-entropy stationarity requires every "
-            "configured degree to be at least 1");
+            "MultiCobordism: joint Hodge-entropy stationarity is declared over "
+            "degrees >= 1; got degree " + std::to_string(degree));
   objectiveMode_ = mode;
 }
 

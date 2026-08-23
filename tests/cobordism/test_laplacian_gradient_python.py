@@ -1,14 +1,19 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
-"""Exact analytic gradient of the symmetric metric Hodge Laplacian (#461).
+"""Exact analytic gradient of the metric Hodge Laplacian (#461, degree zero #805).
 
-`HodgeLaplacian.laplacianGradient(k, a, b)` is `∂L_k^sym/∂ℓ²_e` at arbitrary degree
+`HodgeLaplacian.laplacianGradient(k, a, b)` is `∂L_k/∂ℓ²_e` at arbitrary degree
 — the keystone (with `Simplex.volumeGradient`) for the arbitrary-k `r_U` analytic
-gradient. The rigorous check is the **exact Euler homogeneity identity**: `L_k^sym`
-is homogeneous of degree `−½` in `ℓ²` (each weight `W_j = |vol|` scales as
-`(ℓ²)^{j/2}`, and the `B_k` exponents sum to `−¼`), so
+gradient. The rigorous check is the **exact Euler homogeneity identity**: under
+the `V²` weights `L_k` is homogeneous of degree `−1` in `ℓ²` at every degree, so
 
-    Σ_e ℓ²_e · ∂L_k/∂ℓ²_e  =  −½ · L_k     (exactly).
+    Σ_e ℓ²_e · ∂L_k/∂ℓ²_e  =  −L_k     (exactly).
+
+Degree zero is included: `L_0 = d_1 W_1^-1 d_1^†` is the same construction with
+the lower term absent, so the identity is the same one — checked here on a
+complex carrying a spacelike, a timelike (`ℓ² < 0`), and a complex `ℓ²` edge at
+once, where the old magnitude-convention degree-zero operator had no gradient at
+all.
 
 This is independent of finite difference (which is roundoff-limited and does not
 converge — the optimizer uses the analytic gradient, never FD).
@@ -49,6 +54,24 @@ def _holed_s3(n_refine=12):
     return st
 
 
+def _mixed_signature_graph():
+    """A 1-complex carrying all three edge characters at once: spacelike
+    (l^2 > 0), timelike (l^2 < 0), and a genuinely complex l^2. No degree-zero
+    fixture in the tree carried a negative squared length before #805."""
+    sig = T.Signature(4, T.Lorentzian)
+    st = T.Spacetime(T.Metric(True, sig), T.HERMITIAN_WEIGHTED, 1.0, 1.0,
+                     T.PREFERRED, T.Toroid())
+    squared = {(0, 1): complex(1.3), (1, 2): complex(-0.7),
+               (0, 2): complex(0.9, 0.4), (2, 3): complex(2.1)}
+    verts = {i: st.createVertex(i) for i in range(4)}
+    for (a, b) in squared:
+        st.createSimplex([verts[a], verts[b]])
+    for e in st.getEdgeList().toVector():
+        key = tuple(sorted((e.getSource().getId(), e.getTarget().getId())))
+        e.setLength(cmath.sqrt(squared[key]))
+    return st
+
+
 def _Lmat(hl, k):
     # The signed operator is real on real signed l^2; assert Im = 0 rather than
     # project it away, then hand back the real part.
@@ -70,7 +93,7 @@ class LaplacianGradientHandCalcTest(unittest.TestCase):
         # removed sqrt(W)-conjugated form.
         st = _holed_s3()
         hl = cob.HodgeLaplacian(st)
-        for k in (1, 2):
+        for k in (0, 1, 2):
             L = _Lmat(hl, k)
             n = L.shape[0]
             self.assertGreater(n, 0)
@@ -83,7 +106,31 @@ class LaplacianGradientHandCalcTest(unittest.TestCase):
             self.assertLess(np.max(np.abs(acc + L)), 1e-10,
                             f"Euler identity Σℓ²∂L = −L failed at k={k}")
 
-    def test_matches_finite_difference_and_empty_below_k1(self):
+    def test_euler_identity_holds_at_degree_zero_on_mixed_signature(self):
+        # The same exact identity for the derived L_0 = d_1 W_1^-1 d_1^dagger
+        # (#805), on a genuinely MIXED complex: one spacelike edge, one timelike
+        # (l^2 < 0), one with a complex l^2. L_0 is degree -1 in l^2 like every
+        # other degree, so Σ_e z_e ∂L_0/∂z_e = −L_0, in complex arithmetic.
+        st = _mixed_signature_graph()
+        hl = cob.HodgeLaplacian(st)
+        cc = cob.ChainComplex.fromSpacetime(st)
+        n = cc.numSimplices(0)
+        L = np.asarray(hl.laplacian(0, True), complex).reshape(n, n)
+        by_pair = {tuple(sorted((e.getSource().getId(), e.getTarget().getId()))): e
+                   for e in st.getEdgeList().toVector()}
+        acc = np.zeros((n, n), dtype=complex)
+        for cell in cc.kSimplexVertices(1):
+            g = np.asarray(hl.laplacianGradient(0, cell[0], cell[1]),
+                           complex).reshape(n, n)
+            edge = by_pair[tuple(sorted(cell))]
+            z = complex(edge.getLength()) ** 2
+            acc += z * g
+        self.assertLess(np.max(np.abs(acc + L)), 1e-13,
+                        "Euler identity Σz ∂L_0 = −L_0 failed")
+        # ...and the row sums vanish identically at this mixed signature.
+        self.assertLess(np.max(np.abs(L @ np.ones(n, dtype=complex))), 1e-14)
+
+    def test_matches_finite_difference_and_empty_below_degree_zero(self):
         # The signed operator is non-symmetric, so its gradient is too; the
         # honest check is a central finite difference of L itself.
         st = _holed_s3()
@@ -101,8 +148,23 @@ class LaplacianGradientHandCalcTest(unittest.TestCase):
         e.setLength(l); st.materializeFacets()
         fd = (Lp - Lm) / (2.0 * h)
         self.assertLess(np.max(np.abs(g - fd)), 1e-5)
-        # k < 1 has no metric Laplacian gradient
-        self.assertEqual(hl.laplacianGradient(0, e.getSource().getId(),
+        # Degree zero is now the derived L_0 = d_1 W_1^-1 d_1^dagger, which has
+        # an exact gradient too (#805): the same central-difference check.
+        n0 = _Lmat(hl, 0).shape[0]
+        g0 = np.asarray(hl.laplacianGradient(0, e.getSource().getId(),
+                                             e.getTarget().getId()),
+                        complex).reshape(n0, n0)
+        e.setLength(cmath.sqrt(l * l + h)); st.materializeFacets()
+        L0p = np.asarray(cob.HodgeLaplacian(st).laplacian(0, True),
+                         complex).reshape(n0, n0)
+        e.setLength(cmath.sqrt(l * l - h)); st.materializeFacets()
+        L0m = np.asarray(cob.HodgeLaplacian(st).laplacian(0, True),
+                         complex).reshape(n0, n0)
+        e.setLength(l); st.materializeFacets()
+        self.assertLess(np.max(np.abs(g0 - (L0p - L0m) / (2.0 * h))), 1e-5)
+        self.assertGreater(np.max(np.abs(g0)), 0.0)
+        # k < 0 still has no chain to differentiate.
+        self.assertEqual(hl.laplacianGradient(-1, e.getSource().getId(),
                                               e.getTarget().getId()), [])
 
 

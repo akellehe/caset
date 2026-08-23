@@ -138,9 +138,10 @@ enum class RetainedCoordinateKind {
 /// certificate is detected against that metric:
 ///
 ///  - `PositiveSemidefinite` — \f$ WL \f$ Hermitian, \f$ W > 0 \f$, and
-///    \f$ WL \succeq 0 \f$ (structural for the \f$ k = 0 \f$ graph
-///    Laplacian; verified below the dense crossover otherwise). Energy
-///    \f$ x^\dagger W L x \f$ is minimized.
+///    \f$ WL \succeq 0 \f$, VERIFIED by a pivoted LDLT below the dense
+///    crossover. There is no structural shortcut at any degree (#805): degree
+///    zero is measured like the rest, and a Lorentzian \f$ L_0 \f$ is
+///    routinely indefinite. Energy \f$ x^\dagger W L x \f$ is minimized.
 ///  - `HermitianIndefinite` — \f$ WL \f$ Hermitian but \f$ W \f$ signed or
 ///    \f$ WL \f$ indefinite (the real signed-weight d'Alembertian on real
 ///    \f$ \ell^2 \f$). The interior equation is a stationarity condition.
@@ -149,9 +150,13 @@ enum class RetainedCoordinateKind {
 ///    compatibility check; no variational claim.
 ///
 /// The spacetime path takes `HodgeLaplacian::laplacian(degree)` exactly as
-/// built — the Hermitian \f$ k = 0 \f$ graph Laplacian (metric = identity)
-/// or the signed-weight d'Alembertian at \f$ k \ge 1 \f$ (metric = the
-/// signed `HodgeLaplacian::weights(k)`); there is no Euclidean switch.
+/// built — the signed-weight d'Alembertian at EVERY degree, with metric =
+/// `HodgeLaplacian::weights(degree)` (the identity at degree zero, where
+/// \f$ L_0 = \partial_1 W_1^{-1}\partial_1^{\dagger} \f$); there is no
+/// Euclidean switch and no degree-zero special case. The regime is MEASURED
+/// from that operator at every degree — degree zero is not declared
+/// `PositiveSemidefinite` from a convention, and on a Lorentzian complex it
+/// routinely is not (#805).
 ///
 /// ## Partitions
 ///
@@ -252,8 +257,23 @@ class RecursiveQuotient {
       std::size_t nullity{0};
       /// Exact integer topological zero-mode count (spacetime path;
       /// combinatorial kernel of the stacked boundary blocks). Equals
-      /// `integerBasis.size()`. 0 on the matrix path.
+      /// `integerBasis.size()`. 0 on the matrix path — check
+      /// `integerNullityMeasured` before comparing.
       std::size_t integerNullity{0};
+      /// Whether the exact integer nullity was computed at all. False on the
+      /// matrix path (no boundary maps) and when the integer kernel overflowed;
+      /// `integerNullity == 0` then means "not measured", not "measured zero".
+      bool integerNullityMeasured{false};
+      /// `nullity - integerNullity` — the discrepancy between the numerical
+      /// kernel of the weighted interior block and the exact integer
+      /// topological nullity, RECORDED rather than silently dropped (#805).
+      /// Zero means the two agree; a nonzero value means the operator's
+      /// numerical kernel is not the combinatorial one (a signed/complex metric
+      /// can open or close a zero mode the topology does not have, and the
+      /// weighted kernel differs from the unit-weight one in general). NaN when
+      /// `integerNullityMeasured` is false — never 0, which would claim an
+      /// agreement that was never measured.
+      double nullityDiscrepancy{std::numeric_limits<double>::quiet_NaN()};
       /// Exact integer basis vectors over the component's interior cells
       /// (spacetime path; each of length `interiorCells(component).size()`).
       std::vector<std::vector<long>> integerBasis{};
@@ -669,7 +689,9 @@ class RecursiveQuotient {
                     const std::vector<std::vector<int>> &components,
                     const Options &options);
     void classify();
-    void detectRegime(bool structuralPsd);
+    // Measures the regime from the operator and its carried metric. There is
+    // no "assert PSD from a convention" path (#805).
+    void detectRegime();
     [[nodiscard]] std::shared_ptr<ComponentSolve> componentSolve(
         int component) const;
     [[nodiscard]] std::shared_ptr<ComponentSolve> computeSolve(

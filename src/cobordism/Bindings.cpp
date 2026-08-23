@@ -256,33 +256,45 @@ not of signature; neither reintroduces a Euclidean path.)doc")
   py::class_<HodgeLaplacian>(m, "HodgeLaplacian",
       R"doc(Hodge Laplacian on a Spacetime, degree-parameterized by int k.
 
-k=0: the U(1)-weighted graph Laplacian L = D - A on the 1-skeleton, assembled
-from each edge's complex weight squaredLength * exp(i*phase). Vertices are
-indexed by sorted id (0..N-1). Adjacency is Hermitian (the reverse orientation
-negates the phase); the degree uses the magnitude convention
-D_ii = sum |squaredLength|. (Unchanged.)
+ONE definition at every degree, the whitepaper's: with the integer boundary maps
+d_k (ChainComplex), the diagonal metric weight W_k (weights(k); W_0 = I) and the
+weighted adjoint d_k* = W_k^-1 d_k^dagger W_{k-1},
 
-k>=1: the metric Hodge Laplacian from the integer boundary maps d_k, d_{k+1}
-(ChainComplex) and diagonal weights W_k = the per-k-simplex Euclidean volumes
-(Simplex.volume; W_0 = I). With d_k* = W_k^-1 d_k^T W_{k-1}, the operator is
-L_k = d_k* d_k + d_{k+1} d_{k+1}*, returned in its symmetric (W_k-orthonormal)
-form W_k^{1/2} L_k W_k^{-1/2} = B_k^T B_k + B_{k+1} B_{k+1}^T,
-B_k = W_{k-1}^{1/2} d_k W_k^{-1/2} (symmetric PSD; SelfAdjointEigenSolver). By the
-discrete Hodge theorem ker L_k ~= H_k, so dim ker L_k = b_k for any positive
-weights; metric=False uses unit weights (the combinatorial d_k^T d_k +
-d_{k+1} d_{k+1}^T) as a same-kernel cross-check. k-cells follow the canonical
-ChainComplex column order, so the matrices align with boundaryMatrix(k) and
-weights(k). Negative k raises; k above the top dimension yields empty results.
-Spectra are computed lazily and cached. This is the operator only — fluxes,
-cycle bases, and Betti numbers belong to WilsonLoop / ChainComplex.
+    L_k = d_{k+1} d_{k+1}* + d_k* d_k
+        = d_{k+1} W_{k+1}^-1 d_{k+1}^dagger W_k + W_k^-1 d_k^dagger W_{k-1} d_k
 
-Lorentzian d'Alembertian (§5.6): the lorentzian* methods weight W_k with the
-SIGNED Simplex.volume (timelike l^2 < 0 ⇒ negative volumes), so the inner product
-goes indefinite and L_k = d_k* d_k + d_{k+1} d_{k+1}* is assembled directly and is
-generally non-self-adjoint — eigenvalues may be negative or complex. ker L_k ~= H_k
-degrades: 'harmonic' becomes the small-|lambda| near-kernel and a representative h
-can be null (<h,h>_W = sum_i W_{k,i}|h_i|^2 ~= 0). All-spacelike ⇒ reproduces the
-Euclidean spectrum/kernel.)doc")
+for every k >= 0. At k = 0 the second term is absent (no (-1)-chains), so
+L_0 = d_1 W_1^-1 d_1^dagger: the graph Laplacian with conductance 1/W_1(e) on the
+1-cell e. Its row sums vanish identically, so the constant 0-cochain is harmonic
+at ANY weights and dim ker L_0 = b_0 = the number of connected components,
+independently of the geometry.
+
+W_k is the SIGNED Simplex.volume under the active HodgeWeightConvention (timelike
+cells negative or imaginary), so the inner product is indefinite and L_k is
+assembled directly and is generally non-self-adjoint at every degree, degree zero
+included: eigenvalues may be negative or complex (ComplexEigenSolver, sorted by
+(Re, Im)). ker L_k ~= H_k likewise degrades away from positive weights --
+'harmonic' becomes the small-|lambda| near-kernel and a representative h can be
+null (<h,h>_W = sum_i W_{k,i}|h_i|^2 ~= 0, see nullNorms) -- but L_0 @ 1 = 0
+survives every weight. metric=False selects unit weights (the combinatorial
+d_{k+1} d_{k+1}^T + d_k^T d_k) at every degree. k-cells follow the canonical
+ChainComplex column order at every degree, so the matrices align with
+boundaryMatrix(k) and weights(k). Negative k raises; k above the top dimension
+yields empty results. Spectra are computed lazily and cached. This is the
+operator only -- fluxes, cycle bases, and Betti numbers belong to WilsonLoop /
+ChainComplex.
+
+The U(1) CONNECTION Laplacian is a DIFFERENT operator (#805). connectionLaplacian
+(with adjacency, degree, connectionSpectrum and friends) is the Hermitian
+L = D - A on the 1-skeleton assembled from each edge's complex weight
+squaredLength * exp(i*phase): adjacency Hermitian (the reverse orientation
+negates the phase), degree D_ii = sum |squaredLength| (the MAGNITUDE convention).
+On a Lorentzian complex a timelike edge has l^2 < 0, so its magnitude diagonal
+and signed off-diagonal disagree, its row sums do not vanish, and it is not
+d_1 W_1^-1 d_1^dagger for any W. It carries the Aharonov-Bohm content that L_0
+cannot -- a nonzero flux lifts its zero mode, whereas dim ker L_0 is always b_0 --
+and it is indexed over the FULL sorted vertex-id order, including any lone vertex
+ChainComplex omits.)doc")
       .def(py::init([](std::shared_ptr<Spacetime> st) {
              // No-weights overload: read the PROCESS default at call time (the
              // pybind default-argument form would bake it in at import).
@@ -311,30 +323,45 @@ Euclidean spectrum/kernel.)doc")
            "at startup (e.g. the animation's --hodge-weights flag); flipping "
            "mid-run mixes conventions across cached spectra.")
       .def("adjacency", &HodgeLaplacian::adjacency,
-           "Weighted adjacency A as a flat row-major N*N complex array "
-           "(Hermitian; A_ij = sum squaredLength * exp(i*phase)).")
+           "Weighted adjacency A of the U(1) CONNECTION operator as a flat "
+           "row-major N*N complex array over the sorted vertex order "
+           "(Hermitian; A_ij = sum squaredLength * exp(i*phase)). Not part of "
+           "L_0.")
       .def("degree", &HodgeLaplacian::degree,
-           "Degree vector (length N, real): D_ii = sum |squaredLength| over "
-           "incident edges (magnitude convention).")
+           "Degree vector of the U(1) CONNECTION operator (length N, real): "
+           "D_ii = sum |squaredLength| over incident edges (magnitude "
+           "convention). Not part of L_0.")
+      .def("connectionLaplacian", &HodgeLaplacian::connectionLaplacian,
+           "The Hermitian U(1) connection graph Laplacian L = D - A as a flat "
+           "row-major N*N complex array over the FULL sorted vertex-id order "
+           "(every vertex, including any carried by no simplex). NOT the "
+           "degree-zero Hodge Laplacian: its off-diagonal is the signed complex "
+           "weight while its diagonal is the magnitude, so its row sums do not "
+           "vanish on a Lorentzian complex. It is the Aharonov-Bohm operator -- "
+           "Hermitian, PSD by Gershgorin, unitary under exp(-iLt), zero mode "
+           "lifted by flux. Use laplacian(0) for the Hodge operator.")
       .def("laplacian", &HodgeLaplacian::laplacian, py::arg("k") = 0,
            py::arg("metric") = true,
-           "Laplacian L_k as a flat row-major complex array: N*N for k=0 "
-           "(L = D - A), else |C_k|*|C_k|, the signed-weight d'Alembertian "
-           "(complex, generally non-symmetric). There is no |volume| variant. "
-           "metric=False uses unit weights (combinatorial) for k>=1 and is ignored "
-           "at k=0. Raises for k<0; empty above the top dimension.")
+           "Laplacian L_k as a flat row-major |C_k|*|C_k| complex array in the "
+           "canonical ChainComplex column order: the signed-weight "
+           "d'Alembertian (complex, generally non-symmetric) at EVERY degree, "
+           "degree zero included (L_0 = d_1 W_1^-1 d_1^dagger, row sums zero). "
+           "metric=False uses unit weights (combinatorial) at every degree. "
+           "Raises for k<0; empty above the top dimension.")
       .def("weights", &HodgeLaplacian::weights, py::arg("k"),
            "Diagonal inner-product weights W_k (length |C_k|) in ChainComplex "
-           "column order: the per-k-simplex SIGNED complex volume (W_0 = I). A "
-           "Lorentzian cell's content is imaginary. Empty for k<0 or k above "
-           "the top dimension.")
+           "column order: the per-k-simplex SIGNED complex volume (W_0 = I, "
+           "which is what makes the L_0 row sums vanish). A Lorentzian cell's "
+           "content is negative or imaginary. Empty for k<0 or k above the top "
+           "dimension.")
       .def("laplacianGradient", &HodgeLaplacian::laplacianGradient, py::arg("k"),
            py::arg("edgeA"), py::arg("edgeB"),
-           "Exact analytic dL_k^sym/dl^2_e of the symmetric metric Hodge Laplacian "
-           "(k>=1) w.r.t. one edge's squared length, flat |C_k|x|C_k| row-major. Only "
-           "the weights W_j=|vol| depend on l^2; built via dB_k = diag(a_{k-1})B_k + "
-           "B_k diag(b_k), a_j=dW_j/(2W_j), dW_j = Simplex.volumeGradient. Empty for "
-           "k<1 or an absent edge.")
+           "Exact analytic dL_k/dl^2_e w.r.t. one edge's squared length, flat "
+           "|C_k|x|C_k| row-major, at every degree k>=0. Only the weights W_j "
+           "depend on l^2 (dW_j = Simplex.volumeGradient); at k=0, where "
+           "W_0 = I is constant, the only surviving term is "
+           "-d_1 W_1^-1 (dW_1) W_1^-1 d_1^dagger. Empty for k<0 or an absent "
+           "edge.")
       .def("spectralEntropy", &HodgeLaplacian::spectralEntropy, py::arg("k"),
            py::arg("phase_mode") =
                HodgeLaplacian::EntropyPhaseMode::IncludeComplexPhase,
@@ -346,50 +373,76 @@ Euclidean spectrum/kernel.)doc")
            py::arg("phase_mode") =
                HodgeLaplacian::EntropyPhaseMode::IncludeComplexPhase,
            "Complex-z gradient h=dS/dRe(z)-i*dS/dIm(z), in EdgeList order, "
-           "for z=l^2. conj(h) is the steepest-ascent displacement. Requires "
-           "k>=1.")
+           "for z=l^2. conj(h) is the steepest-ascent displacement. Available "
+           "at every degree k>=0: L_k is holomorphic in z at all of them.")
       .def("spectralEntropyGradientNorm",
            &HodgeLaplacian::spectralEntropyGradientNorm, py::arg("k"),
            py::arg("phase_mode") =
                HodgeLaplacian::EntropyPhaseMode::IncludeComplexPhase,
            "Entropy-stationarity residual sum_e |dS/dz_e|^2.")
       .def("isHermitian", &HodgeLaplacian::isHermitian, py::arg("tol") = 1e-12,
-           "True iff ||L - L^dagger|| <= tol (Frobenius) for the k=0 Laplacian.")
+           "True iff ||L - L^dagger|| <= tol (Frobenius) for the U(1) CONNECTION "
+           "Laplacian. True by construction; it says nothing about L_0, which is "
+           "complex symmetric as soon as a weight is complex.")
       .def("unitarityResidual", &HodgeLaplacian::unitarityResidual,
            py::arg("t") = 1.0,
-           "Residual ||U U^dagger - I|| of U = e^{-iLt} formed from the "
-           "eigendecomposition (~0 for the Hermitian L).")
+           "Residual ||U U^dagger - I|| of U = e^{-iLt} for the U(1) CONNECTION "
+           "Laplacian, formed from its eigendecomposition (~0, that operator "
+           "being Hermitian).")
+      .def("connectionSpectrum", &HodgeLaplacian::connectionSpectrum,
+           "The U(1) CONNECTION Laplacian's eigendecomposition as a Spectrum "
+           "(real ascending eigenvalues + eigenvectors as degree-0 Cochains; "
+           "isHermitian()==True), over the full sorted vertex order.")
+      .def("connectionEigenvalues", &HodgeLaplacian::connectionEigenvalues,
+           "Eigenvalues of the U(1) CONNECTION Laplacian (real, ascending), "
+           "complex-typed for parity with the L_k family.")
+      .def("connectionEigenvectors", &HodgeLaplacian::connectionEigenvectors,
+           "Eigenvectors of the U(1) CONNECTION Laplacian as a flat row-major "
+           "N*N complex array (column j is the eigenvector for the j-th "
+           "ascending eigenvalue).")
+      .def("connectionHarmonics", &HodgeLaplacian::connectionHarmonics,
+           py::arg("tol") = 1e-9,
+           "Harmonic representatives of the U(1) CONNECTION Laplacian "
+           "(|lambda| < tol) as degree-0 Cochains. NOT b_0: a nonzero U(1) flux "
+           "lifts this zero mode.")
+      .def("connectionHarmonicMatrix",
+           &HodgeLaplacian::connectionHarmonicMatrix, py::arg("tol") = 1e-9,
+           "The U(1) CONNECTION harmonic amplitude matrix: connectionHarmonics "
+           "stacked as the ROWS of a flat row-major (dim ker) x N complex "
+           "array, columns in the sorted vertex-id order.")
       .def("spectrum", &HodgeLaplacian::spectrum, py::arg("k") = 0,
            py::arg("metric") = true,
-           "The eigendecomposition of L_k as a Spectrum (real ascending "
-           "eigenvalues + eigenvectors as Cochains; isHermitian()==True). metric "
-           "selects volume vs. unit weights for k>=1 (ignored at k=0). Raises for "
-           "k<0; empty above the top dimension.")
+           "The eigendecomposition of L_k as a Spectrum. L_k is the "
+           "signed-weight d'Alembertian at every degree, generally "
+           "non-self-adjoint, so eigenvalues are complex, sorted by (Re, Im), "
+           "and isHermitian()==False. metric selects signed-content vs. unit "
+           "weights. Raises for k<0; empty above the top dimension.")
       .def("eigenvalues", &HodgeLaplacian::eigenvalues, py::arg("k") = 0,
            py::arg("metric") = true,
-           "Eigenvalues of L_k (real, ascending), a flat view consistent with "
-           "spectrum(k, metric). metric selects volume vs. unit weights for k>=1 "
-           "(ignored at k=0). Raises for k<0; empty above the top dimension.")
+           "Eigenvalues of L_k (complex, sorted by (Re, Im)), a flat view "
+           "consistent with spectrum(k, metric). metric selects signed-content "
+           "vs. unit weights. Raises for k<0; empty above the top dimension.")
       .def("eigenvectors", &HodgeLaplacian::eigenvectors, py::arg("k") = 0,
            py::arg("metric") = true,
-           "Eigenvectors of L_k as a flat row-major M*M complex array (column j "
-           "is the eigenvector for the j-th ascending eigenvalue), a flat view "
+           "Eigenvectors of L_k as a flat row-major |C_k|*|C_k| complex array "
+           "(column j is the eigenvector for the j-th eigenvalue), a flat view "
            "consistent with spectrum(k, metric).eigenvectors(). metric selects "
-           "volume vs. unit weights for k>=1. Raises for k<0; empty above the top "
-           "dimension.")
+           "signed-content vs. unit weights. Raises for k<0; empty above the "
+           "top dimension.")
       .def("harmonics", &HodgeLaplacian::harmonics, py::arg("k") = 0,
            py::arg("tol") = 1e-9, py::arg("metric") = true,
            "Harmonic representatives (eigenvectors with |lambda| < tol) as a list "
-           "of Cochains spanning ker L_k ~= H_k (the count is b_k). metric selects "
-           "volume vs. unit weights for k>=1. Raises for k<0; empty above the top "
-           "dimension.")
+           "of Cochains spanning ker L_k ~= H_k (the count is b_k at positive "
+           "weights; at k=0 the constant is always among them, so dim ker L_0 = "
+           "b_0 always). metric selects signed-content vs. unit weights. Raises "
+           "for k<0; empty above the top dimension.")
       .def("harmonicMatrix", &HodgeLaplacian::harmonicMatrix, py::arg("k") = 0,
            py::arg("tol") = 1e-9, py::arg("metric") = true,
            "The harmonic amplitude matrix: the harmonics(k, tol, metric) "
            "representatives stacked as the ROWS of a flat row-major "
-           "(dim ker L_k) x M complex array (M = |V| at k=0, else |C_k|), "
+           "(dim ker L_k) x |C_k| complex array, "
            "columns in the canonical cell order (cellSimplices / "
-           "kSimplexVertices). Entry [r*M + c] equals "
+           "kSimplexVertices). Entry [r*|C_k| + c] equals "
            "harmonics(k)[r].amplitude(c) exactly -- one call instead of one "
            "amplitudeFor round-trip per cell per harmonic. Raises for k<0; "
            "empty when the kernel is empty or k is above the top dimension.")
@@ -408,8 +461,11 @@ Euclidean spectrum/kernel.)doc")
 Scores how close the complex's current Hermitian edge weights make a target
 state psi to being an eigenvector of the degree-k Hodge Laplacian L_k (via
 HodgeLaplacian), and reads/writes those weights so a search can perturb them.
-At k=0 L_0 = D - A is the graph Laplacian (magnitude convention) and psi is a
-vertex vector (|V|, sorted-id order). At k>=1 L_k is the metric Hodge Laplacian
+At k=0 the scored operator is the U(1) CONNECTION graph Laplacian D - A
+(connectionLaplacian, the magnitude convention), NOT the Hodge L_0: a
+degree-zero register carries U(1) flux and dim ker L_0 is always b_0, so an L_0
+readout would be identically gauge-flat (#805). psi is then a vertex vector
+(|V|, sorted-id order). At k>=1 L_k is the metric Hodge Laplacian
 on k-forms (|C_k|, ChainComplex k-cell order); the tunable parameters stay the
 edge squared-lengths, which feed the volume weights W_k of L_k via Simplex.volume
 (phases enter only k=0). cellSimplices() gives each psi component's vertex tuple,
@@ -598,11 +654,11 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "laplacianGradient (built on Simplex.volumeGradient), through eigenvector-"
            "perturbation theory; period covector + leak from each removed-(k+1)-cell "
            "hole's facets. Reproduces the k=1 edge-loop core on triangle holes. At "
-           "k=0 the core runs against the genuinely COMPLEX Hermitian vertex "
-           "operator L_0 = D - A (full l^2 + U(1) phases; holes are removed "
+           "k=0 the core runs against the genuinely COMPLEX Hermitian U(1) "
+           "CONNECTION operator D - A (full l^2 + U(1) phases; holes are removed "
            "1-cells, i.e. vertex pairs) with the SVD pseudo-inverse fit (#589) — "
-           "the k=0 Euler identity is Σ l² ∂r_U = +2 r_U (L_0 is degree +1 in "
-           "l²). At k>=1, certified by the exact Euler identity Σ l² ∂r_U = −r_U (FD does not "
+           "the k=0 Euler identity is Σ l² ∂r_U = +2 r_U (that operator is "
+           "degree +1 in l²). At k>=1, certified by the exact Euler identity Σ l² ∂r_U = −r_U (FD does not "
            "converge). Raises on a hole/target length mismatch.")
       .def("periodGapForPeriods", &EigenstateSynthesis::periodGapForPeriods,
            py::arg("holes"), py::arg("target_periods"),
@@ -1698,8 +1754,10 @@ the incremental path.)doc")
 Algebraically exact as a matrix identity; as a statement about a complex it
 holds only for an actual product cell structure with product weights, which
 productCertificate verifies at degree zero (a staircase SimplicialProduct is
-refused: holds() == False). The spectrum of the Kronecker sum is exactly the
-pairwise sums of the factor spectra -- no product eigensolve.)doc")
+refused: holds() == False). The degree-zero operator there is the U(1)
+CONNECTION graph Laplacian connectionLaplacian, not the Hodge L_0 (#805). The
+spectrum of the Kronecker sum is exactly the pairwise sums of the factor spectra
+-- no product eigensolve.)doc")
       .def_static("kroneckerSum", &KuennethProduct::kroneckerSum,
                   py::arg("laplacian_a"), py::arg("dim_a"),
                   py::arg("laplacian_b"), py::arg("dim_b"),
@@ -1712,10 +1770,12 @@ pairwise sums of the factor spectra -- no product eigensolve.)doc")
       .def_static("productCertificate", &KuennethProduct::productCertificate,
                   py::arg("product"), py::arg("factor_a"), py::arg("factor_b"),
                   py::arg("pairing"), py::arg("tolerance") = 1e-12,
-                  "Certify that `product`'s k=0 weighted graph Laplacian "
+                  "Certify that `product`'s U(1) CONNECTION graph Laplacian "
+                  "(connectionLaplacian, D - A over the sorted vertex order) "
                   "equals the Kronecker sum of the factors' under the declared "
                   "(product_id, a_id, b_id) vertex pairing. holds() grants the "
-                  "Kuenneth rule for this complex.");
+                  "Kuenneth rule for this complex. Not a statement about the "
+                  "Hodge L_0.");
 
   py::class_<OccupationSpectra>(m, "OccupationSpectra",
       R"doc(Fermionic second quantization at the SPECTRUM/MATRIX level (#764): free
@@ -1933,6 +1993,20 @@ ancestry. Read-only: nothing here enters the emergence objective.)doc");
       .def_readonly("nullity", &RecursiveQuotient::InteriorNullspaceRead::nullity)
       .def_readonly("integerNullity",
                     &RecursiveQuotient::InteriorNullspaceRead::integerNullity)
+      .def_readonly(
+          "integerNullityMeasured",
+          &RecursiveQuotient::InteriorNullspaceRead::integerNullityMeasured,
+          "Whether the exact integer nullity was computed at all (False on the "
+          "matrix path and on integer-kernel overflow, where integerNullity == "
+          "0 means 'not measured').")
+      .def_readonly(
+          "nullityDiscrepancy",
+          &RecursiveQuotient::InteriorNullspaceRead::nullityDiscrepancy,
+          "nullity - integerNullity: the recorded disagreement between the "
+          "numerical kernel of the weighted interior block and the exact "
+          "integer topological nullity. 0 means they agree; NaN means no "
+          "integer nullity was measured (never 0, which would claim an "
+          "agreement that was never made).")
       .def_readonly("integerBasis",
                     &RecursiveQuotient::InteriorNullspaceRead::integerBasis)
       .def_readonly("kernelBasis",

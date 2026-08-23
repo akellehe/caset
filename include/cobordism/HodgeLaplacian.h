@@ -22,73 +22,105 @@ using namespace ::tessera::spacetime;
 ///
 /// The Hodge Laplacian on a `Spacetime`, degree-parameterized by `int k`.
 ///
-/// At \f$ k = 0 \f$ it is the **Hermitian U(1)-weighted graph Laplacian**
-/// \f$ L = D - A \f$ on the 1-skeleton, assembled directly from the complex edge
-/// weights \f$ \text{squaredLength}\cdot e^{i\,\text{phase}} \f$ carried by each
-/// `Edge` (the magnitude convention on the degree keeps \f$ L \f$ Hermitian and
-/// \f$ e^{-iLt} \f$ unitary). This path is unchanged.
+/// ## One definition, at every degree
 ///
-/// At \f$ k \geq 1 \f$ it is the **metric Hodge Laplacian**, assembled from the
-/// integer boundary maps \f$ \partial_k,\partial_{k+1} \f$ (`ChainComplex`) and
-/// the diagonal inner-product weights \f$ W_k \f$ — the per-\f$ k \f$-simplex
-/// Euclidean volumes (`Simplex::volume`), with \f$ W_0 = I \f$. With the metric
-/// adjoint \f$ \partial_k^* = W_k^{-1}\partial_k^{\top} W_{k-1} \f$ the Laplacian
-/// is \f$ L_k = \partial_k^*\partial_k + \partial_{k+1}\partial_{k+1}^* \f$,
-/// returned in its **symmetric** (\f$ W_k \f$-orthonormal) representation
-/// \f$ W_k^{1/2} L_k W_k^{-1/2} = B_k^{\top}B_k + B_{k+1}B_{k+1}^{\top} \f$ with
-/// \f$ B_k = W_{k-1}^{1/2}\partial_k W_k^{-1/2} \f$ — symmetric positive
-/// semidefinite, so `SelfAdjointEigenSolver` applies and the spectrum/kernel are
-/// those of \f$ L_k \f$ (a similarity). By the discrete Hodge theorem
-/// \f$ \ker L_k \cong H_k \f$, so \f$ \dim\ker L_k = b_k \f$ for **any** positive
-/// weights; passing `metric = false` uses unit weights — the combinatorial
-/// \f$ \partial_k^{\top}\partial_k + \partial_{k+1}\partial_{k+1}^{\top} \f$ — as
-/// a same-kernel cross-check. A negative \f$ k \f$ throws; a \f$ k \f$ beyond the
-/// top dimension has no \f$ k \f$-cells and yields empty results.
+/// With the oriented integer boundary maps \f$ \partial_k \f$ (`ChainComplex`),
+/// the diagonal metric weight \f$ W_k \f$ on \f$ k \f$-chains (`weights`, built
+/// from `Simplex::volume`; \f$ W_0 = I \f$), and the weighted adjoint
+/// \f[ \partial_k^{*} = W_k^{-1}\partial_k^{\dagger}W_{k-1}, \f]
+/// the operator is
+/// \f[ L_k = \partial_{k+1}\partial_{k+1}^{*} + \partial_k^{*}\partial_k
+///         = \partial_{k+1}W_{k+1}^{-1}\partial_{k+1}^{\dagger}W_k
+///           + W_k^{-1}\partial_k^{\dagger}W_{k-1}\partial_k \f]
+/// for **every** \f$ k \geq 0 \f$ — degree zero included, with no separate
+/// convention. This is the whitepaper's definition
+/// (`docs/design/recursive_spectral_fibers_whitepaper.tex`, "The microscopic
+/// geometric state") verbatim.
 ///
-/// ## Lorentzian d'Alembertian (§5.6)
+/// At \f$ k = 0 \f$ the second term is absent (there are no
+/// \f$ (-1) \f$-chains), so
+/// \f[ L_0 = \partial_1 W_1^{-1}\partial_1^{\dagger} \f]
+/// — the graph Laplacian whose off-diagonal entry on the 1-cell
+/// \f$ e = (u,v) \f$ is \f$ -1/W_1(e) \f$ and whose diagonal is
+/// \f$ \sum_{e \ni u} 1/W_1(e) \f$. Because \f$ \partial_1^{\dagger} \f$ has
+/// column sums zero, the **row sums of \f$ L_0 \f$ vanish identically**: the
+/// constant 0-cochain is harmonic at ANY weights — positive, signed, or complex
+/// — so \f$ \dim\ker L_0 = b_0 \f$ = the number of connected components,
+/// independently of the geometry. That is the degree-zero instance of the
+/// discrete Hodge theorem \f$ \ker L_k \cong H_k \f$, which holds at every
+/// degree for any *positive* weights; `metric = false` selects unit weights
+/// (the combinatorial \f$ \partial_{k+1}\partial_{k+1}^{\dagger} +
+/// \partial_k^{\dagger}\partial_k \f$) as a same-kernel cross-check, at
+/// \f$ k = 0 \f$ as at \f$ k \geq 1 \f$. A negative \f$ k \f$ throws; a
+/// \f$ k \f$ beyond the top dimension has no \f$ k \f$-cells and yields empty
+/// results.
 ///
-/// The `lorentzian = true` path keeps the same metric-Hodge construction but
-/// weights \f$ W_k \f$ with the **signed** `Simplex::volume()` — the honest,
-/// signature-respecting content in which a timelike edge (\f$ l^2 < 0 \f$) carries
-/// a *negative* volume — instead of \f$ |\text{volume}| \f$. The inner product
-/// then goes **indefinite**: the symmetric \f$ W_k^{1/2} \f$ similarity breaks
-/// (the square root of a negative weight is imaginary), so the operator
-/// \f$ L_k = \partial_k^*\partial_k + \partial_{k+1}\partial_{k+1}^* \f$ with the
-/// *signed* metric adjoint \f$ \partial_k^* = W_k^{-1}\partial_k^{\top}W_{k-1} \f$
-/// is assembled **directly** — \f$ L_k = W_k^{-1}\partial_k^{\top}W_{k-1}\partial_k
-/// + \partial_{k+1}W_{k+1}^{-1}\partial_{k+1}^{\top}W_k \f$ — and is generally
-/// **non-self-adjoint** (a discrete d'Alembertian). It is diagonalized with a
-/// general `Eigen::EigenSolver`, so eigenvalues may be negative or complex. The
-/// clean \f$ \ker L_k \cong H_k \f$ degrades to a pseudo-Hodge decomposition:
-/// "harmonic" becomes the small-\f$ |\lambda| \f$ near-kernel, and a near-kernel
-/// representative \f$ h \f$ may be **null** in the indefinite metric
-/// (\f$ \langle h,h\rangle_W = \sum_i W_{k,i}|h_i|^2 \approx 0 \f$). When every
-/// \f$ l^2 > 0 \f$ the signed content equals \f$ |\text{volume}| \f$ and this path
-/// reproduces the Euclidean spectrum/kernel above. The Euclidean
-/// (`lorentzian = false`) path is untouched.
+/// ## Regime: Lorentzian, so generally not self-adjoint (§5.6)
 ///
-/// For \f$ k = 0 \f$ vertices are indexed by a stable order (sorted vertex id
-/// \f$ \to 0..N-1 \f$); for \f$ k \geq 1 \f$ the \f$ k \f$-cells follow the
-/// canonical `ChainComplex` column order (sorted vertex-id tuples), so the
-/// returned flat row-major matrices are reproducible and align with
-/// `boundaryMatrix(k)` and `weights(k)`.
+/// \f$ W_k \f$ is the **signed** `Simplex::volume()` — the honest,
+/// signature-respecting content in which a timelike edge (\f$ l^2 < 0 \f$)
+/// carries a negative (`SquaredContent`) or imaginary (`Content`) weight. The
+/// inner product is therefore indefinite and the symmetric
+/// \f$ W_k^{1/2} \f$ similarity breaks (the square root of a negative weight is
+/// imaginary), so \f$ L_k \f$ is assembled **directly** and is generally
+/// **non-self-adjoint** (a discrete d'Alembertian) at every degree, degree zero
+/// included: it is diagonalized with a general `Eigen::ComplexEigenSolver`, so
+/// eigenvalues may be negative or complex. In the positive metric regime the
+/// operator IS self-adjoint in the \f$ W_k \f$ inner product; that is a
+/// property of the geometry, never a convention imposed on the assembly, and it
+/// is **measured**, not asserted — `RecursiveQuotient::regime()` reports the
+/// verified `CertificateRegime` for the operator it was handed. On a Lorentzian
+/// complex with signed weights \f$ L_0 \f$ is routinely indefinite: the
+/// 3-cycle with one timelike edge (\f$ l^2 = -\alpha^2 \f$) has
+/// \f$ \mathrm{spec}(L_0) = \{0,\,3,\,1 - 2/\alpha^{2}\} \f$, negative below
+/// \f$ \alpha = \sqrt{2} \f$.
 ///
-/// ## Assembly (k = 0)
+/// \f$ \ker L_k \cong H_k \f$ likewise degrades away from positive weights to a
+/// pseudo-Hodge decomposition: "harmonic" becomes the small-\f$ |\lambda| \f$
+/// near-kernel, and a near-kernel representative \f$ h \f$ may be **null** in
+/// the indefinite metric (\f$ \langle h,h\rangle_W = \sum_i W_{k,i}|h_i|^2
+/// \approx 0 \f$, see `nullNorms`). The one degree-zero statement that survives
+/// every weight is the constant: \f$ L_0 \mathbf{1} = 0 \f$ exactly.
+///
+/// \f$ k \f$-cells follow the canonical `ChainComplex` column order (sorted
+/// vertex-id tuples) at every degree, so the returned flat row-major matrices
+/// are reproducible and align with `boundaryMatrix(k)` and `weights(k)`. A
+/// vertex carried by no simplex is not a 0-cell and does not appear in
+/// \f$ L_0 \f$.
+///
+/// ## The U(1) connection Laplacian is a DIFFERENT operator
+///
+/// `connectionLaplacian` (with `adjacency`, `degree`, `connectionSpectrum` and
+/// friends) is the **Hermitian U(1)-weighted graph Laplacian**
+/// \f$ L^{U(1)} = D - A \f$ on the 1-skeleton, assembled from each `Edge`'s
+/// complex weight \f$ \text{squaredLength}\cdot e^{i\,\text{phase}} \f$:
 ///
 /// - Adjacency \f$ A_{ij} = \sum_{(i,j)} \text{squaredLength}\cdot e^{i\,\text{phase}} \f$,
 ///   summed over edges between \f$ i \f$ and \f$ j \f$; the stored source→target
 ///   orientation carries \f$ +\text{phase} \f$, the reverse carries
 ///   \f$ -\text{phase} \f$, so \f$ A = A^\dagger \f$ (Hermitian).
-/// - Degree \f$ D_{ii} = \sum |\text{squaredLength}| \f$ over incident edges
-///   (the magnitude convention — keeps \f$ L \f$ Hermitian and \f$ e^{-iLt} \f$
-///   unitary for complex weights).
-/// - Laplacian \f$ L = D - A \f$.
+/// - Degree \f$ D_{ii} = \sum |\text{squaredLength}| \f$ over incident edges —
+///   the **magnitude** convention, which keeps \f$ L^{U(1)} \f$ Hermitian and
+///   \f$ e^{-iL^{U(1)}t} \f$ unitary for complex weights, and makes it
+///   diagonally dominant with a non-negative diagonal, hence positive
+///   semidefinite by Gershgorin.
+///
+/// It is NOT \f$ L_0 \f$ and is not of the derived form for any weight: on a
+/// Lorentzian complex a timelike edge has \f$ l^2 < 0 \f$, so the magnitude
+/// diagonal and the signed off-diagonal disagree and the row sums do not
+/// vanish. It carries the Aharonov--Bohm content that \f$ L_0 \f$ cannot —
+/// a nonzero U(1) flux lifts its zero mode, whereas \f$ \ker L_0 \f$ is always
+/// \f$ b_0 \f$ — and it is indexed over the FULL sorted vertex-id order
+/// (\f$ 0..N-1 \f$), including any lone vertex `ChainComplex` omits. Its
+/// consumers are named: `observables::SpectralGap`,
+/// `observables::HarmonicDimension`, `KuennethProduct::productCertificate`, and
+/// the degree-zero `EigenstateSynthesis` register readout.
 ///
 /// This class is the *operator* only: it does not compute fluxes, cycle bases,
 /// or Betti numbers (those are `WilsonLoop` / `ChainComplex`'s job), and it does
 /// not gauge-transform the mesh (gauge invariance is exercised by rephasing the
-/// edges and rebuilding). The Hermitian eigendecomposition is lazily computed
-/// (Eigen `SelfAdjointEigenSolver<MatrixXcd>`) and cached.
+/// edges and rebuilding). The connection operator's Hermitian eigendecomposition
+/// is lazily computed (Eigen `SelfAdjointEigenSolver<MatrixXcd>`) and cached.
 class HodgeLaplacian {
   public:
     /// Which quantity the diagonal inner-product weight \f$ W_k \f$ is built from.
@@ -152,35 +184,52 @@ class HodgeLaplacian {
       defaultWeightConvention_ = convention;
     }
 
-    /// Weighted adjacency \f$ A \f$ as a flat row-major \f$ N\times N \f$ array
-    /// of complex entries. Hermitian by construction.
+    /// Weighted adjacency \f$ A \f$ of the **U(1) connection** operator as a flat
+    /// row-major \f$ N\times N \f$ array of complex entries, over the full sorted
+    /// vertex-id order. Hermitian by construction. Not part of \f$ L_0 \f$; see
+    /// `connectionLaplacian`.
     [[nodiscard]] std::vector<std::complex<double>> adjacency() const;
 
-    /// Degree vector \f$ (D_{00},\dots,D_{N-1,N-1}) \f$, real, length \f$ N \f$
-    /// (magnitude convention \f$ D_{ii} = \sum |\text{squaredLength}| \f$).
+    /// Degree vector \f$ (D_{00},\dots,D_{N-1,N-1}) \f$ of the **U(1)
+    /// connection** operator, real, length \f$ N \f$ (magnitude convention
+    /// \f$ D_{ii} = \sum |\text{squaredLength}| \f$). Not part of \f$ L_0 \f$;
+    /// see `connectionLaplacian`.
     [[nodiscard]] std::vector<double> degree() const;
 
-    /// Laplacian \f$ L_k \f$ as a flat row-major matrix of complex entries:
-    /// \f$ N\times N \f$ for \f$ k = 0 \f$ (\f$ L = D - A \f$), else
-    /// \f$ |C_k|\times|C_k| \f$ (the symmetric metric Laplacian above; imaginary
-    /// parts are zero). For \f$ k \geq 1 \f$, `metric = false` selects unit
-    /// weights (the combinatorial Laplacian); `metric` is ignored at \f$ k = 0 \f$.
+    /// The **Hermitian U(1) connection graph Laplacian**
+    /// \f$ L^{U(1)} = D - A \f$ as a flat row-major \f$ N\times N \f$ array over
+    /// the full sorted vertex-id order (\f$ N \f$ = every vertex, including any
+    /// carried by no simplex). This is NOT the degree-zero Hodge Laplacian: its
+    /// off-diagonal uses the signed complex weight while its diagonal uses the
+    /// magnitude, so its row sums do not vanish on a Lorentzian complex and it is
+    /// not \f$ \partial_1 W_1^{-1}\partial_1^{\dagger} \f$ for any \f$ W \f$. It
+    /// is the Aharonov--Bohm operator: Hermitian, positive semidefinite by
+    /// Gershgorin, unitary under \f$ e^{-iL^{U(1)}t} \f$, and its zero mode is
+    /// lifted by a nonzero U(1) flux (which \f$ \ker L_0 = b_0 \f$ can never
+    /// see). Use `laplacian(0)` for the Hodge operator.
+    [[nodiscard]] std::vector<std::complex<double>> connectionLaplacian() const;
+
+    /// Laplacian \f$ L_k \f$ as a flat row-major
+    /// \f$ |C_k|\times|C_k| \f$ matrix of complex entries in the canonical
+    /// `ChainComplex` column order, assembled from the boundary maps and the
+    /// signed weights at EVERY degree (degree zero included:
+    /// \f$ L_0 = \partial_1 W_1^{-1}\partial_1^{\dagger} \f$, whose row sums
+    /// vanish identically). Generally non-symmetric — it is the signed-weight
+    /// d'Alembertian, not a Hermitian graph Laplacian. `metric = false` selects
+    /// unit weights (the combinatorial Laplacian) at every degree, degree zero
+    /// included.
     /// @throws std::runtime_error for \f$ k < 0 \f$. Empty for \f$ k \f$ above the
     ///   top dimension.
-    /// With `lorentzian = true` (and `metric`, \f$ k \geq 1 \f$) it is instead the
-    /// **signed-weight d'Alembertian** assembled directly (generally
-    /// non-symmetric; the imaginary parts of the returned entries are still zero,
-    /// the operator being real).
     [[nodiscard]] std::vector<std::complex<double>> laplacian(int k = 0,
                                                              bool metric = true) const;
 
     /// Diagonal inner-product weights \f$ W_k \f$ (length \f$ |C_k| \f$) in the
-    /// canonical `ChainComplex` column order: the per-\f$ k \f$-simplex Euclidean
-    /// volume (`Simplex::volume`, magnitude; degenerate cells fall back to 1 to
-    /// keep \f$ W_k \f$ positive). \f$ W_0 = I \f$ (all ones). Empty for \f$ k < 0 \f$
-    /// or \f$ k \f$ above the top dimension. With `lorentzian = true` the entries
-    /// are the **signed** `Simplex::volume()` (timelike cells negative; degenerate
-    /// cells still fall back to \f$ +1 \f$ so \f$ W_k \f$ stays invertible).
+    /// canonical `ChainComplex` column order: the **signed** per-\f$ k \f$-simplex
+    /// content `Simplex::volume()` under the active `WeightConvention` (timelike
+    /// cells negative or imaginary; degenerate cells fall back to \f$ +1 \f$ so
+    /// \f$ W_k \f$ stays invertible). \f$ W_0 = I \f$ (all ones) — the whitepaper
+    /// weight on 0-chains, and what makes the \f$ L_0 \f$ row sums vanish. Empty
+    /// for \f$ k < 0 \f$ or \f$ k \f$ above the top dimension.
     [[nodiscard]] std::vector<std::complex<double>> weights(int k) const;
 
     /// Exact analytic gradient \f$ \partial L_k^{\text{sym}} / \partial \ell^2_e \f$
@@ -193,7 +242,10 @@ class HodgeLaplacian {
     /// with \f$ a_j=\tfrac{\partial W_j}{2W_j} \f$ — and \f$ \partial W_j \f$ is the
     /// per-simplex `Simplex::volumeGradient` (signed for the `|vol|` weight). The
     /// degree-generic keystone for the arbitrary-\f$ k \f$ \f$ r_U \f$ gradient.
-    /// Empty for \f$ k < 1 \f$ or an absent edge.
+    /// Defined at degree zero too, where \f$ W_0 = I \f$ is constant and the only
+    /// surviving term is
+    /// \f$ -\partial_1 W_1^{-1}(\partial W_1)W_1^{-1}\partial_1^{\dagger} \f$.
+    /// Empty for \f$ k < 0 \f$ or an absent edge.
     [[nodiscard]] std::vector<std::complex<double>> laplacianGradient(
         int k, std::uint64_t edgeA, std::uint64_t edgeB) const;
 
@@ -217,9 +269,10 @@ class HodgeLaplacian {
     /// \f$h_e=\partial S/\partial\operatorname{Re}z_e
     ///       -i\,\partial S/\partial\operatorname{Im}z_e\f$, so
     /// \f$\overline h\f$ is the steepest-ascent displacement in the complex
-    /// \f$z\f$ plane. Available for the metric operators \f$k\ge1\f$; degree
-    /// zero throws because its magnitude-weighted diagonal is non-holomorphic
-    /// and has no `laplacianGradient` implementation.
+    /// \f$z\f$ plane. Available at every degree \f$k\ge0\f$: \f$L_k\f$ is
+    /// holomorphic in \f$z\f$ at all of them, degree zero included, because the
+    /// weights are polynomial in the squared edge lengths and no modulus enters
+    /// the assembly.
     [[nodiscard]] std::vector<std::complex<double>> spectralEntropyGradient(
         int k, EntropyPhaseMode phaseMode =
                    EntropyPhaseMode::IncludeComplexPhase) const;
@@ -230,64 +283,93 @@ class HodgeLaplacian {
         int k, EntropyPhaseMode phaseMode =
                    EntropyPhaseMode::IncludeComplexPhase) const;
 
-    /// Whether \f$ \| L - L^\dagger \| \le \text{tol} \f$ (Frobenius norm) for
-    /// the \f$ k = 0 \f$ Laplacian. True by construction.
+    /// Whether \f$ \| L^{U(1)} - (L^{U(1)})^\dagger \| \le \text{tol} \f$
+    /// (Frobenius norm) for the **U(1) connection** Laplacian. True by
+    /// construction. It says nothing about \f$ L_0 \f$, which is complex
+    /// symmetric (hence non-Hermitian) as soon as a weight is complex.
     [[nodiscard]] bool isHermitian(double tol = 1e-12) const;
 
-    /// Unitarity residual of the time-evolution operator
-    /// \f$ U = e^{-iLt} = V\,\mathrm{diag}(e^{-i\lambda t})\,V^\dagger \f$ formed
-    /// from the eigendecomposition: returns \f$ \| U U^\dagger - I \| \f$
-    /// (Frobenius). ~0 for the Hermitian \f$ L \f$.
+    /// Unitarity residual of the **U(1) connection** time-evolution operator
+    /// \f$ U = e^{-iL^{U(1)}t} = V\,\mathrm{diag}(e^{-i\lambda t})\,V^\dagger \f$
+    /// formed from its eigendecomposition: returns \f$ \| U U^\dagger - I \| \f$
+    /// (Frobenius). ~0, that operator being Hermitian.
     [[nodiscard]] double unitarityResidual(double t = 1.0) const;
 
-    /// The eigendecomposition of \f$ L_k \f$ as a `Spectrum` (real ascending
-    /// eigenvalues + eigenvectors as `Cochain`s; `Spectrum::isHermitian()` is
-    /// true). The self-adjoint \f$ k = 0 \f$ graph Laplacian and the symmetric
-    /// metric Hodge Laplacian (\f$ k \geq 1 \f$). For \f$ k \geq 1 \f$, `metric`
-    /// selects volume vs. unit weights (ignored at \f$ k = 0 \f$). The eigenvectors
-    /// are indexed over the sorted-id vertex order (\f$ k = 0 \f$) or the canonical
-    /// `ChainComplex` \f$ k \f$-simplex column order (\f$ k \geq 1 \f$).
+    /// The **U(1) connection** Laplacian's eigendecomposition as a `Spectrum`
+    /// (real ascending eigenvalues + eigenvectors as degree-0 `Cochain`s;
+    /// `Spectrum::isHermitian()` is true), indexed over the full sorted-id vertex
+    /// order. Lazily computed and cached.
+    [[nodiscard]] Spectrum connectionSpectrum() const;
+
+    /// Eigenvalues of the **U(1) connection** Laplacian (real, ascending),
+    /// complex-typed for parity, consistent with `connectionSpectrum()`.
+    [[nodiscard]] std::vector<std::complex<double>> connectionEigenvalues() const;
+
+    /// Eigenvectors of the **U(1) connection** Laplacian as a flat row-major
+    /// \f$ N\times N \f$ array; column \f$ j \f$ (entries at indices
+    /// \f$ iN + j \f$) is the eigenvector for the \f$ j \f$-th ascending
+    /// eigenvalue.
+    [[nodiscard]] std::vector<std::complex<double>> connectionEigenvectors() const;
+
+    /// Harmonic representatives of the **U(1) connection** Laplacian: the
+    /// eigenvectors with \f$ |\lambda| < \text{tol} \f$, as degree-0 `Cochain`s
+    /// over the sorted-id vertex order. Unlike \f$ \ker L_0 \f$ this count is
+    /// NOT \f$ b_0 \f$ — a nonzero U(1) flux lifts it.
+    [[nodiscard]] std::vector<Cochain> connectionHarmonics(double tol = 1e-9) const;
+
+    /// The **U(1) connection** harmonic amplitude matrix: the
+    /// `connectionHarmonics(tol)` representatives stacked as the ROWS of a flat
+    /// row-major \f$ \dim\ker L^{U(1)} \times N \f$ complex array, columns in the
+    /// sorted-id vertex order. Empty when that kernel is empty.
+    [[nodiscard]] std::vector<std::complex<double>> connectionHarmonicMatrix(
+        double tol = 1e-9) const;
+
+    /// The eigendecomposition of \f$ L_k \f$ as a `Spectrum`. \f$ L_k \f$ is the
+    /// signed-weight d'Alembertian at every degree, generally non-self-adjoint,
+    /// so the eigenvalues are complex, sorted by (Re, Im), and
+    /// `Spectrum::isHermitian()` is false. `metric` selects signed-content vs.
+    /// unit weights. The eigenvectors are indexed over the canonical
+    /// `ChainComplex` \f$ k \f$-simplex column order at every degree, degree zero
+    /// included.
     /// @throws std::runtime_error for \f$ k < 0 \f$. Empty above the top dimension.
     [[nodiscard]] Spectrum spectrum(int k = 0, bool metric = true) const;
 
-    /// Eigenvalues of \f$ L_k \f$ (real, ascending), a flat view consistent with
-    /// `spectrum(k, metric)`. For \f$ k \geq 1 \f$, `metric` selects volume vs.
-    /// unit weights (ignored at \f$ k = 0 \f$).
+    /// Eigenvalues of \f$ L_k \f$ (complex, sorted by (Re, Im)), a flat view
+    /// consistent with `spectrum(k, metric)`. `metric` selects signed-content vs.
+    /// unit weights.
     /// @throws std::runtime_error for \f$ k < 0 \f$. Empty above the top dimension.
     [[nodiscard]] std::vector<std::complex<double>> eigenvalues(int k = 0, bool metric = true) const;
 
-    /// Eigenvectors of \f$ L_k \f$ as a flat row-major \f$ M\times M \f$ array
-    /// (\f$ M = N \f$ for \f$ k = 0 \f$, else \f$ |C_k| \f$); column \f$ j \f$
-    /// (entries at indices \f$ iM + j \f$) is the eigenvector for the
-    /// \f$ j \f$-th ascending eigenvalue — a flat view consistent with the
-    /// `Cochain`s of `spectrum(k, metric)`. For \f$ k \geq 1 \f$, `metric` selects
-    /// volume vs. unit weights (ignored at \f$ k = 0 \f$).
+    /// Eigenvectors of \f$ L_k \f$ as a flat row-major
+    /// \f$ |C_k|\times|C_k| \f$ array; column \f$ j \f$ (entries at indices
+    /// \f$ i|C_k| + j \f$) is the eigenvector for the \f$ j \f$-th eigenvalue —
+    /// a flat view consistent with the `Cochain`s of `spectrum(k, metric)`.
+    /// `metric` selects signed-content vs. unit weights.
     /// @throws std::runtime_error for \f$ k < 0 \f$. Empty above the top dimension.
     [[nodiscard]] std::vector<std::complex<double>> eigenvectors(int k = 0,
                                                                bool metric = true) const;
 
     /// Harmonic representatives: the eigenvectors with \f$ |\lambda| < \text{tol} \f$
     /// (a basis for \f$ \ker L_k \cong H_k \f$, so the count is the harmonic
-    /// dimension \f$ = b_k \f$), as `Cochain`s over the \f$ k \f$-simplex ordering.
-    /// For \f$ k \geq 1 \f$, `metric` selects volume vs. unit weights (ignored at
-    /// \f$ k = 0 \f$). @throws std::runtime_error for \f$ k < 0 \f$. Empty above the
-    /// top dimension.
+    /// dimension \f$ = b_k \f$ at positive weights; at \f$ k = 0 \f$ the constant
+    /// is among them at ANY weights, so \f$ \dim\ker L_0 = b_0 \f$ always), as
+    /// `Cochain`s over the canonical \f$ k \f$-simplex ordering. `metric` selects
+    /// signed-content vs. unit weights. @throws std::runtime_error for
+    /// \f$ k < 0 \f$. Empty above the top dimension.
     [[nodiscard]] std::vector<Cochain> harmonics(int k = 0, double tol = 1e-9,
                                                  bool metric = true) const;
 
     /// The harmonic amplitude matrix: the same representatives as
     /// `harmonics(k, tol, metric)` — the eigenvectors with
-    /// \f$ |\lambda| < \text{tol} \f$, in ascending-eigenvalue order — stacked
-    /// as the **rows** of a flat row-major \f$ \dim\ker L_k \times M \f$
-    /// complex array (\f$ M = N \f$ at \f$ k = 0 \f$, else \f$ |C_k| \f$),
-    /// columns in the same sorted-vertex / canonical `ChainComplex`
+    /// \f$ |\lambda| < \text{tol} \f$, in spectral order — stacked
+    /// as the **rows** of a flat row-major \f$ \dim\ker L_k \times |C_k| \f$
+    /// complex array, columns in the canonical `ChainComplex`
     /// \f$ k \f$-cell order the `Cochain`s index. One call replaces the
     /// per-cell `amplitudeFor` round-trips a register layer makes to read its
-    /// harmonics; entry \f$ [\,r\,M + c\,] \f$ equals
+    /// harmonics; entry \f$ [\,r\,|C_k| + c\,] \f$ equals
     /// `harmonics(k, tol, metric)[r].amplitude(c)` exactly. Empty when the
     /// kernel is empty (\f$ b_k = 0 \f$) or \f$ k \f$ is above the top
-    /// dimension. For \f$ k \geq 1 \f$, `metric` selects volume vs. unit
-    /// weights (ignored at \f$ k = 0 \f$).
+    /// dimension. `metric` selects signed-content vs. unit weights.
     /// @throws std::runtime_error for \f$ k < 0 \f$.
     [[nodiscard]] std::vector<std::complex<double>> harmonicMatrix(
         int k = 0, double tol = 1e-9, bool metric = true) const;
@@ -313,7 +395,8 @@ class HodgeLaplacian {
     std::unordered_map<std::uint64_t, std::size_t> idToIndex_{};
     std::size_t order_{0};  // N = |V|
 
-    // Lazy, cached Hermitian eigendecomposition of the k=0 Laplacian.
+    // Lazy, cached Hermitian eigendecomposition of the U(1) CONNECTION
+    // Laplacian D - A (not L_0).
     mutable bool decomposed_{false};
     mutable std::vector<double> evals_{};               // ascending, length N
     mutable std::vector<std::complex<double>> evecs_{};  // flat N*N, columns
@@ -337,7 +420,7 @@ class HodgeLaplacian {
     /// and stores it; entries are keyed by (k, metric, weight convention), so
     /// instances with different conventions share the map without collisions.
     /// The deliberately-uncached ``apply``/``residual`` honesty paths and the
-    /// k=0 Hermitian decomposition below are untouched.
+    /// U(1) connection Hermitian decomposition below are untouched.
     struct SharedSpectrumMap {
       std::unordered_map<long long, SpectrumCache> map{};
     };
@@ -347,9 +430,9 @@ class HodgeLaplacian {
     static void requireNonNegativeDegree(int k);
 
     // The sorted vertex-id tuples a degree-k Cochain is indexed over.
-    // `useVertexSet` returns the full sorted-id vertex order (the Hermitian k=0
-    // basis, length N); otherwise the canonical ChainComplex k-simplex column
-    // order (the metric / Lorentzian basis, length |C_k|).
+    // `useVertexSet` returns the full sorted-id vertex order (the U(1)
+    // connection basis, length N); otherwise the canonical ChainComplex
+    // k-simplex column order (the L_k basis at EVERY degree, length |C_k|).
     [[nodiscard]] std::vector<std::vector<std::uint64_t>> cochainOrdering(
         int k, bool useVertexSet) const;
 
@@ -363,18 +446,19 @@ class HodgeLaplacian {
         const std::vector<std::complex<double>> &evecsFlat, int dim,
         bool hermitian);
 
-    // Build/fetch the cached symmetric spectrum of L_k^sym (k >= 1). Key folds in
-    // `metric` so the metric and combinatorial spectra are cached separately.
-
-    // Build/fetch the cached general spectrum of the signed-weight d'Alembertian.
+    // Build/fetch the cached general spectrum of the signed-weight
+    // d'Alembertian L_k, at every degree. The key folds in `metric` so the
+    // signed-content and combinatorial spectra are cached separately.
     const SpectrumCache &ensureSpectrum(int k, bool metric) const;
 
-    // Assemble the adjacency (flat row-major N*N) and degree (length N) from the
-    // current edge weights/phases, using the stable vertex order. Kept Eigen-free
-    // in its signature so the public header carries no Eigen dependency.
+    // Assemble the U(1) connection adjacency (flat row-major N*N) and degree
+    // (length N) from the current edge weights/phases, using the stable vertex
+    // order. Kept Eigen-free in its signature so the public header carries no
+    // Eigen dependency.
     void assemble(std::vector<std::complex<double>> &A, std::vector<double> &D) const;
 
-    // Build and cache the eigendecomposition of L (k=0) if not already done.
+    // Build and cache the eigendecomposition of the U(1) connection Laplacian
+    // if not already done.
     void ensureDecomposition() const;
 };
 

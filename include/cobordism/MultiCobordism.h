@@ -597,7 +597,9 @@ class MultiCobordism {
   /// (`modeCells[i]`, matched by vertex SET). Nothing here reads a
   /// certificate; the state is plain numbers plus the cells they live on.
   /// @throws std::invalid_argument on a non-square covariance, a size
-  ///   mismatch against `modeCells`, or a negative degree.
+  ///   mismatch against `modeCells`, or a degree below one (the carried
+  ///   state's DECLARED domain, not a capability limit: \f$ L_0 \f$ and its
+  ///   exact gradient exist too).
   void setCarriedState(
       const std::vector<std::vector<std::uint64_t>> &modeCells, int degree,
       const std::vector<std::complex<double>> &covariance);

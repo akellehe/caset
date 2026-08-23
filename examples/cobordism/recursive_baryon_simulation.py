@@ -186,10 +186,12 @@ DECLARED_HOST_SEED = 3
 DECLARED_DEGREES = (1,)
 
 #: The degrees the emergence objective's register term is configured at.
-#: Fixed at one: `MultiCobordism` refuses joint Hodge-entropy stationarity
-#: below degree one (there is no d(Hodge)/dz there), so this is the
-#: objective's domain, not a tuning choice. The ANALYSIS degrees above are a
-#: separate, post-hoc knob.
+#: Fixed at one: `MultiCobordism` declares joint Hodge-entropy stationarity
+#: over degrees >= 1, so this is the objective's DECLARED domain, not a tuning
+#: choice. (Since #805 a degree-zero d(Hodge)/dz does exist -- L_0 is
+#: holomorphic in z -- so the restriction is a decision about the objective,
+#: not a missing derivative.) The ANALYSIS degrees above are a separate,
+#: post-hoc knob.
 DECLARED_REGISTER_DEGREES = (1,)
 
 #: The resolution the component/fiber/reduction layer is READ at: gamma = 1,
@@ -3650,8 +3652,10 @@ def _add_run_arguments(parser):
     parser.add_argument("--degrees", default=",".join(
         str(k) for k in DECLARED_DEGREES),
         help="comma-separated Hodge degrees the bands are enumerated at "
-             "(default: %(default)s; degree 0 is the POSITIVE graph "
-             "Laplacian, where the Fock oracle has an exact reference)")
+             "(default: %(default)s; degree 0 reads the POSITIVE U(1) "
+             "connection graph Laplacian -- SpectralFiber's induced-subgraph "
+             "D - A, not the Hodge L_0 -- where the Fock oracle has an exact "
+             "reference)")
 
 
 def _config_from_arguments(args):

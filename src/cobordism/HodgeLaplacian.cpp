@@ -174,7 +174,12 @@ public:
   [[nodiscard]] Eigen::MatrixXcd gradient(std::uint64_t edgeA,
                                           std::uint64_t edgeB) const {
     Eigen::MatrixXcd result = Eigen::MatrixXcd::Zero(degreeSize_, degreeSize_);
-    if (degree_ < 1 || degreeSize_ == 0)
+    // Degree zero is included: W_0 = I contributes no derivative and there is
+    // no lower boundary block, so the only surviving term is the W_1 one,
+    // -d_1 W_1^-1 dW_1 W_1^-1 d_1^T -- the exact derivative of
+    // L_0 = d_1 W_1^-1 d_1^T. The buildWeightData/derivativesFor lookups below
+    // return nothing for the absent blocks, so no degree special case is needed.
+    if (degree_ < 0 || degreeSize_ == 0)
       return result;
     const EdgeKey edge{std::min(edgeA, edgeB), std::max(edgeA, edgeB)};
 
@@ -288,6 +293,10 @@ private:
 // operator is assembled directly from the signed metric adjoint
 // d_k* = W_k^{-1} d_k^T W_{k-1}:
 //   L_k = W_k^{-1} d_k^T W_{k-1} d_k + d_{k+1} W_{k+1}^{-1} d_{k+1}^T W_k.
+// DEGREE ZERO IS NOT A SPECIAL CASE: term 1 is simply absent (no (-1)-chains)
+// and W_0 = I, leaving L_0 = d_1 W_1^{-1} d_1^T, whose row sums vanish
+// identically because d_1^T has zero column sums. That is the whitepaper's
+// L_0 = d_1 d*_1 verbatim.
 // This is similar to the symmetric metricLaplacian when every weight is positive
 // (W_k^{-1/2} L_k W_k^{1/2} = L_k^sym), so the spectrum/kernel coincide there; with
 // signed weights it is generally NON-symmetric (a true d'Alembertian). Returns a
@@ -484,16 +493,17 @@ std::vector<std::vector<std::uint64_t>> HodgeLaplacian::cochainOrdering(
   std::vector<std::vector<std::uint64_t>> ord;
   if (k < 0 || !st_) return ord;
   if (useVertexSet && k == 0) {
-    // The Hermitian k=0 operator is indexed over the full sorted-id vertex set
-    // (it reads every vertex, including any lone vertices ChainComplex omits).
+    // The Hermitian U(1) connection operator is indexed over the full sorted-id
+    // vertex set (it reads every vertex, including any lone vertices
+    // ChainComplex omits).
     ord.reserve(ids_.size());
     for (const std::uint64_t id : ids_) ord.push_back({id});
     return ord;
   }
-  // The metric (k>=1) and signed-weight (any k) operators are assembled from the
-  // ChainComplex boundary maps, so the eigenvector components are indexed in the
-  // canonical ChainComplex k-simplex column order — exactly kSimplexVertices(k),
-  // whose count always matches the operator dimension numSimplices(k).
+  // L_k is assembled from the ChainComplex boundary maps at every degree, so
+  // the eigenvector components are indexed in the canonical ChainComplex
+  // k-simplex column order — exactly kSimplexVertices(k), whose count always
+  // matches the operator dimension numSimplices(k).
   return ChainComplex::fromSpacetime(*st_).kSimplexVertices(k);
 }
 
@@ -571,32 +581,36 @@ std::vector<double> HodgeLaplacian::degree() const {
 
 std::vector<cd> HodgeLaplacian::laplacian(int k, bool metric) const {
   requireNonNegativeDegree(k);
-  if (k >= 1) {
-    // The signed-weight d'Alembertian, complex and generally non-symmetric. This is
-    // the ONLY k >= 1 operator: the |vol|-weighted symmetric variant was a Euclidean
-    // read and is gone (#641).
-    if (!st_) return {};
-    const Eigen::MatrixXcd L = laplacianMatrix(*st_, k, metric, weightConvention_);
-    const int nk = static_cast<int>(L.rows());
-    std::vector<cd> out(static_cast<std::size_t>(nk) * nk, cd(0.0, 0.0));
-    for (int i = 0; i < nk; ++i)
-      for (int j = 0; j < nk; ++j)
-        out[static_cast<std::size_t>(i) * nk + j] = L(i, j);
-    return out;
-  }
-  if (k == 0) {
-    // k = 0 (unchanged): L = D - A. Off-diagonal entries are -A_ij; the diagonal
-    // carries D_ii (the adjacency has no diagonal in a complex without self-loops).
-    std::vector<cd> A;
-    std::vector<double> D;
-    assemble(A, D);
-    const std::size_t N = order_;
-    std::vector<cd> L(N * N, cd(0.0, 0.0));
-    for (std::size_t idx = 0; idx < A.size(); ++idx) L[idx] = -A[idx];
-    for (std::size_t i = 0; i < N; ++i) L[i * N + i] += D[i];
-    return L;
-  }
-  return {};
+  // The signed-weight d'Alembertian, complex and generally non-symmetric, at
+  // EVERY degree: L_k = W_k^-1 d_k^T W_{k-1} d_k + d_{k+1} W_{k+1}^-1 d_{k+1}^T W_k
+  // (#805). Degree zero used to be a separately specified Hermitian U(1) graph
+  // Laplacian D - A whose magnitude diagonal disagreed with its signed
+  // off-diagonal; that operator survives under its own name,
+  // connectionLaplacian(), and is no longer called L_0.
+  if (!st_) return {};
+  const Eigen::MatrixXcd L = laplacianMatrix(*st_, k, metric, weightConvention_);
+  const int nk = static_cast<int>(L.rows());
+  std::vector<cd> out(static_cast<std::size_t>(nk) * nk, cd(0.0, 0.0));
+  for (int i = 0; i < nk; ++i)
+    for (int j = 0; j < nk; ++j)
+      out[static_cast<std::size_t>(i) * nk + j] = L(i, j);
+  return out;
+}
+
+std::vector<cd> HodgeLaplacian::connectionLaplacian() const {
+  // L^U(1) = D - A. Off-diagonal entries are -A_ij; the diagonal carries D_ii
+  // (the adjacency has no diagonal in a complex without self-loops). NOT L_0:
+  // the diagonal is the MAGNITUDE sum while the off-diagonal is the signed
+  // complex weight, so the row sums do not vanish once a squared length is
+  // negative or complex.
+  std::vector<cd> A;
+  std::vector<double> D;
+  assemble(A, D);
+  const std::size_t N = order_;
+  std::vector<cd> L(N * N, cd(0.0, 0.0));
+  for (std::size_t idx = 0; idx < A.size(); ++idx) L[idx] = -A[idx];
+  for (std::size_t i = 0; i < N; ++i) L[i * N + i] += D[i];
+  return L;
 }
 
 std::vector<std::complex<double>> HodgeLaplacian::weights(int k) const {
@@ -604,6 +618,8 @@ std::vector<std::complex<double>> HodgeLaplacian::weights(int k) const {
   const ChainComplex cc = ChainComplex::fromSpacetime(*st_);
   if (k > cc.dimension()) return {};
   const int m = static_cast<int>(cc.numSimplices(k));
+  // W_0 = I: the whitepaper weight on 0-chains, and precisely what makes the
+  // row sums of L_0 = d_1 W_1^-1 d_1^T W_0 vanish identically.
   if (k == 0)
     return std::vector<std::complex<double>>(static_cast<std::size_t>(m),
                                              std::complex<double>{1.0, 0.0});
@@ -612,7 +628,7 @@ std::vector<std::complex<double>> HodgeLaplacian::weights(int k) const {
 
 std::vector<std::complex<double>> HodgeLaplacian::laplacianGradient(
     int k, std::uint64_t ea, std::uint64_t eb) const {
-  if (k < 1 || !st_) return {};
+  if (k < 0 || !st_) return {};
   const LaplacianDerivativeWorkspace workspace(*st_, k, weightConvention_);
   const Eigen::MatrixXcd dL = workspace.gradient(ea, eb);
   const int nk = static_cast<int>(dL.rows());
@@ -633,10 +649,10 @@ double HodgeLaplacian::spectralEntropy(int k,
 std::vector<std::complex<double>> HodgeLaplacian::spectralEntropyGradient(
     int k, EntropyPhaseMode phaseMode) const {
   requireNonNegativeDegree(k);
-  if (k == 0)
-    throw std::runtime_error(
-        "HodgeLaplacian::spectralEntropyGradient: degree zero has no "
-        "complex squared-length Laplacian gradient; use k >= 1");
+  // Degree zero is included (#805): L_0 = d_1 W_1^-1 d_1^T is holomorphic in
+  // z = l^2, so the same workspace derivative applies. The old throw was
+  // specific to the magnitude-weighted diagonal of the U(1) connection
+  // operator, which is no longer what degree zero assembles.
   const auto edges = st_ && st_->getEdgeList()
                          ? st_->getEdgeList()->toVector()
                          : std::vector<EdgePtr>{};
@@ -748,6 +764,7 @@ const HodgeLaplacian::SpectrumCache &HodgeLaplacian::ensureSpectrum(
 }
 
 void HodgeLaplacian::ensureDecomposition() const {
+  // The U(1) CONNECTION Laplacian's Hermitian eigendecomposition (not L_0).
   if (decomposed_) return;
   const int N = static_cast<int>(order_);
   evals_.assign(static_cast<std::size_t>(N), 0.0);
@@ -780,7 +797,7 @@ void HodgeLaplacian::ensureDecomposition() const {
 bool HodgeLaplacian::isHermitian(double tol) const {
   const int N = static_cast<int>(order_);
   if (N == 0) return true;
-  const std::vector<cd> Lflat = laplacian(0);
+  const std::vector<cd> Lflat = connectionLaplacian();
   Eigen::MatrixXcd L(N, N);
   for (int i = 0; i < N; ++i)
     for (int j = 0; j < N; ++j)
@@ -811,37 +828,58 @@ double HodgeLaplacian::unitarityResidual(double t) const {
 
 Spectrum HodgeLaplacian::spectrum(int k, bool metric) const {
   requireNonNegativeDegree(k);
-  if (k == 0) {
-    ensureDecomposition();
-    std::vector<cd> evalsC(evals_.size());
-    for (std::size_t i = 0; i < evals_.size(); ++i) evalsC[i] = cd(evals_[i], 0.0);
-    return makeSpectrum(0, cochainOrdering(0, /*useVertexSet=*/true), evalsC,
-                        evecs_, static_cast<int>(order_), /*hermitian=*/true);
-  }
   const SpectrumCache &sp = ensureSpectrum(k, metric);
-  // The k >= 1 operator is the signed d'Alembertian: complex and generally
-  // non-self-adjoint, so the spectrum is not flagged Hermitian (#641).
-  return makeSpectrum(k, cochainOrdering(k, /*useVertexSet=*/true), sp.evals,
+  // L_k is the signed d'Alembertian at every degree: complex and generally
+  // non-self-adjoint, so the spectrum is not flagged Hermitian (#641/#805).
+  // Components are indexed over the canonical ChainComplex k-cell order.
+  return makeSpectrum(k, cochainOrdering(k, /*useVertexSet=*/false), sp.evals,
                       sp.evecs, sp.dim, /*hermitian=*/false);
 }
 
 std::vector<std::complex<double>> HodgeLaplacian::eigenvalues(int k, bool metric) const {
   requireNonNegativeDegree(k);
-  if (k == 0) {
-    // k = 0 is the graph Laplacian D - A, genuinely Hermitian; widen for type parity.
-    ensureDecomposition();
-    return std::vector<cd>(evals_.begin(), evals_.end());
-  }
   return ensureSpectrum(k, metric).evals;
 }
 
 std::vector<cd> HodgeLaplacian::eigenvectors(int k, bool metric) const {
   requireNonNegativeDegree(k);
-  if (k == 0) {
-    ensureDecomposition();
-    return evecs_;
-  }
   return ensureSpectrum(k, metric).evecs;
+}
+
+Spectrum HodgeLaplacian::connectionSpectrum() const {
+  ensureDecomposition();
+  std::vector<cd> evalsC(evals_.size());
+  for (std::size_t i = 0; i < evals_.size(); ++i) evalsC[i] = cd(evals_[i], 0.0);
+  return makeSpectrum(0, cochainOrdering(0, /*useVertexSet=*/true), evalsC,
+                      evecs_, static_cast<int>(order_), /*hermitian=*/true);
+}
+
+std::vector<cd> HodgeLaplacian::connectionEigenvalues() const {
+  // Genuinely Hermitian, so the eigenvalues are real and ascending; widened to
+  // complex for type parity with the L_k family.
+  ensureDecomposition();
+  return std::vector<cd>(evals_.begin(), evals_.end());
+}
+
+std::vector<cd> HodgeLaplacian::connectionEigenvectors() const {
+  ensureDecomposition();
+  return evecs_;
+}
+
+std::vector<Cochain> HodgeLaplacian::connectionHarmonics(double tol) const {
+  return connectionSpectrum().harmonics(tol);
+}
+
+std::vector<cd> HodgeLaplacian::connectionHarmonicMatrix(double tol) const {
+  ensureDecomposition();
+  const int dim = static_cast<int>(order_);
+  std::vector<cd> rows;
+  for (int j = 0; j < dim; ++j) {
+    if (std::abs(evals_[static_cast<std::size_t>(j)]) >= tol) continue;
+    for (int i = 0; i < dim; ++i)
+      rows.push_back(evecs_[static_cast<std::size_t>(i) * dim + j]);
+  }
+  return rows;
 }
 
 std::vector<Cochain> HodgeLaplacian::harmonics(int k, double tol,
@@ -856,22 +894,10 @@ std::vector<cd> HodgeLaplacian::harmonicMatrix(int k, double tol,
   requireNonNegativeDegree(k);
   // The same cached eigendecompositions harmonics() reads, emitted column-by-
   // selected-column so no Cochain objects are materialized.
-  std::vector<cd> evals0;
-  const std::vector<cd> *evals = nullptr;
-  const std::vector<cd> *evecs = nullptr;
-  int dim = 0;
-  if (k == 0) {
-    ensureDecomposition();
-    evals0.assign(evals_.begin(), evals_.end());
-    evals = &evals0;
-    evecs = &evecs_;
-    dim = static_cast<int>(order_);
-  } else {
-    const SpectrumCache &sp = ensureSpectrum(k, metric);
-    evals = &sp.evals;
-    evecs = &sp.evecs;
-    dim = sp.dim;
-  }
+  const SpectrumCache &sp = ensureSpectrum(k, metric);
+  const std::vector<cd> *evals = &sp.evals;
+  const std::vector<cd> *evecs = &sp.evecs;
+  const int dim = sp.dim;
   std::vector<cd> rows;
   for (int j = 0; j < dim; ++j) {
     if (std::abs((*evals)[static_cast<std::size_t>(j)]) >= tol) continue;

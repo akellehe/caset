@@ -29,6 +29,7 @@ naive internal direct sum miscounts while the declared policy stays exact.
 """
 
 import cmath
+import math
 import os
 import sys
 import unittest
@@ -1438,6 +1439,201 @@ class TestValidation(unittest.TestCase):
             _flat(L), 3, [], [[0, 1, 2], [0], [2]])
         with self.assertRaises(ValueError):
             q.staticProbeCertificate([1.0 + 0j])
+
+
+
+# --------------------------------------------------------------------------
+# degree zero: the DERIVED L_0, a MEASURED regime, and the recorded
+# nullity discrepancy (#805)
+# --------------------------------------------------------------------------
+def _derived_zero_laplacian(st):
+    """Independent L_0 = d_1 W_1^-1 d_1^dagger W_0 (W_0 = I) from the boundary
+    map and the weights, computed test-side."""
+    cc = cob.ChainComplex.fromSpacetime(st)
+    n0, n1 = cc.numSimplices(0), cc.numSimplices(1)
+    d1 = np.array(cc.boundaryMatrix(1), dtype=float).reshape(n0, n1).astype(complex)
+    w1 = np.array(cob.HodgeLaplacian(st).weights(1), dtype=complex)
+    return d1 @ np.diag(1.0 / w1) @ d1.conj().T
+
+
+def _spacelike_triangle():
+    return build_graph([(0, 1, 1.0, 0.0), (1, 2, 1.0, 0.0), (0, 2, 1.0, 0.0)])
+
+
+def _timelike_triangle(alpha):
+    """Triangle 0-1-2 with edge (1,2) genuinely TIMELIKE (l^2 = -alpha^2). No
+    previous degree-zero reduction fixture carried a negative squared length,
+    which is exactly why the magnitude convention went unpinned."""
+    return build_graph([(0, 1, 1.0, 0.0), (1, 2, -(alpha ** 2), 0.0),
+                        (0, 2, 1.0, 0.0)])
+
+
+def _complex_triangle():
+    """Triangle with a genuinely COMPLEX squared length on one edge (the
+    whitepaper's z = rho e^{i theta})."""
+    return build_graph([(0, 1, 1.0, 0.0), (1, 2, complex(1.3, 0.4), 0.0),
+                        (0, 2, 1.0, 0.0)])
+
+
+class TestDegreeZeroDerivedOperator(unittest.TestCase):
+    """RecursiveQuotient reads the derived L_0 at degree zero and MEASURES its
+    regime instead of asserting one from a convention."""
+
+    def test_reduction_matches_the_derived_operator_on_a_timelike_complex(self):
+        # Reduce over interface {0, 1} / interior {2} and compare against an
+        # independent numpy pinv-Schur of the test-side L_0. The magnitude
+        # convention would give a different matrix here. alpha = 2 keeps the
+        # single-cell interior block L_0[2,2] = 1 - 1/alpha^2 invertible.
+        st = _timelike_triangle(2.0)
+        q = cob.RecursiveQuotient.overCells(
+            st, 0, [[[0], [1], [2]], [[0]], [[1]]])
+        self.assertEqual(q.dimension, 3)
+        E, read = reduction_matrix(q)
+        L0 = _derived_zero_laplacian(st)
+        np.testing.assert_allclose(E, numpy_schur(L0, [0, 1], [2]),
+                                   rtol=0, atol=1e-12)
+        self.assertEqual([c.provenance for c in read.coordinates],
+                         ["cell(0)", "cell(1)"])
+        # The row sums of the operator being reduced vanish identically.
+        np.testing.assert_allclose(L0.sum(axis=1), 0.0, rtol=0, atol=1e-15)
+
+    def test_degenerate_interior_cell_is_retained_not_regularized(self):
+        # A degree-zero diagonal entry is sum_e 1/W_1(e) over incident edges, so
+        # at alpha = 1 the interior vertex has 1/1 + 1/(-1) = 0 EXACTLY: the
+        # one-cell interior block is singular. The kernel is retained as a fiber
+        # coordinate (never regularized) and the compatibility check honestly
+        # refuses the load, which the magnitude convention could never produce
+        # because its diagonal was a sum of magnitudes.
+        st = _timelike_triangle(1.0)
+        L0 = _derived_zero_laplacian(st)
+        self.assertAlmostEqual(abs(L0[2, 2]), 0.0, delta=1e-15)
+        q = cob.RecursiveQuotient.overCells(
+            st, 0, [[[0], [1], [2]], [[0]], [[1]]])
+        E, read = reduction_matrix(q)
+        self.assertEqual(E.shape, (3, 3))               # 2 kept + 1 harmonic
+        self.assertEqual(read.coordinates[2].kind,
+                         cob.RetainedCoordinateKind.Harmonic)
+        self.assertGreater(read.compatibilityResidual, 0.1)
+        self.assertFalse(read.certificate.holds())
+
+    def test_regime_is_measured_not_asserted(self):
+        # Positive weights: the LDLT check certifies PSD.
+        psd = cob.RecursiveQuotient.overCells(
+            _spacelike_triangle(), 0, [[[0], [1], [2]], [[0]], [[1]]])
+        self.assertEqual(psd.regime, cob.CertificateRegime.PositiveSemidefinite)
+
+        # One timelike edge: L_0 has spec {0, 3, 1 - 2/alpha^2}, negative below
+        # alpha = sqrt(2). Nothing here may claim PSD.
+        for alpha in (1.0, 1.2):
+            indefinite = cob.RecursiveQuotient.overCells(
+                _timelike_triangle(alpha), 0, [[[0], [1], [2]], [[0]], [[1]]])
+            with self.subTest(alpha=alpha):
+                self.assertEqual(indefinite.regime,
+                                 cob.CertificateRegime.HermitianIndefinite)
+                self.assertLess(
+                    np.min(np.linalg.eigvalsh(
+                        _derived_zero_laplacian(
+                            _timelike_triangle(alpha)).real)), -1e-3)
+
+        # A complex squared length: WL loses Hermiticity outright.
+        non_normal = cob.RecursiveQuotient.overCells(
+            _complex_triangle(), 0, [[[0], [1], [2]], [[0]], [[1]]])
+        self.assertEqual(non_normal.regime, cob.CertificateRegime.NonNormal)
+
+    def test_timelike_reduction_certificate_reports_the_measured_regime(self):
+        q = cob.RecursiveQuotient.overCells(
+            _timelike_triangle(1.2), 0, [[[0], [1], [2]], [[0]], [[1]]])
+        read = q.staticReduction()
+        self.assertEqual(read.certificate.regime,
+                         cob.CertificateRegime.HermitianIndefinite)
+        self.assertTrue(read.certificate.holds(), read.certificate.describe())
+
+    def test_the_regime_tracks_the_geometry_across_the_crossing(self):
+        # spec(L_0) = {0, 3, 1 - 2/alpha^2}: negative below alpha = sqrt(2),
+        # non-negative above. A MEASURED regime follows the geometry across the
+        # crossing; the old convention-asserted one said PositiveSemidefinite on
+        # both sides. A timelike edge is present throughout -- this is not a
+        # spacelike-vs-Lorentzian distinction.
+        for alpha, expected in ((0.8, cob.CertificateRegime.HermitianIndefinite),
+                                (1.2, cob.CertificateRegime.HermitianIndefinite),
+                                (1.6, cob.CertificateRegime.PositiveSemidefinite),
+                                (3.0, cob.CertificateRegime.PositiveSemidefinite)):
+            with self.subTest(alpha=alpha):
+                q = cob.RecursiveQuotient.overCells(
+                    _timelike_triangle(alpha), 0,
+                    [[[0], [1], [2]], [[0]], [[1]]])
+                self.assertEqual(q.regime, expected)
+                smallest = np.min(np.linalg.eigvalsh(
+                    _derived_zero_laplacian(_timelike_triangle(alpha)).real))
+                if expected == cob.CertificateRegime.PositiveSemidefinite:
+                    self.assertGreater(smallest, -1e-12)
+                else:
+                    self.assertLess(smallest, -1e-3)
+
+
+class TestDegreeZeroNullityDiscrepancy(unittest.TestCase):
+    """The numerical kernel of the weighted interior block and the exact integer
+    topological nullity are different quantities; the disagreement is RECORDED,
+    and 'not measured' is NaN rather than a zero claiming agreement."""
+
+    @staticmethod
+    def _fully_interior(st):
+        ids = sorted(v.getId() for v in st.getVertexList().toVector())
+        return cob.RecursiveQuotient.overCells(st, 0, [[[i] for i in ids]])
+
+    def test_agreement_is_recorded_as_zero(self):
+        q = self._fully_interior(_spacelike_triangle())
+        read = q.interiorNullspace(0)
+        self.assertTrue(read.integerNullityMeasured)
+        self.assertEqual(read.nullity, 1)          # the constant
+        self.assertEqual(read.integerNullity, 1)
+        self.assertEqual(read.nullityDiscrepancy, 0.0)
+
+    def test_timelike_off_the_crossing_still_agrees(self):
+        for alpha in (0.5, 1.0, 2.0):
+            with self.subTest(alpha=alpha):
+                read = self._fully_interior(
+                    _timelike_triangle(alpha)).interiorNullspace(0)
+                self.assertTrue(read.integerNullityMeasured)
+                self.assertEqual(read.nullity, 1)
+                self.assertEqual(read.integerNullity, 1)
+                self.assertEqual(read.nullityDiscrepancy, 0.0)
+
+    def test_lightlike_crossing_records_a_real_disagreement(self):
+        # At alpha = sqrt(2) the eigenvalue 1 - 2/alpha^2 hits zero, so the
+        # WEIGHTED interior block drops to rank 1 while the combinatorial
+        # topology still has exactly one zero mode. The extra kernel direction
+        # is geometry, not topology, and the read now says so out loud.
+        q = self._fully_interior(_timelike_triangle(math.sqrt(2.0)))
+        read = q.interiorNullspace(0)
+        self.assertTrue(read.integerNullityMeasured)
+        self.assertEqual(read.integerNullity, 1)
+        self.assertEqual(read.nullity, 2)
+        self.assertEqual(read.nullityDiscrepancy, 1.0)
+
+    def test_matrix_path_reports_not_measured_as_nan(self):
+        # No boundary maps on the matrix path: integerNullity 0 must NOT be
+        # read as "measured zero".
+        L = np.array([[1.0, -1.0, 0.0], [-1.0, 2.0, -1.0], [0.0, -1.0, 1.0]])
+        q = cob.RecursiveQuotient.overMatrix(_flat(L), 3, [], [[0, 1, 2]])
+        read = q.interiorNullspace(0)
+        self.assertFalse(read.integerNullityMeasured)
+        self.assertEqual(read.integerNullity, 0)
+        self.assertTrue(math.isnan(read.nullityDiscrepancy))
+
+    def test_two_components_each_agree(self):
+        st = build_graph([(0, 1, 1.0, 0.0), (1, 2, 1.0, 0.0), (0, 2, 1.0, 0.0),
+                          (10, 11, 1.0, 0.0), (11, 12, 1.0, 0.0),
+                          (10, 12, -0.25, 0.0)])
+        q = cob.RecursiveQuotient.overCells(
+            st, 0, [[[0], [1], [2]], [[10], [11], [12]]])
+        for component in range(2):
+            with self.subTest(component=component):
+                read = q.interiorNullspace(component)
+                self.assertTrue(read.integerNullityMeasured)
+                self.assertEqual(read.nullity, 1)
+                self.assertEqual(read.integerNullity, 1)
+                self.assertEqual(read.nullityDiscrepancy, 0.0)
 
 
 if __name__ == "__main__":

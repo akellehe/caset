@@ -27,7 +27,9 @@ using namespace ::tessera::spacetime;
 /// algebraically exact for ANY two square operators, and because
 /// \f$ L_A\otimes I \f$ and \f$ I\otimes L_B \f$ commute, its spectrum is
 /// exactly the pairwise sums \f$ \{\lambda_i+\mu_j\} \f$ — no product
-/// eigensolve is ever needed. As a statement about a COMPLEX it holds only
+/// eigensolve is ever needed. The degree-zero operator here is the **U(1)
+/// connection** graph Laplacian `HodgeLaplacian::connectionLaplacian`, not the
+/// Hodge \f$ L_0 \f$. As a statement about a COMPLEX it holds only
 /// for an actual product cell structure with product weights: at degree
 /// zero, a complex whose weighted 1-skeleton is the Cartesian product of the
 /// factors' 1-skeletons (product vertices \f$ (u,v) \f$; edges
@@ -63,9 +65,12 @@ class KuennethProduct {
         const std::vector<std::complex<double>> &spectrumB);
 
     /// Certify that `product` IS an actual product complex of the two
-    /// factors at degree zero: its \f$ k=0 \f$ weighted graph Laplacian
-    /// (`HodgeLaplacian`) equals the Kronecker sum of the factors' under the
-    /// declared vertex `pairing`, entrywise, to relative `tolerance`.
+    /// factors at degree zero: its **U(1) connection** graph Laplacian
+    /// (`HodgeLaplacian::connectionLaplacian`, \f$ D - A \f$ over the sorted
+    /// vertex order) equals the Kronecker sum of the factors' under the declared
+    /// vertex `pairing`, entrywise, to relative `tolerance`. The rule's domain is
+    /// a weighted 1-skeleton, which is that operator's subject; this is NOT a
+    /// statement about the Hodge \f$ L_0 \f$.
     ///
     /// `pairing` lists (product vertex id, factor-A vertex id, factor-B
     /// vertex id) — the product structure is DATA carried by the caller, not

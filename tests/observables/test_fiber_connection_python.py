@@ -159,16 +159,23 @@ def _tracker_fiber(st, support, degree, band=0):
 # chain-transfer sources
 # =========================================================================== #
 class TestChainTransferSources(unittest.TestCase):
-    def test_degree0_block_matches_hodge_laplacian(self):
+    def test_degree0_block_matches_the_connection_laplacian(self):
+        # chainTransfer reads the U(1) CONNECTION operator at degree zero
+        # (#805): its identity is the oriented link entry -l^2 e^{i phi}, which
+        # is what the Wilson-loop machinery it is compared against carries. The
+        # derived Hodge L_0 has no link phase (off-diagonal -1/W_1) and is a
+        # different block, asserted here so the distinction stays pinned.
         st = _from_simplices(3, [(0, 1), (1, 2), (2, 0)])
         _set_phase(st, 0, 1, 0.7)
-        L = np.array(cob.HodgeLaplacian(st).laplacian(0)).reshape(3, 3)
+        L = np.array(cob.HodgeLaplacian(st).connectionLaplacian()).reshape(3, 3)
         block = np.asarray(obs.FiberConnection.chainTransfer(
             st, 0, [[0]], [[1]]))
         self.assertAlmostEqual(abs(block[0, 0] - L[0, 1]), 0.0, delta=MACHINE)
         # oriented U(1) entry: -l^2 e^{i phi} with the stored orientation
         self.assertAlmostEqual(abs(block[0, 0] + cmath.exp(0.7j)), 0.0,
                                delta=MACHINE)
+        hodge = np.array(cob.HodgeLaplacian(st).laplacian(0)).reshape(3, 3)
+        self.assertGreater(abs(hodge[0, 1] - L[0, 1]), 1e-3)
 
     def test_degree1_block_matches_whole_operator(self):
         # bowtie: two triangles sharing vertex 0 — the connecting simplices
