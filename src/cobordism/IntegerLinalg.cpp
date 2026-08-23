@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -158,6 +159,143 @@ std::vector<std::vector<int>> gf2Nullspace(std::vector<int> M, int rows, int col
     for (int r = 0; r < rank; ++r)
       x[static_cast<std::size_t>(pivotCol[r])] = M[idx(r, f)] & 1;
     basis.push_back(std::move(x));
+  }
+  return basis;
+}
+
+namespace {
+
+/// Exact rational arithmetic for integerNullspace. Overflow fails loudly —
+/// the exact-integer claim is never silently rounded.
+struct Rational {
+  long long num{0};
+  long long den{1};
+
+  static long long checkedMul(long long a, long long b) {
+    const __int128 wide = static_cast<__int128>(a) * b;
+    if (wide > std::numeric_limits<long long>::max() ||
+        wide < std::numeric_limits<long long>::min())
+      throw std::overflow_error(
+          "integerNullspace: exact rational elimination overflow");
+    return static_cast<long long>(wide);
+  }
+  static long long checkedAdd(long long a, long long b) {
+    if ((b > 0 && a > std::numeric_limits<long long>::max() - b) ||
+        (b < 0 && a < std::numeric_limits<long long>::min() - b))
+      throw std::overflow_error(
+          "integerNullspace: exact rational elimination overflow");
+    return a + b;
+  }
+  static long long gcd(long long a, long long b) {
+    a = std::llabs(a);
+    b = std::llabs(b);
+    while (b != 0) {
+      const long long t = a % b;
+      a = b;
+      b = t;
+    }
+    return a == 0 ? 1 : a;
+  }
+  void normalize() {
+    if (den < 0) {
+      num = -num;
+      den = -den;
+    }
+    const long long g = gcd(num, den);
+    num /= g;
+    den /= g;
+  }
+  Rational() = default;
+  Rational(long long n, long long d) : num(n), den(d) { normalize(); }
+  explicit Rational(long long n) : num(n), den(1) {}
+  bool zero() const noexcept { return num == 0; }
+  Rational operator*(const Rational &o) const {
+    return Rational(checkedMul(num, o.num), checkedMul(den, o.den));
+  }
+  Rational operator-(const Rational &o) const {
+    return Rational(checkedAdd(checkedMul(num, o.den), -checkedMul(o.num, den)),
+                    checkedMul(den, o.den));
+  }
+  Rational operator/(const Rational &o) const {
+    if (o.num == 0) throw std::domain_error("Rational: division by zero");
+    return Rational(checkedMul(num, o.den), checkedMul(den, o.num));
+  }
+};
+
+}  // namespace
+
+std::vector<std::vector<long>> integerNullspace(const std::vector<long> &M,
+                                                int rows, int cols) {
+  if (rows < 0 || cols < 0 ||
+      M.size() != static_cast<std::size_t>(rows) * static_cast<std::size_t>(cols))
+    throw std::invalid_argument(
+        "integerNullspace: flat size does not match dimensions");
+  std::vector<std::vector<Rational>> a(
+      static_cast<std::size_t>(rows),
+      std::vector<Rational>(static_cast<std::size_t>(cols)));
+  for (int i = 0; i < rows; ++i)
+    for (int j = 0; j < cols; ++j)
+      a[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] =
+          Rational(M[static_cast<std::size_t>(i) * cols + j]);
+
+  // Gauss-Jordan to RREF over Q with deterministic first-nonzero pivoting.
+  std::vector<int> pivotColOfRow;
+  std::vector<char> isPivotCol(static_cast<std::size_t>(cols), 0);
+  int rank = 0;
+  for (int col = 0; col < cols && rank < rows; ++col) {
+    int piv = -1;
+    for (int r = rank; r < rows; ++r)
+      if (!a[static_cast<std::size_t>(r)][static_cast<std::size_t>(col)].zero()) {
+        piv = r;
+        break;
+      }
+    if (piv < 0) continue;
+    std::swap(a[static_cast<std::size_t>(rank)], a[static_cast<std::size_t>(piv)]);
+    const Rational lead =
+        a[static_cast<std::size_t>(rank)][static_cast<std::size_t>(col)];
+    for (int j = col; j < cols; ++j)
+      a[static_cast<std::size_t>(rank)][static_cast<std::size_t>(j)] =
+          a[static_cast<std::size_t>(rank)][static_cast<std::size_t>(j)] / lead;
+    for (int r = 0; r < rows; ++r) {
+      if (r == rank) continue;
+      const Rational factor =
+          a[static_cast<std::size_t>(r)][static_cast<std::size_t>(col)];
+      if (factor.zero()) continue;
+      for (int j = col; j < cols; ++j)
+        a[static_cast<std::size_t>(r)][static_cast<std::size_t>(j)] =
+            a[static_cast<std::size_t>(r)][static_cast<std::size_t>(j)] -
+            factor * a[static_cast<std::size_t>(rank)][static_cast<std::size_t>(j)];
+    }
+    pivotColOfRow.push_back(col);
+    isPivotCol[static_cast<std::size_t>(col)] = 1;
+    ++rank;
+  }
+
+  // One kernel vector per free column: x[free] = 1, x[pivot r] = -a[r][free];
+  // clear denominators to coprime integers.
+  std::vector<std::vector<long>> basis;
+  basis.reserve(static_cast<std::size_t>(cols - rank));
+  for (int freeCol = 0; freeCol < cols; ++freeCol) {
+    if (isPivotCol[static_cast<std::size_t>(freeCol)]) continue;
+    std::vector<Rational> x(static_cast<std::size_t>(cols), Rational(0));
+    x[static_cast<std::size_t>(freeCol)] = Rational(1);
+    for (std::size_t r = 0; r < pivotColOfRow.size(); ++r)
+      x[static_cast<std::size_t>(pivotColOfRow[r])] =
+          Rational(0) - a[r][static_cast<std::size_t>(freeCol)];
+    long long lcm = 1;
+    for (const Rational &entry : x)
+      lcm = Rational::checkedMul(lcm / Rational::gcd(lcm, entry.den), entry.den);
+    std::vector<long> integer(static_cast<std::size_t>(cols), 0);
+    long long g = 0;
+    for (int j = 0; j < cols; ++j) {
+      const Rational &entry = x[static_cast<std::size_t>(j)];
+      const long long value = Rational::checkedMul(entry.num, lcm / entry.den);
+      integer[static_cast<std::size_t>(j)] = static_cast<long>(value);
+      g = Rational::gcd(g == 0 ? value : g, value);
+    }
+    if (g > 1)
+      for (long &value : integer) value = static_cast<long>(value / g);
+    basis.push_back(std::move(integer));
   }
   return basis;
 }

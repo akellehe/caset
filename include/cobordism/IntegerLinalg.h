@@ -47,6 +47,20 @@ struct SmithNormalForm {
 [[nodiscard]] std::vector<std::vector<int>> gf2Nullspace(std::vector<int> M,
                                                          int rows, int cols);
 
+/// Basis of the rational kernel of an integer matrix M (rows x cols, flat
+/// row-major), returned as INTEGER vectors: exact Gauss-Jordan over Q (the
+/// integer sibling of gf2Nullspace; smithNormalForm reports only the rank and
+/// invariant factors, not the transforms a kernel basis needs). Each returned
+/// vector x has length `cols`, satisfies M·x = 0 exactly over Z, has coprime
+/// entries, and there are exactly nullity = cols - rank(M) of them: over Q
+/// they span the whole kernel. Deterministic pivoting (first nonzero per
+/// column), so a relabeled input yields the correspondingly mapped basis.
+/// @throws std::overflow_error when the exact rational elimination would
+///   overflow 64-bit intermediates — the topological claim is exact or
+///   absent, never rounded.
+[[nodiscard]] std::vector<std::vector<long>> integerNullspace(
+    const std::vector<long> &M, int rows, int cols);
+
 /// All 2^k GF(2) linear combinations of a `basis` of k length-`cols` vectors,
 /// each combination a length-`cols` vector (entries read mod 2). The first
 /// element is always the zero vector (empty combination); `cols` is taken
