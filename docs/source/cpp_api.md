@@ -205,6 +205,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} DenseReference.h
 ```
+```{doxygenfile} RecursiveQuotient.h
+```
 
 ## Reinforcement Learning
 
