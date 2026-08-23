@@ -134,6 +134,11 @@ class Json {
     static std::string optional(const std::optional<int> &value) {
       return value.has_value() ? integer(*value) : std::string("null");
     }
+    /// An optional complex: `null` when the read never certified one — an
+    /// ABSENT character, distinct from a measured `[null, null]`.
+    static std::string optional(const std::optional<complexd> &value) {
+      return value.has_value() ? complexPair(*value) : std::string("null");
+    }
 
     template <typename T, typename Fn>
     static std::string array(const std::vector<T> &items, Fn &&render) {
@@ -1173,6 +1178,7 @@ void MultiCobordism::runRecursiveAnalysisOn(
   std::vector<QuarkRead> quarkReads;
   std::vector<std::size_t> quarkBandRead;
   std::vector<::tessera::observables::BoundSupercomponentRead> bindings;
+  std::vector<::tessera::observables::BaryonRead> baryonReads;
   for (std::size_t index = 0; index < bandReads.size(); ++index) {
     if (candidateBand[index] < 0) continue;
     const auto &bandRead = bandReads[index];
@@ -1219,9 +1225,31 @@ void MultiCobordism::runRecursiveAnalysisOn(
     }
     bindings = classifier.boundSupercomponentSearch(nextLevelComponents,
                                                     candidates);
+    // The three-cluster verdict itself (design spec §16.4): every binding
+    // that grouped EXACTLY three CERTIFIED constituents is classified. The
+    // evidence this pass HAS is the binding, those three #773 verdicts, and
+    // the bound component's #765 lifetime; the color columns, the octet
+    // flux, the #772 2π character, the #780 spin reads, the swept
+    // covariance-only class and the refinement window are not read here, and
+    // the classifier NAMES each of them as missing. That is the honest
+    // report of one analysis pass on one frame — an unsupplied quantity is
+    // unknown, never a fabricated pass.
+    std::vector<double> boundLifetimes;
+    boundLifetimes.reserve(bindings.size());
+    for (const auto &binding : bindings) {
+      double lifetime = std::numeric_limits<double>::quiet_NaN();
+      for (const auto &track : report.tracks)
+        for (const auto &member : track.members)
+          if (member == binding.boundComponent)
+            lifetime =
+                static_cast<double>(track.lastSlice - track.firstSlice + 1);
+      boundLifetimes.push_back(lifetime);
+    }
+    baryonReads = classifier.classifyBoundSupercomponents(
+        bindings, quarkReads, boundLifetimes);
   }
 
-  // ── §17.7 the checkpoint (design spec §20, schema version 3) ─────────
+  // ── §17.7 the checkpoint (design spec §20, schema version 4) ─────────
   std::string hierarchyText = "[";
   for (std::size_t sliceIndex = 0; sliceIndex < report.slices.size();
        ++sliceIndex) {
@@ -1346,11 +1374,11 @@ void MultiCobordism::runRecursiveAnalysisOn(
   }
   quarkText += "]";
 
-  std::string baryonText = "[";
+  std::string bindingText = "[";
   for (std::size_t index = 0; index < bindings.size(); ++index) {
-    if (index) baryonText += ", ";
+    if (index) bindingText += ", ";
     const auto &binding = bindings[index];
-    baryonText += Json::object({
+    bindingText += Json::object({
         {"bound_component", Json::str(binding.boundComponent.canonicalHash())},
         {"found", Json::boolean(binding.found)},
         {"constituents",
@@ -1360,6 +1388,66 @@ void MultiCobordism::runRecursiveAnalysisOn(
         {"transport_leakage_max", Json::number(binding.transportLeakageMax)},
         {"failed_certificates",
          Json::stringArray(binding.failedCertificates)},
+    });
+  }
+  bindingText += "]";
+
+  // `particles.baryons` carries the §16.4 THREE-CLUSTER VERDICT — one
+  // `BaryonRead` per binding that grouped exactly three certified
+  // constituents — in the `BaryonRead::toRecord` field vocabulary. Unknown
+  // and uncertified values are `null`, never zero, and every gap is NAMED in
+  // `failed_certificates`.
+  std::string baryonText = "[";
+  for (std::size_t index = 0; index < baryonReads.size(); ++index) {
+    if (index) baryonText += ", ";
+    const auto &read = baryonReads[index];
+    std::string quarkIdText = "[";
+    for (std::size_t leg = 0; leg < read.quarks.size(); ++leg) {
+      if (leg) quarkIdText += ", ";
+      quarkIdText += Json::str(read.quarks[leg].canonicalHash());
+    }
+    quarkIdText += "]";
+    baryonText += Json::object({
+        {"bound_component", Json::str(read.boundComponent.canonicalHash())},
+        {"quarks", quarkIdText},
+        {"classification", Json::str(read.classification)},
+        {"confidence", Json::number(read.confidence)},
+        {"color_gram_determinant", Json::number(read.colorGramDeterminant)},
+        {"color_wedge", Json::complexPair(read.colorWedge)},
+        {"color_flux", Json::number(read.colorFlux)},
+        {"baryon_flux", Json::optional(read.baryonFlux)},
+        {"electric_flux", Json::optional(read.electricFlux)},
+        {"total_winding", Json::optional(read.totalWinding)},
+        {"exterior_parity", Json::integer(read.exteriorParity)},
+        {"flavor_pattern", Json::str(read.flavorPattern)},
+        {"total_isospin", Json::optional(read.totalIsospin)},
+        {"total_j2", Json::optional(read.totalJ2)},
+        {"total_j2_variance", Json::optional(read.totalJ2Variance)},
+        {"sharp_spin", Json::boolean(read.sharpSpin)},
+        {"quasi_free_class_swept",
+         Json::boolean(read.quasiFreeClassSwept)},
+        {"class_variance_floor", Json::number(read.classVarianceFloor)},
+        {"rotation_character", Json::optional(read.rotationCharacter)},
+        {"rotation_character_sign",
+         Json::integer(read.rotationCharacterSign)},
+        {"exchange_character", Json::optional(read.exchangeCharacter)},
+        {"spin_statistics_ratio", Json::optional(read.spinStatisticsRatio)},
+        {"spin_lift_applicable", Json::boolean(read.spinLiftApplicable)},
+        {"spin_lift_accepted", Json::boolean(read.spinLiftAccepted)},
+        {"radius", Json::number(read.radius)},
+        {"radius_finite", Json::boolean(read.radiusFinite)},
+        {"spectral_mass", Json::number(read.spectralMass)},
+        {"radius_ratio", Json::number(read.radiusRatio)},
+        {"profile_max_deviation", Json::number(read.profileMaxDeviation)},
+        {"profile_stable", Json::boolean(read.profileStable)},
+        {"physical_mass", Json::optional(read.physicalMass)},
+        {"persistence", Json::number(read.persistence)},
+        {"lifetime_overlap", Json::number(read.lifetimeOverlap)},
+        {"transport_count",
+         Json::integer(static_cast<long long>(read.transportCount))},
+        {"transport_leakage_max", Json::number(read.transportLeakageMax)},
+        {"failed_certificates", Json::stringArray(read.failedCertificates)},
+        {"certificate", Json::certificate(read.certificate)},
     });
   }
   baryonText += "]";
@@ -1466,6 +1554,7 @@ void MultiCobordism::runRecursiveAnalysisOn(
        Json::object({
            {"quarks", quarkText},
            {"gluons", "[]"},
+           {"bound_supercomponents", bindingText},
            {"baryons", baryonText},
        })},
       {"certificates",

@@ -1278,7 +1278,11 @@ Right -- re-read after each drive call:
            "(design spec section 17 order). Read-only on the geometry.")
       .def_property_readonly("checkpoint_json", &MultiCobordism::checkpointJson,
                              "The versioned checkpoint document of the last "
-                             "pass (design spec section 20, schema 3).")
+                             "pass (design spec section 20, schema 4). "
+                             "Schema 4 splits the section 16.2 search records "
+                             "and the section 16.4 three-cluster verdicts "
+                             "into two blocks; unknown values are null, "
+                             "never zero.")
       .def_static("checkpoint_schema_version",
                   &MultiCobordism::checkpointSchemaVersion)
       .def_static("checkpoint_version_of", &MultiCobordism::checkpointVersionOf,

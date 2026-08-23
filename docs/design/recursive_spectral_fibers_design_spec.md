@@ -961,7 +961,7 @@ Each frame stores:
 
 ```json
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "mode": "emergence",
   "emergence_submode": "strict",
   "geometry_revision": 0,
@@ -987,6 +987,7 @@ Each frame stores:
   "particles": {
     "quarks": [],
     "gluons": [],
+    "bound_supercomponents": [],
     "baryons": []
   },
   "certificates": {},
@@ -997,6 +998,15 @@ Each frame stores:
   }
 }
 ```
+
+`particles.bound_supercomponents` carries the §16.2 SEARCH records (one per
+next-level component containing at least one certified quark candidate);
+`particles.baryons` carries the §16.4 three-cluster VERDICT — one `BaryonRead`
+per binding that grouped exactly three certified constituents, in the
+`BaryonRead::toRecord` field vocabulary, with every unknown serialized as
+`null` and every gap NAMED in `failed_certificates`. Schema 3 wrote the search
+records under `baryons`; a version-3 document is therefore rejected on read
+rather than reinterpreted.
 
 Matrices too large for JSON use a versioned binary sidecar with content hashes.
 Checkpoint filenames follow the repository's per-run suffix convention. Readers

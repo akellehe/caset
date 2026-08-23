@@ -302,6 +302,65 @@ class QuickPathTest(unittest.TestCase):
                        "inconclusive"})
         self.assertTrue(self.result["dichotomy"]["reason"])
 
+    def test_the_dichotomy_is_fed_the_overlay_s_own_proton_verdicts(self):
+        """The branch point is EVALUATED, not skipped: the driver hands the
+        dichotomy the BaryonRead verdicts the overlay produced, so the
+        counts are measurements over a real denominator."""
+        dichotomy = self.result["dichotomy"]
+        self.assertIsNotNone(dichotomy["proton_verdicts"])
+        self.assertEqual(dichotomy["proton_verdicts_total"],
+                         len(dichotomy["proton_verdicts"]))
+        self.assertEqual(
+            dichotomy["proton_verdicts_total"],
+            sum(len(run["particles"]["proton_verdicts"])
+                for run in self.result["runs"]))
+        self.assertEqual(dichotomy["proton_verdicts"],
+                         mv.proton_verdicts_of(self.result["runs"]))
+
+    def test_the_proton_counts_are_measured_over_the_verdicts(self):
+        dichotomy = self.result["dichotomy"]
+        verdicts = dichotomy["proton_verdicts"]
+        self.assertEqual(
+            dichotomy["certified_protons"],
+            sum(1 for v in verdicts
+                if v["classification"] == "certified-proton"))
+        self.assertEqual(
+            dichotomy["certified_proton_candidates"],
+            sum(1 for v in verdicts
+                if v["classification"] == "baryon-candidate"))
+        self.assertEqual(
+            dichotomy["sharp_spin_obstructions"],
+            sum(1 for v in verdicts
+                if v["classification"]
+                == "quasi-free-sharp-spin-obstruction"))
+
+    def test_the_checkpoint_carries_both_particle_sectors(self):
+        for run in self.result["runs"]:
+            particles = run["checkpoint"]["particles"]
+            self.assertIn("bound_supercomponents", particles)
+            self.assertIn("baryons", particles)
+            # One BaryonRead per binding of exactly three certified legs.
+            three = [b for b in particles["bound_supercomponents"]
+                     if b["constituents"] == 3]
+            self.assertEqual(len(particles["baryons"]), len(three))
+
+    def test_the_run_reports_the_verdict_layers_separately(self):
+        for run in self.result["runs"]:
+            block = run["particles"]
+            self.assertIn("bound_supercomponents", block)
+            self.assertIn("bound_supercomponents_found", block)
+            self.assertIn("baryons", block)
+            self.assertIn("baryon_classifications", block)
+            self.assertEqual(block["baryons"],
+                             len(block["proton_verdicts"]))
+            self.assertEqual(
+                block["certified_protons"]
+                + block["certified_proton_candidates"]
+                + block["sharp_spin_obstructions"]
+                + sum(1 for v in block["proton_verdicts"]
+                      if v["classification"] == "no-baryon"),
+                block["baryons"])
+
     def test_an_uncertified_read_is_reported_as_data_not_hidden(self):
         run = self.result["runs"][0]
         self.assertGreater(run["particles"]["quark_reads"], 0)
@@ -394,6 +453,286 @@ class ResponseNetworkEmptyReductionTest(unittest.TestCase):
         self.assertEqual(len(network.edges), 0)
         self.assertEqual(network.coverageResidual, 0.0)
         self.assertTrue(network.certificate.holds())
+
+
+def _baryon_record(classification="baryon-candidate", failed=(),
+                   variance=None, swept=False, floor=None, tag="00"):
+    """One `particles.baryons` record in the schema-4 field vocabulary.
+
+    The field names and the classification strings are the classifier's
+    own; ``DichotomyOutcomeTest`` pins that against the shipped
+    ``BaryonRead`` so a fixture can never drift into a vocabulary the
+    instrument does not emit.
+    """
+    return {
+        "bound_component": tag * 16,
+        "quarks": [tag * 16] * 3,
+        "classification": classification,
+        "confidence": 1.0 - len(failed) / 14.0,
+        "failed_certificates": list(failed),
+        "sharp_spin": not failed,
+        "total_j2": 0.75,
+        "total_j2_variance": variance,
+        "quasi_free_class_swept": swept,
+        "class_variance_floor": floor if floor is not None else float("nan"),
+    }
+
+
+def _member(size, seed, var_j2, accepted=True, baryons=()):
+    """One synthetic ensemble member with the blocks `dichotomy` reads."""
+    failures = {"none" if accepted else "persistence": 1}
+    particles = {
+        "quark_reads": 1,
+        "classifications": {"quark" if accepted else "none": 1},
+        "first_failing_certificate": dict(failures),
+        "all_failing_certificates": dict(failures),
+        "bound_supercomponents": len(baryons),
+        "bound_supercomponents_found": len(baryons),
+        "bound_supercomponent_failed_certificates": {},
+        "baryons": len(baryons),
+        "baryon_classifications": {},
+        "baryon_failed_certificates": {},
+        "proton_verdicts": [mv._proton_verdict(b) for b in baryons],
+        "certified_protons": sum(
+            1 for b in baryons
+            if b["classification"] == "certified-proton"),
+        "certified_proton_candidates": sum(
+            1 for b in baryons
+            if b["classification"] == "baryon-candidate"),
+        "sharp_spin_obstructions": sum(
+            1 for b in baryons
+            if b["classification"] == "quasi-free-sharp-spin-obstruction"),
+    }
+    return {
+        "size": size,
+        "seed": seed,
+        "particles": particles,
+        "particles_resolution_scan": json.loads(json.dumps(particles)),
+        "covariance": {"states": [{
+            "available": True,
+            "rank": 3,
+            "modes": 6,
+            "unpaired_modes": 0,
+            "j2": 0.75,
+            "var_j2": var_j2,
+            "j2_pairing_spread": 0.0,
+            "var_j2_pairing_spread": 0.0,
+            "trivial_rank1": False,
+            "rank1_with_unpaired_mode": False,
+            "var_j2_dominated_by_convention": False,
+        }]},
+    }
+
+
+class DichotomyOutcomeTest(unittest.TestCase):
+    """#802 — every declared outcome is REACHABLE and is returned for the
+    right input. Before this ticket both branches of the terminal
+    conditional assigned ``inconclusive``, the two informative strings lived
+    only in a docstring, and no proton verdict reached the function at all,
+    so the epic's decisive falsifier could not return a result.
+
+    These fixtures drive ``mv.dichotomy`` itself -- the real branching code
+    -- with synthetic verdicts, which is what the emergent data cannot yet
+    supply because it certifies nothing.
+    """
+
+    #: Var(J^2) means over three sizes that extrapolate to ZERO under 1/N.
+    ZERO_LIMIT = (0.5 / 6.0, 0.5 / 12.0, 0.5 / 20.0)
+    #: The same 1/N trend offset to a nonzero limit.
+    NONZERO_LIMIT = tuple(0.25 + v for v in ZERO_LIMIT)
+    SIZES = (6, 12, 20)
+
+    def _runs(self, variances, accepted=True, baryons=()):
+        return [_member(size, 7, variance, accepted, baryons)
+                for size, variance in zip(self.SIZES, variances)]
+
+    # ---- the fixture vocabulary is the instrument's own ---------------
+
+    def test_the_fixture_classification_strings_are_the_classifiers(self):
+        self.assertEqual(T.BaryonRead().classification, "no-baryon")
+        doc = T.ParticleClusters.classifyBaryon.__doc__
+        for name in ("no-baryon", "baryon-candidate", "certified-proton",
+                     "quasi-free-sharp-spin-obstruction"):
+            self.assertIn(name, doc)
+
+    # ---- outcome 1: covariance_only_proton ----------------------------
+
+    def test_a_certified_proton_verdict_returns_covariance_only_proton(self):
+        runs = self._runs(self.NONZERO_LIMIT)
+        verdicts = [mv._proton_verdict(
+            _baryon_record("certified-proton", failed=()))]
+        result = mv.dichotomy(runs, proton_verdicts=verdicts)
+        self.assertEqual(result["classification"], "covariance_only_proton")
+        self.assertIn("COMPLETE proton certificate", result["reason"])
+        self.assertEqual(result["certified_protons"], 1)
+
+    def test_a_vanishing_var_j2_limit_returns_covariance_only_proton(self):
+        """No candidate carried its own certified Var(J^2), but every other
+        certificate held and the accepted class's Var(J^2) extrapolates to
+        zero under refinement."""
+        runs = self._runs(self.ZERO_LIMIT)
+        verdicts = [mv._proton_verdict(
+            _baryon_record("baryon-candidate", failed=("sharp-spin",)))]
+        result = mv.dichotomy(runs, proton_verdicts=verdicts)
+        self.assertEqual(result["classification"], "covariance_only_proton")
+        self.assertTrue(result["var_j2_zero_limit"]["converges_to_zero"])
+        self.assertIn("extrapolates to zero", result["reason"])
+
+    # ---- outcome 2: quasi_free_sharp_spin_obstruction -----------------
+
+    def test_a_swept_class_obstruction_verdict_is_relayed(self):
+        runs = self._runs(self.ZERO_LIMIT)
+        verdicts = [mv._proton_verdict(_baryon_record(
+            "quasi-free-sharp-spin-obstruction", failed=("sharp-spin",),
+            variance=0.25, swept=True, floor=0.125))]
+        result = mv.dichotomy(runs, proton_verdicts=verdicts)
+        self.assertEqual(result["classification"],
+                         "quasi_free_sharp_spin_obstruction")
+        self.assertIn("SWEPT", result["reason"])
+        self.assertIn("0.125", result["reason"])
+        self.assertEqual(result["sharp_spin_obstructions"], 1)
+
+    def test_a_nonzero_var_j2_limit_returns_the_obstruction(self):
+        runs = self._runs(self.NONZERO_LIMIT)
+        verdicts = [mv._proton_verdict(
+            _baryon_record("baryon-candidate", failed=("sharp-spin",)))]
+        result = mv.dichotomy(runs, proton_verdicts=verdicts)
+        self.assertEqual(result["classification"],
+                         "quasi_free_sharp_spin_obstruction")
+        self.assertFalse(result["var_j2_zero_limit"]["converges_to_zero"])
+        self.assertIn("non-Gaussian mechanism is required", result["reason"])
+
+    # ---- outcome 3: inconclusive, each for its own named reason -------
+
+    def test_no_certified_candidate_is_inconclusive(self):
+        result = mv.dichotomy(self._runs(self.ZERO_LIMIT, accepted=False),
+                              proton_verdicts=[])
+        self.assertEqual(result["classification"], "inconclusive")
+        self.assertIn("no quark candidate was certified", result["reason"])
+
+    def test_no_verdict_list_is_an_instrument_gap(self):
+        result = mv.dichotomy(self._runs(self.ZERO_LIMIT))
+        self.assertEqual(result["classification"], "inconclusive")
+        self.assertIn("instrument gap", result["reason"])
+        # Unmeasured is null, never zero.
+        self.assertIsNone(result["certified_protons"])
+        self.assertIsNone(result["certified_proton_candidates"])
+        self.assertIsNone(result["proton_verdicts"])
+
+    def test_an_empty_verdict_list_is_a_measured_emptiness(self):
+        result = mv.dichotomy(self._runs(self.ZERO_LIMIT),
+                              proton_verdicts=[])
+        self.assertEqual(result["classification"], "inconclusive")
+        self.assertIn("grouped three certified constituents nowhere",
+                      result["reason"])
+        # Measured: the classifier ran and certified none.
+        self.assertEqual(result["certified_protons"], 0)
+        self.assertEqual(result["proton_verdicts_total"], 0)
+
+    def test_a_candidate_missing_a_non_spin_certificate_is_inconclusive(self):
+        verdicts = [mv._proton_verdict(_baryon_record(
+            "baryon-candidate", failed=("color-singlet", "sharp-spin")))]
+        result = mv.dichotomy(self._runs(self.ZERO_LIMIT),
+                              proton_verdicts=verdicts)
+        self.assertEqual(result["classification"], "inconclusive")
+        self.assertIn("none completed the non-spin proton certificates",
+                      result["reason"])
+
+    def test_an_unmeasured_convergence_is_not_a_measured_failure(self):
+        """The whitepaper's obstruction is Var(J^2) FAILING to converge.
+        With too few sizes to fit, that was never measured, and the
+        instrument says so instead of defaulting to the obstruction."""
+        runs = [_member(6, 7, 0.5)]
+        verdicts = [mv._proton_verdict(
+            _baryon_record("baryon-candidate", failed=("sharp-spin",)))]
+        result = mv.dichotomy(runs, proton_verdicts=verdicts)
+        self.assertEqual(result["classification"], "inconclusive")
+        self.assertIn("never measured", result["reason"])
+        self.assertIsNone(result["var_j2_zero_limit"]["converges_to_zero"])
+
+    # ---- every outcome is reachable, and they are distinct ------------
+
+    def test_all_three_outcomes_are_produced_by_these_fixtures(self):
+        proton = mv.dichotomy(
+            self._runs(self.ZERO_LIMIT),
+            proton_verdicts=[mv._proton_verdict(
+                _baryon_record("certified-proton"))])["classification"]
+        obstruction = mv.dichotomy(
+            self._runs(self.NONZERO_LIMIT),
+            proton_verdicts=[mv._proton_verdict(
+                _baryon_record("baryon-candidate",
+                               failed=("sharp-spin",)))])["classification"]
+        inconclusive = mv.dichotomy(
+            self._runs(self.ZERO_LIMIT), proton_verdicts=[]
+        )["classification"]
+        self.assertEqual(
+            {proton, obstruction, inconclusive},
+            {"covariance_only_proton", "quasi_free_sharp_spin_obstruction",
+             "inconclusive"})
+
+    def test_every_outcome_carries_a_reason(self):
+        for verdicts in (None, [],
+                         [mv._proton_verdict(
+                             _baryon_record("certified-proton"))],
+                         [mv._proton_verdict(
+                             _baryon_record("baryon-candidate",
+                                            failed=("sharp-spin",)))]):
+            for variances in (self.ZERO_LIMIT, self.NONZERO_LIMIT):
+                result = mv.dichotomy(self._runs(variances),
+                                      proton_verdicts=verdicts)
+                self.assertTrue(result["reason"])
+                self.assertIn(result["classification"],
+                              {"covariance_only_proton",
+                               "quasi_free_sharp_spin_obstruction",
+                               "inconclusive"})
+
+
+class VarJ2ZeroLimitTest(unittest.TestCase):
+    """The zero-limit read is tri-state and never confuses the three."""
+
+    def test_a_vanishing_limit_converges(self):
+        fit = mv.inverse_size_fit([6, 12, 20],
+                                  [0.5 / s for s in (6, 12, 20)])
+        limit = mv.var_j2_zero_limit(fit)
+        self.assertTrue(limit["converges_to_zero"])
+        self.assertLess(abs(limit["extrapolated_limit"]),
+                        limit["zero_band"])
+
+    def test_a_nonzero_limit_does_not_converge(self):
+        fit = mv.inverse_size_fit([6, 12, 20],
+                                  [0.25 + 0.5 / s for s in (6, 12, 20)])
+        limit = mv.var_j2_zero_limit(fit)
+        self.assertFalse(limit["converges_to_zero"])
+        self.assertAlmostEqual(limit["extrapolated_limit"], 0.25, places=9)
+
+    def test_an_absent_fit_is_unmeasured_not_a_failure(self):
+        for fit in (None, {}):
+            limit = mv.var_j2_zero_limit(fit)
+            self.assertIsNone(limit["converges_to_zero"])
+            self.assertIn("UNMEASURED", limit["reason"])
+
+    def test_an_untrustworthy_extrapolation_is_unmeasured(self):
+        limit = mv.var_j2_zero_limit(
+            {"verdict": "trending_but_not_inverse_size",
+             "extrapolated_limit": 0.0, "extrapolated_limit_se": 0.0})
+        self.assertIsNone(limit["converges_to_zero"])
+        self.assertIn("not to be trusted", limit["reason"])
+
+    def test_the_tolerance_is_the_classifier_s_own(self):
+        self.assertEqual(mv.DECLARED_VAR_J2_ZERO_TOLERANCE,
+                         T.ParticleClustersConfig().spinVarianceTolerance)
+
+    def test_an_exactly_constant_zero_series_converges(self):
+        fit = mv.inverse_size_fit([6, 12, 20], [0.0, 0.0, 0.0])
+        limit = mv.var_j2_zero_limit(fit)
+        self.assertEqual(limit["fit_verdict"], "exactly_constant")
+        self.assertTrue(limit["converges_to_zero"])
+
+    def test_an_exactly_constant_nonzero_series_does_not(self):
+        fit = mv.inverse_size_fit([6, 12, 20], [0.3, 0.3, 0.3])
+        limit = mv.var_j2_zero_limit(fit)
+        self.assertEqual(limit["fit_verdict"], "exactly_constant")
+        self.assertFalse(limit["converges_to_zero"])
 
 
 if __name__ == "__main__":
