@@ -432,6 +432,14 @@ struct LazyCompatibilityRead {
 /// synchronized — same threading contract as the analytic caches
 /// (thread-private engines; a shared engine must be driven serially).
 ///
+/// Density-operator boundary sectors are carried VECTORIZED on a doubled
+/// mode register (ket modes ⊕ bra modes) through the same six node kinds
+/// — |ρ⟩⟩ = Σ ρ_ij |i⟩_ket ⊗̂ |j⟩_bra, with traces and occupation reads as
+/// inner products against the vectorized identity. The design spec §14.2
+/// node list is exactly the six kinds above; no dedicated density node
+/// exists, and the arbitrary-mode-count carrier makes the doubled
+/// register free.
+///
 /// Roles this engine explicitly does NOT play: it is not the production
 /// representation of the quasi-free path (that is the #780 covariance
 /// layer; this is its dense/oracle reference and the carrier for

@@ -376,6 +376,37 @@ class TestBuilders(unittest.TestCase):
             self.assertAlmostEqual(abs(eng.amplitude(w, occ).value), 0.0,
                                    delta=1e-14)
 
+    def test_density_boundary_sector_carried_vectorized(self):
+        # A density-operator boundary sector rides the SAME six node
+        # kinds, vectorized on a doubled (ket + bra) mode register:
+        # |rho>> = sum_ij rho_ij |i>_ket (x) |j>_bra. Trace and
+        # occupation reads are inner products against the vectorized
+        # identity — exact, with no dedicated density node (spec 14.2's
+        # node list is authoritative; the arbitrary-mode-count carrier
+        # makes the doubled register free).
+        eng = LazyFockEngine(2)  # mode 0 = ket copy, mode 1 = bra copy
+        rho = np.array([[0.7, 0.2 - 0.1j], [0.2 + 0.1j, 0.3]], dtype=complex)
+        vec_rho = eng.occupationState(
+            [0, 1], [[], [1], [0], [0, 1]],
+            [rho[0, 0], rho[0, 1], rho[1, 0], rho[1, 1]])
+        vec_id = eng.occupationState([0, 1], [[], [0, 1]], [1.0, 1.0])
+        # tr rho = <<I|rho>> = 1.
+        self.assertAlmostEqual(eng.innerProduct(vec_id, vec_rho).value, 1.0,
+                               delta=TOL)
+        # tr(rho n) = <<I| (n_ket x 1) |rho>> = rho_11 (n is even: no
+        # Koszul twist touches the bra register).
+        n_op = np.diag([0.0, 1.0]).astype(complex)
+        self.assertAlmostEqual(
+            eng.innerProduct(vec_id,
+                             eng.applyLocalMapDense(vec_rho, [0], n_op)).value,
+            rho[1, 1], delta=TOL)
+        # Mixedness is visible in the carrier: tr(rho^2) = ||vec(rho)||^2
+        # (Hilbert-Schmidt norm of a Hermitian rho) < 1.
+        purity = float(np.trace(rho @ rho).real)
+        self.assertAlmostEqual(eng.normSquared(vec_rho).value.real, purity,
+                               delta=TOL)
+        self.assertLess(purity, 1.0)
+
 
 # ─── local maps against the independent JW polynomial extension ───────────
 
