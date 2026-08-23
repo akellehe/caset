@@ -412,6 +412,13 @@ establish is that **the sizes at which the particle certificates are being
 evaluated are nowhere near the sizes at which the 4D regime was ever
 observed** — which is very likely part of why every certificate fails.
 
+Against the ticket's trichotomy: the construction **neither preserves nor
+improves nor destroys** the near-four-dimensional regime, because on this host
+it never enters it. "Preserves" and "destroys" both presuppose a run that was
+in the regime to begin with, and none of the 25 members was. The measurable
+statement is the one above — peak D_S = 2.839 ± 0.154 extrapolated, still
+rising, 1.41 below the baseline.
+
 ## 12. Unexplained degeneracy
 
 Reported raw over a declared tolerance ladder, on 1868 band eigenvalues:
