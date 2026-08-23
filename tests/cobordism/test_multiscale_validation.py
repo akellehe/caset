@@ -7,9 +7,11 @@ Per repository convention the STUDY lives in ``examples/`` and its findings in
 
 * the analytic small fixtures the study reports are exact at machine
   precision, and the mandated NEGATIVE spin fixture is exactly nonzero;
-* the declared one-particle spin convention has the structural property the
-  study leans on — every rank-1 covariance is trivially a J^2 = 3/4
-  eigenstate — so a rank-1 read can never be mistaken for evidence;
+* the declared one-particle spin convention has the two structural
+  properties the study leans on — a FULLY PAIRED rank-1 covariance is
+  trivially a J^2 = 3/4 eigenstate, and the same state with one mode left
+  unpaired picks up a spin-0 admixture and a nonzero variance — so neither
+  read can be mistaken for evidence about the geometry;
 * every mandated negative control FIRES on a small host (a control that
   silently passes is a bug in the instrument);
 * the ``--quick`` path runs end to end and emits a complete, JSON-round-
@@ -99,12 +101,13 @@ class AnalyticInvariantTest(unittest.TestCase):
 class DeclaredSpinConventionTest(unittest.TestCase):
     """The convention's structural property, stated so it cannot be misread."""
 
-    def test_every_rank_one_covariance_is_a_trivial_spin_half_eigenstate(self):
-        """A single fermion is a j = 1/2 eigenstate under this convention.
+    def test_a_fully_paired_rank_one_state_is_a_trivial_spin_half_eigenstate(
+            self):
+        """A single fermion in a fully paired doublet operator is j = 1/2.
 
-        This is why the study labels every rank-1 read `trivial_rank1`: on a
-        rank-1 band `<J^2> = 3/4` and `Var(J^2) = 0` are identities of the
-        READOUT and carry no information about the geometry at all.
+        This is why the study labels such reads `trivial_rank1`: `<J^2> = 3/4`
+        and `Var(J^2) = 0` are identities of the READOUT and carry no
+        information about the geometry at all.
         """
         rng = np.random.default_rng(4)
         for modes in (2, 4, 6, 8):
@@ -120,6 +123,27 @@ class DeclaredSpinConventionTest(unittest.TestCase):
             with self.subTest(modes=modes):
                 self.assertLess(abs(expectation - 0.75), 1e-12)
                 self.assertLess(abs(variance), 1e-12)
+
+    def test_an_unpaired_mode_makes_the_same_state_a_nonsharp_read(self):
+        """The other half of the caveat: the leftover mode is spin-0.
+
+        With an odd mode count the declared pairing leaves one spinless mode,
+        so a rank-1 state with weight on it is a j = 1/2 + j = 0 superposition
+        with genuinely nonzero Var(J^2) — an artifact of the convention, not
+        of the geometry, and exactly the design spec §5.12 negative shape.
+        """
+        modes = 5
+        orbital = np.zeros((modes, 1), dtype=complex)
+        orbital[0, 0] = math.sqrt(0.5)     # inside a doublet
+        orbital[4, 0] = math.sqrt(0.5)     # the unpaired, spin-0 mode
+        state = QU.CovarianceState.fromSlaterFrame(orbital)
+        jx, jy, jz = mv.declared_spin_matrices(modes)
+        expectation = complex(
+            state.wickSpinSquaredExpectation(jx, jy, jz).value).real
+        variance = complex(
+            state.wickSpinSquaredVariance(jx, jy, jz).value).real
+        self.assertLess(abs(expectation - 0.375), 1e-12)   # (3/4) * 1/2
+        self.assertGreater(variance, 0.1)
 
     def test_the_pairing_offset_is_a_different_operator(self):
         """The offset arm must actually differ, or the reported pairing
@@ -256,6 +280,7 @@ class QuickPathTest(unittest.TestCase):
         for key in ("degrees", "analysis_resolution", "resolution_scan",
                     "shift_fractions", "window_half_width_fraction",
                     "amls_mode_cutoff", "degeneracy_tolerance",
+                    "degeneracy_tolerances", "threshold_scan",
                     "candidate_moves", "stage2_iters", "krylov_dim"):
             self.assertIn(key, config)
             self.assertNotIsInstance(config[key], dict,
@@ -287,13 +312,25 @@ class QuickPathTest(unittest.TestCase):
                 # A "none" read must NAME what failed.
                 self.assertTrue(run["particles"]["first_failing_certificate"])
 
-    def test_rank_one_spin_reads_are_labelled_trivial(self):
+    def test_rank_one_spin_reads_are_labelled_by_their_pairing(self):
         for run in self.result["runs"]:
             for state in run["covariance"]["states"]:
-                if state.get("available") and state.get("rank") == 1:
+                if not state.get("available") or state.get("rank") != 1:
+                    continue
+                if state["modes"] % 2 == 0:
                     self.assertTrue(state["trivial_rank1"])
+                    self.assertFalse(state["rank1_with_unpaired_mode"])
+                else:
+                    self.assertFalse(state["trivial_rank1"])
+                    self.assertTrue(state["rank1_with_unpaired_mode"])
         for entry in self.result["dichotomy"]["var_j2_on_nontrivial_bands"]:
             self.assertNotEqual(entry["rank"], 1)
+
+    def test_the_spin_convention_dominance_is_reported(self):
+        dominance = self.result["dichotomy"]["spin_convention_dominance"]
+        self.assertIn("reads_total", dominance)
+        self.assertIn("var_j2_pairing_spread", dominance)
+        self.assertIn("not supplied by", dominance["meaning"])
 
     def test_the_stationarity_correlation_is_labelled_conjectural(self):
         correlation = self.result["stationarity_defect_correlation"]
@@ -322,12 +359,18 @@ class QuickPathTest(unittest.TestCase):
         self.assertEqual(actual, expected)
 
     def test_every_checkpoint_replays_cold_to_the_same_verdicts(self):
-        for entry in self.result["replay"]:
-            self.assertTrue(entry["replayed"], entry.get("reason"))
+        replay = self.result["replay"]
+        self.assertTrue(replay["all_replayed"])
+        self.assertTrue(replay["all_discrete_verdicts_identical"],
+                        "a cold replay changed a DISCRETE verdict")
+        for entry in replay["entries"]:
             self.assertEqual(entry["mode"], "replay")
-            for block, identical in entry["blocks_identical"].items():
-                self.assertTrue(identical,
-                                f"replayed block {block} differs")
+            for block, within in entry["blocks_within_tolerance"].items():
+                self.assertTrue(
+                    within,
+                    f"replayed block {block} differs by "
+                    f"{entry['worst_relative_difference'][block]} at "
+                    f"{entry['worst_difference_at'].get(block)}")
 
 
 class ResponseNetworkEmptyReductionTest(unittest.TestCase):

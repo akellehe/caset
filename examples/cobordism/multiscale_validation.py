@@ -151,19 +151,26 @@ DECLARED_WINDOW_HALF_WIDTH_FRACTION = 0.1
 #: Declared AMLS mode cutoff (Craig-Bampton retained-mode count).
 DECLARED_AMLS_MODE_CUTOFF = 4
 
-#: Relative tolerance at which two eigenvalues count as one near-degenerate
-#: cluster, for the multiplicity histogram. Declared, never fitted.
-DECLARED_DEGENERACY_TOLERANCE = 1e-6
+#: Relative tolerances at which two eigenvalues count as one near-degenerate
+#: cluster, for the multiplicity histogram. A declared LADDER, so "no
+#: degeneracy" is a statement about a range of tolerances rather than about
+#: one lucky cut. Never fitted.
+DECLARED_DEGENERACY_TOLERANCES = (1e-9, 1e-6, 1e-3)
+DECLARED_DEGENERACY_TOLERANCE = DECLARED_DEGENERACY_TOLERANCES[1]
 
 #: The steps of the declared closed rotation loop, and the rotation plane.
 DECLARED_ROTATION_STEPS = 16
 DECLARED_ROTATION_PLANE = (0, 1)
 DECLARED_ROTATION_DIMENSIONS = (3, 4)
 
-#: Threshold-sensitivity scan: the declared multiplicative perturbations
-#: applied to the shipped band-isolation thresholds. This is an UNCERTAINTY
-#: measurement reported alongside the result, never a search for a verdict.
-DECLARED_THRESHOLD_SCAN = (0.5, 1.0, 2.0)
+#: Threshold-sensitivity ladder: multiplicative perturbations applied to the
+#: shipped band-isolation thresholds, spanning several decades so the scan
+#: actually crosses the acceptance boundary instead of sitting on one side of
+#: it. Raising the isolation floor can only ever REDUCE acceptance, so the
+#: ladder cannot be a search for a desired verdict; it is the uncertainty
+#: curve reported alongside the result.
+DECLARED_THRESHOLD_SCAN = (1.0e-2, 1.0e-1, 1.0, 1.0e1, 1.0e2, 1.0e3,
+                           1.0e4, 1.0e5, 1.0e6)
 
 #: Control seeds (kept apart from the ensemble seeds so a control can never
 #: be mistaken for a measurement).
@@ -282,25 +289,39 @@ def inverse_size_fit(sizes, values):
     """Fit y = y_inf + c / N over size means and classify the trend.
 
     `intercept` is the extrapolated N -> infinity value with its standard
-    error. The verdict is deliberately conservative: "converging" only when
-    the 1/N coefficient is separated from zero by more than two standard
-    errors AND the fit explains most of the spread; otherwise
-    "not_established" — three to five sizes cannot prove a continuum limit
-    and this study does not claim one.
+    error. The verdict vocabulary describes the FIT and nothing more; three to
+    five sizes cannot prove a continuum limit and this study never claims one:
+
+    * ``exactly_constant`` — every size mean is identical, so there is no
+      trend to fit;
+    * ``flat_within_uncertainty`` — the 1/N coefficient is not separated from
+      zero by two standard errors;
+    * ``converging`` — the coefficient IS resolved and a 1/N law explains
+      more than 90% of the spread, so the extrapolated limit is meaningful;
+    * ``trending_but_not_inverse_size`` — the coefficient is resolved but a
+      1/N law does not explain the spread, so the observable is moving with
+      size in some other way and the extrapolation is NOT to be trusted;
+    * ``insufficient_points`` — fewer than three sizes carry the observable.
     """
+    finite = [v for v in values if _finite(v) is not None]
+    if len(finite) == len(values) and len(set(finite)) == 1:
+        fit = linear_fit([1.0 / s for s in sizes], values)
+        return {"fit": fit, "verdict": "exactly_constant",
+                "extrapolated_limit": finite[0],
+                "extrapolated_limit_se": 0.0}
     fit = linear_fit([1.0 / s for s in sizes], values)
     if fit is None:
         return {"fit": None, "verdict": "insufficient_points"}
     slope, se = fit["slope"], fit["slope_se"]
     r2 = fit["r_squared"]
-    if se is None or se == 0.0 or r2 is None:
-        verdict = "not_established"
-    elif abs(slope) > 2.0 * se and r2 > 0.9:
-        verdict = "converging"
+    if se is None or r2 is None:
+        verdict = "insufficient_points"
     elif abs(slope) <= 2.0 * se:
         verdict = "flat_within_uncertainty"
+    elif r2 > 0.9:
+        verdict = "converging"
     else:
-        verdict = "not_established"
+        verdict = "trending_but_not_inverse_size"
     return {"fit": fit, "verdict": verdict,
             "extrapolated_limit": fit["intercept"],
             "extrapolated_limit_se": fit["intercept_se"]}
@@ -343,11 +364,20 @@ def declared_spin_matrices(mode_count, offset=0):
     on the arbitrary pairing — that spread is reported as uncertainty, never
     used to select a value.
 
-    Consequence, stated up front because it dominates the reading: for ANY
-    rank-1 covariance this operator has <J^2> = 3/4 and Var(J^2) = 0 exactly,
-    because a single fermion in a doublet-block-diagonal spin operator is
-    trivially a j = 1/2 eigenstate. A rank-1 band therefore CANNOT be
-    evidence of a proton, and this driver labels such reads `trivial_rank1`.
+    Two consequences dominate the reading and are stated up front:
+
+    1. When EVERY mode is paired (`mode_count - offset` even), any rank-1
+       covariance is exactly a j = 1/2 eigenstate: `<J^2> = 3/4` and
+       `Var(J^2) = 0` are identities of the READOUT, carrying no information
+       about the geometry. Such reads are labelled `trivial_rank1` and can
+       never be evidence of a proton.
+    2. When a mode is left UNPAIRED it is a spin-0 mode, and the very same
+       rank-1 state becomes a j = 1/2 + j = 0 superposition with a genuinely
+       nonzero `Var(J^2)` — the design spec §5.12 negative fixture, produced
+       here by the pairing convention rather than by the physics. The
+       difference between the two arms is reported as
+       `var_j2_pairing_spread`, and it is the honest uncertainty on every
+       `Var(J^2)` this study quotes.
     """
     sx = np.array([[0, 1], [1, 0]], dtype=complex) / 2.0
     sy = np.array([[0, -1j], [1j, 0]], dtype=complex) / 2.0
@@ -438,8 +468,15 @@ def _spin_reads(state, rank):
     out["j2_pairing_spread"] = _finite(max(values) - min(values)) if values else None
     out["var_j2_pairing_spread"] = (
         _finite(max(variances) - min(variances)) if variances else None)
-    # The dominant honesty caveat, carried on every read.
-    out["trivial_rank1"] = bool(rank == 1)
+    # The dominant honesty caveats, carried on every read.
+    out["unpaired_modes"] = modes % 2
+    out["trivial_rank1"] = bool(rank == 1 and modes % 2 == 0)
+    out["rank1_with_unpaired_mode"] = bool(rank == 1 and modes % 2 == 1)
+    variance_value = out.get("var_j2")
+    spread = out.get("var_j2_pairing_spread")
+    out["var_j2_dominated_by_convention"] = bool(
+        spread is not None and variance_value is not None
+        and spread > max(abs(variance_value), 1e-12))
     return out
 
 
@@ -686,6 +723,9 @@ def run_member(size, seed, config, commit, config_hash):
         "solver_paths": sorted({str(r.solverPath) for r in band_reads}),
         "degeneracy_histogram": _degeneracy_histogram(
             all_eigenvalues, config["degeneracy_tolerance"]),
+        "degeneracy_histograms": {
+            repr(tolerance): _degeneracy_histogram(all_eigenvalues, tolerance)
+            for tolerance in config["degeneracy_tolerances"]},
         "detail": bands,
     }
 
@@ -843,7 +883,12 @@ def _reduction_reads(spacetime, components, config, eigenvalues):
             "type": kind,
             "emitted": bool(sheaf.emitted),
             "simplicial": bool(sheaf.simplicial),
-            "reconstruction_residual": _finite(sheaf.reconstructionResidual),
+            # An unemitted realization reconstructed nothing, so it has no
+            # reconstruction residual. The struct's default is 0.0, which
+            # would read as "exact"; unknown is null here, never zero.
+            "reconstruction_residual": (
+                _finite(sheaf.reconstructionResidual) if sheaf.emitted
+                else None),
             "certificate_grade": str(sheaf.certificate.grade),
             "certificate_holds": bool(sheaf.certificate.holds()),
         }
@@ -873,6 +918,20 @@ def _amplitude_reads(doc, band_reads, config):
             max((entry["gram_defect"] for entry in sums
                  if entry["gram_defect"] is not None), default=None)),
     }
+    # The Gram of the retained-fiber embedding is G = J* W J and the defect is
+    # ||G - I||. With an all-positive weight diagonal that is an exact
+    # isometry; a single negative (Krein) weight flips one diagonal entry to
+    # -1 and puts the defect at 2. The regime label records WHICH of those two
+    # the run landed in instead of averaging across a bimodal quantity.
+    worst = out["gram_defect_max"]
+    if worst is None:
+        out["gram_defect_regime"] = None
+    elif worst < 1e-12:
+        out["gram_defect_regime"] = "isometric"
+    elif abs(worst - 2.0) < 1e-1:
+        out["gram_defect_regime"] = "signature_flipped"
+    else:
+        out["gram_defect_regime"] = "intermediate"
     # Inductive compatibility: the vacuum embedding must preserve every
     # amplitude exactly (falsifier 7).
     defects = []
@@ -1667,6 +1726,9 @@ def dichotomy(runs):
     """
     certified = []
     trivial = []
+    unpaired = []
+    convention_dominated = 0
+    spreads = []
     for run in runs:
         for state in run["covariance"]["states"]:
             if not state.get("available") or state.get("var_j2") is None:
@@ -1674,13 +1736,20 @@ def dichotomy(runs):
             entry = {"size": run["size"], "seed": run["seed"],
                      "rank": state.get("rank"),
                      "modes": state.get("modes"),
+                     "unpaired_modes": state.get("unpaired_modes"),
                      "j2": state.get("j2"),
                      "var_j2": state.get("var_j2"),
                      "j2_pairing_spread": state.get("j2_pairing_spread"),
                      "var_j2_pairing_spread": state.get(
                          "var_j2_pairing_spread")}
+            if state.get("var_j2_dominated_by_convention"):
+                convention_dominated += 1
+            if state.get("var_j2_pairing_spread") is not None:
+                spreads.append(state["var_j2_pairing_spread"])
             if state.get("trivial_rank1"):
                 trivial.append(entry)
+            elif state.get("rank1_with_unpaired_mode"):
+                unpaired.append(entry)
             else:
                 certified.append(entry)
 
@@ -1731,12 +1800,29 @@ def dichotomy(runs):
             "and the first failure is the informative one"),
         "quark_reads_total": total_reads,
         "var_j2_on_nontrivial_bands": certified,
-        "var_j2_on_rank1_bands": trivial,
+        "var_j2_on_fully_paired_rank1_bands": trivial,
+        "var_j2_on_rank1_bands_with_an_unpaired_mode": unpaired,
         "rank1_triviality_note": (
-            "under ANY doublet-block one-particle spin convention a rank-1 "
-            "covariance is exactly a j = 1/2 eigenstate, so <J^2> = 3/4 and "
-            "Var(J^2) = 0 on a rank-1 band are structural identities of the "
-            "readout, NOT evidence of a proton"),
+            "with every mode paired, a rank-1 covariance is exactly a "
+            "j = 1/2 eigenstate under this convention, so <J^2> = 3/4 and "
+            "Var(J^2) = 0 are identities of the READOUT, not evidence of a "
+            "proton; with a mode left unpaired the SAME rank-1 state picks up "
+            "a spin-0 admixture and a genuinely nonzero Var(J^2), which is "
+            "likewise an artifact of the convention"),
+        "spin_convention_dominance": {
+            "reads_where_the_pairing_spread_exceeds_the_value":
+                convention_dominated,
+            "reads_total": len(trivial) + len(unpaired) + len(certified),
+            "var_j2_pairing_spread": mean_sd(spreads),
+            "max_var_j2_pairing_spread": _finite(max(spreads))
+            if spreads else None,
+            "meaning": (
+                "the DECLARED one-particle spin convention is not supplied by "
+                "the geometry; the pairing spread is how much Var(J^2) moves "
+                "when the arbitrary pairing is shifted by one mode, and where "
+                "it exceeds the value itself the read carries no geometric "
+                "information at all"),
+        },
     }
     if certified:
         sizes = sorted({e["size"] for e in certified})
@@ -1754,7 +1840,11 @@ def dichotomy(runs):
             "no quark candidate was certified at any size or seed, so the "
             "accepted covariance-only class is EMPTY and the dichotomy is "
             "not reached; the first-failing-certificate distribution above "
-            "is the result")
+            "is the result. A second, independent obstruction is recorded in "
+            "`spin_convention_dominance`: the geometry supplies no spin "
+            "structure, so even a certified candidate could not be given a "
+            "Var(J^2) that means anything until one is derived rather than "
+            "declared")
     else:
         out["classification"] = "inconclusive"
         out["reason"] = (
@@ -1875,8 +1965,62 @@ def threshold_sensitivity(size, config):
     }
 
 
+#: Relative tolerance the cold-replay comparison allows on CONTINUOUS
+#: aggregates. #776 measured and declared this: on a checkpoint whose edge
+#: list is in construction rather than `fromCells` order the same weights
+#: accumulate in a different order, so the modularity aggregates agree to
+#: double round-off and not to the bit. Every DISCRETE read is compared
+#: exactly, with no tolerance at all.
+DECLARED_REPLAY_TOLERANCE = 1e-12
+
+
+def _worst_relative_difference(left, right, path=""):
+    """(max relative difference, first structurally differing path).
+
+    Numbers are compared relatively; every other leaf must be exactly equal.
+    A structural difference returns infinity so it can never hide inside a
+    tolerance.
+    """
+    if isinstance(left, dict) and isinstance(right, dict):
+        if set(left) != set(right):
+            return float("inf"), path or "<root>"
+        worst, where = 0.0, None
+        for key in left:
+            value, spot = _worst_relative_difference(
+                left[key], right[key], f"{path}.{key}" if path else key)
+            if value > worst:
+                worst, where = value, spot
+        return worst, where
+    if isinstance(left, list) and isinstance(right, list):
+        if len(left) != len(right):
+            return float("inf"), path or "<root>"
+        worst, where = 0.0, None
+        for index, (a, b) in enumerate(zip(left, right)):
+            value, spot = _worst_relative_difference(a, b, f"{path}[{index}]")
+            if value > worst:
+                worst, where = value, spot
+        return worst, where
+    if isinstance(left, bool) or isinstance(right, bool):
+        return (0.0, None) if left == right else (float("inf"), path)
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+        scale = max(abs(float(left)), abs(float(right)))
+        if scale == 0.0:
+            return 0.0, None
+        difference = abs(float(left) - float(right)) / scale
+        return difference, (path if difference else None)
+    return (0.0, None) if left == right else (float("inf"), path)
+
+
 def replay_check(runs):
-    """Cold replay of every stored checkpoint: the verdicts must match."""
+    """Cold replay of every stored checkpoint.
+
+    Every DISCRETE read — classification, named failed certificates, band
+    ranks and acceptance, component supports and ids, transport counts, baryon
+    verdicts, the raw complex — must be byte-identical. Continuous aggregates
+    are allowed the declared double-round-off tolerance and their measured
+    worst relative difference is REPORTED, so a real divergence can never be
+    mistaken for accumulation order.
+    """
     results = []
     for run in runs:
         checkpoint = json.dumps(run["checkpoint"])
@@ -1889,14 +2033,67 @@ def replay_check(runs):
             continue
         blocks = ("hierarchy", "fibers", "labeled_fiber_sums", "transports",
                   "covariance", "particles", "certificates", "raw_complex")
-        identical = {name: replayed.get(name) == run["checkpoint"].get(name)
-                     for name in blocks}
-        results.append({"size": run["size"], "seed": run["seed"],
-                        "replayed": True,
-                        "mode": replayed.get("mode"),
-                        "blocks_identical": identical,
-                        "all_identical": all(identical.values())})
+        identical = {}
+        worst = {}
+        where = {}
+        for name in blocks:
+            mine = run["checkpoint"].get(name)
+            theirs = replayed.get(name)
+            identical[name] = theirs == mine
+            difference, spot = _worst_relative_difference(mine, theirs)
+            worst[name] = _finite(difference)
+            where[name] = spot
+        within = {name: (worst[name] is not None
+                         and worst[name] <= DECLARED_REPLAY_TOLERANCE)
+                  for name in blocks}
+        results.append({
+            "size": run["size"], "seed": run["seed"],
+            "replayed": True,
+            "mode": replayed.get("mode"),
+            "blocks_identical": identical,
+            "blocks_within_tolerance": within,
+            "worst_relative_difference": worst,
+            "worst_difference_at": {k: v for k, v in where.items() if v},
+            "discrete_verdicts_identical":
+                _discrete_verdicts(run["checkpoint"])
+                == _discrete_verdicts(replayed),
+            "all_identical": all(identical.values()),
+            "all_within_tolerance": all(within.values()),
+            "tolerance": DECLARED_REPLAY_TOLERANCE,
+        })
     return results
+
+
+def _discrete_verdicts(document):
+    """Every DISCRETE read of a checkpoint — no tolerance may apply to these."""
+    return {
+        "raw_complex": document.get("raw_complex"),
+        "component_ids": [
+            [component["id"] for component in slice_read["components"]]
+            for slice_read in document.get("hierarchy", [])],
+        "component_supports": [
+            [component["support"] for component in slice_read["components"]]
+            for slice_read in document.get("hierarchy", [])],
+        "band_ranks": [(fiber["degree"], fiber["rank"], fiber["accepted"])
+                       for fiber in document.get("fibers", [])],
+        "labeled_sum_ranks": [
+            (entry["degree"], entry["nominal_rank"], entry["effective_rank"],
+             entry["quotient_nullity"])
+            for entry in document.get("labeled_fiber_sums", [])],
+        "transport_verdicts": [(entry["rank"], entry["numerical_rank"],
+                                entry["accepted"])
+                               for entry in document.get("transports", [])],
+        "active_modes": document.get("covariance", {}).get("active_modes"),
+        "quark_verdicts": [
+            (quark["component"], quark["classification"], quark["color_rank"],
+             quark["exterior_parity"], quark["winding_closure"],
+             tuple(quark["failed_certificates"]))
+            for quark in document.get("particles", {}).get("quarks", [])],
+        "baryon_verdicts": [
+            (baryon["bound_component"], baryon["found"],
+             baryon["constituents"], tuple(baryon["failed_certificates"]))
+            for baryon in document.get("particles", {}).get("baryons", [])],
+    }
 
 
 def aggregate(runs):
@@ -1917,6 +2114,9 @@ def aggregate(runs):
         "mean_component_conductance": lambda r: mean_sd(
             [c["conductance"] for c in r["components"]])["mean"],
         "amplitude_gram_defect": lambda r: r["amplitudes"]["gram_defect_max"],
+        "self_adjoint_band_fraction": lambda r: (
+            r["bands"]["self_adjoint"] / r["bands"]["total"]
+            if r["bands"]["total"] else None),
         "vacuum_embedding_defect": lambda r: (
             r["amplitudes"]["vacuum_embedding_defect_max"]),
         "static_solve_residual": lambda r: (
@@ -1991,24 +2191,72 @@ def spectral_dimension_verdict(runs, aggregates):
 
 def degeneracy_report(runs):
     """Any unexplained near-fourfold degeneracy, reported without naming it."""
-    combined = {}
-    for run in runs:
-        for size_key, count in run["bands"]["degeneracy_histogram"].items():
-            combined[size_key] = combined.get(size_key, 0) + count
-    fourfold = combined.get("4", 0)
-    total = sum(combined.values())
+    ladder = {}
+    for tolerance in DECLARED_DEGENERACY_TOLERANCES:
+        key = repr(tolerance)
+        combined = {}
+        for run in runs:
+            histograms = run["bands"].get("degeneracy_histograms", {})
+            for size_key, count in histograms.get(key, {}).items():
+                combined[size_key] = combined.get(size_key, 0) + count
+        fourfold = combined.get("4", 0)
+        total = sum(combined.values())
+        ladder[key] = {
+            "cluster_size_histogram": dict(sorted(
+                combined.items(), key=lambda kv: int(kv[0]))),
+            "fourfold_clusters": fourfold,
+            "clusters_total": total,
+            "fourfold_fraction": (fourfold / total) if total else None,
+            "largest_cluster": max((int(k) for k in combined), default=None),
+        }
+    primary = ladder[repr(DECLARED_DEGENERACY_TOLERANCE)]
     return {
-        "cluster_size_histogram": dict(sorted(combined.items(),
-                                              key=lambda kv: int(kv[0]))),
+        "tolerance_ladder": ladder,
         "tolerance": DECLARED_DEGENERACY_TOLERANCE,
-        "fourfold_clusters": fourfold,
-        "clusters_total": total,
-        "fourfold_fraction": (fourfold / total) if total else None,
+        "cluster_size_histogram": primary["cluster_size_histogram"],
+        "fourfold_clusters": primary["fourfold_clusters"],
+        "clusters_total": primary["clusters_total"],
+        "fourfold_fraction": primary["fourfold_fraction"],
         "interpretation": (
-            "reported RAW. A robust fourfold degeneracy is NOT automatically "
-            "Kahler-Dirac taste; naming a mechanism would require a "
-            "prediction from the stated one-particle operator, which this "
-            "study does not have"),
+            "reported RAW over a declared tolerance ladder. A robust fourfold "
+            "degeneracy is NOT automatically Kahler-Dirac taste; naming a "
+            "mechanism would require a prediction from the stated "
+            "one-particle operator, which this study does not have"),
+    }
+
+
+def amplitude_regime_report(runs):
+    """The bimodal retained-fiber Gram defect, and what tracks it."""
+    regimes = _string_histogram(r["amplitudes"]["gram_defect_regime"]
+                                for r in runs)
+    paired = []
+    for run in runs:
+        regime = run["amplitudes"]["gram_defect_regime"]
+        total = run["bands"]["total"]
+        fraction = (run["bands"]["self_adjoint"] / total) if total else None
+        paired.append({"size": run["size"], "seed": run["seed"],
+                       "gram_defect_regime": regime,
+                       "gram_defect_max": run["amplitudes"]["gram_defect_max"],
+                       "self_adjoint_band_fraction": _finite(fraction),
+                       "krein_indefinite_bands":
+                           run["bands"]["krein_indefinite"]})
+    agree = sum(1 for entry in paired
+                if entry["gram_defect_regime"] is not None
+                and entry["self_adjoint_band_fraction"] is not None
+                and ((entry["gram_defect_regime"] == "isometric")
+                     == (entry["self_adjoint_band_fraction"] > 0.5)))
+    return {
+        "regimes": regimes,
+        "per_run": paired,
+        "isometric_iff_self_adjoint_agreement": (
+            agree / len(paired) if paired else None),
+        "mechanism": (
+            "the retained-fiber Gram is G = J* W J and the defect is "
+            "||G - I||; an all-positive weight diagonal makes the embedding "
+            "an exact isometry, while one negative (Krein) weight flips a "
+            "diagonal entry to -1 and puts the defect at 2 — so the "
+            "observable is bimodal by construction and a mean across the "
+            "ensemble would be meaningless"),
     }
 
 
@@ -2033,6 +2281,7 @@ def make_config(quick, sizes=None, seeds=None):
         "shift_fractions": list(DECLARED_SHIFT_FRACTIONS),
         "window_half_width_fraction": DECLARED_WINDOW_HALF_WIDTH_FRACTION,
         "amls_mode_cutoff": DECLARED_AMLS_MODE_CUTOFF,
+        "degeneracy_tolerances": list(DECLARED_DEGENERACY_TOLERANCES),
         "degeneracy_tolerance": DECLARED_DEGENERACY_TOLERANCE,
         "threshold_scan": list(DECLARED_THRESHOLD_SCAN),
         "control_seed": DECLARED_CONTROL_SEED,
@@ -2131,6 +2380,7 @@ def main(argv=None):
         "spectral_dimension_verdict":
             spectral_dimension_verdict(runs, aggregates),
         "degeneracy": degeneracy_report(runs),
+        "amplitude_regime": amplitude_regime_report(runs),
         "analytic_invariants": analytic_invariants(),
         "uncertainty_budget": {
             "finite_size_drift": (
@@ -2159,7 +2409,19 @@ def main(argv=None):
             threshold_sensitivity(control_size, config)
 
     if not args.no_replay:
-        result["replay"] = replay_check(runs)
+        entries = replay_check(runs)
+        result["replay"] = {
+            "tolerance": DECLARED_REPLAY_TOLERANCE,
+            "entries": entries,
+            "all_replayed": all(e["replayed"] for e in entries),
+            "all_discrete_verdicts_identical": all(
+                e.get("discrete_verdicts_identical") for e in entries),
+            "byte_identical": sum(1 for e in entries
+                                  if e.get("all_identical")),
+            "within_tolerance": sum(1 for e in entries
+                                    if e.get("all_within_tolerance")),
+            "members": len(entries),
+        }
 
     if args.drop_checkpoints:
         for run in result["runs"]:
