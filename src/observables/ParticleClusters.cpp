@@ -2415,9 +2415,22 @@ BaryonRead ParticleClusters::classifyBaryon(
       gate(constituentsOk, "constituent-quarks", failed);
   passed += structuralQuarks;
 
-  // 2. one persistent bound supercomponent (the §16.2 search result).
-  const bool bindingOk =
-      evidence.binding.found && evidence.binding.certificate.holds();
+  // 2. one persistent bound supercomponent CONTAINING THESE THREE
+  //    constituents (whitepaper: "one persistent bound supercluster
+  //    containing them"): the §16.2 search result must hold AND its
+  //    contained-candidate set must be exactly the three constituents'
+  //    label-free identities (an order-insensitive set comparison — an
+  //    incoherent bundle never certifies).
+  std::vector<ComponentId> boundIds = evidence.binding.quarks;
+  std::vector<ComponentId> constituentIds;
+  constituentIds.reserve(evidence.quarks.size());
+  for (const QuarkRead &quark : evidence.quarks)
+    constituentIds.push_back(quark.component);
+  std::sort(boundIds.begin(), boundIds.end());
+  std::sort(constituentIds.begin(), constituentIds.end());
+  const bool bindingOk = evidence.binding.found &&
+                         evidence.binding.certificate.holds() &&
+                         boundIds == constituentIds;
   const bool structuralBinding =
       gate(bindingOk, "bound-supercomponent", failed);
   passed += structuralBinding;

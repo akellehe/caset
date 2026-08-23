@@ -1220,7 +1220,11 @@ struct BaryonCandidateEvidence {
   ComponentId boundComponent{};
   /// The three constituents' #773 reads, CONSUMED VERBATIM.
   std::array<QuarkRead, 3> quarks{};
-  /// The bound-supercomponent search result (`boundSupercomponentSearch`).
+  /// The bound-supercomponent search result
+  /// (`boundSupercomponentSearch`).  Its contained-candidate set must be
+  /// exactly these three constituents' label-free identities — the
+  /// whitepaper's "one persistent bound supercluster CONTAINING THEM";
+  /// an incoherent bundle fails `bound-supercomponent` by name.
   BoundSupercomponentRead binding{};
   /// The three NORMALIZED anchored color columns C = [c_A c_B c_C], in
   /// constituent order.  The three-mode wedge is built ONCE from this

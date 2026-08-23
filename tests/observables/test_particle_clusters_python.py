@@ -2390,22 +2390,27 @@ def _modular_hierarchy():
 
 
 def _bound_candidates(kinds=("u", "u", "d"), lifetimes=None, supports=None,
-                      leakage_ok=True, transports=True, levels=None):
+                      leakage_ok=True, transports=True, levels=None,
+                      quarks=None):
     """Three #775 bound-supercomponent candidates: certified #773 quark
     verdicts, the planted level-0 supports, overlapping #765 lifetime
-    windows, and accepted #770 mutual transports."""
+    windows, and accepted #770 mutual transports.  `quarks` overrides the
+    constituent reads (so the binding stays COHERENT with an evidence
+    bundle that carries custom legs)."""
     groups, _fine, coarse = _modular_hierarchy()
     super_level = coarse.components[0].id.level()
     conn = obs.FiberConnection()
     A, B = _unit_fiber(1, 3), _unit_fiber(11, 3)
     good = _phase_link(conn, A, B, 0.3)
     leaky = conn.transport(A, B, np.diag([0.5, 1.0, 1.0]).astype(complex))
+    kinds = kinds if quarks is None else tuple(range(len(quarks)))
     out = []
     for i, kind in enumerate(kinds):
         cand = obs.BoundCandidateEvidence()
         level = super_level - 1 if levels is None else levels[i]
-        cand.quark = _relabel_quark(_ud_quark(kind), level=level,
-                                    tag="%02x" % (0xa0 + i))
+        cand.quark = (quarks[i] if quarks is not None
+                      else _relabel_quark(_ud_quark(kind), level=level,
+                                          tag="%02x" % (0xa0 + i)))
         cand.support = (list(groups[i % len(groups)]) if supports is None
                         else list(supports[i]))
         cand.lifetime = ((2, 6) if lifetimes is None else lifetimes[i])
@@ -2436,7 +2441,14 @@ def _baryon_evidence(kinds=("u", "u", "d"), spin="sharp", rotation_turns=1,
         ev.quarks = [c.quark for c in candidates]
     else:
         ev.quarks = list(quarks)
-    ev.binding = _binding(kinds=kinds) if binding is None else binding
+    if binding is not None:
+        ev.binding = binding
+    elif quarks is None:
+        ev.binding = _binding(kinds=kinds)
+    else:
+        # the binding stays COHERENT with the supplied legs: the read must
+        # contain exactly these three label-free identities.
+        ev.binding = _binding(quarks=list(quarks))
     ev.colorColumns = _color_triad() if color is None else np.asarray(color)
     ev.colorFlux = _filled_triplet_flux() if flux is None else flux
     ev.rotation = _rotation_character(turns=rotation_turns)
@@ -3103,9 +3115,7 @@ class TestBaryonClassification(unittest.TestCase):
         plain = self.pc.classifyQuark(_certified_evidence())
         legs = [_relabel_quark(plain, level=1, tag="%02x" % (0xb0 + i))
                 for i in range(3)]
-        binding = _binding()
-        read = self.pc.classifyBaryon(
-            _baryon_evidence(quarks=legs, binding=binding))
+        read = self.pc.classifyBaryon(_baryon_evidence(quarks=legs))
         self.assertEqual(read.classification, "baryon-candidate")
         self.assertAlmostEqual(read.colorGramDeterminant, 1.0, delta=MACHINE)
         self.assertEqual(read.flavorPattern, "")
@@ -3663,3 +3673,43 @@ class TestExchangeChannelReport(unittest.TestCase):
         blank = self.pc.classifyBaryon(_baryon_evidence()).toRecord()
         self.assertIsNone(blank["exchange_character_re"])
         self.assertIsNone(blank["spin_statistics_ratio_im"])
+
+
+class TestBindingCoherence(unittest.TestCase):
+    """The whitepaper's "one persistent bound supercluster CONTAINING THEM":
+    the binding read's contained-candidate set must be exactly the three
+    constituents' label-free identities."""
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+
+    def test_coherent_binding_certifies(self):
+        read = self.pc.classifyBaryon(_baryon_evidence())
+        self.assertEqual(read.classification, "certified-proton")
+        self.assertEqual(
+            sorted(q.canonicalHash()
+                   for q in _baryon_evidence().binding.quarks),
+            sorted(q.canonicalHash() for q in read.quarks))
+
+    def test_binding_for_other_components_is_refused(self):
+        # a CERTIFIED binding read of three DIFFERENT constituents is not
+        # this candidate's supercomponent: the gate refuses rather than
+        # accepting an incoherent bundle.
+        strangers = [_relabel_quark(_ud_quark(k), level=1,
+                                    tag="%02x" % (0xf0 + i))
+                     for i, k in enumerate(("u", "u", "d"))]
+        foreign = _binding(quarks=strangers)
+        self.assertTrue(foreign.found)
+        read = self.pc.classifyBaryon(_baryon_evidence(binding=foreign))
+        self.assertEqual(read.classification, "no-baryon")
+        self.assertEqual(read.failedCertificates, ["bound-supercomponent"])
+
+    def test_binding_order_does_not_matter(self):
+        # the comparison is an order-insensitive SET statement.
+        ev = _baryon_evidence()
+        legs = list(ev.quarks)
+        permuted = _baryon_evidence(
+            quarks=[legs[2], legs[0], legs[1]],
+            color=_color_triad()[:, [2, 0, 1]], binding=ev.binding)
+        read = self.pc.classifyBaryon(permuted)
+        self.assertEqual(read.classification, "certified-proton")
