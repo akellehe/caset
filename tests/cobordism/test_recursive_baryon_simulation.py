@@ -726,6 +726,121 @@ class CampaignTest(unittest.TestCase):
 
 
 # =====================================================================
+# relabeling covariance (design spec §21.2)
+# =====================================================================
+
+def _relabel(raw, permutation):
+    """The same complex with every vertex id mapped through `permutation`."""
+    relabelled = copy.deepcopy(raw)
+    relabelled["cells"] = sorted([permutation[int(v)] for v in cell]
+                                 for cell in raw["cells"])
+    edges = {}
+    for edge in raw["edges"]:
+        a, b = permutation[int(edge["a"])], permutation[int(edge["b"])]
+        edges[(min(a, b), max(a, b))] = edge["length"]
+    relabelled["edges"] = [{"a": a, "b": b, "length": length}
+                           for (a, b), length in sorted(edges.items())]
+    return relabelled
+
+
+class RelabelingTest(unittest.TestCase):
+    """A random vertex relabeling changes no hierarchy support, no particle
+    verdict, no transport verdict and no band read.
+
+    #776 finding 6 measured that the canonical component HASH is NOT fully
+    label-free, so nothing here is keyed on that hash — the SUPPORTS are the
+    label-free object, and they must map through the permutation exactly.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        document, _ = shared_run()
+        cls.config = document["config"]
+        raw = document["raw_geometry"]
+        vertices = sorted({int(v) for cell in raw["cells"] for v in cell})
+        rng = np.random.default_rng(20260823)
+        shuffled = list(rng.permutation(vertices))
+        cls.permutation = {int(v): int(shuffled[i])
+                           for i, v in enumerate(vertices)}
+        cls.base = rbs.RecursiveReadout(
+            rbs._spacetime_from_raw(raw), cls.config, cls.config["seed"])
+        cls.relabelled = rbs.RecursiveReadout(
+            rbs._spacetime_from_raw(_relabel(raw, cls.permutation)),
+            cls.config, cls.config["seed"])
+
+    def _supports(self, readout):
+        return sorted(tuple(sorted(int(v) for v in c.support))
+                      for c in readout.components)
+
+    def test_the_permutation_is_a_genuine_relabeling(self):
+        self.assertNotEqual(sorted(self.permutation.items()),
+                            [(k, k) for k in sorted(self.permutation)])
+        self.assertEqual(sorted(self.permutation.values()),
+                         sorted(self.permutation))
+
+    def test_the_discovered_partition_maps_through_exactly(self):
+        mapped = sorted(tuple(sorted(self.permutation[v] for v in support))
+                        for support in self._supports(self.base))
+        self.assertEqual(mapped, self._supports(self.relabelled))
+
+    def test_the_band_reads_are_identical(self):
+        base = sorted((f.degree(), f.rank(), f.accepted())
+                      for read in self.base.band_reads for f in read.fibers)
+        again = sorted((f.degree(), f.rank(), f.accepted())
+                       for read in self.relabelled.band_reads
+                       for f in read.fibers)
+        self.assertEqual(base, again)
+
+    def test_the_transport_verdicts_are_identical(self):
+        base = sorted((t["read"].accepted, t["read"].rank,
+                       t["read"].rejectionReason)
+                      for t in self.base.transports)
+        again = sorted((t["read"].accepted, t["read"].rank,
+                        t["read"].rejectionReason)
+                       for t in self.relabelled.transports)
+        self.assertEqual(base, again)
+
+    def test_the_quark_verdicts_are_identical(self):
+        base = sorted((q.classification, tuple(q.failedCertificates),
+                       q.colorRank) for q in self.base.quarks)
+        again = sorted((q.classification, tuple(q.failedCertificates),
+                        q.colorRank) for q in self.relabelled.quarks)
+        self.assertEqual(base, again)
+
+    def test_the_baryon_verdict_is_identical(self):
+        base = rbs.verdict_block(self.base)
+        again = rbs.verdict_block(self.relabelled)
+        self.assertEqual(base["verdict"], again["verdict"])
+        self.assertEqual(base["library_classification"],
+                         again["library_classification"])
+        self.assertEqual(base["failed_certificates"],
+                         again["failed_certificates"])
+
+    def test_the_closed_holonomy_center_and_exchange_reads_are_identical(self):
+        """The gauge and statistics channels — whether present or absent —
+        must read the same under a relabeling, absence reasons included."""
+        base = rbs.transports_block(self.base)
+        again = rbs.transports_block(self.relabelled)
+        for channel in ("full", "determinant", "projective", "center",
+                        "winding"):
+            self.assertEqual(base[channel].get("available"),
+                             again[channel].get("available"), channel)
+            self.assertEqual(base[channel].get("reason"),
+                             again[channel].get("reason"), channel)
+        self.assertEqual(rbs.statistics_block(self.base)["declared_carrier"],
+                         rbs.statistics_block(
+                             self.relabelled)["declared_carrier"])
+
+    def test_the_continuous_aggregates_agree_to_double_round_off(self):
+        base = rbs.hierarchy_block(self.base, {"hierarchy": []})
+        again = rbs.hierarchy_block(self.relabelled, {"hierarchy": []})
+        self.assertAlmostEqual(base["analysis_slice"]["q"],
+                               again["analysis_slice"]["q"], delta=1e-12)
+        self.assertEqual(base["analysis_slice"]["levels"],
+                         again["analysis_slice"]["levels"])
+
+
+# =====================================================================
 # the geometry-only refinement rule
 # =====================================================================
 

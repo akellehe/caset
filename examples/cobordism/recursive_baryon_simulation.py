@@ -2103,7 +2103,13 @@ def run_simulation(config, commit=None, sidecar_path=None, progress=False):
     node.run_recursive_analysis()
     analysis_seconds = time.time() - analysis_started
     checkpoint = json.loads(node.checkpoint_json)
-    checkpoints[-1] = checkpoint
+    # The final pass replaces the last drive step's (same geometry, one more
+    # pass). With no drive step at all — a bare analysis of the neutral host —
+    # it IS the only frame.
+    if checkpoints:
+        checkpoints[-1] = checkpoint
+    else:
+        checkpoints.append(checkpoint)
     spacetime = node.st
 
     readout_started = time.time()
@@ -2681,9 +2687,16 @@ def run_campaign(sizes, seeds, base_config, out_dir=None, progress=False):
     RECORDED, including one that fails: a silently dropped seed would make
     the aggregate a selection.
     """
+    import shutil
+    import tempfile
+
     started = time.time()
     commit = current_commit()
     members = []
+    # Without --member-dir the member documents are not kept, so their
+    # sidecars are scratch: they go to a temporary directory that is removed,
+    # rather than littering the working directory with orphans.
+    scratch = None if out_dir else tempfile.mkdtemp(prefix="rbs-campaign-")
     for size in sizes:
         for seed in seeds:
             config = dict(base_config)
@@ -2692,10 +2705,8 @@ def run_campaign(sizes, seeds, base_config, out_dir=None, progress=False):
             member_started = time.time()
             rss_before = _rss_bytes()
             record = {"size": int(size), "seed": int(seed)}
-            sidecar = (os.path.join(out_dir,
-                                    f"sidecar_{size}_{seed}.npz")
-                       if out_dir else
-                       f"recursive_baryon_sidecar_{size}_{seed}.npz")
+            sidecar = os.path.join(out_dir or scratch,
+                                   f"sidecar_{size}_{seed}.npz")
             try:
                 document = run_simulation(config, commit=commit,
                                           sidecar_path=sidecar)
@@ -2777,6 +2788,8 @@ def run_campaign(sizes, seeds, base_config, out_dir=None, progress=False):
                 print(f"  size {size} seed {seed}: {record['verdict']!r} "
                       f"cells={record['cells']} "
                       f"{record['wall_seconds']:.2f}s", flush=True)
+    if scratch:
+        shutil.rmtree(scratch, ignore_errors=True)
     return {
         "schema_version": RUN_SCHEMA_VERSION,
         "kind": "recursive_baryon_campaign",
@@ -2788,6 +2801,11 @@ def run_campaign(sizes, seeds, base_config, out_dir=None, progress=False):
         "members_total": len(members),
         "members_ok": sum(1 for m in members if m["ok"]),
         "members_failed": [m for m in members if not m["ok"]],
+        "member_documents": bool(out_dir),
+        "member_documents_note": (
+            "each member's full run document and its sidecar are written to "
+            "--member-dir; without it a member's matrices are scratch and are "
+            "removed, so only the aggregate below survives"),
         "aggregate": aggregate_campaign(members),
         "wall_seconds": time.time() - started,
     }
@@ -2979,7 +2997,7 @@ def render_overlay(document, path, frame=-1):
         f"{document['provenance']['config_hash'][:8]})",
         fontsize=12)
 
-    _panel_world_tubes(axes[0][0], document, layout)
+    _panel_world_tubes(axes[0][0], document, layout, raw)
     _panel_response(axes[0][1], document, layout)
     _panel_fibers(axes[0][2], document)
     _panel_transports(axes[0][3], document, layout)
@@ -3010,7 +3028,7 @@ def _component_colors(count):
     return [colormap(i % 10) for i in range(max(count, 1))]
 
 
-def _panel_world_tubes(axis, document, layout):
+def _panel_world_tubes(axis, document, layout, raw):
     hierarchy = document["hierarchy"]["analysis_slice"]
     axis.set_title("component world tubes (analysis resolution)", fontsize=9)
     axis.set_xticks([])
@@ -3019,7 +3037,6 @@ def _panel_world_tubes(axis, document, layout):
         _absent(axis, "component world tubes",
                 "the modularity discovery returned no component")
         return
-    raw = document["raw_geometry"]
     for edge in raw["edges"]:
         a, b = layout.get(int(edge["a"])), layout.get(int(edge["b"]))
         if a is None or b is None:
