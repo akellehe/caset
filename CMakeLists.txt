@@ -217,6 +217,11 @@ list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX
 # (quantum/GradedFock.h, #766), so it belongs in tessera_quantum too.
 list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX
     "/src/observables/ColorFiber\\.cpp$")
+# FiberConnection (#770) likewise lives in src/observables/ but delegates its
+# rank-three center/adjoint conventions to ColorFiber (#767), which compiles
+# in tessera_quantum — so it follows ColorFiber there.
+list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX
+    "/src/observables/FiberConnection\\.cpp$")
 # bindings.cpp is the pybind11 entry point — goes into _tessera, not tessera_core.
 list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX "/src/bindings\\.cpp$")
 # Per-subsystem Bindings.cpp files also belong to _tessera, not tessera_core
@@ -399,6 +404,10 @@ list(APPEND TESSERA_QUANTUM_SOURCES
 # delegates to quantum/GradedFock.h (#766), so it compiles here.
 list(APPEND TESSERA_QUANTUM_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/observables/ColorFiber.cpp")
+# FiberConnection (#770) delegates its rank-three center/adjoint conventions
+# to ColorFiber (#767), so it compiles beside it.
+list(APPEND TESSERA_QUANTUM_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/observables/FiberConnection.cpp")
 # bindings.cpp uses pybind11 + Python.h and goes into _tessera, not the
 # pybind-free static lib.
 list(FILTER TESSERA_QUANTUM_SOURCES EXCLUDE REGEX "/src/quantum/Bindings\\.cpp$")
