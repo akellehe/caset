@@ -224,6 +224,7 @@ class RecursiveQuotient {
     /// One retained stalk/fiber coordinate of the reduced space, with its
     /// provenance (never silently deleted; design spec section 10 step 8).
     struct RetainedCoordinate {
+      /// Why this coordinate was retained.
       RetainedCoordinateKind kind{RetainedCoordinateKind::Interface};
       /// Owning component (every retained interior mode has one; an
       /// interface cell may be shared — this is the FIRST claiming
@@ -243,6 +244,7 @@ class RecursiveQuotient {
 
     /// Interior nullspace of one component (topological + numerical).
     struct InteriorNullspaceRead {
+      /// The component this read describes.
       int component{0};
       /// dim ker of the weighted interior block (numerical, at
       /// `rankTolerance`).
@@ -288,9 +290,11 @@ class RecursiveQuotient {
 
     /// One evaluation of the exact Feshbach--Schur response pencil.
     struct FeshbachRead {
+      /// The spectral parameter the pencil was evaluated at.
       std::complex<double> lambda{};
-      /// Declared band window (caller-supplied; plain frequencies).
+      /// Declared band window (caller-supplied), lower edge.
       double windowLower{0.0};
+      /// Declared band window (caller-supplied), upper edge.
       double windowUpper{0.0};
       /// \f$ F_B(\lambda) \f$ over the kept cells (interface + selected)
       /// plus any resonant-retained modes, flat row-major.
@@ -310,13 +314,17 @@ class RecursiveQuotient {
       /// \f$ |\det(L-\lambda) - \det(L_{II}-\lambda)\det F_B(\lambda)| \f$
       /// (scale-normalized), measured below the dense crossover; NaN above.
       double determinantResidual{0.0};
+      /// Band-window certificate in the detected regime.
       Certificate certificate{};
     };
 
     /// Honest multiplicity report at a candidate eigenvalue (band domain).
     struct MultiplicityRead {
+      /// The candidate eigenvalue the contour is centred on.
       std::complex<double> lambda{};
+      /// Radius of the counting contour.
       double contourRadius{0.0};
+      /// Node count of the stabilized (doubled) evaluation.
       int nodes{0};
       /// Winding of \f$ \det F_B \f$ around the contour (zeros minus poles
       /// of the pencil determinant inside).
@@ -337,12 +345,15 @@ class RecursiveQuotient {
       /// Max per-step phase advance / pi over both unwrapped determinant
       /// phases (must stay well below 1 for an alias-free winding).
       double phaseStepMargin{0.0};
+      /// Certified-numerical winding certificate (stability + margin).
       Certificate certificate{};
     };
 
     /// Craig--Bampton / AMLS retained-mode surrogate over a declared window.
     struct CraigBamptonRead {
+      /// Declared frequency window, lower edge.
       double windowLower{0.0};
+      /// Declared frequency window, upper edge.
       double windowUpper{0.0};
       /// Fixed-interface eigenvalue cutoff used for mode retention.
       double modeCutoff{0.0};
@@ -367,6 +378,8 @@ class RecursiveQuotient {
       /// \f$ \|L V y - \lambda V y\| / (\|L\|\,\|V y\|) \f$, one per
       /// window eigenvalue.
       std::vector<double> eigenResiduals{};
+      /// Certified-approximation certificate against the declared residual
+      /// tolerance.
       Certificate certificate{};
     };
 
@@ -399,12 +412,15 @@ class RecursiveQuotient {
       /// Orthonormal basis of \f$ (\ker G)^\perp \f$, flat row-major
       /// (totalRank x effectiveRank), populated under `QuotientKernel`.
       std::vector<std::complex<double>> quotientBasis{};
+      /// Certificate of the declared policy's claim.
       Certificate certificate{};
     };
 
     /// One operator-valued link of the next-level response network.
     struct ResponseEdge {
+      /// Source component of the link.
       int from{0};
+      /// Target component of the link.
       int to{0};
       /// The effective block between the two stalks, flat row-major
       /// (stalkDim(from) x stalkDim(to)).
@@ -427,6 +443,7 @@ class RecursiveQuotient {
       /// Largest |entry| of the reduced operator not covered by any
       /// vertex/edge block (0 = the network reproduces the operator).
       double coverageResidual{0.0};
+      /// Exact-tiling certificate (residual = uncovered magnitude).
       Certificate certificate{};
     };
 
@@ -448,6 +465,7 @@ class RecursiveQuotient {
       /// Max relative block-reconstruction residual of the sheaf Laplacian
       /// against the response network blocks.
       double reconstructionResidual{0.0};
+      /// Realization certificate; `holds()` gates `emitted`.
       Certificate certificate{};
     };
 
@@ -591,14 +609,15 @@ class RecursiveQuotient {
     [[nodiscard]] LabeledFiberSumRead labeledFiberSum() const;
 
     /// The composable amplitude budget of the `CertifiedNearIsometry`
-    /// policy: two embeddings with Gram defects $ arepsilon_A,
-    /// arepsilon_B $ compose (tensor) to at most
-    /// [ arepsilon_{AB} \le arepsilon_A + arepsilon_B +
-    ///     arepsilon_Aarepsilon_B , ]
+    /// policy: two embeddings with Gram defects \f$ \varepsilon_A,
+    /// \varepsilon_B \f$ compose (tensor) to at most
+    /// \f[ \varepsilon_{AB} \le \varepsilon_A + \varepsilon_B +
+    ///     \varepsilon_A\varepsilon_B , \f]
     /// and the amplitude error obeys
-    /// $ |a^\dagger G b - a^\dagger b| \le arepsilon\|a\|\|b\| $
-    /// (whitepaper, "Interactions and the expanding Hilbert space"). This is
-    /// how a certified $ arepsilon $ PROPAGATES to composite reads.
+    /// \f$ |a^\dagger G b - a^\dagger b| \le \varepsilon\|a\|\|b\| \f$
+    /// (whitepaper, "Interactions and the expanding Hilbert space"). This
+    /// is how a certified \f$ \varepsilon \f$ PROPAGATES to composite
+    /// reads.
     [[nodiscard]] static double composeNearIsometryBudget(
         double epsilonA, double epsilonB) noexcept {
       return epsilonA + epsilonB + epsilonA * epsilonB;
