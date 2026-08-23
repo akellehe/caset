@@ -350,6 +350,40 @@ class TestCoreClassification(unittest.TestCase):
         self.assertEqual(read.windingReferenceId, "co-moving-reference")
         self.assertAlmostEqual(read.baryonFlux, 1.0 / 3.0, delta=MACHINE)
 
+    def test_boundary_register_trivialization_closure(self):
+        # the other declared closure of the ticket: an open segment closed
+        # through boundary-register trivializations
+        conn = obs.FiberConnection()
+        A, B = _unit_fiber(1, 3), _unit_fiber(11, 3)
+        segment = [_phase_link(conn, A, B, TWO_PI * k / 4) for k in range(5)]
+        spec = obs.WindingClosureSpec()
+        spec.mode = obs.WindingClosureSpec.Mode.ENDPOINT_TRIVIALIZATION
+        spec.referenceId = "boundary-registers"
+        spec.startTrivialization = np.eye(3)
+        spec.endTrivialization = np.eye(3)
+        ev = _certified_evidence()
+        ev.winding = conn.openSegmentWinding(segment, spec)
+        read = self.pc.classifyQuark(ev)
+        self.assertEqual(read.classification, "quark")
+        self.assertEqual(read.windingClosure, "endpoint-trivialization")
+        self.assertEqual(read.windingReferenceId, "boundary-registers")
+        self.assertAlmostEqual(read.baryonFlux, 1.0 / 3.0, delta=MACHINE)
+
+    def test_dual_transport_carries_the_conjugate_determinant_line(self):
+        # the DUAL color transport of a link is its W-adjoint reverse
+        # (#770 transportReverse): its determinant line is the conjugate,
+        # so the dual traversal winds opposite — the transport-level
+        # statement behind quark vs antiquark orientation
+        conn = obs.FiberConnection()
+        A, B = _unit_fiber(1, 3), _unit_fiber(11, 3)
+        for phi in (0.3, 1.1, -0.7):
+            v = np.diag([np.exp(1j * phi), 1.0, 1.0]).astype(complex)
+            fwd = conn.transport(A, B, v)
+            dual = conn.transportReverse(B, A, v)
+            self.assertTrue(fwd.accepted and dual.accepted)
+            self.assertLess(abs(dual.determinantPhase
+                                - np.conj(fwd.determinantPhase)), 1e-12)
+
     def test_certified_zero_winding_is_a_certified_zero_flux_not_a_quark(self):
         read = self.pc.classifyQuark(_certified_evidence(turns=0))
         self.assertEqual(read.determinantWinding, 0)
