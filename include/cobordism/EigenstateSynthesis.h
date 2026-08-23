@@ -30,9 +30,12 @@ using ::tessera::mesh::Edge;
 /// degree-\f$ k \f$ Hodge Laplacian \f$ L_k \f$ (via `HodgeLaplacian`), and
 /// read/write those weights so a search can perturb them.
 ///
-/// At \f$ k = 0 \f$ \f$ L_0 = D - A \f$ is the U(1)-weighted graph Laplacian (the
-/// magnitude convention) and \f$ \psi \f$ is a vertex vector (length \f$ |V| \f$,
-/// sorted-id order). At \f$ k \geq 1 \f$ \f$ L_k \f$ is the **metric Hodge
+/// At \f$ k = 0 \f$ the scored operator is the **U(1) connection** graph
+/// Laplacian \f$ D - A \f$ (`HodgeLaplacian::connectionLaplacian`), not the
+/// Hodge \f$ L_0 \f$: a degree-zero register carries U(1) FLUX around its
+/// holes, and \f$ \dim\ker L_0 = b_0 \f$ at any weights, so an \f$ L_0 \f$
+/// readout would be identically gauge-flat and could carry nothing (#805).
+/// \f$ \psi \f$ is then a vertex vector (length \f$ |V| \f$, sorted-id order). At \f$ k \geq 1 \f$ \f$ L_k \f$ is the **metric Hodge
 /// Laplacian** on \f$ k \f$-cochains and \f$ \psi \f$ is a \f$ k \f$-form (length
 /// \f$ |C_k| \f$, the canonical `ChainComplex` \f$ k \f$-cell order); the tunable
 /// parameters stay the **edge** squared-lengths (`Edge::setSquaredLength`), which
@@ -243,7 +246,7 @@ class EigenstateSynthesis {
     ///
     /// Returns `false`, leaving the complex **unchanged** (rolled back), if a spec
     /// is empty, references a missing vertex, repeats a vertex, or the attach would
-    /// perturb \f$ \partial W \f$. Because only the k=0 graph Laplacian's edges feed
+    /// perturb \f$ \partial W \f$. Because only the k=0 connection Laplacian's edges feed
     /// `residual()`, wiring the interior vertex by edges (singleton specs) is always
     /// boundary-safe: a new edge to a brand-new vertex creates no new top cell and
     /// changes no facet count among the pinned boundary.
@@ -333,8 +336,9 @@ class EigenstateSynthesis {
     /// loop stays affordable; at \f$ k \ge 2 \f$ it uses the degree-generic
     /// `periodGradientGeneral`. The two are value-identical at \f$ k = 1 \f$ (verified
     /// to 1.7e-15). At \f$ k = 0 \f$ the gradient runs against the genuinely
-    /// **complex Hermitian** vertex operator \f$ L_0 = D - A \f$ (full \f$ l^2 \f$ and
-    /// U(1) phases — `periodGradientDegreeZero`, #589); \f$ L_0 \f$ is homogeneous of
+    /// **complex Hermitian** U(1) connection operator \f$ D - A \f$ (full
+    /// \f$ l^2 \f$ and U(1) phases — `periodGradientDegreeZero`, #589), which is
+    /// the operator this synthesis scores there; it is homogeneous of
     /// degree **+1** in \f$ l^2 \f$, so the \f$ k = 0 \f$ Euler identity is
     /// \f$ \sum_e l^2_e\,\partial r_U/\partial l^2_e = +2\,r_U \f$.
     /// @throws std::runtime_error if `targetPeriods.size() != holes.size()`.
@@ -796,7 +800,7 @@ class EigenstateSynthesis {
         const std::vector<std::complex<double>> &targetPeriods) const;
 
     // Exact d r_U / d l^2 at k = 0 against the genuinely COMPLEX Hermitian
-    // vertex operator L_0 = D - A (D_ii = sum |l^2|, A_ij = l^2 e^{i phase};
+    // U(1) CONNECTION operator D - A (D_ii = sum |l^2|, A_ij = l^2 e^{i phase};
     // the k >= 1 cores' laplacian(k).real() projection would be the WRONG
     // operator here, #580/#589). A hole is a removed 1-cell: a vertex pair
     // whose drop-v_j facets carry (-1)^j, the assembleRegisterReadout

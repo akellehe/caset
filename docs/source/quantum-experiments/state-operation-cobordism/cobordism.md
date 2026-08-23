@@ -54,7 +54,8 @@ New mathematics to add on top (no implementation prescription):
 - $C^k$ : complex vector space of $k$-cochains; $d_k:C^k\to C^{k+1}$ the coboundary.
 - $A$ : weighted adjacency, $A_{ij}=w_{ij}\,e^{i\theta_{ij}}$, with $w_{ij}=w_{ji}\in\mathbb{R}$ (magnitudes; sign sets signature) and $\theta_{ij}=-\theta_{ji}$ (a $U(1)$ connection). Hermitian: $A=A^\dagger$.
 - $D$ : diagonal degree matrix. Use the **magnitude convention** $D_{ii}=\sum_j |A_{ij}|=\sum_j w_{ij}$ so that $L$ is Hermitian.
-- $L=D-A$ : graph (0-)Laplacian; $L_k$ : Hodge Laplacian on $k$-cochains, $L_k = d_{k-1}d_{k-1}^\dagger + d_k^\dagger d_k$.
+- $L=D-A$ : the **U(1) connection** graph Laplacian used throughout this note (`HodgeLaplacian::connectionLaplacian`). It is *not* the degree-zero Hodge Laplacian: with the magnitude diagonal and the signed off-diagonal its row sums do not vanish once an $\ell^2$ is negative or complex, so it is not $\partial_1 W_1^{-1}\partial_1^\dagger$ for any weight.
+- $L_k = \partial_{k+1}\partial^*_{k+1} + \partial^*_k\partial_k$ with $\partial^*_k = W_k^{-1}\partial_k^\dagger W_{k-1}$ : the Hodge Laplacian on $k$-cochains, at **every** degree including $k=0$, where it reduces to $L_0=\partial_1 W_1^{-1}\partial_1^\dagger$ (`HodgeLaplacian::laplacian(0)`). Its row sums vanish identically, so the constant is harmonic and $\dim\ker L_0=b_0$ at any weights.
 - $b_k=\dim\ker L_k$ : $k$-th Betti number (harmonic-cochain dimension).
 - $\Phi_\gamma=\sum_{(ij)\in\gamma}\theta_{ij}\ (\mathrm{mod}\ 2\pi)$ : holonomy (flux) around cycle $\gamma$.
 - $G=\operatorname{diag}(e^{i\alpha_v})$ : a vertex-phase gauge transformation, acting by $A\mapsto GAG^\dagger$.
@@ -143,7 +144,7 @@ with $A_{ii}=0$ and $D_{ii}=\sum_j w_{ij}$. Then $\psi$ is an eigenvector iff $r
 ### 4b.5 Notes
 
 - **Coning vs the cone.** The growth move must be the topology-preserving subdivision (Pachner add), **not** the full cone $CX$ — a cone is contractible and would trivialize all harmonic/topological content. Confirm `tessera`'s coning primitive is the subdivision.
-- **Degree convention.** Keep the magnitude convention $D_{ii}=\sum_j|A_{ij}|$ (Hermitian $L$, unitary evolution). The signed convention restores the constant zero mode but breaks Hermiticity for complex weights — do not mix them.
+- **Degree convention.** This stage scores the **U(1) connection** operator $L=D-A$ with the magnitude convention $D_{ii}=\sum_j|A_{ij}|$ (Hermitian $L$, unitary evolution, and the Aharonov–Bohm flux dependence this stage's readout needs). Do not mix it with the derived $L_0=\partial_1 W_1^{-1}\partial_1^\dagger$, which restores the constant zero mode at every weight but is complex symmetric rather than Hermitian for complex weights. They are two named operators (`connectionLaplacian` vs `laplacian(0)`), not two conventions for one.
 - **Feasibility.** On an unrestricted complete graph, parameters far outnumber constraints and a solution is generic; the search is nontrivial only because the complex must be a valid simplicial complex. Coning is the canonical simplicial way to add freedom, so the loop terminates.
 - **Output per state.** $\mathrm{geo}(\psi_A)$ and $\mathrm{geo}(\psi_B)$: their minimal complexes, edge weights, and realized $\lambda$. These are the boundary objects consumed by Stage 2.
 

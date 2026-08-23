@@ -461,8 +461,11 @@ ChainComplex omits.)doc")
 Scores how close the complex's current Hermitian edge weights make a target
 state psi to being an eigenvector of the degree-k Hodge Laplacian L_k (via
 HodgeLaplacian), and reads/writes those weights so a search can perturb them.
-At k=0 L_0 = D - A is the graph Laplacian (magnitude convention) and psi is a
-vertex vector (|V|, sorted-id order). At k>=1 L_k is the metric Hodge Laplacian
+At k=0 the scored operator is the U(1) CONNECTION graph Laplacian D - A
+(connectionLaplacian, the magnitude convention), NOT the Hodge L_0: a
+degree-zero register carries U(1) flux and dim ker L_0 is always b_0, so an L_0
+readout would be identically gauge-flat (#805). psi is then a vertex vector
+(|V|, sorted-id order). At k>=1 L_k is the metric Hodge Laplacian
 on k-forms (|C_k|, ChainComplex k-cell order); the tunable parameters stay the
 edge squared-lengths, which feed the volume weights W_k of L_k via Simplex.volume
 (phases enter only k=0). cellSimplices() gives each psi component's vertex tuple,
@@ -651,11 +654,11 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "laplacianGradient (built on Simplex.volumeGradient), through eigenvector-"
            "perturbation theory; period covector + leak from each removed-(k+1)-cell "
            "hole's facets. Reproduces the k=1 edge-loop core on triangle holes. At "
-           "k=0 the core runs against the genuinely COMPLEX Hermitian vertex "
-           "operator L_0 = D - A (full l^2 + U(1) phases; holes are removed "
+           "k=0 the core runs against the genuinely COMPLEX Hermitian U(1) "
+           "CONNECTION operator D - A (full l^2 + U(1) phases; holes are removed "
            "1-cells, i.e. vertex pairs) with the SVD pseudo-inverse fit (#589) — "
-           "the k=0 Euler identity is Σ l² ∂r_U = +2 r_U (L_0 is degree +1 in "
-           "l²). At k>=1, certified by the exact Euler identity Σ l² ∂r_U = −r_U (FD does not "
+           "the k=0 Euler identity is Σ l² ∂r_U = +2 r_U (that operator is "
+           "degree +1 in l²). At k>=1, certified by the exact Euler identity Σ l² ∂r_U = −r_U (FD does not "
            "converge). Raises on a hole/target length mismatch.")
       .def("periodGapForPeriods", &EigenstateSynthesis::periodGapForPeriods,
            py::arg("holes"), py::arg("target_periods"),
@@ -1747,8 +1750,10 @@ the incremental path.)doc")
 Algebraically exact as a matrix identity; as a statement about a complex it
 holds only for an actual product cell structure with product weights, which
 productCertificate verifies at degree zero (a staircase SimplicialProduct is
-refused: holds() == False). The spectrum of the Kronecker sum is exactly the
-pairwise sums of the factor spectra -- no product eigensolve.)doc")
+refused: holds() == False). The degree-zero operator there is the U(1)
+CONNECTION graph Laplacian connectionLaplacian, not the Hodge L_0 (#805). The
+spectrum of the Kronecker sum is exactly the pairwise sums of the factor spectra
+-- no product eigensolve.)doc")
       .def_static("kroneckerSum", &KuennethProduct::kroneckerSum,
                   py::arg("laplacian_a"), py::arg("dim_a"),
                   py::arg("laplacian_b"), py::arg("dim_b"),
@@ -1761,10 +1766,12 @@ pairwise sums of the factor spectra -- no product eigensolve.)doc")
       .def_static("productCertificate", &KuennethProduct::productCertificate,
                   py::arg("product"), py::arg("factor_a"), py::arg("factor_b"),
                   py::arg("pairing"), py::arg("tolerance") = 1e-12,
-                  "Certify that `product`'s k=0 weighted graph Laplacian "
+                  "Certify that `product`'s U(1) CONNECTION graph Laplacian "
+                  "(connectionLaplacian, D - A over the sorted vertex order) "
                   "equals the Kronecker sum of the factors' under the declared "
                   "(product_id, a_id, b_id) vertex pairing. holds() grants the "
-                  "Kuenneth rule for this complex.");
+                  "Kuenneth rule for this complex. Not a statement about the "
+                  "Hodge L_0.");
 
   py::class_<OccupationSpectra>(m, "OccupationSpectra",
       R"doc(Fermionic second quantization at the SPECTRUM/MATRIX level (#764): free

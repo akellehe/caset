@@ -26,10 +26,10 @@ namespace tessera::cobordism {
 /// Eigenvalues are stored as a single complex vector (`Eigen::VectorXcd`),
 /// the cleanest representation that covers BOTH cases uniformly:
 ///
-///  - **Hermitian / metric** (`isHermitian() == true`): the self-adjoint
-///    \f$ k = 0 \f$ graph Laplacian and the symmetric metric Hodge Laplacian
-///    (\f$ k \geq 1 \f$). The eigenvalues are mathematically real (their stored
-///    imaginary parts are zero) and **ascending**.
+///  - **Hermitian** (`isHermitian() == true`): the self-adjoint U(1)
+///    connection graph Laplacian (`HodgeLaplacian::connectionSpectrum`) and any
+///    other genuinely self-adjoint producer. The eigenvalues are mathematically
+///    real (their stored imaginary parts are zero) and **ascending**.
 ///  - **Lorentzian** (`isHermitian() == false`): the signed-weight, generally
 ///    non-self-adjoint d'Alembertian. The eigenvalues may be negative or come in
 ///    complex-conjugate pairs, sorted ascending by \f$ (\mathrm{Re},\mathrm{Im}) \f$.

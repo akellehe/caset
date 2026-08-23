@@ -138,9 +138,10 @@ enum class RetainedCoordinateKind {
 /// certificate is detected against that metric:
 ///
 ///  - `PositiveSemidefinite` — \f$ WL \f$ Hermitian, \f$ W > 0 \f$, and
-///    \f$ WL \succeq 0 \f$ (structural for the \f$ k = 0 \f$ graph
-///    Laplacian; verified below the dense crossover otherwise). Energy
-///    \f$ x^\dagger W L x \f$ is minimized.
+///    \f$ WL \succeq 0 \f$, VERIFIED by a pivoted LDLT below the dense
+///    crossover. There is no structural shortcut at any degree (#805): degree
+///    zero is measured like the rest, and a Lorentzian \f$ L_0 \f$ is
+///    routinely indefinite. Energy \f$ x^\dagger W L x \f$ is minimized.
 ///  - `HermitianIndefinite` — \f$ WL \f$ Hermitian but \f$ W \f$ signed or
 ///    \f$ WL \f$ indefinite (the real signed-weight d'Alembertian on real
 ///    \f$ \ell^2 \f$). The interior equation is a stationarity condition.
@@ -149,9 +150,13 @@ enum class RetainedCoordinateKind {
 ///    compatibility check; no variational claim.
 ///
 /// The spacetime path takes `HodgeLaplacian::laplacian(degree)` exactly as
-/// built — the Hermitian \f$ k = 0 \f$ graph Laplacian (metric = identity)
-/// or the signed-weight d'Alembertian at \f$ k \ge 1 \f$ (metric = the
-/// signed `HodgeLaplacian::weights(k)`); there is no Euclidean switch.
+/// built — the signed-weight d'Alembertian at EVERY degree, with metric =
+/// `HodgeLaplacian::weights(degree)` (the identity at degree zero, where
+/// \f$ L_0 = \partial_1 W_1^{-1}\partial_1^{\dagger} \f$); there is no
+/// Euclidean switch and no degree-zero special case. The regime is MEASURED
+/// from that operator at every degree — degree zero is not declared
+/// `PositiveSemidefinite` from a convention, and on a Lorentzian complex it
+/// routinely is not (#805).
 ///
 /// ## Partitions
 ///

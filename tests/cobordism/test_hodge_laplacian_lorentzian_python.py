@@ -446,5 +446,94 @@ class TestLorentzianDegreeParameterization(unittest.TestCase):
         self.assertEqual(_near_kernel_count(st, 1, metric=False), _betti(st, 1))
 
 
+
+# --------------------------------------------------------------------------- #
+# (N) Degree zero is not a special case: L_0 = d_1 W_1^-1 d_1^dagger (#805)
+# --------------------------------------------------------------------------- #
+class TestDegreeZeroLorentzian(unittest.TestCase):
+    """The same signed-weight assembly at degree zero, on genuinely timelike
+    (l^2 < 0) and genuinely complex squared lengths. Before #805 degree zero was
+    a separately specified Hermitian D - A whose magnitude diagonal disagreed
+    with its signed off-diagonal, and no degree-zero fixture carried a negative
+    squared length, so the deviation was unreachable from the tests."""
+
+    def _l0(self, st, metric=True):
+        return _lor_matrix(st, 0, metric)
+
+    def _oracle(self, st, metric=True):
+        cc = cob.ChainComplex.fromSpacetime(st)
+        n0, n1 = cc.numSimplices(0), cc.numSimplices(1)
+        d1 = np.array(cc.boundaryMatrix(1),
+                      dtype=float).reshape(n0, n1).astype(complex)
+        w1 = (np.array(cob.HodgeLaplacian(st).weights(1), dtype=complex)
+              if metric else np.ones(n1, dtype=complex))
+        return d1 @ np.diag(1.0 / w1) @ d1.conj().T
+
+    FIXTURES = (
+        ("all-spacelike 3-cycle", lambda: _triangle_cycle()),
+        ("one timelike a=0.7", lambda: _triangle_one_timelike(0.7)),
+        ("one timelike a=1.9", lambda: _triangle_one_timelike(1.9)),
+        ("filled square timelike", lambda: _filled_square_timelike(1.3)),
+        ("lorentzian torus", lambda: _torus_lorentzian(1.1)[0]),
+    )
+
+    def test_assembly_matches_the_boundary_map_oracle(self):
+        for name, build in self.FIXTURES:
+            st = build()
+            for metric in (True, False):
+                with self.subTest(fixture=name, metric=metric):
+                    np.testing.assert_allclose(
+                        self._l0(st, metric), self._oracle(st, metric),
+                        atol=1e-10)
+
+    def test_constant_is_harmonic_at_every_signature(self):
+        for name, build in self.FIXTURES:
+            st = build()
+            with self.subTest(fixture=name):
+                L = self._l0(st)
+                ones = np.ones(L.shape[0], dtype=complex)
+                scale = max(np.max(np.abs(L)), 1.0)
+                self.assertLess(np.max(np.abs(L @ ones)) / scale, 1e-13)
+
+    def test_kernel_dimension_is_b0_at_every_signature(self):
+        for name, build in self.FIXTURES:
+            st = build()
+            with self.subTest(fixture=name):
+                self.assertEqual(_near_kernel_count(st, 0), _betti(st, 0))
+
+    def test_timelike_cycle_is_indefinite_below_the_crossing(self):
+        # spec(L_0) = {0, 3, 1 - 2/alpha^2}: the SAME closed form the k=1
+        # operator has on this fixture, and negative below alpha = sqrt(2).
+        for alpha in (0.5, 1.0, 1.9):
+            with self.subTest(alpha=alpha):
+                eigs = _lor_eigs(_triangle_one_timelike(alpha), 0)
+                np.testing.assert_allclose(
+                    np.sort(eigs.real),
+                    np.sort([0.0, 3.0, 1.0 - 2.0 / alpha ** 2]), atol=1e-9)
+                self.assertEqual(_is_not_psd(eigs), alpha < math.sqrt(2.0))
+
+    def test_complex_squared_length_keeps_the_constant_harmonic(self):
+        # z = rho e^{i theta} on one edge: L_0 goes genuinely complex (and
+        # complex-symmetric rather than Hermitian) but still annihilates 1.
+        st = _triangle_cycle()
+        _edge(st, 1, 2).setLength(cmath.sqrt(2.4 * cmath.exp(1.1j)))
+        L = self._l0(st)
+        self.assertGreater(np.max(np.abs(L.imag)), 1e-2)
+        np.testing.assert_allclose(L, L.T, atol=1e-14)
+        self.assertGreater(np.linalg.norm(L - L.conj().T), 1e-2)
+        np.testing.assert_allclose(L @ np.ones(3), 0.0, atol=1e-14)
+        self.assertEqual(_near_kernel_count(st, 0), 1)
+
+    def test_null_norm_of_the_constant_is_unity(self):
+        # W_0 = I, so <h,h>_W of the unit constant is exactly 1 -- no timelike
+        # cancellation is possible at degree zero, unlike k >= 1.
+        for name, build in self.FIXTURES:
+            st = build()
+            with self.subTest(fixture=name):
+                norms = _null_norms(st, 0)
+                self.assertEqual(len(norms), _betti(st, 0))
+                np.testing.assert_allclose(norms, 1.0, atol=1e-9)
+
+
 if __name__ == "__main__":
     unittest.main()
