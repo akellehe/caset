@@ -1106,6 +1106,191 @@ Right -- re-read after each drive call:
            "Directed gated cone-in: select the register by capping the hole whose removal "
            "most lowers rU. Returns #holes capped.");
 
+  // === #776: modes, the enumerable objective, refinement, and the overlay ===
+  py::enum_<MultiCobordism::SimulationMode>(multiCobordismClass, "SimulationMode",
+      "The three top-level simulation modes (design spec section 4).")
+      .value("EMERGENCE", MultiCobordism::SimulationMode::Emergence,
+             "Only the base geometric objective (plus the one permitted "
+             "state-energy term) drives optimization; every particle and gauge "
+             "quantity is a post-hoc observable.")
+      .value("SYNTHESIS", MultiCobordism::SimulationMode::Synthesis,
+             "A pinned carrier or spectral sector. Never counted as emergence.")
+      .value("REPLAY", MultiCobordism::SimulationMode::Replay,
+             "Recompute every derived hierarchy and certificate from a "
+             "checkpoint and verify that nothing cached changed the result.");
+  py::enum_<MultiCobordism::EmergenceSubmode>(multiCobordismClass, "EmergenceSubmode",
+      "The two labeled, Gaussian-closed emergence sub-modes (design spec 4.1).")
+      .value("STRICT", MultiCobordism::EmergenceSubmode::Strict,
+             "The carried state does not act back on the geometry at all.")
+      .value("CERTIFICATES_BLIND_MEAN_FIELD",
+             MultiCobordism::EmergenceSubmode::CertificatesBlindMeanField,
+             "Only the carried state's energy density may enter the objective; "
+             "every particle certificate stays firewalled from it.");
+
+  py::class_<MultiCobordism::ObjectiveTerms>(multiCobordismClass, "ObjectiveTerms",
+      "The COMPLETE, enumerable term list the scalar objective is the sum of. "
+      "MultiCobordism.objective_of is static over this record, so the objective "
+      "provably reads nothing else -- the structural half of the no-feedback "
+      "firewall.")
+      .def(py::init<>())
+      .def_readwrite("regge_stationarity",
+                     &MultiCobordism::ObjectiveTerms::reggeStationarity)
+      .def_readwrite("hodge_stationarity",
+                     &MultiCobordism::ObjectiveTerms::hodgeStationarity)
+      .def_readwrite("register_residual",
+                     &MultiCobordism::ObjectiveTerms::registerResidual)
+      .def_readwrite("action_magnitude",
+                     &MultiCobordism::ObjectiveTerms::actionMagnitude)
+      .def_readwrite("carried_state_energy",
+                     &MultiCobordism::ObjectiveTerms::carriedStateEnergy);
+
+  py::class_<MultiCobordism::RefinementIndicators>(multiCobordismClass,
+      "RefinementIndicators",
+      "The particle-independent geometric/numerical indicators emergence-mode "
+      "refinement is allowed to consult (design spec section 17).")
+      .def(py::init<>())
+      .def_readwrite("regge_stationarity_residual",
+                     &MultiCobordism::RefinementIndicators::reggeStationarityResidual)
+      .def_readwrite("hodge_stationarity_residual",
+                     &MultiCobordism::RefinementIndicators::hodgeStationarityResidual)
+      .def_readwrite("curvature_concentration",
+                     &MultiCobordism::RefinementIndicators::curvatureConcentration)
+      .def_readwrite("mesh_quality",
+                     &MultiCobordism::RefinementIndicators::meshQuality)
+      .def_readwrite("solver_error",
+                     &MultiCobordism::RefinementIndicators::solverError);
+
+  py::class_<MultiCobordism::RefinementDecision>(multiCobordismClass,
+      "RefinementDecision", "Whether to refine, and which indicator asked.")
+      .def_readonly("refine", &MultiCobordism::RefinementDecision::refine)
+      .def_readonly("trigger", &MultiCobordism::RefinementDecision::trigger)
+      .def_readonly("indicators", &MultiCobordism::RefinementDecision::indicators);
+
+  py::class_<MultiCobordism::AnalysisConfig>(multiCobordismClass, "AnalysisConfig",
+      "Analysis-overlay configuration. DISABLED by default: with enabled False "
+      "not one line of the overlay runs.")
+      .def(py::init<>())
+      .def_readwrite("enabled", &MultiCobordism::AnalysisConfig::enabled)
+      .def_readwrite("cadence", &MultiCobordism::AnalysisConfig::cadence)
+      .def_readwrite("degrees", &MultiCobordism::AnalysisConfig::degrees)
+      .def_readwrite("resolutions", &MultiCobordism::AnalysisConfig::resolutions)
+      .def_readwrite("fock_oracle", &MultiCobordism::AnalysisConfig::fockOracle)
+      .def_readwrite("cold_caches", &MultiCobordism::AnalysisConfig::coldCaches);
+
+  multiCobordismClass
+      .def_static("objective_term_names", &MultiCobordism::objectiveTermNames,
+           "The names of ObjectiveTerms' members, in declaration order -- the "
+           "firewall list a structural test asserts against.")
+      .def_static("objective_of", &MultiCobordism::objectiveOf, py::arg("terms"),
+           "The scalar objective: the plain sum of the declared terms. STATIC "
+           "by design -- it cannot reach any analysis state.")
+      .def("objective_terms", &MultiCobordism::objectiveTerms,
+           "Decompose this node's objective into its declared terms.")
+      .def("objective_terms_for", &MultiCobordism::objectiveTermsFor, py::arg("st"),
+           "Decompose the objective on an explicit complex.")
+      .def("set_simulation_mode", &MultiCobordism::setSimulationMode,
+           py::arg("mode"),
+           py::arg("submode") = MultiCobordism::EmergenceSubmode::Strict,
+           "Select the simulation mode and (for emergence) its labeled "
+           "sub-mode. Anything but CERTIFICATES_BLIND_MEAN_FIELD zeroes the "
+           "carried-state energy coupling.")
+      .def_property_readonly("simulation_mode", &MultiCobordism::simulationMode)
+      .def_property_readonly("emergence_submode", &MultiCobordism::emergenceSubmode)
+      .def_static("mode_name", &MultiCobordism::modeName, py::arg("mode"))
+      .def_static("submode_name", &MultiCobordism::submodeName, py::arg("submode"))
+      .def("set_carried_state", &MultiCobordism::setCarriedState,
+           py::arg("mode_cells"), py::arg("degree"), py::arg("covariance"),
+           "Adopt the carried quasi-free state: the covariance Gamma (flat "
+           "row-major) over modes each NAMED by the degree-cell it occupies.")
+      .def("clear_carried_state", &MultiCobordism::clearCarriedState)
+      .def_property_readonly("has_carried_state", &MultiCobordism::hasCarriedState)
+      .def_property_readonly("carried_state_degree",
+                             &MultiCobordism::carriedStateDegree)
+      .def_property_readonly("carried_state_mode_cells",
+                             &MultiCobordism::carriedStateModeCells)
+      .def_property_readonly("carried_state_covariance",
+                             &MultiCobordism::carriedStateCovariance)
+      .def("set_carried_state_energy_weight",
+           &MultiCobordism::setCarriedStateEnergyWeight, py::arg("weight"),
+           "The mean-field coefficient beta_E. Nonzero requires the "
+           "CERTIFICATES_BLIND_MEAN_FIELD emergence sub-mode.")
+      .def_property_readonly("carried_state_energy_weight",
+                             &MultiCobordism::carriedStateEnergyWeight)
+      .def("carried_state_energy", &MultiCobordism::carriedStateEnergy, py::arg("st"),
+           "E_carried(Gamma, g) = Re tr(Gamma_S h_S(g)) with h_S the Hermitian "
+           "part of the metric Hodge operator at the carried degree, restricted "
+           "to the carried modes' cells.")
+      .def("carried_state_energy_gradient",
+           &MultiCobordism::carriedStateEnergyGradient, py::arg("st"),
+           "Exact analytic dE/dz per edge in getEdgeList() order.")
+      .def("carried_state_purity_defect",
+           &MultiCobordism::carriedStatePurityDefect,
+           "The #780 purity defect ||Gamma^2 - Gamma||_F of the carried "
+           "covariance (NaN with no carried state).")
+      .def("carried_state_purity_holds",
+           &MultiCobordism::carriedStatePurityHolds, py::arg("tolerance") = 1e-9,
+           "Whether the #780 purity certificate HOLDS at the tolerance.")
+      .def("set_mean_field_schedule", &MultiCobordism::setMeanFieldSchedule,
+           py::arg("dt"), py::arg("steps"),
+           "The checkpointed mean-field update schedule.")
+      .def_property_readonly("mean_field_step_size",
+                             &MultiCobordism::meanFieldStepSize)
+      .def_property_readonly("mean_field_steps", &MultiCobordism::meanFieldSteps)
+      .def("advance_carried_state", &MultiCobordism::advanceCarriedState,
+           py::call_guard<py::gil_scoped_release>(),
+           "Advance the carried covariance through #780's meanFieldEvolve under "
+           "the SAME generator the energy term uses. Returns the worst purity "
+           "defect measured across the steps.")
+      .def_static("refinement_indicator_names",
+           &MultiCobordism::refinementIndicatorNames,
+           "The names of RefinementIndicators' members, in declaration order.")
+      .def("refinement_indicators", &MultiCobordism::refinementIndicators,
+           "Measure the indicators on this node's current complex.")
+      .def("set_refinement_thresholds", &MultiCobordism::setRefinementThresholds,
+           py::arg("thresholds"))
+      .def_property_readonly("refinement_thresholds",
+                             &MultiCobordism::refinementThresholds,
+                             py::return_value_policy::copy)
+      .def_static("refinement_decision_of", &MultiCobordism::refinementDecisionOf,
+           py::arg("indicators"), py::arg("thresholds"),
+           "The refinement rule. STATIC over the indicator record by design: it "
+           "cannot reach a certificate, fiber, transport, or particle read.")
+      .def("refinement_decision", &MultiCobordism::refinementDecision)
+      .def("refine_geometry", &MultiCobordism::refineGeometry, py::arg("max_cells") = 1,
+           py::call_guard<py::gil_scoped_release>(),
+           "Apply geometry refinement when -- and only when -- "
+           "refinement_decision() asks, through the EXISTING gated cone-in "
+           "surgery. Returns the number of refinement cells committed.")
+      .def("set_analysis_config", &MultiCobordism::setAnalysisConfig, py::arg("config"))
+      .def_property_readonly("analysis_config", &MultiCobordism::analysisConfig,
+                             py::return_value_policy::copy)
+      .def("set_provenance", &MultiCobordism::setProvenance,
+           py::arg("config_hash"), py::arg("commit"),
+           "Deterministic provenance stamped on every checkpoint.")
+      .def_property_readonly("provenance_config_hash",
+                             &MultiCobordism::provenanceConfigHash)
+      .def_property_readonly("provenance_commit", &MultiCobordism::provenanceCommit)
+      .def_property_readonly("accepted_move_count", &MultiCobordism::acceptedMoveCount)
+      .def_property_readonly("analysis_pass_count", &MultiCobordism::analysisPassCount)
+      .def("run_recursive_analysis", &MultiCobordism::runRecursiveAnalysis,
+           py::call_guard<py::gil_scoped_release>(),
+           "Run ONE post-hoc analysis pass over the CURRENT accepted geometry "
+           "(design spec section 17 order). Read-only on the geometry.")
+      .def_property_readonly("checkpoint_json", &MultiCobordism::checkpointJson,
+                             "The versioned checkpoint document of the last "
+                             "pass (design spec section 20, schema 3).")
+      .def_static("checkpoint_schema_version",
+                  &MultiCobordism::checkpointSchemaVersion)
+      .def_static("checkpoint_version_of", &MultiCobordism::checkpointVersionOf,
+                  py::arg("checkpoint"))
+      .def_static("replay_checkpoint", &MultiCobordism::replayCheckpoint,
+                  py::arg("checkpoint"),
+                  py::call_guard<py::gil_scoped_release>(),
+                  "Replay mode: rebuild the raw complex, disable every cache, "
+                  "recompute every derived hierarchy and certificate, and "
+                  "return the freshly written checkpoint. Raises on an unknown "
+                  "schema_version.");
+
   // === CobordismDAG (#491): chain emergent merges, output -> input ===
   py::class_<CobordismDAG>(m, "CobordismDAG",
       "Chain emergent merges (MultiCobordism) into a DAG: the output of one "

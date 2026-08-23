@@ -1080,8 +1080,11 @@ class MultiCobordism {
   double carriedStateEnergyWeight_{0.0};
   double meanFieldStepSize_{0.0};
   int meanFieldSteps_{0};
-  /// Thresholds for `refinementDecisionOf`; defaults never fire.
-  RefinementIndicators refinementThresholds_{};
+  /// Thresholds for `refinementDecisionOf`. Explicitly ALL ZERO — the
+  /// indicator struct's own defaults describe a healthy complex
+  /// (`meshQuality` 1), which as a LOWER bound would fire on every real mesh.
+  /// Zero is "never" for both senses, so an unconfigured node never refines.
+  RefinementIndicators refinementThresholds_{0.0, 0.0, 0.0, 0.0, 0.0};
   /// |ΔF| of the last ACCEPTED stage-2 update (the solver-error indicator).
   double lastStage2Improvement_{0.0};
   AnalysisConfig analysisConfig_{};

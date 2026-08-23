@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <cstddef>
 #include <limits>
 #include <map>
@@ -477,6 +478,23 @@ std::uint64_t FiberConnection::fiberKey(const SpectralFiber &fiber) {
   return mesh::Fingerprint::fingerprintOf(ids);
 }
 
+std::uint64_t FiberConnection::bandFingerprint(const SpectralFiber &fiber) {
+  std::uint64_t hash = mesh::Fingerprint::mix64(
+      (static_cast<std::uint64_t>(static_cast<std::uint32_t>(fiber.degree()))
+       << 32) ^
+      static_cast<std::uint64_t>(fiber.rank()));
+  for (const auto &eigenvalue : fiber.eigenvalues()) {
+    std::uint64_t bits = 0;
+    const double real = eigenvalue.real();
+    std::memcpy(&bits, &real, sizeof(bits));
+    hash = mesh::Fingerprint::mix64(hash ^ bits);
+    const double imaginary = eigenvalue.imag();
+    std::memcpy(&bits, &imaginary, sizeof(bits));
+    hash = mesh::Fingerprint::mix64(hash ^ bits);
+  }
+  return hash;
+}
+
 std::vector<std::uint64_t> FiberConnection::unionVertexIds(
     const std::vector<const SpectralFiber *> &fibers) {
   std::set<std::uint64_t> ids;
@@ -814,9 +832,14 @@ FiberTransportRead FiberConnection::transportOnSpacetimeCached(
     const SpectralFiber &to, const SpectralFiber &from,
     cobordism::HodgeLaplacian::WeightConvention weights) const {
   const std::vector<std::uint64_t> ids = unionVertexIds({&to, &from});
+  // The BAND fingerprints join the component keys here: every band of one
+  // component restricts to the same cells, so component keys alone collide
+  // across a component pair's bands and the cache would serve one band's
+  // transport for all of them.
   const std::int64_t parameter =
       chainedParameter(to.degree(), static_cast<int>(weights),
-                       {fiberKey(to), fiberKey(from)});
+                       {fiberKey(to), bandFingerprint(to), fiberKey(from),
+                        bandFingerprint(from)});
   if (const auto payload = cache.fetch(ids, kTransportCacheKind, parameter))
     return *std::static_pointer_cast<FiberTransportRead>(payload);
   FiberTransportRead read = transportOnSpacetime(st, to, from, weights);
@@ -924,7 +947,11 @@ WilsonHolonomyRead FiberConnection::holonomyOnSpacetimeCached(
   orderedKeys.reserve(fibers.size());
   for (const SpectralFiber &fiber : fibers) {
     pointers.push_back(&fiber);
+    // Component key AND band fingerprint, for the same reason
+    // `transportOnSpacetimeCached` needs both: two loops over the same
+    // components through different bands are different loops.
     orderedKeys.push_back(fiberKey(fiber));
+    orderedKeys.push_back(bandFingerprint(fiber));
   }
   const std::vector<std::uint64_t> ids = unionVertexIds(pointers);
   const std::int64_t parameter = chainedParameter(

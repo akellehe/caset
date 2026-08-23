@@ -646,6 +646,21 @@ class FiberConnection {
     /// component-key convention; relabeling-covariant, order-invariant).
     [[nodiscard]] static std::uint64_t fiberKey(const SpectralFiber &fiber);
 
+    /// The BAND identity of a fiber: degree, rank, and the exact bit
+    /// patterns of its eigenvalues, folded order-sensitively.
+    ///
+    /// `fiberKey` alone is the COMPONENT identity — every band of one
+    /// component restricts to the same cells, so every band of one component
+    /// shares it. It is therefore not enough to key a cached transport:
+    /// without this, all of a component pair's band-to-band transports
+    /// collide on one cache entry and the second onward are served the
+    /// first's read (found by the #776 incremental-versus-cold comparison,
+    /// where 169 of 170 transports came back stale). `toKey`/`fromKey` and
+    /// the holonomy chaining rule keep using `fiberKey`, which is the
+    /// component-level identity they mean.
+    [[nodiscard]] static std::uint64_t bandFingerprint(
+        const SpectralFiber &fiber);
+
   private:
     FiberConnectionConfig cfg_{};
 

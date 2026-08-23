@@ -110,7 +110,11 @@ class Json {
       if (!std::isfinite(value)) return "null";
       std::ostringstream stream;
       stream << std::setprecision(17) << value;
-      return stream.str();
+      std::string text = stream.str();
+      // A measured double stays a JSON float even at a whole value, so a
+      // downstream reader never sees `1` where the schema promises a real.
+      if (text.find_first_of(".eE") == std::string::npos) text += ".0";
+      return text;
     }
 
     /// A complex number as the pair `[re, im]` (each `null` when unmeasured).
@@ -853,20 +857,28 @@ std::string MultiCobordism::rawComplexJson(
     cellText += Json::idArray(cells[index]);
   }
   cellText += "]";
-  std::string edgeText = "[";
-  bool firstEdge = true;
+  // Serialized in CANONICAL endpoint order, not in the live list order: the
+  // raw complex a checkpoint records is then a pure function of the geometry,
+  // so two runs that reached the same complex write the same bytes even when
+  // their internal edge lists were built in different orders.
+  std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> edgesByEndpoints;
   for (const auto *edge : spacetime->getEdgeList()->toVector()) {
     if (edge == nullptr || edge->getSource() == nullptr ||
         edge->getTarget() == nullptr)
       continue;
+    const auto a = edge->getSource()->getId();
+    const auto b = edge->getTarget()->getId();
+    edgesByEndpoints[{std::min(a, b), std::max(a, b)}] = edge->getLength();
+  }
+  std::string edgeText = "[";
+  bool firstEdge = true;
+  for (const auto &entry : edgesByEndpoints) {
     if (!firstEdge) edgeText += ", ";
     firstEdge = false;
     edgeText += Json::object({
-        {"a", Json::integer(
-                  static_cast<long long>(edge->getSource()->getId()))},
-        {"b", Json::integer(
-                  static_cast<long long>(edge->getTarget()->getId()))},
-        {"length", Json::complexPair(edge->getLength())},
+        {"a", Json::integer(static_cast<long long>(entry.first.first))},
+        {"b", Json::integer(static_cast<long long>(entry.first.second))},
+        {"length", Json::complexPair(entry.second)},
     });
   }
   edgeText += "]";
