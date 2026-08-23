@@ -56,19 +56,19 @@ OMP_NUM_THREADS=8 .venv-build/bin/python \
 
 | command | what it does | MEASURED wall time (32-core box, 8 threads) |
 |---|---|---|
-| `run` (fast default) | size 12, 2 drive steps, 54 top cells | **7.5 s** (median of three: 7.40 / 7.52 / 8.41) |
-| `run --animate overlay.gif` | the same plus the 2-frame overlay | **10.7 s** |
-| `run --large` | size 30, 4 drive steps, 122 top cells | **50 s** |
-| `replay --from run.json` | cold-cache replay of both frames | **0.11 s** (median of three) |
-| `campaign` (declared default) | 3 sizes × 2 seeds = 6 members | **44 s** |
+| `run` (fast default) | size 12, 2 drive steps, 54 top cells | **7.40 s** (median of three: 7.38 / 7.40 / 7.51) |
+| `run --animate overlay.gif` | the same plus the 2-frame overlay | **11.0 s** |
+| `run --large` | size 30, 4 drive steps, 122 top cells | **52 s** |
+| `replay --from run.json` | cold-cache replay of both frames | **0.10 s** (median of three) |
+| `campaign` (declared default) | 3 sizes × 2 seeds = 6 members | **47 s** |
 | `campaign --sizes 6,12,20,30 --seeds 7,11,13` | 4 sizes × 3 seeds = 12 members | **155 s** |
-| `fixtures` | the eleven exactness fixtures alone | **0.15 s** |
+| `fixtures` | the eleven exactness fixtures alone | **0.15 s** (median of three) |
 
 `run` exits 0 whether or not a proton emerges — the exit code reports whether
 the SOFTWARE ran, never whether the physics obliged. `replay` exits non-zero
 only when a stored verdict or content hash fails to reproduce.
 
-Every number in §§2–8 comes from the fast-default run at commit `53cd5ed`,
+Every number in §§2–8 comes from the fast-default run at commit `e7456f9`,
 config hash `5e7ada57efad6aa2aea6c9a1855cf088`; §7 comes from the 12-member
 campaign at the same commit.
 
@@ -252,7 +252,7 @@ format 1.0, a versioned container, not an ad-hoc blob. A matrix of more than
 lists so a small run needs no sidecar file at all. Every array carries the
 SHA-256 of its own C-contiguous bytes and the container carries its own
 SHA-256, so a replay verifies both. This run: 4 arrays (2 covariances, 2
-candidate-band projectors), container hash `d8b04b91…`, document 212 KB.
+candidate-band projectors), container hash `d8b04b91…`, document 207 KB.
 
 **The driver's reads agree with the C++ overlay's.** The run cross-checks its
 Python-side quark classifications and failed-certificate sets against the
@@ -307,36 +307,36 @@ caught; tests assert each.
 ## 7. The campaign and its scaling
 
 Four sizes × three seeds = **12 members, 12 of 12 ran, none dropped**;
-164 s total. Silently omitting a failed seed is explicitly out of scope, so
+160 s total, at commit `4d75a4f`. Silently omitting a failed seed is explicitly out of scope, so
 a failing member is recorded with its error and counted.
 
 | size | top cells | wall s | drive s | analysis s | readout s | RSS MiB | peak RSS MiB | cache hits/misses | invalidations | entries | components | bands | rank-3 accepted | accepted transports | peak D_S |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 6 | 28.3 | 3.29 | 3.27 | 0.0067 | 0.0042 | 70.4 | 68.9 | 9/21 | 15.0 | 12.0 | 2.00 | 28.3 | **0** | **0** | 1.910 |
-| 12 | 52.3 | 6.99 | 6.92 | 0.0144 | 0.0135 | 76.2 | 76.5 | 13.7/32.7 | 27.3 | 16.7 | 2.67 | 44.7 | **0** | **0** | 2.062 |
-| 20 | 86.0 | 14.16 | 13.97 | 0.0310 | 0.0312 | 84.9 | 87.8 | 16/44 | 38.7 | 19.0 | 3.00 | 66.3 | **0** | **0** | 2.382 |
-| 30 | 122.7 | 27.21 | 26.95 | 0.0541 | 0.0736 | 99.6 | 114.4 | 25/59 | 50.0 | 34.0 | 4.00 | 93.7 | **0** | **0** | 2.652 |
+| 6 | 28.3 | 3.34 | 3.32 | 0.0067 | 0.0041 | 69.5 | 68.0 | 9.0/21.0 | 15.0 | 12.0 | 2.00 | 28.3 | **0** | **0** | 1.910 |
+| 12 | 52.3 | 6.95 | 6.87 | 0.0145 | 0.0160 | 74.2 | 74.6 | 16.0/35.0 | 27.3 | 19.0 | 3.00 | 42.7 | **0** | **0** | 2.057 |
+| 20 | 84.7 | 14.11 | 13.90 | 0.0343 | 0.0365 | 83.0 | 86.8 | 16.0/44.0 | 38.7 | 19.0 | 3.00 | 65.3 | **0** | **0** | 2.369 |
+| 30 | 124.7 | 28.99 | 28.70 | 0.0620 | 0.0817 | 98.6 | 108.7 | 25.0/59.0 | 50.0 | 34.0 | 4.00 | 96.0 | **0** | **0** | 2.667 |
 
 Scaling against top cells, over the four sizes (log–log OLS, uncertainty
 from the fit):
 
 | quantity | exponent | R² |
 |---|---|---|
-| wall seconds | **1.42 ± 0.09** | 0.993 |
-| drive seconds | **1.42 ± 0.09** | 0.992 |
-| analysis seconds | **1.43 ± 0.06** | 0.997 |
-| Python readout seconds | **1.92 ± 0.08** | 0.996 |
+| wall seconds | **1.44 ± 0.10** | 0.990 |
+| drive seconds | **1.44 ± 0.10** | 0.990 |
+| analysis seconds | **1.52 ± 0.08** | 0.995 |
+| Python readout seconds | **2.00 ± 0.07** | 0.997 |
 
 The cost is the DRIVE — the stage-2 relaxation — at every size: the analysis
-pass is **0.2 %** of the member. Memory grows from 70 to 100 MiB across a
-4.3× growth in cells; the report distinguishes the process RSS at a member's
+pass is **0.2 %** of the member. Memory grows from 70 to 99 MiB across a
+4.4× growth in cells; the report distinguishes the process RSS at a member's
 end, the process peak so far (monotone, hence never a per-member cost), and
 the per-member RSS delta, and says so in its own output.
 
 Cache activity is aggregated over EVERY analysis pass a member ran, not just
 the last: the last pass is warm by construction (two passes already ran on
 the same complex), so quoting it alone would report a hit rate the run did
-not pay for. The hit fraction is flat at 0.27–0.30 across the whole range
+not pay for. The hit fraction is flat at 0.27–0.31 across the whole range
 while misses, invalidations and live entries grow roughly linearly in cells —
 the published-star invalidation is local, and disjoint siblings are served.
 
@@ -347,7 +347,7 @@ eleven exactness fixtures exact in every member. Nothing drifts toward a
 proton and nothing drifts away from one; the particle certificates are
 identically zero rather than converging or diverging.
 
-Peak spectral dimension rises monotonically with size (1.910 → 2.652 at 123
+Peak spectral dimension rises monotonically with size (1.910 → 2.667 at 125
 cells) against the pinned 4.245 ± 0.024 baseline
 (`docs/source/quantum-experiments/overview/h_ds4_status.md`), reproducing
 #777 §11 on the same estimator (`Spacetime::getSpectralDimensionOnSkeleton`,
@@ -457,12 +457,12 @@ through an independent assembly path and adds one:
    them, ⟨J²⟩ and Var(J²) are readout conventions. This driver therefore
    supplies no spin read for an uncertified composite and NAMES the gap
    rather than quoting a convention-dependent number as a physical one.
-5. **The host is nowhere near four-dimensional.** Peak D_S ≈ 2.65 at 123
+5. **The host is nowhere near four-dimensional.** Peak D_S ≈ 2.67 at 125
    cells against a 4.245 baseline, still rising.
 6. **New here: the analysis is not the cost.** The recursive analysis pass is
-   0.2 % of a member's wall time and scales as cells^1.43, while the
-   stage-2 relaxation is 99 % and scales as cells^1.42 — the same exponent
-   within uncertainty. Whatever limits the accessible size, it is the
+   0.2 % of a member's wall time and scales as cells^1.52 ± 0.08, while the
+   stage-2 relaxation is 99 % and scales as cells^1.44 ± 0.10 — the same
+   exponent within uncertainty. Whatever limits the accessible size, it is the
    emergence dynamics, not the recursive readout: the readout is already
    ~500× cheaper and does not scale worse. A bigger host is a relaxation
    problem.
@@ -473,7 +473,7 @@ The machine-readable documents (run schema version 1) carry the full config,
 its hash, the commit, every embedded schema-3 checkpoint, every persisted
 layer, the certificate ledger, the exactness fixtures and the verdict with
 its named reasons. Reproduce every number above with the commands in §1 at
-commit `53cd5ed`; the fast run's emitted `config_hash` must be
+commit `e7456f9`; the fast run's emitted `config_hash` must be
 `5e7ada57efad6aa2aea6c9a1855cf088`.
 
 Per the repository convention that issue artifacts do not live in the
