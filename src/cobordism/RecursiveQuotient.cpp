@@ -1589,6 +1589,25 @@ RecursiveQuotient::ResponseNetworkRead RecursiveQuotient::responseNetwork()
 
   ResponseNetworkRead read;
   read.stalkCoordinates.assign(components_.size(), {});
+
+  // An EMPTY reduction is a legitimate one, exactly as for `labeledFiberSum`:
+  // a partition whose single component covers every cell keeps no interface
+  // coordinate, and a component whose interior block has no kernel retains no
+  // mode, so the reduced operator is 0 x 0. `Eigen::maxCoeff` is undefined at
+  // size zero, so the empty network is REPORTED as the exactly-empty network
+  // it is — one empty stalk per component, no edges, nothing left uncovered —
+  // rather than computed. (Found by the #777 driver at modularity resolution
+  // gamma = 0.5 on the closed-S4 host, where the scan puts the whole complex
+  // in one component; the zero-size `maxCoeff` faulted in a Release build.)
+  if (reduced == 0) {
+    read.stalkDimensions.assign(components_.size(), 0);
+    read.vertexBlocks.assign(components_.size(), {});
+    read.coverageResidual = 0.0;
+    read.certificate = Certificate::algebraicallyExact(
+        CertificateDomain::Static, regime_, 0.0, options_.tolerance);
+    return read;
+  }
+
   for (int position = 0; position < kept; ++position) {
     const int fine = interfaceIndices_[static_cast<std::size_t>(position)];
     for (const int component : claimants_[static_cast<std::size_t>(fine)])
