@@ -18,10 +18,10 @@
 #include <iomanip>
 #include <limits>
 #include <map>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -33,7 +33,6 @@
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/RecursiveQuotient.h"
 #include "mesh/Edge.h"
-#include "mesh/EdgeKey.h"
 #include "mesh/EdgeList.h"
 #include "mesh/Simplex.h"
 #include "mesh/Vertex.h"
