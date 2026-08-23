@@ -977,8 +977,9 @@ class AnimationTest(unittest.TestCase):
 
     def test_a_single_frame_document_falls_back_to_a_still(self):
         path = os.path.join(self.directory, "single.gif")
-        produced = rbs.render_animation(self.document, path)
-        self.assertEqual(len(produced), 1)
+        produced, frames = rbs.render_animation(self.document, path)
+        self.assertEqual(produced, path)
+        self.assertEqual(frames, 1)
         self.assertTrue(os.path.exists(path))
 
     def test_a_multi_frame_document_renders_every_frame(self):
@@ -989,9 +990,9 @@ class AnimationTest(unittest.TestCase):
         document["checkpoints"].append(
             copy.deepcopy(document["checkpoints"][0]))
         path = os.path.join(self.directory, "multi.gif")
-        produced = rbs.render_animation(document, path)
-        self.assertEqual(produced[0], path)
-        self.assertEqual(len(produced), 1 + len(document["checkpoints"]))
+        produced, frames = rbs.render_animation(document, path)
+        self.assertEqual(produced, path)
+        self.assertEqual(frames, len(document["checkpoints"]))
         self.assertTrue(os.path.exists(path))
         self.assertGreater(os.path.getsize(path), 20000)
 

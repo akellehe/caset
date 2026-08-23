@@ -3379,9 +3379,11 @@ def _panel_verdict(axis, document):
     axis.text(0.5, 0.92, verdict["verdict"].upper(), ha="center", va="center",
               fontsize=15, color=color, fontweight="bold",
               transform=axis.transAxes)
+    confidence = verdict["confidence"]
     lines = [f"classifier: {verdict['library_classification']}",
-             f"confidence: {verdict['confidence']:.4g} "
-             f"(passed-gate fraction, NOT a probability)",
+             ("confidence: "
+              + (f"{confidence:.4g}" if confidence is not None else "unknown")
+              + " (passed-gate fraction, NOT a probability)"),
              f"certificate: {verdict['certificate_grade']} "
              f"holds={verdict['certificate_holds']}",
              "",
@@ -3394,17 +3396,22 @@ def _panel_verdict(axis, document):
 
 def render_animation(document, path, fps=1):
     """Render EVERY persisted frame. A GIF when more than one exists,
-    otherwise a single still. Both read the same checkpoint data."""
+    otherwise a single still. Both read the same checkpoint data.
+
+    Returns ``(path, frames rendered)``. The per-frame stills are scratch
+    and are removed with their temporary directory — the animation is the
+    artifact.
+    """
     frames = len(document["checkpoints"])
     if frames <= 1 or not path.lower().endswith((".gif", ".mp4")):
-        return [render_overlay(document, path, frame=frames - 1)]
+        render_overlay(document, path, frame=frames - 1)
+        return path, 1
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import matplotlib.animation as animation
     import tempfile
 
-    images = []
     with tempfile.TemporaryDirectory() as directory:
         paths = []
         for index in range(frames):
@@ -3424,8 +3431,7 @@ def render_animation(document, path, fps=1):
         writer = "pillow" if path.lower().endswith(".gif") else "ffmpeg"
         movie.save(path, writer=writer)
         plt.close(figure)
-        images = paths
-    return [path] + images
+    return path, frames
 
 
 # =====================================================================
