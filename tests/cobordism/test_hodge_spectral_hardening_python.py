@@ -12,7 +12,7 @@ complements the per-feature suites (``test_hodge_laplacian*`` and
 *full* fixture zoo at once:
 
   * **Gauge invariance** (C3) — a random vertex rephasing ``A ↦ G A G†`` leaves
-    ``spec(L_0)`` and every cycle flux ``Φ_γ`` unchanged, and rephases the
+    the U(1) CONNECTION spectrum and every cycle flux ``Φ_γ`` unchanged, and rephases the
     eigenvectors ``v ↦ G v`` (checked via the spectral projector ``P ↦ G P G†``,
     which is robust to the per-eigenvector phase/degeneracy ambiguity). Verified
     on hand-built graphs with explicit cycle bases and on the CDT-built T²/S²
@@ -25,13 +25,17 @@ complements the per-feature suites (``test_hodge_laplacian*`` and
     for both the metric (|volume|) and combinatorial (unit) weightings, whose
     operators genuinely differ yet share the kernel dimension.
 
-  * **Hermiticity / unitarity** (k=0) — ``L = L†`` and ``e^{-iLt}`` unitary under
-    generic complex Hermitian weights.
+  * **Hermiticity / unitarity** — ``L = L†`` and ``e^{-iLt}`` unitary under
+    generic complex Hermitian weights, for the U(1) CONNECTION operator
+    ``connectionLaplacian`` (#805). The derived ``L_0 = d_1 W_1^-1 d_1^†`` is
+    complex symmetric, not Hermitian, once a weight is complex; what IS exact
+    there is ``L_0 @ 1 = 0``, checked in ``test_hodge_laplacian_python``.
 
-  * **Flux in the spectrum** — the Aharonov–Bohm ring
+  * **Flux in the spectrum** (U(1) connection operator) — the Aharonov–Bohm ring
     ``λ = 2 − 2cos((Φ + 2πk)/3)``, dependence on the gauge-invariant *total* flux
     only, the half-quantum gap collapse, 2π-periodic restoration of the zero
-    mode, and the flux lifting the harmonic at Φ ≠ 0.
+    mode, and the flux lifting the harmonic at Φ ≠ 0. ``dim ker L_0`` is ``b_0``
+    at every flux and is checked separately.
 
   * **Lorentzian d'Alembertian (§5.6)** — the harmonic null-norm ``(2 − α)/3``
     crossing zero at α = 2 (sign flip + bracketed root), tracked alongside the
@@ -51,9 +55,9 @@ import cmath
 
 
 def _real_spectrum(evals):
-    """Degree 0 is the Hermitian graph Laplacian D - A, so its spectrum is REAL.
+    """The U(1) connection operator D - A is Hermitian, so its spectrum is REAL.
 
-    `eigenvalues()` is complex-typed for parity with the k >= 1 d'Alembertian.
+    `connectionEigenvalues()` is complex-typed for parity with the L_k family.
     This ASSERTS the imaginary part vanishes rather than discarding it (#644)."""
     a = np.asarray(evals)
     np.testing.assert_allclose(a.imag, 0.0, atol=1e-12,
@@ -324,16 +328,16 @@ class TestGaugeInvariance(unittest.TestCase):
         ids, _ = _ordering(st)
         n = len(ids)
         hl_old = cob.HodgeLaplacian(st)
-        evals_old = _real_spectrum(hl_old.eigenvalues())
-        V_old = _matrix(hl_old.eigenvectors(), n)
+        evals_old = _real_spectrum(hl_old.connectionEigenvalues())
+        V_old = _matrix(hl_old.connectionEigenvectors(), n)
         flux_old = [_cycle_flux(st, c) for c in cycles]
 
         alpha = {vid: float(rng.uniform(-PI, PI)) for vid in ids}
         _apply_gauge(st, alpha)
 
         hl_new = cob.HodgeLaplacian(st)
-        evals_new = _real_spectrum(hl_new.eigenvalues())
-        V_new = _matrix(hl_new.eigenvectors(), n)
+        evals_new = _real_spectrum(hl_new.connectionEigenvalues())
+        V_new = _matrix(hl_new.connectionEigenvectors(), n)
 
         # (i) spectrum unchanged
         np.testing.assert_allclose(evals_new, evals_old, atol=1e-9)
@@ -384,8 +388,8 @@ class TestGaugeInvariance(unittest.TestCase):
         ids, _ = _ordering(st)
         n = len(ids)
         hl_old = cob.HodgeLaplacian(st)
-        evals_old = _real_spectrum(hl_old.eigenvalues())
-        V_old = _matrix(hl_old.eigenvectors(), n)
+        evals_old = _real_spectrum(hl_old.connectionEigenvalues())
+        V_old = _matrix(hl_old.connectionEigenvectors(), n)
         # the degenerate low pair really is present
         self.assertAlmostEqual(evals_old[1] - evals_old[0], 0.0, places=9)
 
@@ -393,9 +397,10 @@ class TestGaugeInvariance(unittest.TestCase):
         alpha = {vid: float(rng.uniform(-PI, PI)) for vid in ids}
         _apply_gauge(st, alpha)
         hl_new = cob.HodgeLaplacian(st)
-        np.testing.assert_allclose(_real_spectrum(hl_new.eigenvalues()), evals_old,
-                                   atol=1e-12)
-        V_new = _matrix(hl_new.eigenvectors(), n)
+        np.testing.assert_allclose(
+            _real_spectrum(hl_new.connectionEigenvalues()), evals_old,
+            atol=1e-12)
+        V_new = _matrix(hl_new.connectionEigenvectors(), n)
         G = np.diag([np.exp(1j * alpha[vid]) for vid in ids])
         p_old = V_old[:, 0:2] @ V_old[:, 0:2].conj().T
         p_new = V_new[:, 0:2] @ V_new[:, 0:2].conj().T
@@ -418,7 +423,7 @@ class TestHermiticityUnitarity(unittest.TestCase):
             with self.subTest(fixture=name):
                 hl = cob.HodgeLaplacian(st)
                 n = st.getVertexCount()
-                L = _matrix(hl.laplacian(), n)
+                L = _matrix(hl.connectionLaplacian(), n)
                 self.assertLess(np.linalg.norm(L - L.conj().T), 1e-12)
                 self.assertTrue(hl.isHermitian(1e-12))
                 self.assertLess(hl.unitarityResidual(1.0), 1e-12)
@@ -475,40 +480,57 @@ class TestFluxSpectrum(unittest.TestCase):
         for phi in np.linspace(-2.0 * PI, 2.0 * PI, 25):
             with self.subTest(phi=float(phi)):
                 hl = cob.HodgeLaplacian(self._triangle_total_flux(phi))
-                np.testing.assert_allclose(sorted(_real_spectrum(hl.eigenvalues())),
-                                           self._ring(phi), atol=1e-12)
+                np.testing.assert_allclose(
+                    sorted(_real_spectrum(hl.connectionEigenvalues())),
+                    self._ring(phi), atol=1e-12)
 
     def test_spectrum_depends_only_on_total_flux(self):
         # Concentrated vs. spread flux of the same total are gauge-equivalent.
         for phi in (PI / 3, PI / 2, 2 * PI / 3, 1.234):
             with self.subTest(phi=phi):
                 concentrated = sorted(_real_spectrum(cob.HodgeLaplacian(
-                    self._triangle_total_flux(phi)).eigenvalues()))
+                    self._triangle_total_flux(phi)).connectionEigenvalues()))
                 spread = sorted(_real_spectrum(cob.HodgeLaplacian(
-                    self._triangle_total_flux(phi, spread=True)).eigenvalues()))
+                    self._triangle_total_flux(
+                        phi, spread=True)).connectionEigenvalues()))
                 np.testing.assert_allclose(concentrated, spread, atol=1e-12)
 
     def test_half_quantum_collapses_gap_and_lifts_zero_mode(self):
         hl = cob.HodgeLaplacian(self._triangle_total_flux(PI))
-        np.testing.assert_allclose(sorted(_real_spectrum(hl.eigenvalues())), [1.0, 1.0, 4.0],
-                                   atol=1e-12)
-        self.assertEqual(len(hl.harmonics()), 0)  # the zero mode is gone
+        np.testing.assert_allclose(
+            sorted(_real_spectrum(hl.connectionEigenvalues())),
+            [1.0, 1.0, 4.0], atol=1e-12)
+        self.assertEqual(len(hl.connectionHarmonics()), 0)  # zero mode gone
 
     def test_zero_mode_restored_at_full_flux_quantum(self):
         # Φ = 2π is gauge-equivalent to Φ = 0: spectrum {0, 3, 3}, zero mode back.
         hl = cob.HodgeLaplacian(self._triangle_total_flux(2.0 * PI))
-        np.testing.assert_allclose(sorted(_real_spectrum(hl.eigenvalues())), [0.0, 3.0, 3.0],
-                                   atol=1e-10)
-        self.assertEqual(len(hl.harmonics()), 1)
+        np.testing.assert_allclose(
+            sorted(_real_spectrum(hl.connectionEigenvalues())),
+            [0.0, 3.0, 3.0], atol=1e-10)
+        self.assertEqual(len(hl.connectionHarmonics()), 1)
 
     def test_harmonic_dimension_tracks_flux(self):
         # Zero (or full-quantum) flux: one harmonic; any intermediate flux: none.
         self.assertEqual(len(cob.HodgeLaplacian(
-            self._triangle_total_flux(0.0)).harmonics()), 1)
+            self._triangle_total_flux(0.0)).connectionHarmonics()), 1)
         for phi in (0.3, 1.0, PI / 2, 2.0):
             with self.subTest(phi=phi):
                 self.assertEqual(len(cob.HodgeLaplacian(
-                    self._triangle_total_flux(phi)).harmonics()), 0)
+                    self._triangle_total_flux(phi)).connectionHarmonics()), 0)
+
+    def test_derived_degree_zero_kernel_is_flux_blind(self):
+        # The contrast the connection tests above rest on (#805): L_0 is built
+        # from d_1 and W_1, so no flux can lift its zero mode -- dim ker L_0 is
+        # b_0 = 1 at every flux, and the constant is annihilated exactly.
+        for phi in (0.0, 0.3, 1.0, PI / 2, PI, 2.0, 2.0 * PI):
+            with self.subTest(phi=phi):
+                st = self._triangle_total_flux(phi)
+                hl = cob.HodgeLaplacian(st)
+                self.assertEqual(len(hl.harmonics(0)), 1)
+                n = cob.ChainComplex.fromSpacetime(st).numSimplices(0)
+                L = np.array(hl.laplacian(0), dtype=complex).reshape(n, n)
+                np.testing.assert_allclose(L @ np.ones(n), 0.0, atol=1e-15)
 
 
 # --------------------------------------------------------------------------- #
@@ -677,18 +699,24 @@ class TestLorentzianNullNormCrossing(unittest.TestCase):
 class TestEdgeCases(unittest.TestCase):
 
     def test_single_vertex(self):
-        # The 1×1 operator L₀ = [0]: a single harmonic zero-mode, no gap. The
-        # operator/observables read the vertex set directly, so they handle the
-        # lone vertex; ChainComplex (built from *simplices*) registers a bare
-        # vertex as nothing — recorded here so a change in either is noticed.
+        # The 1×1 CONNECTION operator L = [0]: a single harmonic zero-mode, no
+        # gap. It reads the vertex set directly, so it handles the lone vertex;
+        # ChainComplex (built from *simplices*) registers a bare vertex as
+        # nothing, so the DERIVED L_0 — indexed over 0-cells — is the EMPTY
+        # operator here. Both are recorded so a change in either is noticed.
         st = _single_vertex()
         hl = cob.HodgeLaplacian(st)
-        np.testing.assert_allclose(_real_spectrum(hl.eigenvalues()), [0.0], atol=1e-12)
-        self.assertEqual(_kernel_dim(hl, 0, True), 1)
-        self.assertEqual(len(hl.harmonics()), 1)
+        np.testing.assert_allclose(
+            _real_spectrum(hl.connectionEigenvalues()), [0.0], atol=1e-12)
+        self.assertEqual(len(hl.connectionHarmonics()), 1)
         self.assertEqual(obs.HarmonicDimension().compute(st), 1.0)
         self.assertEqual(obs.SpectralGap().compute(st), 0.0)      # no gap
         self.assertEqual(cob.ChainComplex.fromSpacetime(st).bettiNumbers(), [])
+        # The derived L_0 has no 0-cells to act on.
+        self.assertEqual(cob.ChainComplex.fromSpacetime(st).numSimplices(0), 0)
+        self.assertEqual(hl.laplacian(0), [])
+        self.assertEqual(hl.eigenvalues(0), [])
+        self.assertEqual(hl.harmonics(0), [])
 
     def test_two_vertex_edge(self):
         st = _two_vertex_edge()

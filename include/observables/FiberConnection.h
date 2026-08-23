@@ -56,8 +56,13 @@
 //          T_AB = L_k[cells(A), cells(B)] of the whole-complex weighted
 //          Hodge operator `cobordism::HodgeLaplacian::laplacian(k)` (the
 //          cochain-coordinate d'Alembertian
-//          L_k = W_k⁻¹d_kᵀW_{k-1}d_k + d_{k+1}W_{k+1}⁻¹d_{k+1}ᵀW_k; at
-//          k = 0 the Hermitian U(1) graph Laplacian).  This block equals
+//          L_k = W_k⁻¹d_kᵀW_{k-1}d_k + d_{k+1}W_{k+1}⁻¹d_{k+1}ᵀW_k).  At
+//          k = 0 it reads the Hermitian U(1) CONNECTION graph Laplacian
+//          `connectionLaplacian` instead — the oriented link entry
+//          −l²e^{iφ}, which is what the Wilson-loop machinery this
+//          transport is compared against carries — NOT the Hodge
+//          L₀ = d₁W₁⁻¹d₁ᵀ, whose off-diagonal is −1/W₁(e) and which has no
+//          separate link phase (#805).  This block equals
 //          the same block of the operator of the induced subcomplex on
 //          support(A) ∪ support(B) EXACTLY: every coupling path between a
 //          k-cell of A and a k-cell of B — a shared (k−1)-facet or a

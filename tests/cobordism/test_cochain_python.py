@@ -126,8 +126,10 @@ class TestCochain(unittest.TestCase):
                                        places=12)
 
     def test_eigenbasis_is_orthonormal(self):
-        # The SelfAdjointEigenSolver basis: <v_i, v_j> = delta_ij.
-        evecs = cob.HodgeLaplacian(_triangle()).spectrum().eigenvectors()
+        # The SelfAdjointEigenSolver basis of the U(1) CONNECTION operator:
+        # <v_i, v_j> = delta_ij. (L_k is non-self-adjoint at every degree, so
+        # its eigenvectors carry no orthonormality claim.)
+        evecs = cob.HodgeLaplacian(_triangle()).connectionSpectrum().eigenvectors()
         for i, a in enumerate(evecs):
             for j, b in enumerate(evecs):
                 self.assertAlmostEqual(a.innerProduct(b), 1.0 if i == j else 0.0,
@@ -182,7 +184,8 @@ class TestSpectrum(unittest.TestCase):
             sp.eigenvalue(99)
 
     def test_hermitian_eigenvalues_are_real_and_ascending(self):
-        sp = cob.HodgeLaplacian(_triangle()).spectrum()
+        # The Hermitian regime lives on the U(1) CONNECTION spectrum (#805).
+        sp = cob.HodgeLaplacian(_triangle()).connectionSpectrum()
         self.assertTrue(sp.isHermitian())
         evals = sp.eigenvalues()
         self.assertEqual(evals.dtype, np.dtype("complex128"))
@@ -248,9 +251,12 @@ class TestHarmonicAnchors(unittest.TestCase):
         for simplex in harm[0].simplices():
             self.assertEqual(len(simplex), 2)  # an edge = two vertex ids
 
-    def test_flux_lifts_the_zero_mode(self):
-        # Any U(1) flux removes the k=0 harmonic (magnetic frustration).
-        self.assertEqual(len(cob.HodgeLaplacian(_triangle(math.pi)).harmonics()), 0)
+    def test_flux_lifts_the_connection_zero_mode(self):
+        # Any U(1) flux removes the CONNECTION operator's harmonic (magnetic
+        # frustration). dim ker L_0 stays b_0 = 1 -- L_0 has no link phase.
+        st = _triangle(math.pi)
+        self.assertEqual(len(cob.HodgeLaplacian(st).connectionHarmonics()), 0)
+        self.assertEqual(len(cob.HodgeLaplacian(st).harmonics(0)), 1)
 
     def test_torus_first_homology_is_the_qubit(self):
         # T²: dim ker L_1 = b₁ = 2 — the qubit. Each harmonic is a 1-cochain.

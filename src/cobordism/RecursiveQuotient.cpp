@@ -106,6 +106,11 @@ struct RecursiveQuotient::ComponentSolve {
   cd interiorDet{kNaN, 0.0};
   bool detValid{false};
   bool eliminationCertified{true};
+  // Whether the exact integer topological kernel was actually computed for
+  // this component. False on the matrix path (no boundary maps) and on an
+  // integer-kernel overflow, where an empty integerBasis means "not measured"
+  // rather than "measured zero" (#805).
+  bool integerKernelMeasured{false};
   std::string note{};
 };
 
@@ -159,7 +164,7 @@ void RecursiveQuotient::initMatrix(const std::vector<cd> &op, int dim,
           "coord(" + std::to_string(i) + ")";
   }
   classify();
-  detectRegime(/*structuralPsd=*/false);
+  detectRegime();
 }
 
 RecursiveQuotient RecursiveQuotient::overMatrix(
@@ -185,18 +190,13 @@ RecursiveQuotient RecursiveQuotient::overCells(
   const ChainComplex cc = ChainComplex::fromSpacetime(*st);
   HodgeLaplacian hodge(st);
 
-  // Canonical cell order: sorted vertex ids at k = 0, the ChainComplex
-  // column order (sorted vertex-id tuples) at k >= 1.
-  std::vector<std::vector<std::uint64_t>> cells;
-  if (degree == 0) {
-    std::vector<std::uint64_t> ids;
-    for (const auto &vertex : st->getVertexList()->toVector())
-      if (vertex != nullptr) ids.push_back(vertex->getId());
-    std::sort(ids.begin(), ids.end());
-    for (const std::uint64_t id : ids) cells.push_back({id});
-  } else {
-    cells = cc.kSimplexVertices(degree);
-  }
+  // Canonical cell order at EVERY degree: the ChainComplex column order
+  // (sorted vertex-id tuples), which is what L_k is indexed over now that
+  // degree zero is d_1 W_1^-1 d_1^T rather than a vertex-set graph Laplacian
+  // (#805). A vertex carried by no simplex is not a 0-cell and so is not a
+  // coordinate here.
+  const std::vector<std::vector<std::uint64_t>> cells =
+      cc.kSimplexVertices(degree);
   const int dim = static_cast<int>(cells.size());
 
   std::map<std::vector<std::uint64_t>, int> cellIndex;
@@ -234,29 +234,22 @@ RecursiveQuotient RecursiveQuotient::overCells(
     quotient.provenance_[static_cast<std::size_t>(i)] =
         cellName(cells[static_cast<std::size_t>(i)]);
 
+  quotient.hasBoundary_ = true;
   if (degree >= 1) {
-    quotient.hasBoundary_ = true;
     quotient.boundaryK_ = cc.boundaryMatrix(degree);
     quotient.boundaryKRows_ = static_cast<int>(cc.numSimplices(degree - 1));
-    quotient.boundaryK1_ = cc.boundaryMatrix(degree + 1);
-    quotient.boundaryK1Cols_ = static_cast<int>(cc.numSimplices(degree + 1));
-  } else if (static_cast<int>(cc.numSimplices(0)) == dim) {
-    // k = 0: the ChainComplex vertex order (sorted single-id tuples) matches
-    // the sorted-vertex-id operator order only when every vertex is carried
-    // by a simplex; an isolated vertex would desynchronize the rows.
-    quotient.hasBoundary_ = true;
+  } else {
+    // k = 0: there are no (-1)-chains, so the boundary block is empty and the
+    // interior zero-mode condition is the coboundary one alone.
     quotient.boundaryK_.clear();
     quotient.boundaryKRows_ = 0;
-    quotient.boundaryK1_ = cc.boundaryMatrix(1);
-    quotient.boundaryK1Cols_ = static_cast<int>(cc.numSimplices(1));
   }
+  quotient.boundaryK1_ = cc.boundaryMatrix(degree + 1);
+  quotient.boundaryK1Cols_ = static_cast<int>(cc.numSimplices(degree + 1));
 
-  const std::vector<cd> weights =
-      degree == 0 ? std::vector<cd>() : hodge.weights(degree);
-  quotient.initMatrix(hodge.laplacian(degree), dim, weights, indexComponents,
-                      resolved);
-  // k = 0 is Hermitian PSD by construction (magnitude degree convention).
-  if (degree == 0) quotient.detectRegime(/*structuralPsd=*/true);
+  // W_k for every degree, degree zero included (there W_0 = I).
+  quotient.initMatrix(hodge.laplacian(degree), dim, hodge.weights(degree),
+                      indexComponents, resolved);
   return quotient;
 }
 
@@ -266,16 +259,10 @@ RecursiveQuotient RecursiveQuotient::overVertexSupports(
     const Options &options, std::shared_ptr<AnalyticCache> cache) {
   if (!st) throw std::invalid_argument("RecursiveQuotient: null spacetime");
   const ChainComplex cc = ChainComplex::fromSpacetime(*st);
-  std::vector<std::vector<std::uint64_t>> cells;
-  if (degree == 0) {
-    std::vector<std::uint64_t> ids;
-    for (const auto &vertex : st->getVertexList()->toVector())
-      if (vertex != nullptr) ids.push_back(vertex->getId());
-    std::sort(ids.begin(), ids.end());
-    for (const std::uint64_t id : ids) cells.push_back({id});
-  } else {
-    cells = cc.kSimplexVertices(degree);
-  }
+  // The same canonical ChainComplex column order overCells uses, at every
+  // degree (#805).
+  const std::vector<std::vector<std::uint64_t>> cells =
+      cc.kSimplexVertices(degree);
 
   std::vector<std::set<std::uint64_t>> supports;
   for (const auto &support : componentVertexSupports)
@@ -401,7 +388,15 @@ void RecursiveQuotient::classify() {
   partitionFingerprint_ = fingerprint;
 }
 
-void RecursiveQuotient::detectRegime(bool structuralPsd) {
+void RecursiveQuotient::detectRegime() {
+  // Every branch below MEASURES (#805). There used to be a `structuralPsd`
+  // escape that declared degree zero PositiveSemidefinite without looking at
+  // the operator, on the strength of the magnitude-diagonal convention the
+  // degree-zero graph Laplacian used to carry. That convention is gone, the
+  // escape with it: on a Lorentzian complex L_0 = d_1 W_1^-1 d_1^T is
+  // routinely indefinite (the 3-cycle with one timelike edge has
+  // spec(L_0) = {0, 3, 1 - 2/alpha^2}), and the regime has to say so.
+  //
   // Hermiticity against the carried metric: WL vs (WL)^dagger.
   const Eigen::SparseMatrix<cd> weighted = weights_.asDiagonal() * op_;
   const Eigen::SparseMatrix<cd> adjoint =
@@ -420,10 +415,6 @@ void RecursiveQuotient::detectRegime(bool structuralPsd) {
       positiveMetric = false;
       break;
     }
-  if (structuralPsd && positiveMetric) {
-    regime_ = CertificateRegime::PositiveSemidefinite;
-    return;
-  }
   if (positiveMetric && dim_ < options_.denseCrossover) {
     // Pivoted LDLT decides semidefiniteness far cheaper than an eigensolve
     // (a factorization decision, not a spectrum claim -- the Sylvester
@@ -583,8 +574,10 @@ RecursiveQuotient::computeSolve(int component, cd lambda) const {
     const std::vector<long> stack = integerKernelStack(component, &rows);
     try {
       solve->integerBasis = integerNullspace(stack, rows, m);
+      solve->integerKernelMeasured = true;
     } catch (const std::overflow_error &) {
       solve->integerBasis.clear();
+      solve->integerKernelMeasured = false;
       solve->note = "integer kernel overflow";
     }
   }
@@ -782,6 +775,16 @@ RecursiveQuotient::InteriorNullspaceRead RecursiveQuotient::interiorNullspace(
   read.nullity = static_cast<std::size_t>(solve->rightKernel.cols());
   read.integerNullity = solve->integerBasis.size();
   read.integerBasis = solve->integerBasis;
+  read.integerNullityMeasured = solve->integerKernelMeasured;
+  // Record the discrepancy instead of dropping it (#805). The numerical kernel
+  // of the WEIGHTED interior block and the exact integer topological nullity
+  // are different quantities; when no integer nullity was measured the field
+  // stays NaN rather than claiming an agreement.
+  read.nullityDiscrepancy =
+      solve->integerKernelMeasured
+          ? static_cast<double>(static_cast<long long>(read.nullity) -
+                                static_cast<long long>(read.integerNullity))
+          : std::numeric_limits<double>::quiet_NaN();
   read.kernelBasis = toFlat(solve->rightKernel);
   read.leftKernelBasis = toFlat(solve->leftKernel);
 
@@ -1851,12 +1854,10 @@ void RecursiveQuotient::invalidate() {
     op_ = dense.sparseView();
     op_.makeCompressed();
     opNorm_ = dense.norm();
-    if (degree_ >= 1) {
-      const std::vector<cd> weights = hodge.weights(degree_);
-      for (int i = 0; i < dim_; ++i)
-        weights_(i) = weights[static_cast<std::size_t>(i)];
-    }
-    detectRegime(degree_ == 0);
+    const std::vector<cd> weights = hodge.weights(degree_);
+    for (int i = 0; i < dim_ && i < static_cast<int>(weights.size()); ++i)
+      weights_(i) = weights[static_cast<std::size_t>(i)];
+    detectRegime();
   }
 }
 

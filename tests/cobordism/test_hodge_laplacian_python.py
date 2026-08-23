@@ -1,13 +1,32 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
 
-"""Hermitian-weighted Hodge Laplacian, k=0 operator (#90).
+"""Degree-zero operators (#90, reworked #805).
 
-Validates the U(1)-weighted graph Laplacian L = D - A assembled from edge
-weights (squaredLength * exp(i*phase)) against an independent numpy D-A oracle,
-plus the spec checks that live at degree 0: Hermiticity / unitary evolution,
-the Aharonov-Bohm flux spectrum on the triangle (C4/C5 anchors), gauge
-invariance (C3, computed test-side), and a b1 cross-check against ChainComplex.
+TWO distinct operators live at degree zero and this module pins both:
+
+  * the DERIVED Hodge Laplacian L_0 = d_1 W_1^-1 d_1^dagger W_0 (W_0 = I),
+    HodgeLaplacian.laplacian(0) -- assembled from the boundary map and the
+    weight exactly as every other degree is. Its row sums vanish identically,
+    so the constant 0-cochain is harmonic at ANY weights (positive, signed,
+    or complex) and dim ker L_0 = b_0. TestDerivedDegreeZero.
+
+  * the U(1) CONNECTION graph Laplacian L = D - A,
+    HodgeLaplacian.connectionLaplacian() -- off-diagonal
+    squaredLength * exp(i*phase), diagonal sum |squaredLength| (the MAGNITUDE
+    convention). Hermitian, PSD by Gershgorin, unitary under exp(-iLt), and its
+    zero mode IS lifted by a U(1) flux. It is not L_0 and is not of the derived
+    form for any weight. TestAssemblyAndSpectrum / TestHermiticityUnitarity /
+    TestFluxSpectrum / TestGaugeInvariance.
+
+The two coincide exactly at unit real weights and zero phase, which is why the
+deviation went unpinned for so long; every deviation test here therefore uses a
+genuinely timelike edge (l^2 < 0) or a nonzero phase.
+
+Validated against independent numpy oracles, plus the spec checks that live at
+degree 0: Hermiticity / unitary evolution, the Aharonov-Bohm flux spectrum on
+the triangle (C4/C5 anchors), gauge invariance (C3, computed test-side), and a
+b1 cross-check against ChainComplex.
 
 Fixtures (per the cobordism plan):
   triangle = SimplexBoundarySphere(1)  (S^1 = boundary of a 2-simplex; b1=1)
@@ -102,9 +121,9 @@ def _ordering(st):
     return ids, {vid: i for i, vid in enumerate(ids)}
 
 
-def _np_laplacian(st):
-    """Independent D - A reference, built from the same edges with the same
-    stable (sorted-id) vertex order the operator uses."""
+def _np_connection_laplacian(st):
+    """Independent D - A reference for the U(1) CONNECTION operator, built from
+    the same edges with the same stable (sorted-id) vertex order it uses."""
     ids, idx = _ordering(st)
     n = len(ids)
     A = np.zeros((n, n), dtype=complex)
@@ -212,11 +231,11 @@ def _betti(st, k):
 
 
 def _real_spectrum(evals):
-    """Degree 0 is the Hermitian graph Laplacian D - A, so its spectrum is REAL.
+    """The U(1) connection operator D - A is Hermitian, so its spectrum is REAL.
 
-    `eigenvalues()` is complex-typed for parity with the k >= 1 d'Alembertian.
+    `connectionEigenvalues()` is complex-typed for parity with the L_k family.
     This asserts the imaginary part vanishes rather than discarding it, so a
-    degree-0 spectrum that stopped being real fails here instead of being
+    connection spectrum that stopped being real fails here instead of being
     silently projected."""
     a = np.asarray(evals)
     np.testing.assert_allclose(a.imag, 0.0, atol=1e-12,
@@ -241,15 +260,15 @@ def _harmonic_dim(st, k, metric=True, tol=1e-9):
 class TestAssemblyAndSpectrum(unittest.TestCase):
 
     def _check_against_numpy(self, st):
-        n, _ids, _idx, A, D, L = _np_laplacian(st)
+        n, _ids, _idx, A, D, L = _np_connection_laplacian(st)
         hl = cob.HodgeLaplacian(st)
         np.testing.assert_allclose(_matrix(hl.adjacency(), n), A, atol=1e-12)
         np.testing.assert_allclose(np.array(hl.degree()), D, atol=1e-12)
-        np.testing.assert_allclose(_matrix(hl.laplacian(), n), L, atol=1e-12)
-        np.testing.assert_allclose(np.array(hl.laplacian(0)).reshape(n, n), L,
+        np.testing.assert_allclose(_matrix(hl.connectionLaplacian(), n), L,
                                    atol=1e-12)
-        np.testing.assert_allclose(_real_spectrum(hl.eigenvalues()),
-                                   np.linalg.eigvalsh(L), atol=1e-12)
+        np.testing.assert_allclose(
+            _real_spectrum(hl.connectionEigenvalues()),
+            np.linalg.eigvalsh(L), atol=1e-12)
         return n
 
     def test_triangle_is_three_vertices_three_edges(self):
@@ -324,7 +343,7 @@ class TestHermiticityUnitarity(unittest.TestCase):
         for name, st in self._fixtures_with_random_weights():
             with self.subTest(fixture=name):
                 n = st.getVertexCount()
-                L = _matrix(cob.HodgeLaplacian(st).laplacian(), n)
+                L = _matrix(cob.HodgeLaplacian(st).connectionLaplacian(), n)
                 self.assertLess(np.linalg.norm(L - L.conj().T), 1e-12)
                 self.assertTrue(cob.HodgeLaplacian(st).isHermitian(1e-12))
 
@@ -357,28 +376,41 @@ class TestFluxSpectrum(unittest.TestCase):
         for phi in (0.0, math.pi / 3, math.pi / 2, 2 * math.pi / 3, math.pi, 1.234):
             with self.subTest(phi=phi):
                 hl = cob.HodgeLaplacian(self._triangle_with_flux(phi))
-                np.testing.assert_allclose(sorted(_real_spectrum(hl.eigenvalues())),
-                                           self._ring_eigs(phi), atol=1e-12)
+                np.testing.assert_allclose(
+                    sorted(_real_spectrum(hl.connectionEigenvalues())),
+                    self._ring_eigs(phi), atol=1e-12)
 
     def test_half_flux_quantum_gives_degenerate_pair(self):
         # Φ = π -> {1, 1, 4}; the spectral gap λ1 - λ0 collapses to 0.
         hl = cob.HodgeLaplacian(self._triangle_with_flux(math.pi))
-        eigs = sorted(_real_spectrum(hl.eigenvalues()))
+        eigs = sorted(_real_spectrum(hl.connectionEigenvalues()))
         np.testing.assert_allclose(eigs, [1.0, 1.0, 4.0], atol=1e-12)
         self.assertAlmostEqual(eigs[1] - eigs[0], 0.0, places=12)
 
-    def test_flux_lifts_the_zero_mode(self):
+    def test_flux_lifts_the_connection_zero_mode(self):
         # No flux: one harmonic (the constant 0-cochain, b0 = 1). Any flux lifts
-        # it, so the harmonic dimension of L0 drops to 0.
+        # it, so the CONNECTION operator's harmonic dimension drops to 0.
         hl0 = cob.HodgeLaplacian(_triangle())
-        self.assertEqual(len(hl0.harmonics()), 1)
+        self.assertEqual(len(hl0.connectionHarmonics()), 1)
         hlpi = cob.HodgeLaplacian(self._triangle_with_flux(math.pi))
-        self.assertEqual(len(hlpi.harmonics()), 0)
+        self.assertEqual(len(hlpi.connectionHarmonics()), 0)
+
+    def test_flux_never_lifts_the_derived_zero_mode(self):
+        # The contrast: L_0 = d_1 W_1^-1 d_1^dagger has no link phase at all,
+        # so its kernel is b_0 = 1 at every flux -- the constant is annihilated
+        # to machine precision.
+        for phi in (0.0, math.pi / 3, math.pi, 1.234):
+            with self.subTest(phi=phi):
+                st = self._triangle_with_flux(phi)
+                hl = cob.HodgeLaplacian(st)
+                self.assertEqual(len(hl.harmonics(0)), 1)
+                L = np.array(hl.laplacian(0)).reshape(3, 3)
+                np.testing.assert_allclose(L @ np.ones(3), 0.0, atol=1e-15)
 
     def test_zero_mode_is_uniform(self):
         # The Φ=0 harmonic is the uniform vector (equal magnitudes on every vertex).
         n = 3
-        harmonics = cob.HodgeLaplacian(_triangle()).harmonics()
+        harmonics = cob.HodgeLaplacian(_triangle()).connectionHarmonics()
         self.assertEqual(len(harmonics), 1)  # one harmonic, a degree-0 Cochain
         h = harmonics[0]
         self.assertEqual(h.degree(), 0)
@@ -411,8 +443,8 @@ class TestGaugeInvariance(unittest.TestCase):
         ids, idx = _ordering(st)
         n = len(ids)
         hl_old = cob.HodgeLaplacian(st)
-        evals_old = _real_spectrum(hl_old.eigenvalues())
-        V_old = _matrix(hl_old.eigenvectors(), n)
+        evals_old = _real_spectrum(hl_old.connectionEigenvalues())
+        V_old = _matrix(hl_old.connectionEigenvectors(), n)
 
         # Two independent cycles of the testbed (b1 = 2).
         cycles = ([0, 1, 2], [0, 2, 3])
@@ -423,8 +455,8 @@ class TestGaugeInvariance(unittest.TestCase):
         self._apply_gauge(st, alpha)
 
         hl_new = cob.HodgeLaplacian(st)
-        evals_new = _real_spectrum(hl_new.eigenvalues())
-        V_new = _matrix(hl_new.eigenvectors(), n)
+        evals_new = _real_spectrum(hl_new.connectionEigenvalues())
+        V_new = _matrix(hl_new.connectionEigenvectors(), n)
 
         # (i) spectrum unchanged
         np.testing.assert_allclose(evals_new, evals_old, atol=1e-12)
@@ -451,14 +483,15 @@ class TestGaugeInvariance(unittest.TestCase):
         ids, idx = _ordering(st)
         n = len(ids)
         hl_old = cob.HodgeLaplacian(st)
-        V_old = _matrix(hl_old.eigenvectors(), n)
+        V_old = _matrix(hl_old.connectionEigenvectors(), n)
 
         alpha = {vid: float(rng.uniform(-math.pi, math.pi)) for vid in ids}
         TestGaugeInvariance._apply_gauge(st, alpha)
         hl_new = cob.HodgeLaplacian(st)
-        np.testing.assert_allclose(_real_spectrum(hl_new.eigenvalues()),
-                                   _real_spectrum(hl_old.eigenvalues()), atol=1e-12)
-        V_new = _matrix(hl_new.eigenvectors(), n)
+        np.testing.assert_allclose(
+            _real_spectrum(hl_new.connectionEigenvalues()),
+            _real_spectrum(hl_old.connectionEigenvalues()), atol=1e-12)
+        V_new = _matrix(hl_new.connectionEigenvectors(), n)
 
         g = np.array([np.exp(1j * alpha[vid]) for vid in ids])
         for k in range(n):
@@ -509,11 +542,21 @@ class TestDegreeParameterization(unittest.TestCase):
         np.testing.assert_allclose(np.array(hl.eigenvalues()),
                                    np.array(hl.eigenvalues(0)), atol=1e-12)
 
-    def test_k_zero_ignores_metric_flag(self):
-        # The k=0 path is the edge-weighted graph Laplacian regardless of metric.
-        hl = cob.HodgeLaplacian(_testbed())
-        np.testing.assert_allclose(np.array(hl.eigenvalues(0, True)),
-                                   np.array(hl.eigenvalues(0, False)), atol=1e-12)
+    def test_k_zero_honours_the_metric_flag_like_every_other_degree(self):
+        # metric=False selects unit weights at EVERY degree now, degree zero
+        # included: with l^2 = 4 on every edge the signed-content L_0 is the
+        # combinatorial one scaled by 1/4.
+        st = _testbed()
+        for e in st.getEdgeList().toVector():
+            e.setLength(cmath.sqrt(complex(4.0)))
+        hl = cob.HodgeLaplacian(st)
+        n = cob.ChainComplex.fromSpacetime(st).numSimplices(0)
+        metric = np.array(hl.laplacian(0, True)).reshape(n, n)
+        combinatorial = np.array(hl.laplacian(0, False)).reshape(n, n)
+        np.testing.assert_allclose(metric, combinatorial / 4.0, atol=1e-12)
+        # Same kernel either way: b_0 = 1.
+        self.assertEqual(len(hl.harmonics(0, 1e-9, True)), 1)
+        self.assertEqual(len(hl.harmonics(0, 1e-9, False)), 1)
 
 
 # --------------------------------------------------------------------------- #
@@ -642,6 +685,238 @@ class TestMetricWeights(unittest.TestCase):
         st = _triangle()  # S^1, top dimension 1
         self.assertEqual(cob.HodgeLaplacian(st).weights(-1), [])
         self.assertEqual(cob.HodgeLaplacian(st).weights(5), [])
+
+
+
+# --------------------------------------------------------------------------- #
+# The DERIVED degree-zero Hodge Laplacian L_0 = d_1 W_1^-1 d_1^dagger (#805)
+# --------------------------------------------------------------------------- #
+def _np_derived_zero_laplacian(st, metric=True):
+    """Independent reconstruction of L_0 = d_1 W_1^-1 d_1^dagger W_0 (W_0 = I)
+    from ChainComplex's boundary map and HodgeLaplacian.weights(1), with no
+    reference to the C++ degree-zero assembly."""
+    cc = cob.ChainComplex.fromSpacetime(st)
+    n0, n1 = cc.numSimplices(0), cc.numSimplices(1)
+    if n0 == 0:
+        return np.zeros((0, 0), dtype=complex)
+    L = np.zeros((n0, n0), dtype=complex)
+    if n1 == 0:
+        return L
+    d1 = np.array(cc.boundaryMatrix(1), dtype=float).reshape(n0, n1).astype(complex)
+    w1 = (np.array(cob.HodgeLaplacian(st).weights(1), dtype=complex)
+          if metric else np.ones(n1, dtype=complex))
+    w0 = np.ones(n0, dtype=complex)                     # W_0 = I
+    return d1 @ np.diag(1.0 / w1) @ d1.conj().T @ np.diag(w0)
+
+
+def _timelike_cycle(alpha):
+    """The 3-cycle 0-1-2-0 with edge (1,2) genuinely TIMELIKE (l^2 = -alpha^2)
+    and the other two spacelike (l^2 = 1). No current degree-zero fixture had a
+    negative squared length; the derived and magnitude conventions coincide
+    without one."""
+    st = _from_simplices(3, [(0, 1), (1, 2), (2, 0)])
+    _set_uniform(st, 1.0, 0.0)
+    _edge(st, 1, 2).setLength(cmath.sqrt(complex(-(alpha ** 2))))
+    return st
+
+
+def _complex_l2_cycle(rho, theta):
+    """The 3-cycle with a genuinely COMPLEX squared length z = rho e^{i theta}
+    on edge (1,2) -- the whitepaper's z_e = rho_e e^{i theta_e}, whose phase is
+    part of the edge geometry rather than a second link field."""
+    st = _from_simplices(3, [(0, 1), (1, 2), (2, 0)])
+    _set_uniform(st, 1.0, 0.0)
+    _edge(st, 1, 2).setLength(cmath.sqrt(rho * cmath.exp(1j * theta)))
+    return st
+
+
+class TestDerivedDegreeZero(unittest.TestCase):
+    """L_0 is assembled from d_1 and the weight, uniformly with every other
+    degree. Every check here is run at a genuinely timelike squared length or a
+    genuinely complex one, where the derived and magnitude conventions differ."""
+
+    FIXTURES = (
+        ("spacelike triangle", lambda: _triangle()),
+        ("path", lambda: _path()),
+        ("testbed", lambda: _testbed()),
+        ("timelike cycle a=1", lambda: _timelike_cycle(1.0)),
+        ("timelike cycle a=0.5", lambda: _timelike_cycle(0.5)),
+        ("timelike cycle a=2", lambda: _timelike_cycle(2.0)),
+        ("complex l2", lambda: _complex_l2_cycle(1.7, 0.9)),
+        ("torus", lambda: _torus()),
+    )
+
+    def test_equals_the_boundary_map_identity_entrywise(self):
+        for name, build in self.FIXTURES:
+            st = build()
+            n = cob.ChainComplex.fromSpacetime(st).numSimplices(0)
+            for metric in (True, False):
+                with self.subTest(fixture=name, metric=metric):
+                    got = np.array(cob.HodgeLaplacian(st).laplacian(0, metric),
+                                   dtype=complex).reshape(n, n)
+                    np.testing.assert_allclose(
+                        got, _np_derived_zero_laplacian(st, metric), atol=1e-12)
+
+    def test_constant_is_annihilated_to_machine_precision(self):
+        for name, build in self.FIXTURES:
+            st = build()
+            n = cob.ChainComplex.fromSpacetime(st).numSimplices(0)
+            with self.subTest(fixture=name):
+                L = np.array(cob.HodgeLaplacian(st).laplacian(0),
+                             dtype=complex).reshape(n, n)
+                ones = np.ones(n, dtype=complex)
+                # Row sums vanish identically: |L @ 1| is at rounding level
+                # relative to the operator scale, not merely "small".
+                scale = max(np.max(np.abs(L)), 1.0)
+                self.assertLess(np.max(np.abs(L @ ones)) / scale, 1e-14)
+
+    def test_harmonic_dimension_is_the_component_count(self):
+        # dim ker L_0 = b_0, at signed and complex weights alike.
+        cases = (
+            ("one component", _timelike_cycle(0.5), 1),
+            ("complex l2", _complex_l2_cycle(2.0, -1.1), 1),
+            ("two components", _two_timelike_components(), 2),
+        )
+        for name, st, expected in cases:
+            with self.subTest(fixture=name):
+                b0 = cob.ChainComplex.fromSpacetime(st).bettiNumbers()[0]
+                self.assertEqual(b0, expected)
+                self.assertEqual(len(cob.HodgeLaplacian(st).harmonics(0)), b0)
+
+    def test_timelike_cycle_closed_form_spectrum(self):
+        # W_1 = diag(1, 1, -alpha^2) on 1-cells (0,1),(0,2),(1,2), so
+        # L_0 = d_1 W_1^-1 d_1^T has spec {0, 3, 1 - 2/alpha^2} -- computed by
+        # hand, not read off the implementation. NEGATIVE below alpha = sqrt(2):
+        # the derived degree-zero operator is genuinely indefinite on a
+        # Lorentzian complex.
+        for alpha in (0.5, 1.0, math.sqrt(2.0), 2.0, 3.0):
+            with self.subTest(alpha=alpha):
+                st = _timelike_cycle(alpha)
+                evals = np.array(cob.HodgeLaplacian(st).eigenvalues(0),
+                                 dtype=complex)
+                np.testing.assert_allclose(np.sort(evals.imag), 0.0, atol=1e-12)
+                np.testing.assert_allclose(
+                    np.sort(evals.real),
+                    np.sort([0.0, 3.0, 1.0 - 2.0 / alpha ** 2]), atol=1e-12)
+
+    def test_lorentzian_degree_zero_is_not_positive_semidefinite(self):
+        # The honest regime statement: below the crossing the smallest
+        # eigenvalue is strictly negative, so no PSD claim survives here.
+        st = _timelike_cycle(1.0)
+        evals = np.array(cob.HodgeLaplacian(st).eigenvalues(0), dtype=complex)
+        self.assertLess(np.min(evals.real), -0.5)
+
+    def test_complex_weight_makes_it_complex_symmetric_not_hermitian(self):
+        # z = rho e^{i theta} on one edge: L_0 stays SYMMETRIC (the conductance
+        # -1/z sits on both off-diagonals) but is no longer Hermitian.
+        st = _complex_l2_cycle(1.7, 0.9)
+        L = np.array(cob.HodgeLaplacian(st).laplacian(0),
+                     dtype=complex).reshape(3, 3)
+        np.testing.assert_allclose(L, L.T, atol=1e-14)
+        self.assertGreater(np.linalg.norm(L - L.conj().T), 1e-2)
+        # ...and the constant is still exactly harmonic.
+        np.testing.assert_allclose(L @ np.ones(3), 0.0, atol=1e-14)
+
+    def test_conductance_is_the_reciprocal_weight(self):
+        # The hand identity, entry by entry: off-diagonal -1/W_1(e), diagonal
+        # the incident sum. Distinct edge weights pin the column order too.
+        st = _from_simplices(3, [(0, 1), (1, 2), (2, 0)])
+        squared = {(0, 1): 2.0, (0, 2): -4.0, (1, 2): 5.0}
+        for e in st.getEdgeList().toVector():
+            key = tuple(sorted((e.getSource().getId(), e.getTarget().getId())))
+            e.setLength(cmath.sqrt(complex(squared[key])))
+        c = {k: 1.0 / v for k, v in squared.items()}
+        expected = np.array([
+            [c[(0, 1)] + c[(0, 2)], -c[(0, 1)], -c[(0, 2)]],
+            [-c[(0, 1)], c[(0, 1)] + c[(1, 2)], -c[(1, 2)]],
+            [-c[(0, 2)], -c[(1, 2)], c[(0, 2)] + c[(1, 2)]]], dtype=complex)
+        got = np.array(cob.HodgeLaplacian(st).laplacian(0),
+                       dtype=complex).reshape(3, 3)
+        np.testing.assert_allclose(got, expected, atol=1e-13)
+
+    def test_setPhase_does_not_enter_the_derived_operator(self):
+        # The whitepaper's phase is arg(z_e), carried by the complex squared
+        # length; Edge.setPhase is the separate U(1) link field the CONNECTION
+        # operator reads. L_0 is built from d_1 and W_1 alone, so rephasing the
+        # edges cannot move it -- recorded here so a change is noticed.
+        st = _timelike_cycle(0.7)
+        before = np.array(cob.HodgeLaplacian(st).laplacian(0), dtype=complex)
+        for e in st.getEdgeList().toVector():
+            e.setPhase(0.83)
+        after = np.array(cob.HodgeLaplacian(st).laplacian(0), dtype=complex)
+        np.testing.assert_allclose(after, before, atol=0.0, rtol=0.0)
+        # The connection operator, by contrast, moves.
+        self.assertGreater(
+            np.linalg.norm(
+                np.array(cob.HodgeLaplacian(st).connectionLaplacian()) -
+                np.array(cob.HodgeLaplacian(_timelike_cycle(0.7))
+                         .connectionLaplacian())), 1e-2)
+
+    def test_relabeling_the_vertices_permutes_the_operator(self):
+        # Vertex ids are matched by SET, never sorted into a convention: a
+        # relabeled complex gives the permuted operator and the same spectrum.
+        squared = {(0, 1): 2.0, (0, 2): -4.0, (1, 2): 5.0}
+        relabel = {0: 70, 1: 5, 2: 31}
+
+        def graph(idmap):
+            sig = tessera.Signature(4, tessera.Lorentzian)
+            metric = tessera.Metric(True, sig)
+            st = tessera.Spacetime(metric, tessera.HERMITIAN_WEIGHTED, 1.0, 1.0,
+                                   tessera.PREFERRED, tessera.Toroid())
+            verts = {i: st.createVertex(idmap[i]) for i in range(3)}
+            for (a, b) in squared:
+                st.createSimplex([verts[a], verts[b]])
+            for e in st.getEdgeList().toVector():
+                pair = (e.getSource().getId(), e.getTarget().getId())
+                inv = {v: k for k, v in idmap.items()}
+                key = tuple(sorted((inv[pair[0]], inv[pair[1]])))
+                e.setLength(cmath.sqrt(complex(squared[key])))
+            return st
+
+        plain = graph({0: 0, 1: 1, 2: 2})
+        moved = graph(relabel)
+        cc_plain = cob.ChainComplex.fromSpacetime(plain).kSimplexVertices(0)
+        cc_moved = cob.ChainComplex.fromSpacetime(moved).kSimplexVertices(0)
+        # position in the moved operator of each original vertex
+        order = [cc_moved.index([relabel[c[0]]]) for c in cc_plain]
+        A = np.array(cob.HodgeLaplacian(plain).laplacian(0),
+                     dtype=complex).reshape(3, 3)
+        B = np.array(cob.HodgeLaplacian(moved).laplacian(0),
+                     dtype=complex).reshape(3, 3)
+        np.testing.assert_allclose(A, B[np.ix_(order, order)], atol=1e-13)
+
+    def test_null_norms_align_with_the_harmonics(self):
+        # nullNorms(0) is one entry per harmonic of the SAME operator; with
+        # W_0 = I the constant's norm is exactly its squared length, 1.
+        for name, build in self.FIXTURES:
+            st = build()
+            with self.subTest(fixture=name):
+                hl = cob.HodgeLaplacian(st)
+                harmonics = hl.harmonics(0, 1e-9)
+                norms = hl.nullNorms(0, 1e-9)
+                self.assertEqual(len(norms), len(harmonics))
+                for value in norms:
+                    self.assertAlmostEqual(complex(value).real, 1.0, places=9)
+                    self.assertAlmostEqual(complex(value).imag, 0.0, places=9)
+
+    def test_isolated_vertex_is_not_a_zero_cell(self):
+        # ChainComplex is built from simplices, so a bare vertex is not a
+        # 0-cell and does not appear in L_0. The CONNECTION operator reads the
+        # vertex set directly and does carry it.
+        st = _from_simplices(3, [(0, 1)])          # vertex 2 is bare
+        hl = cob.HodgeLaplacian(st)
+        self.assertEqual(cob.ChainComplex.fromSpacetime(st).numSimplices(0), 2)
+        self.assertEqual(len(hl.laplacian(0)), 4)          # 2x2
+        self.assertEqual(len(hl.connectionLaplacian()), 9)  # 3x3
+
+
+def _two_timelike_components(alpha=0.6):
+    """Two disjoint 3-cycles, each carrying one timelike edge: b_0 = 2."""
+    st = _from_simplices(6, [(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3)])
+    _set_uniform(st, 1.0, 0.0)
+    _edge(st, 1, 2).setLength(cmath.sqrt(complex(-(alpha ** 2))))
+    _edge(st, 4, 5).setLength(cmath.sqrt(complex(-(alpha ** 2))))
+    return st
 
 
 if __name__ == "__main__":

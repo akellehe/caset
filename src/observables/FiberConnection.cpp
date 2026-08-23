@@ -519,7 +519,8 @@ Eigen::MatrixXcd FiberConnection::chainTransfer(
     throw std::invalid_argument("FiberConnection::chainTransfer: negative degree");
 
   // Canonical whole-complex cell order: sorted vertex ids at degree 0 (the
-  // HodgeLaplacian k = 0 convention), the ChainComplex column order at
+  // HodgeLaplacian U(1) CONNECTION convention, which is the operator this
+  // wrapper reads there -- see below), the ChainComplex column order at
   // degree >= 1 (the documented laplacian(k) alignment).
   std::vector<std::vector<std::uint64_t>> cells;
   if (degree == 0) {
@@ -565,7 +566,13 @@ Eigen::MatrixXcd FiberConnection::chainTransfer(
   };
 
   const cobordism::HodgeLaplacian hodge(st, weights);
-  const std::vector<cd> flat = hodge.laplacian(degree);
+  // Degree 0 reads the U(1) CONNECTION Laplacian D - A, not the Hodge L_0
+  // (#805): this wrapper's degree-zero identity is the oriented U(1) link
+  // entry -l^2 e^{i phase}, which is what the Wilson-loop machinery this
+  // transport is compared against carries. L_0 = d_1 W_1^-1 d_1^T has no
+  // separate link phase at all -- its off-diagonal is -1/W_1(e).
+  const std::vector<cd> flat =
+      degree == 0 ? hodge.connectionLaplacian() : hodge.laplacian(degree);
   if (flat.size() != n * n)
     throw std::invalid_argument(
         "FiberConnection::chainTransfer: operator/cell count mismatch");

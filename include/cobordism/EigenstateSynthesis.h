@@ -709,6 +709,21 @@ class EigenstateSynthesis {
     [[nodiscard]] RegisterReadout assembleRegisterReadout(
         const std::vector<std::vector<std::uint64_t>> &holes) const;
 
+    // The operator this synthesis scores, fresh from the live complex, in the
+    // cellOrdering_ basis. At k >= 1 that is HodgeLaplacian::laplacian(k_) --
+    // the Hodge L_k. At k = 0 it is the U(1) CONNECTION Laplacian D - A,
+    // indexed over the full sorted vertex order exactly as cellOrdering_ is
+    // (#805): the degree-zero register carries U(1) FLUX, and dim ker L_0 is
+    // b_0 at any weights, so an L_0 readout would be identically gauge-flat and
+    // could carry nothing. The matrix path never consults the
+    // eigendecomposition cache, so repeated perturb-then-query is honest.
+    [[nodiscard]] std::vector<std::complex<double>> readoutLaplacian() const;
+
+    // The harmonic amplitude matrix of `readoutLaplacian`, fresh from the live
+    // complex and in the same basis: HodgeLaplacian::harmonicMatrix(k_) at
+    // k >= 1, connectionHarmonicMatrix() at k = 0.
+    [[nodiscard]] std::vector<std::complex<double>> readoutHarmonicMatrix() const;
+
     // The loop analogue of assembleRegisterReadout: P[r*m+q] = sum over loop q's
     // oriented edges of (+/-1) * H[r, edge]; leak = the loop's first edge.
     [[nodiscard]] RegisterReadout assembleReadoutOverLoops(

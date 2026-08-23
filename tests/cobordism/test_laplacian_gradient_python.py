@@ -83,7 +83,7 @@ class LaplacianGradientHandCalcTest(unittest.TestCase):
             self.assertLess(np.max(np.abs(acc + L)), 1e-10,
                             f"Euler identity Σℓ²∂L = −L failed at k={k}")
 
-    def test_matches_finite_difference_and_empty_below_k1(self):
+    def test_matches_finite_difference_and_empty_below_degree_zero(self):
         # The signed operator is non-symmetric, so its gradient is too; the
         # honest check is a central finite difference of L itself.
         st = _holed_s3()
@@ -101,8 +101,23 @@ class LaplacianGradientHandCalcTest(unittest.TestCase):
         e.setLength(l); st.materializeFacets()
         fd = (Lp - Lm) / (2.0 * h)
         self.assertLess(np.max(np.abs(g - fd)), 1e-5)
-        # k < 1 has no metric Laplacian gradient
-        self.assertEqual(hl.laplacianGradient(0, e.getSource().getId(),
+        # Degree zero is now the derived L_0 = d_1 W_1^-1 d_1^dagger, which has
+        # an exact gradient too (#805): the same central-difference check.
+        n0 = _Lmat(hl, 0).shape[0]
+        g0 = np.asarray(hl.laplacianGradient(0, e.getSource().getId(),
+                                             e.getTarget().getId()),
+                        complex).reshape(n0, n0)
+        e.setLength(cmath.sqrt(l * l + h)); st.materializeFacets()
+        L0p = np.asarray(cob.HodgeLaplacian(st).laplacian(0, True),
+                         complex).reshape(n0, n0)
+        e.setLength(cmath.sqrt(l * l - h)); st.materializeFacets()
+        L0m = np.asarray(cob.HodgeLaplacian(st).laplacian(0, True),
+                         complex).reshape(n0, n0)
+        e.setLength(l); st.materializeFacets()
+        self.assertLess(np.max(np.abs(g0 - (L0p - L0m) / (2.0 * h))), 1e-5)
+        self.assertGreater(np.max(np.abs(g0)), 0.0)
+        # k < 0 still has no chain to differentiate.
+        self.assertEqual(hl.laplacianGradient(-1, e.getSource().getId(),
                                               e.getTarget().getId()), [])
 
 

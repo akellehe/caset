@@ -13,20 +13,27 @@ namespace tessera::observables {
 
 double SpectralGap::compute(const std::shared_ptr<Spacetime> &spacetime) {
   if (spacetime == nullptr) return 0.0;
-  // Eigenvalues are ascending; the first gap is lambda_1 - lambda_0.
-  // Degree 0 is the graph Laplacian D - A, Hermitian, so the spectrum is real;
-  // eigenvalues() is complex-typed for parity with the k >= 1 d'Alembertian.
+  // The U(1) CONNECTION Laplacian D - A, not the Hodge L_0 (#805). This
+  // observable's content is Aharonov-Bohm -- the gap collapses at flux pi --
+  // which is a statement about the connection operator; L_0's gap is a
+  // different number and carries no flux dependence at all. The connection
+  // operator is Hermitian, so eigenvalues are real and ascending and the first
+  // gap is lambda_1 - lambda_0; connectionEigenvalues() is complex-typed for
+  // parity with the L_k family.
   const std::vector<std::complex<double>> evals =
-      ::tessera::cobordism::HodgeLaplacian(spacetime).eigenvalues();
+      ::tessera::cobordism::HodgeLaplacian(spacetime).connectionEigenvalues();
   if (evals.size() < 2) return 0.0;
   return (evals[1] - evals[0]).real();
 }
 
 double HarmonicDimension::compute(const std::shared_ptr<Spacetime> &spacetime) {
   if (spacetime == nullptr) return 0.0;
-  // harmonics() is one Cochain per basis vector of ker L_0, so dim ker = its count.
+  // dim ker of the U(1) CONNECTION Laplacian, not of L_0 (#805). A nonzero flux
+  // lifts this zero mode, which is the observable's whole content; dim ker L_0
+  // is always b_0, already reported by ChainComplex::bettiNumbers.
   return static_cast<double>(
-      ::tessera::cobordism::HodgeLaplacian(spacetime).harmonics().size());
+      ::tessera::cobordism::HodgeLaplacian(spacetime)
+          .connectionHarmonics().size());
 }
 
 }  // namespace tessera::observables

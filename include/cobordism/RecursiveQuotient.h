@@ -252,8 +252,23 @@ class RecursiveQuotient {
       std::size_t nullity{0};
       /// Exact integer topological zero-mode count (spacetime path;
       /// combinatorial kernel of the stacked boundary blocks). Equals
-      /// `integerBasis.size()`. 0 on the matrix path.
+      /// `integerBasis.size()`. 0 on the matrix path — check
+      /// `integerNullityMeasured` before comparing.
       std::size_t integerNullity{0};
+      /// Whether the exact integer nullity was computed at all. False on the
+      /// matrix path (no boundary maps) and when the integer kernel overflowed;
+      /// `integerNullity == 0` then means "not measured", not "measured zero".
+      bool integerNullityMeasured{false};
+      /// `nullity - integerNullity` — the discrepancy between the numerical
+      /// kernel of the weighted interior block and the exact integer
+      /// topological nullity, RECORDED rather than silently dropped (#805).
+      /// Zero means the two agree; a nonzero value means the operator's
+      /// numerical kernel is not the combinatorial one (a signed/complex metric
+      /// can open or close a zero mode the topology does not have, and the
+      /// weighted kernel differs from the unit-weight one in general). NaN when
+      /// `integerNullityMeasured` is false — never 0, which would claim an
+      /// agreement that was never measured.
+      double nullityDiscrepancy{std::numeric_limits<double>::quiet_NaN()};
       /// Exact integer basis vectors over the component's interior cells
       /// (spacetime path; each of length `interiorCells(component).size()`).
       std::vector<std::vector<long>> integerBasis{};
@@ -669,7 +684,9 @@ class RecursiveQuotient {
                     const std::vector<std::vector<int>> &components,
                     const Options &options);
     void classify();
-    void detectRegime(bool structuralPsd);
+    // Measures the regime from the operator and its carried metric. There is
+    // no "assert PSD from a convention" path (#805).
+    void detectRegime();
     [[nodiscard]] std::shared_ptr<ComponentSolve> componentSolve(
         int component) const;
     [[nodiscard]] std::shared_ptr<ComponentSolve> computeSolve(
