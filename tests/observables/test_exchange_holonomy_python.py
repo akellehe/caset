@@ -138,10 +138,9 @@ def _fiber(frame, cells, weights=None, accepted=True, degree=0,
     weights = np.asarray(weights, complex)
     eigenvalues = ([0.0] * rank if eigenvalues is None
                    else list(eigenvalues))
-    # Psi^dagger W Phi = I for the biorthogonal-normalized left frame.
+    # Psi^dagger W Phi = I for the biorthogonal-normalized left frame:
+    # Psi = W^{-dagger} Phi G^{-dagger} with G = Phi^dagger W Phi.
     gram = frame.conj().T @ np.diag(weights) @ frame
-    left = np.diag(weights.conj()) @ np.linalg.solve(
-        gram.conj().T, (np.diag(weights) @ frame).conj().T).conj().T
     left = np.linalg.solve(np.diag(weights).conj(),
                            np.linalg.solve(gram, frame.conj().T
                                            @ np.diag(weights)).conj().T)

@@ -691,7 +691,7 @@ int ExchangeHolonomy::spinorDimension(int d) {
 }
 
 Eigen::MatrixXcd ExchangeHolonomy::gamma(int a, int d) {
-  const int dim = spinorDimension(d);
+  spinorDimension(d);  // validates d
   if (a < 0 || a >= d)
     throw std::invalid_argument("ExchangeHolonomy: gamma axis out of range");
   Eigen::Matrix2cd s1, s2, s3, id2;
@@ -713,7 +713,6 @@ Eigen::MatrixXcd ExchangeHolonomy::gamma(int a, int d) {
         out.block(2 * i, 2 * j, 2, 2) = p(i, j) * q;
     return out;
   };
-  (void)dim;
   if (a == 0) return kron2(s1, s1);
   if (a == 1) return kron2(s1, s2);
   if (a == 2) return kron2(s1, s3);
@@ -1102,7 +1101,7 @@ SpinLiftRead ExchangeHolonomy::spinLift(
     const std::vector<Eigen::MatrixXd> &edgeRotations,
     const std::vector<std::vector<std::uint64_t>> &triangles, int d,
     const ExchangeHolonomyConfig &cfg) {
-  const int dim = spinorDimension(d);
+  spinorDimension(d);  // validates d
   if (edges.size() != edgeRotations.size())
     throw std::invalid_argument(
         "ExchangeHolonomy::spinLift: one rotation per edge required");
@@ -1160,7 +1159,6 @@ SpinLiftRead ExchangeHolonomy::spinLift(
         std::max(read.maxLiftResidual, std::min(toPlus, toMinus));
     w01.push_back(sign < 0 ? 1 : 0);
   }
-  (void)dim;
 
   const bool premiseOk =
       read.maxCocycleResidual <= cfg.cocycleTolerance &&
