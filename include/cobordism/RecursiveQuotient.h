@@ -7,6 +7,7 @@
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
 
+#include <limits>
 #include <complex>
 #include <cstdint>
 #include <map>
@@ -442,7 +443,7 @@ class RecursiveQuotient {
       std::vector<ResponseEdge> edges{};
       /// Largest |entry| of the reduced operator not covered by any
       /// vertex/edge block (0 = the network reproduces the operator).
-      double coverageResidual{0.0};
+      double coverageResidual{std::numeric_limits<double>::quiet_NaN()};
       /// Exact-tiling certificate (residual = uncovered magnitude).
       Certificate certificate{};
     };
@@ -464,7 +465,7 @@ class RecursiveQuotient {
       std::vector<std::vector<std::complex<double>>> restrictionMaps{};
       /// Max relative block-reconstruction residual of the sheaf Laplacian
       /// against the response network blocks.
-      double reconstructionResidual{0.0};
+      double reconstructionResidual{std::numeric_limits<double>::quiet_NaN()};
       /// Realization certificate; `holds()` gates `emitted`.
       Certificate certificate{};
     };

@@ -2169,6 +2169,19 @@ conjugated at its base component, so the normalized trace is invariant.)doc")
       .def_readonly("unitarityResidual",
                     &WilsonHolonomyRead::unitarityResidual)
       .def_readonly("unitary", &WilsonHolonomyRead::unitary)
+      .def_readonly("maxLeakage", &WilsonHolonomyRead::maxLeakage,
+                    "Worst pre-normalization isometry defect over the links.")
+      .def_readonly("minEndpointGap", &WilsonHolonomyRead::minEndpointGap,
+                    "Worst endpoint band isolation over the links.")
+      .def_readonly("maxFrameConditionNumber",
+                    &WilsonHolonomyRead::maxFrameConditionNumber,
+                    "Worst endpoint frame conditioning over the links.")
+      .def_readonly("minSingularValue",
+                    &WilsonHolonomyRead::minSingularValue,
+                    "Smallest singular value over the links' raw overlaps.")
+      .def_readonly("minNumericalRank",
+                    &WilsonHolonomyRead::minNumericalRank,
+                    "Smallest numerical rank over the links.")
       .def_readonly("certificate", &WilsonHolonomyRead::certificate);
 
   py::class_<FundamentalLiftRead>(m, "FundamentalLiftRead",

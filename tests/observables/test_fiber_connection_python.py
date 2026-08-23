@@ -1458,3 +1458,46 @@ class TestRecordSerialization(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+# =========================================================================== #
+# whitepaper line 891 — polar normalization must not conceal a bad fiber
+# =========================================================================== #
+class TestSpecHolonomyDiagnostics(unittest.TestCase):
+    """The spec requires every ACCEPTED holonomy to be reported together
+    with the leakage, the rank/singular-value evidence, the endpoint band
+    gaps and the frame conditioning of the links it was built from.  Polar
+    normalization discards each factor's defect, so the loop must carry it
+    forward or a barely-accepted chain reads as clean."""
+
+    def _links(self):
+        conn = obs.FiberConnection()
+        a, b, c = _unit_fiber(1, 3), _unit_fiber(2, 3), _unit_fiber(3, 3)
+        return [conn.transport(a, b, _random_unitary(np.random.default_rng(4), 3)),
+                conn.transport(b, c, _random_unitary(np.random.default_rng(5), 3)),
+                conn.transport(c, a, _random_unitary(np.random.default_rng(6), 3))]
+
+    def test_every_required_diagnostic_is_measured(self):
+        links = self._links()
+        loop = obs.FiberConnection().holonomy(links)
+        for name in ("maxLeakage", "minEndpointGap",
+                     "maxFrameConditionNumber", "minSingularValue"):
+            self.assertFalse(math.isnan(getattr(loop, name)),
+                             name + " must be measured, never NaN, on an "
+                                    "accepted holonomy")
+        self.assertGreaterEqual(loop.minNumericalRank, 1)
+
+    def test_each_diagnostic_is_the_worst_case_over_the_links(self):
+        links = self._links()
+        loop = obs.FiberConnection().holonomy(links)
+        self.assertAlmostEqual(loop.maxLeakage,
+                               max(l.leakage for l in links), delta=MACHINE)
+        self.assertAlmostEqual(loop.maxFrameConditionNumber,
+                               max(l.frameConditionNumber for l in links),
+                               delta=MACHINE)
+        self.assertAlmostEqual(
+            loop.minEndpointGap,
+            min(min(l.toGap, l.fromGap) for l in links), delta=MACHINE)
+        self.assertEqual(loop.minNumericalRank,
+                         min(l.numericalRank for l in links))

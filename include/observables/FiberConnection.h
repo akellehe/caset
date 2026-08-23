@@ -333,6 +333,21 @@ struct WilsonHolonomyRead {
   double unitarityResidual = std::numeric_limits<double>::quiet_NaN();
   /// True when every link supplied a unitary/pseudo-unitary factor.
   bool unitary = false;
+  /// Worst pre-normalization isometry defect max_i η_i over the links.
+  /// Polar normalization discards each factor's defect, so the loop
+  /// carries it forward: a holonomy assembled from barely-accepted links
+  /// stays legible as such rather than reading as clean.
+  double maxLeakage = std::numeric_limits<double>::quiet_NaN();
+  /// Worst endpoint band isolation min_i min(toGap_i, fromGap_i) — the
+  /// smallest gap any constituent band was accepted on.
+  double minEndpointGap = std::numeric_limits<double>::quiet_NaN();
+  /// Worst endpoint frame conditioning max_i frameConditionNumber_i.
+  double maxFrameConditionNumber = std::numeric_limits<double>::quiet_NaN();
+  /// Smallest singular value over the links' raw overlaps — the
+  /// singular-value evidence behind the accepted `rank`.
+  double minSingularValue = std::numeric_limits<double>::quiet_NaN();
+  /// Smallest numerical rank over the links.
+  int minNumericalRank = 0;
   /// CertifiedNumerical/BandWindow in the links' shared regime.
   cobordism::Certificate certificate{};
 };

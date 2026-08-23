@@ -886,6 +886,15 @@ WilsonHolonomyRead FiberConnection::holonomy(
   CertificateRegime regime = CertificateRegime::PositiveSemidefinite;
   double residual = kNaN;
   double conditioning = kNaN;
+  // The spec forbids polar normalization from concealing a bad fiber
+  // assignment, so the pre-normalization diagnostics of every constituent
+  // link travel with the loop: worst leakage, worst endpoint isolation,
+  // worst frame conditioning, and the singular-value/rank evidence.
+  double maxLeakage = kNaN;
+  double minEndpointGap = kNaN;
+  double maxFrameCondition = kNaN;
+  double minSingularValue = kNaN;
+  int minNumericalRank = rank;
   for (const FiberTransportRead &link : links) {
     // Never a mixture: the unitary product uses every emitted factor, the
     // GL product the raw maps throughout.
@@ -894,7 +903,27 @@ WilsonHolonomyRead FiberConnection::holonomy(
     residual = fmaxAccumulate(residual, unitary ? link.polarResidual
                                                 : link.certificate.residual());
     conditioning = fmaxAccumulate(conditioning, link.certificate.conditioning());
+    maxLeakage = fmaxAccumulate(maxLeakage, link.leakage);
+    maxFrameCondition =
+        fmaxAccumulate(maxFrameCondition, link.frameConditionNumber);
+    const double endpointGap = std::fmin(link.toGap, link.fromGap);
+    minEndpointGap = std::isnan(minEndpointGap)
+                         ? endpointGap
+                         : std::fmin(minEndpointGap, endpointGap);
+    if (!link.singularValues.empty()) {
+      const double smallest = *std::min_element(link.singularValues.begin(),
+                                                link.singularValues.end());
+      minSingularValue = std::isnan(minSingularValue)
+                             ? smallest
+                             : std::fmin(minSingularValue, smallest);
+    }
+    minNumericalRank = std::min(minNumericalRank, link.numericalRank);
   }
+  read.maxLeakage = maxLeakage;
+  read.minEndpointGap = minEndpointGap;
+  read.maxFrameConditionNumber = maxFrameCondition;
+  read.minSingularValue = minSingularValue;
+  read.minNumericalRank = minNumericalRank;
   read.holonomy = h;
   read.normalizedTrace = h.trace() / static_cast<double>(rank);
   read.determinant = h.determinant();
