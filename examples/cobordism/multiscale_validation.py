@@ -711,7 +711,13 @@ def run_member(size, seed, config, commit, config_hash):
                     "eigen_residual": _finite(certificate.eigenResidual),
                     "projector_residual": _finite(
                         certificate.projectorResidual),
-                    "condition_number": _finite(certificate.conditionNumber),
+                    "nearest_discarded_separation": _finite(
+                        certificate.nearestDiscardedSeparation),
+                    "localization_excess": _finite(
+                        certificate.localizationExcess),
+                    "projector_norm": _finite(certificate.projectorNorm),
+                    "frame_condition_number": _finite(
+                        certificate.frameConditionNumber),
                     "self_adjoint": bool(certificate.selfAdjoint),
                     "krein_positive": int(certificate.positiveSignature),
                     "krein_negative": int(certificate.negativeSignature),
