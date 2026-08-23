@@ -234,6 +234,14 @@ class FastPathTest(unittest.TestCase):
                 self.assertIn(step["refinement"]["trigger"],
                               cob.MultiCobordism.refinement_indicator_names())
 
+    def test_disabling_refinement_commits_no_cell(self):
+        document = rbs.run_simulation(small_config(refine=False),
+                                      commit="testcommit")
+        self.assertEqual(document["drive"]["refinement_events"], 0)
+        for step in document["drive"]["steps"]:
+            self.assertFalse(step["refinement"]["enabled"])
+            self.assertEqual(step["refinement"]["cells_committed"], 0)
+
     def test_the_provenance_carries_seed_config_hash_and_commit(self):
         provenance = self.document["provenance"]
         self.assertEqual(provenance["seed"], SMALL_SEED)
@@ -718,6 +726,87 @@ class CampaignTest(unittest.TestCase):
 
 
 # =====================================================================
+# the geometry-only refinement rule
+# =====================================================================
+
+class RefinementTest(unittest.TestCase):
+    """The refinement rule is #776's, unchanged: STATIC over five geometric
+    indicators, so it cannot reach a certificate."""
+
+    def test_the_declared_thresholds_are_geometry_only(self):
+        for name in rbs.DECLARED_REFINEMENT_THRESHOLDS:
+            self.assertIn(
+                name, cob.MultiCobordism.refinement_indicator_names())
+
+    def test_a_none_threshold_never_fires_and_a_number_can(self):
+        indicators = cob.MultiCobordism.RefinementIndicators()
+        indicators.curvature_concentration = 100.0
+        indicators.mesh_quality = 0.5
+        never = cob.MultiCobordism.RefinementIndicators()
+        never.regge_stationarity_residual = float("inf")
+        never.hodge_stationarity_residual = float("inf")
+        never.curvature_concentration = float("inf")
+        never.solver_error = float("inf")
+        never.mesh_quality = 0.0
+        self.assertFalse(
+            cob.MultiCobordism.refinement_decision_of(indicators,
+                                                      never).refine)
+        declared = cob.MultiCobordism.RefinementIndicators()
+        declared.regge_stationarity_residual = float("inf")
+        declared.hodge_stationarity_residual = float("inf")
+        declared.curvature_concentration = 4.0
+        declared.solver_error = float("inf")
+        declared.mesh_quality = 0.1
+        decision = cob.MultiCobordism.refinement_decision_of(indicators,
+                                                             declared)
+        self.assertTrue(decision.refine)
+        self.assertEqual(decision.trigger, "curvature_concentration")
+
+    def test_the_declared_thresholds_are_applied_to_the_node(self):
+        node = cob.MultiCobordism(rbs.build_neutral_host(SMALL), [], [],
+                                  [1], 1.0, SMALL_SEED)
+        rbs._apply_refinement_thresholds(node, small_config())
+        thresholds = node.refinement_thresholds
+        self.assertEqual(thresholds.curvature_concentration, 4.0)
+        self.assertEqual(thresholds.mesh_quality, 0.1)
+        self.assertEqual(thresholds.regge_stationarity_residual,
+                         float("inf"))
+        self.assertEqual(thresholds.solver_error, float("inf"))
+
+    def test_the_refinement_mechanism_commits_through_the_gated_surgery(self):
+        """A THRESHOLD CHOSEN HERE to make the decision fire — a test of the
+        MECHANISM, never a run configuration. The declared run thresholds
+        stay untouched."""
+        node = cob.MultiCobordism(rbs.build_neutral_host(SMALL), [], [],
+                                  [1], 1.0, SMALL_SEED)
+        node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
+        firing = cob.MultiCobordism.RefinementIndicators()
+        firing.regge_stationarity_residual = float("inf")
+        firing.hodge_stationarity_residual = float("inf")
+        firing.curvature_concentration = float("inf")
+        firing.solver_error = float("inf")
+        firing.mesh_quality = 1.0          # a LOWER bound nothing can meet
+        node.set_refinement_thresholds(firing)
+        decision = node.refinement_decision()
+        self.assertTrue(decision.refine)
+        self.assertEqual(decision.trigger, "mesh_quality")
+        before = len(node.st.getTopSimplices())
+        committed = node.refine_geometry(1)
+        self.assertGreaterEqual(committed, 0)
+        if committed:
+            self.assertGreater(len(node.st.getTopSimplices()), before)
+
+    def test_the_run_records_the_thresholds_that_never_fire(self):
+        document, _ = shared_run()
+        never = document["drive"]["refinement_never_fires"]
+        self.assertEqual(
+            sorted(never),
+            sorted(name for name, value
+                   in rbs.DECLARED_REFINEMENT_THRESHOLDS.items()
+                   if value is None))
+
+
+# =====================================================================
 # the animation reads the same checkpoint data as the headless path
 # =====================================================================
 
@@ -768,6 +857,26 @@ class AnimationTest(unittest.TestCase):
         self.assertIn("ABSENT", texts)
         self.assertTrue(any("named reason" in t for t in texts))
         plt.close(figure)
+
+    def test_a_single_frame_document_falls_back_to_a_still(self):
+        path = os.path.join(self.directory, "single.gif")
+        produced = rbs.render_animation(self.document, path)
+        self.assertEqual(len(produced), 1)
+        self.assertTrue(os.path.exists(path))
+
+    def test_a_multi_frame_document_renders_every_frame(self):
+        """Two frames of the SAME persisted document — the animation walks
+        the checkpoints, so a longer drive animates without any extra data
+        source."""
+        document = copy.deepcopy(self.document)
+        document["checkpoints"].append(
+            copy.deepcopy(document["checkpoints"][0]))
+        path = os.path.join(self.directory, "multi.gif")
+        produced = rbs.render_animation(document, path)
+        self.assertEqual(produced[0], path)
+        self.assertEqual(len(produced), 1 + len(document["checkpoints"]))
+        self.assertTrue(os.path.exists(path))
+        self.assertGreater(os.path.getsize(path), 20000)
 
     def test_the_cli_animate_command_exits_zero(self):
         out = os.path.join(self.directory, "cli_overlay.png")
@@ -943,11 +1052,36 @@ class ReadoutTest(unittest.TestCase):
         self.assertEqual(
             certificates["held"] + len(certificates["failed"]),
             certificates["total"])
+        self.assertEqual(
+            certificates["held"] + certificates["refused"]
+            + certificates["failed_count"], certificates["total"])
         for entry in certificates["entries"]:
+            self.assertIn(entry["status"], ("holds", "refused", "failed"))
+            if entry["status"] == "refused":
+                self.assertTrue(entry["reason"], entry["name"])
             if not entry["holds"]:
                 self.assertTrue(entry["reason"] or entry["residual"]
                                 is not None or entry["name"].startswith(
                                     ("baryon:", "holonomy-")))
+
+    def test_a_correct_domain_refusal_is_not_reported_as_a_failure(self):
+        """AMLS on a non-normal operator and an unemitted sheaf realization
+        are REFUSALS with named reasons, not certificate failures."""
+        named = {e["name"]: e for e in self.document["certificates"]["entries"]}
+        amls = named["amls-craig-bampton"]
+        if not amls["holds"]:
+            self.assertEqual(amls["status"], "refused")
+            self.assertIn("non-normal", amls["reason"])
+        sheaf = named.get("sheaf-realization")
+        if sheaf is not None and not sheaf["holds"]:
+            self.assertEqual(sheaf["status"], "refused")
+
+    def test_the_labeled_fiber_sum_gram_regime_is_classified_not_averaged(self):
+        for entry in self.document["response_hierarchy"]["labeled_fiber_sums"]:
+            if entry.get("gram_defect") is None:
+                continue
+            self.assertIn(entry["gram_defect_regime"],
+                          ("isometric", "signature_flipped", "intermediate"))
 
 
 if __name__ == "__main__":

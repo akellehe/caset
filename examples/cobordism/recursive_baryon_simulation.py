@@ -1132,11 +1132,26 @@ def response_hierarchy_block(readout, config):
 
     try:
         labeled = quotient.labeledFiberSum()
+        defect = _finite(labeled.gramDefect)
+        # The retained-fiber Gram G = J* W J is BIMODAL, for the structural
+        # reason #777 §5 records: an all-positive weight diagonal makes the
+        # embedding an exact isometry, while a single negative (Krein) weight
+        # flips one diagonal entry to -1 and puts ||G - I|| at exactly 2. The
+        # regime is classified, never averaged across.
+        if defect is None:
+            regime = None
+        elif defect < 1e-12:
+            regime = "isometric"
+        elif abs(defect - 2.0) < 1e-1:
+            regime = "signature_flipped"
+        else:
+            regime = "intermediate"
         out["labeled_fiber_sums"].append({
             "degree": int(degree),
             "nominal_rank": int(labeled.nominalRank),
             "effective_rank": int(labeled.effectiveRank),
-            "gram_defect": _finite(labeled.gramDefect),
+            "gram_defect": defect,
+            "gram_defect_regime": regime,
             "quotient_nullity": int(labeled.quotientNullity),
             "certificate_grade": str(labeled.certificate.grade),
             "certificate_holds": bool(labeled.certificate.holds()),
@@ -2260,13 +2275,22 @@ def hierarchy_block(readout, checkpoint):
 
 
 def certificates_block(document):
-    """Every certificate the run reported, with its grade and whether it
-    held — the one place a reader can see what did and did not certify."""
+    """Every certificate the run reported, with its grade and status — the
+    one place a reader can see what did and did not certify.
+
+    Three statuses, deliberately distinguished: ``holds`` (evaluated and
+    certified), ``refused`` (out of domain or unsupplied evidence, with the
+    reason named — a correct refusal, not a failure), and ``failed``
+    (evaluated and did not certify).
+    """
     entries = []
 
-    def add(name, grade, holds, residual=None, reason=None):
-        entries.append({"name": name, "grade": grade, "holds": holds,
-                        "residual": _finite(residual), "reason": reason})
+    def add(name, grade, holds, residual=None, reason=None, refused=False):
+        entries.append({
+            "name": name, "grade": grade, "holds": bool(holds),
+            "status": "holds" if holds else ("refused" if refused
+                                             else "failed"),
+            "residual": _finite(residual), "reason": reason})
 
     response = document["response_hierarchy"]
     if response.get("static"):
@@ -2283,19 +2307,24 @@ def certificates_block(document):
         add("amls-craig-bampton", amls["certificate_grade"],
             amls["certificate_holds"], amls["max_eigen_residual"])
     else:
-        add("amls-craig-bampton", None, False, None, amls.get("reason"))
+        add("amls-craig-bampton", None, False, None, amls.get("reason"),
+            refused=True)
     network = response.get("response_network") or {}
     if network.get("certificate_grade"):
         add("response-network", network["certificate_grade"],
             network["certificate_holds"], network["coverage_residual"])
     else:
-        add("response-network", None, False, None, network.get("reason"))
+        add("response-network", None, False, None, network.get("reason"),
+            refused=True)
     realization = response.get("realization") or {}
     if realization.get("certificate_grade"):
         add("sheaf-realization", realization["certificate_grade"],
             realization["emitted"], realization["reconstruction_residual"],
             None if realization["emitted"] else
-            "not emitted; the general response network is retained")
+            "not emitted: a cellular-sheaf Laplacian is self-adjoint and the "
+            "regime is non-normal, so the general response network is "
+            "correctly retained",
+            refused=not realization["emitted"])
     for entry in response.get("labeled_fiber_sums", []):
         if entry.get("certificate_grade"):
             add(f"labeled-fiber-sum@k={entry['degree']}",
@@ -2307,7 +2336,8 @@ def certificates_block(document):
         covariance["purity_defect_max"] is not None
         and covariance["purity_defect_max"] < 1e-9,
         covariance["purity_defect_max"],
-        None if covariance["state_count"] else "no accepted band state")
+        None if covariance["state_count"] else "no accepted band state",
+        refused=not covariance["state_count"])
     add("inductive-embedding", "exact",
         covariance["vacuum_embedding_defect_max"] is not None
         and covariance["vacuum_embedding_defect_max"] < 1e-12,
@@ -2323,7 +2353,8 @@ def certificates_block(document):
         entry = transports.get(channel) or {}
         add(f"holonomy-{channel}", "exact" if entry.get("available") else None,
             bool(entry.get("available")), None,
-            None if entry.get("available") else entry.get("reason"))
+            None if entry.get("available") else entry.get("reason"),
+            refused=not entry.get("available"))
 
     for fixture in document["exactness"]:
         add(f"fixture:{fixture['name']}", fixture["grade"], fixture["exact"],
@@ -2331,13 +2362,20 @@ def certificates_block(document):
 
     for name in document["verdict"]["failed_certificates"]:
         add(f"baryon:{name}", "heuristic-discovery", False, None,
-            "named as failed or missing by ParticleClusters::classifyBaryon")
+            "named as failed or missing by ParticleClusters::classifyBaryon",
+            refused=True)
 
     return {
         "entries": entries,
-        "held": sum(1 for e in entries if e["holds"]),
+        "held": sum(1 for e in entries if e["status"] == "holds"),
+        "refused": sum(1 for e in entries if e["status"] == "refused"),
+        "failed_count": sum(1 for e in entries if e["status"] == "failed"),
         "total": len(entries),
         "failed": [e["name"] for e in entries if not e["holds"]],
+        "status_note": (
+            "`refused` means out of domain or evidence unsupplied, with the "
+            "reason named — a correct refusal, not a failure; `failed` means "
+            "evaluated and not certified"),
     }
 
 
@@ -3391,6 +3429,11 @@ def print_run_summary(document, stream=sys.stdout):
     write(f"  exact fixtures  : {len(document['exactness']) - len(inexact)} of "
           f"{len(document['exactness'])} exact"
           + (f"; FAILED {inexact}" if inexact else "") + "\n")
+    certificates = document["certificates"]
+    write(f"  certificates    : {certificates['held']} held, "
+          f"{certificates['refused']} refused with a named reason, "
+          f"{certificates['failed_count']} failed, of "
+          f"{certificates['total']}\n")
     write(f"  refinement      : "
           f"{document['drive']['refinement_events']} cells committed by the "
           f"declared geometry-only rule\n")
