@@ -255,11 +255,22 @@ The two edge fields are distinct, and the reason is gauge invariance. The
 connection transforms as $\varphi\mapsto\varphi+d\chi$ while the geometry must
 not: were $\varphi_{e}$ taken to be $\arg z_{e}$, a gauge transformation would
 change the squared length --- that is, it would change the metric. So the phase
-is carried as its own field and enters the metric weight multiplicatively,
-\begin{equation*}
-  w_{e}=z_{e}\,e^{i\varphi_{e}},
-\end{equation*}
-the discrete magnetic coupling: geometry times a link phase. Saying that an edge
+is carried as its own field, and it twists the hopping rather than rescaling
+the weight.
+
+The distinction is not cosmetic. The geometric Hodge operator of
+Section~\ref{sec:state} is built from $z$ alone and is blind to $\varphi$: its
+row sums vanish at degree zero, so the constant is harmonic and
+$\dim\ker L_{0}=b_{0}$ at any weights, positive, signed or complex. The
+connection enters a second and distinct operator, the Aharonov--Bohm operator,
+whose off-diagonal carries the link phase while its diagonal carries the
+magnitude; it is that operator, and not $L_{k}$, whose zero mode a nonzero flux
+lifts. Writing $\varphi$ into the metric weight instead would be an error twice
+over: it would make the metric gauge-variant, which is the very thing the
+separation exists to prevent, and it would destroy the derived form of $L_{k}$,
+since a rescaled weight is not a conjugation and does not preserve the spectrum.
+A gauge transformation must act on the twisted operator by conjugation, leaving
+its spectrum fixed and the geometry untouched. Saying that an edge
 ``carries a qubit'' means that it carries the local mode algebra above, not that
 the global state is forced to be a product of normalized vectors $q_{e}$.
 
@@ -268,7 +279,9 @@ $e^{i\varphi}=e^{i\operatorname{Re}\varphi}e^{-\operatorname{Im}\varphi}$, and
 the structure group is $\mathbb{C}^{*}=U(1)\times\mathbb{R}^{+}$: a compact part
 and a non-compact one. Only the compact part has winding, so only the compact
 part quantizes; the non-compact part acts as a local scale and carries no
-quantum number. Four consequences follow and are used throughout:
+quantum number. A complex connection therefore twists by a similarity rather
+than by a unitary, and together with the complex edge geometry this fixes the
+operator class. Four consequences follow and are used throughout:
 \begin{itemize}
   \item $L$ is generically \emph{non-normal}, not merely Krein-indefinite, so
     matched left and right frames with $\Psi^{\dagger}W\Phi=I$ are mandatory
