@@ -3146,7 +3146,10 @@ variance reads, and the refinement-window mass-radius samples.)doc")
       .def_readwrite("boundComponent",
                      &BaryonCandidateEvidence::boundComponent)
       .def_readwrite("quarks", &BaryonCandidateEvidence::quarks,
-                     "The three constituents' #773 QuarkReads.")
+                     "The three constituents' #773 QuarkReads.  Assign the "
+                     "whole list (ev.quarks = [a, b, c]): like every "
+                     "std::array/std::vector binding, reading it yields a "
+                     "COPY, so item assignment does not stick.")
       .def_readwrite("binding", &BaryonCandidateEvidence::binding,
                      "The boundSupercomponentSearch result.")
       .def_readwrite("colorColumns", &BaryonCandidateEvidence::colorColumns,
