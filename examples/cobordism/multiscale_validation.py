@@ -1196,7 +1196,10 @@ def _particle_reads(doc):
         "baryons_found": sum(1 for b in baryons if b["found"]),
         "baryon_failed_certificates": _string_histogram(
             name for b in baryons for name in (b.get("failed_certificates") or [])),
-        "certified_protons": 0,   # no proton verdict exists in these reads
+        # The overlay emits BoundSupercomponentRead, never a BaryonRead, so
+        # no proton verdict reaches this driver.  Unmeasured is null, never
+        # zero: a zero would claim a proton count that was never computed.
+        "certified_protons": None,
     }
 
 
@@ -1714,7 +1717,7 @@ def _convergence(runs, extractor, name):
     return result
 
 
-def dichotomy(runs):
+def dichotomy(runs, proton_verdicts=None):
     """The covariance-only dichotomy: Var(J^2) on accepted candidates.
 
     Three outcomes are possible and exactly one is returned:
@@ -1787,7 +1790,7 @@ def dichotomy(runs):
 
     out = {
         "accepted_candidates": accepted_candidates,
-        "certified_proton_candidates": 0,
+        "certified_proton_candidates": None,
         "first_failing_certificate": primary["first_failing_certificate"],
         "first_failing_certificate_fraction":
             primary["first_failing_certificate_fraction"],
@@ -1848,11 +1851,38 @@ def dichotomy(runs):
             "structure, so even a certified candidate could not be given a "
             "Var(J^2) that means anything until one is derived rather than "
             "declared")
-    else:
+    elif proton_verdicts is None:
         out["classification"] = "inconclusive"
         out["reason"] = (
-            "candidates were classified but no proton certificate set was "
-            "completed; the dichotomy branch point is not reached")
+            "quark candidates were classified, but this driver receives no "
+            "proton verdict at all: the analysis overlay emits a bound "
+            "supercomponent search and never runs the baryon classifier, so "
+            "the branch point cannot be evaluated here. This is an "
+            "instrument gap, NOT a measurement that the dichotomy failed")
+    else:
+        # The branch point proper: every OTHER proton certificate holds on an
+        # accepted class, and the question is only whether Var(J^2) converges.
+        others_hold = [v for v in proton_verdicts
+                       if v.get("all_non_spin_certificates_hold")]
+        if not others_hold:
+            out["classification"] = "inconclusive"
+            out["reason"] = (
+                "no candidate completed the non-spin proton certificates, so "
+                "the sharp-spin branch point is not reached")
+        else:
+            fit = out.get("var_j2_convergence") or {}
+            converges = fit.get("verdict") == "converges_to_zero"
+            if converges:
+                out["classification"] = "covariance_only_proton"
+                out["reason"] = (
+                    "every other proton certificate holds on the accepted "
+                    "class and Var(J^2) converges to zero under refinement")
+            else:
+                out["classification"] = "quasi_free_sharp_spin_obstruction"
+                out["reason"] = (
+                    "every other proton certificate holds on the accepted "
+                    "class but Var(J^2) does not converge to zero; a "
+                    "non-Gaussian mechanism is required")
     return out
 
 
