@@ -1265,5 +1265,268 @@ class TestConstantAlgebraSelfCheck(unittest.TestCase):
         self.assertTrue(math.isnan(cert.conditioning))
 
 
+# ─── #774: the singlet complement resolving 3 x 3bar = 1 + 8 ───────────────
+
+class TestAdjointSingletProjector(unittest.TestCase):
+    def test_matches_independent_construction(self) -> None:
+        vec_i = np.eye(3, dtype=complex).reshape(9, order="F")
+        ref = np.outer(vec_i, vec_i.conj()) / 3.0
+        self.assertLessEqual(
+            np.max(np.abs(ColorFiber.adjointSingletProjector() - ref)),
+            1e-15)
+
+    def test_bitwise_complement_of_the_octet_projector(self) -> None:
+        # The implementation is LITERALLY I9 - P8: assert the delegation
+        # bitwise, not just to tolerance.
+        p1 = ColorFiber.adjointSingletProjector()
+        p8 = ColorFiber.adjointOctetProjector()
+        self.assertTrue(np.array_equal(p1, np.eye(9, dtype=complex) - p8))
+
+    def test_singlet_plus_octet_resolve_to_identity(self) -> None:
+        # THE #774 acceptance identity: P1 + P8 = I9 on 3 x 3bar.
+        p1 = ColorFiber.adjointSingletProjector()
+        p8 = ColorFiber.adjointOctetProjector()
+        self.assertEqual(np.max(np.abs(p1 + p8 - np.eye(9))), 0.0)
+
+    def test_projector_algebra(self) -> None:
+        p1 = ColorFiber.adjointSingletProjector()
+        self.assertLessEqual(np.max(np.abs(p1 - p1.conj().T)), 1e-15)
+        self.assertLessEqual(np.max(np.abs(p1 @ p1 - p1)), 1e-15)
+        self.assertLessEqual(abs(np.trace(p1) - 1.0), 1e-15)
+        self.assertEqual(np.linalg.matrix_rank(p1), 1)
+
+    def test_mutually_orthogonal_with_the_octet(self) -> None:
+        p1 = ColorFiber.adjointSingletProjector()
+        p8 = ColorFiber.adjointOctetProjector()
+        self.assertLessEqual(np.max(np.abs(p1 @ p8)), 1e-15)
+        self.assertLessEqual(np.max(np.abs(p8 @ p1)), 1e-15)
+
+    def test_extracts_the_trace_part(self) -> None:
+        rng = np.random.default_rng(741)
+        m = rng.normal(size=(3, 3)) + 1j * rng.normal(size=(3, 3))
+        p1 = ColorFiber.adjointSingletProjector()
+        got = (p1 @ m.reshape(9, order="F")).reshape(3, 3, order="F")
+        want = (np.trace(m) / 3.0) * np.eye(3)
+        self.assertLessEqual(np.max(np.abs(got - want)), 1e-15)
+
+    def test_octet_read_weights_are_the_projector_weights(self) -> None:
+        # The 1 + 8 resolution and the Frobenius split are the SAME split:
+        # octetRead weights equal ||P8 v||^2 and ||P1 v||^2.
+        rng = np.random.default_rng(742)
+        m = rng.normal(size=(3, 3)) + 1j * rng.normal(size=(3, 3))
+        v = m.reshape(9, order="F")
+        read = ColorFiber.octetRead(m)
+        p1 = ColorFiber.adjointSingletProjector()
+        p8 = ColorFiber.adjointOctetProjector()
+        self.assertLessEqual(
+            abs(read.octet - np.linalg.norm(p8 @ v) ** 2), 1e-13)
+        self.assertLessEqual(
+            abs(read.singlet - np.linalg.norm(p1 @ v) ** 2), 1e-13)
+
+
+# ─── #774: the traceless even bilinears on Fock space ──────────────────────
+
+class TestOctetBilinears(unittest.TestCase):
+    def _jw_number(self) -> np.ndarray:
+        return sum(jw_creation(k, 3) @ jw_annihilation(k, 3)
+                   for k in range(3))
+
+    def test_matches_independent_jordan_wigner_reference(self) -> None:
+        number = self._jw_number()
+        for i in range(3):
+            for j in range(3):
+                ref = jw_creation(i, 3) @ jw_annihilation(j, 3)
+                if i == j:
+                    ref = ref - number / 3.0
+                self.assertLessEqual(
+                    np.max(np.abs(ColorFiber.octetBilinear(i, j) - ref)),
+                    1e-15, msg=f"T_{i}{j}")
+
+    def test_delegation_identity_is_bitwise(self) -> None:
+        # T_ij == dGamma(tracelessPart(matrixUnit(i, j))) -- the literal
+        # composition documented in the header.
+        for i in range(3):
+            for j in range(3):
+                want = ColorFiber.dGamma(ColorFiber.tracelessPart(
+                    ColorFiber.matrixUnit(i, j)))
+                self.assertTrue(np.array_equal(
+                    ColorFiber.octetBilinear(i, j), want))
+
+    def test_diagonal_family_sums_to_zero(self) -> None:
+        # sum_i T_ii = N - 3 (N/3): zero up to the dGamma accumulation
+        # rounding (double round-off; fl(1/3) sums in operator assembly).
+        total = sum(ColorFiber.octetBilinear(i, i) for i in range(3))
+        self.assertLessEqual(np.max(np.abs(total)), 1e-15)
+
+    def test_even_fermion_parity(self) -> None:
+        # T_ij conserves N, hence commutes with (-1)^N: the traceless
+        # bilinears are EVEN elements of the graded algebra (whitepaper
+        # "Fock space as an inductive limit of interactions").
+        parity = dense(ExteriorAlgebra(3).parityMatrixCOO())
+        for i in range(3):
+            for j in range(3):
+                t = ColorFiber.octetBilinear(i, j)
+                self.assertEqual(np.max(np.abs(t @ parity - parity @ t)),
+                                 0.0)
+
+    def test_triplet_restriction_is_the_traceless_matrix_unit(self) -> None:
+        for i in range(3):
+            for j in range(3):
+                got = ColorFiber.restrictToTriplet(
+                    ColorFiber.octetBilinear(i, j))
+                want = ColorFiber.tracelessPart(ColorFiber.matrixUnit(i, j))
+                self.assertLessEqual(np.max(np.abs(got - want)), 1e-15)
+
+    def test_bilinears_span_the_octet(self) -> None:
+        # The nine T_ij restrict to the nine traceless matrix units, whose
+        # span is EXACTLY the 8-dimensional octet = range(P8).
+        vecs = np.column_stack([
+            ColorFiber.restrictToTriplet(
+                ColorFiber.octetBilinear(i, j)).reshape(9, order="F")
+            for i in range(3) for j in range(3)])
+        self.assertEqual(np.linalg.matrix_rank(vecs), 8)
+        p8 = ColorFiber.adjointOctetProjector()
+        self.assertLessEqual(np.max(np.abs(p8 @ vecs - vecs)), 1e-15)
+
+    def test_gellmann_bilinears_are_octet_combinations(self) -> None:
+        # dGamma(lambda_a) is a combination of the T_ij (lambda_a is
+        # traceless): dGamma(lambda_a) = sum_ij (lambda_a)_ij T_ij.
+        for a in range(1, 9):
+            lam = ColorFiber.gellMann(a)
+            combo = sum(lam[i, j] * ColorFiber.octetBilinear(i, j)
+                        for i in range(3) for j in range(3))
+            self.assertLessEqual(
+                np.max(np.abs(combo - ColorFiber.dGamma(lam))), 1e-15)
+
+    def test_index_validation(self) -> None:
+        with self.assertRaises(ValueError):
+            ColorFiber.octetBilinear(3, 0)
+        with self.assertRaises(ValueError):
+            ColorFiber.octetBilinear(0, 5)
+
+
+# ─── #774: the adjoint quadratic Casimir C = 3 P8 ──────────────────────────
+
+class TestAdjointCasimir(unittest.TestCase):
+    def test_casimir_matrix_is_three_times_the_octet_projector(self) -> None:
+        # THE identity: sum_a ad(lambda_a/2)^2 = C2(adjoint) P8 = 3 P8.
+        c = ColorFiber.adjointCasimirMatrix()
+        p8 = ColorFiber.adjointOctetProjector()
+        self.assertLessEqual(np.max(np.abs(c - 3.0 * p8)), 1e-14)
+
+    def test_casimir_matrix_matches_independent_commutator_sum(self) -> None:
+        # Independent NumPy construction from the hardcoded Gell-Mann
+        # table: K_a vec(M) = vec([lambda_a/2, M]) via the Kronecker rule
+        # vec(AMB) = (B^T kron A) vec(M).
+        eye = np.eye(3, dtype=complex)
+        ref = np.zeros((9, 9), dtype=complex)
+        for a in range(1, 9):
+            half = GELL_MANN_REF[a] / 2.0
+            k = np.kron(eye.T, half) - np.kron(half.T, eye)
+            ref = ref + k @ k
+        self.assertLessEqual(
+            np.max(np.abs(ColorFiber.adjointCasimirMatrix() - ref)), 1e-14)
+
+    def test_rayleigh_on_generators_identity_and_zero(self) -> None:
+        for a in range(1, 9):
+            self.assertLessEqual(
+                abs(ColorFiber.adjointCasimir(ColorFiber.gellMann(a)) - 3.0),
+                1e-14)
+        self.assertLessEqual(
+            abs(ColorFiber.adjointCasimir(np.eye(3, dtype=complex))), 1e-14)
+        self.assertTrue(np.isnan(
+            ColorFiber.adjointCasimir(np.zeros((3, 3), dtype=complex))))
+
+    def test_rayleigh_is_three_times_the_octet_fraction(self) -> None:
+        rng = np.random.default_rng(743)
+        m = rng.normal(size=(3, 3)) + 1j * rng.normal(size=(3, 3))
+        read = ColorFiber.octetRead(m)
+        fraction = read.octet / (read.octet + read.singlet)
+        self.assertLessEqual(
+            abs(ColorFiber.adjointCasimir(m) - 3.0 * fraction), 1e-13)
+
+    def test_su3_invariance(self) -> None:
+        rng = np.random.default_rng(744)
+        for _ in range(5):
+            g = random_su3(rng)
+            self.assertTrue(ColorFiber.isSpecialUnitary(g))
+            m = rng.normal(size=(3, 3)) + 1j * rng.normal(size=(3, 3))
+            self.assertLessEqual(
+                abs(ColorFiber.adjointCasimir(g @ m @ g.conj().T) -
+                    ColorFiber.adjointCasimir(m)), 1e-12)
+
+
+# ─── #774: octet generators transform in the adjoint under SU(3) ───────────
+
+class TestAdjointTransformation(unittest.TestCase):
+    def test_traceless_projection_commutes_with_conjugation(self) -> None:
+        # The octet is an invariant subspace: tracelessPart(g M g^dag) ==
+        # g tracelessPart(M) g^dag for every certified g in SU(3).
+        rng = np.random.default_rng(745)
+        for _ in range(5):
+            g = random_su3(rng)
+            m = rng.normal(size=(3, 3)) + 1j * rng.normal(size=(3, 3))
+            got = ColorFiber.tracelessPart(g @ m @ g.conj().T)
+            want = g @ ColorFiber.tracelessPart(m) @ g.conj().T
+            self.assertLessEqual(np.max(np.abs(got - want)), 1e-13)
+
+    def test_generators_transform_by_a_real_orthogonal_adjoint(self) -> None:
+        # g lambda_a g^dag = sum_b R_ba lambda_b with R_ab =
+        # Tr(lambda_a g lambda_b g^dag)/2 REAL, orthogonal, det +1 -- the
+        # adjoint (8-dimensional) representation of a random certified
+        # SU(3) element (property test over several draws).
+        rng = np.random.default_rng(746)
+        lams = [ColorFiber.gellMann(a) for a in range(1, 9)]
+        for _ in range(5):
+            g = random_su3(rng)
+            self.assertTrue(ColorFiber.isSpecialUnitary(g))
+            r = np.zeros((8, 8), dtype=complex)
+            for a in range(8):
+                for b in range(8):
+                    r[a, b] = np.trace(
+                        lams[a] @ g @ lams[b] @ g.conj().T) / 2.0
+            self.assertLessEqual(np.max(np.abs(r.imag)), 1e-12)
+            r = r.real
+            self.assertLessEqual(np.max(np.abs(r @ r.T - np.eye(8))), 1e-12)
+            self.assertLessEqual(abs(np.linalg.det(r) - 1.0), 1e-11)
+            # the transformation law itself, generator by generator
+            for b in range(8):
+                got = g @ lams[b] @ g.conj().T
+                want = sum(r[a, b] * lams[a] for a in range(8))
+                self.assertLessEqual(np.max(np.abs(got - want)), 1e-12)
+
+    def test_octet_projector_commutes_with_the_conjugation_action(self) -> None:
+        # vec(g M g^dag) = (conj(g) kron g) vec(M): P8 commutes with the
+        # conjugation operator (and so does P1) -- the resolution 1 + 8 is
+        # SU(3)-equivariant.
+        rng = np.random.default_rng(747)
+        p8 = ColorFiber.adjointOctetProjector()
+        p1 = ColorFiber.adjointSingletProjector()
+        for _ in range(3):
+            g = random_su3(rng)
+            k = np.kron(g.conj(), g)
+            self.assertLessEqual(np.max(np.abs(p8 @ k - k @ p8)), 1e-13)
+            self.assertLessEqual(np.max(np.abs(p1 @ k - k @ p1)), 1e-13)
+
+    def test_consistent_with_fiber_connection_adjoint_image(self) -> None:
+        # The #770 faithful PU(3) image consumes the SAME #767 projector:
+        # Ad(g) (P8 vec M) == P8 vec(g M g^dag) -- cross-kernel agreement,
+        # and Ad is center-blind (Ad(omega g) = Ad(g)).
+        rng = np.random.default_rng(748)
+        conn = tessera.observables.FiberConnection
+        for _ in range(3):
+            g = random_su3(rng)
+            ad = conn.adjointRepresentation(g)
+            m = rng.normal(size=(3, 3)) + 1j * rng.normal(size=(3, 3))
+            p8 = ColorFiber.adjointOctetProjector()
+            got = ad @ (p8 @ m.reshape(9, order="F"))
+            want = p8 @ (g @ m @ g.conj().T).reshape(9, order="F")
+            self.assertLessEqual(np.max(np.abs(got - want)), 1e-12)
+            omega = ColorFiber.omega()
+            self.assertLessEqual(
+                np.max(np.abs(conn.adjointRepresentation(omega * g) - ad)),
+                1e-12)
+
+
 if __name__ == "__main__":
     unittest.main()

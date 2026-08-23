@@ -1187,5 +1187,880 @@ class TestObjectiveGuardAndBenchmark(unittest.TestCase):
         self.assertLess(cold, 0.05)  # generous ceiling: 50 ms/candidate
 
 
+# =========================================================================== #
+# #774: the even sectors -- quasi-free octet bilinear read and the gluon /
+# meson / diquark candidate classifiers.  Fixtures compose the MERGED
+# public APIs (#767 ColorFiber, #770 FiberConnection, #773 QuarkReads,
+# #780 CovarianceState, #771 LazyFockEngine as the dense oracle).
+# =========================================================================== #
+def _rank2_state(hole=(0.0, 0.0, 1.0)):
+    """N = 2 anti-triplet Slater covariance on three modes:
+    Gamma = I - c c^dag (even parity, occupation two)."""
+    c = np.asarray(hole, dtype=complex)
+    c = c / np.linalg.norm(c)
+    return qm.CovarianceState(np.eye(3, dtype=complex) - np.outer(c, c.conj()))
+
+
+def _gluon_evidence(turns=0, state=None, modes=(0, 1, 2), lifetime=3.0,
+                    band_base=1, conn=None):
+    """A gluon-candidate evidence bundle: quasi-free octet read of the
+    carried state, carried-state Wick parity/occupation, an accepted
+    rank-three transport family with certified winding `turns`, and the
+    persistence lifetime."""
+    conn = conn or obs.FiberConnection()
+    A, B = _unit_fiber(band_base, 3), _unit_fiber(band_base + 10, 3)
+    family = _winding_family(conn, A, B, turns=turns)
+    state = _rank2_state() if state is None else state
+    pc = obs.ParticleClusters()
+    ev = obs.GluonCandidateEvidence()
+    ev.component = obs.ComponentId("1a" * 16, 1)
+    ev.bindingComponent = obs.ComponentId("2b" * 16, 2)
+    ev.octet = pc.octetBilinearRead(state, list(modes))
+    ev.parityRead = state.wickParity()
+    ev.occupationRead = state.wickTotalNumber()
+    ev.lifetimeTransports = family
+    ev.winding = conn.closedFamilyWinding(family)
+    ev.persistenceLifetime = lifetime
+    return ev
+
+
+def _meson_evidence(first_turns=1, second_turns=-1, pairing="singlet"):
+    """A two-cluster composite bundle: one #773 quark + one antiquark,
+    the carried composite occupation, and the pair color bilinear."""
+    pc = obs.ParticleClusters()
+    first = pc.classifyQuark(_certified_evidence(turns=first_turns))
+    second = pc.classifyQuark(
+        _certified_evidence(turns=second_turns, band_base=31))
+    ev = obs.CompositeCandidateEvidence()
+    ev.bindingComponent = obs.ComponentId("3c" * 16, 2)
+    ev.first = first
+    ev.second = second
+    ev.occupationRead = qm.CovarianceState.fromOccupations(
+        np.array([1.0, 1.0])).wickTotalNumber()
+    if pairing == "singlet":
+        ev.colorPairing = np.eye(3, dtype=complex) / math.sqrt(3.0)
+    elif pairing == "octet":
+        ev.colorPairing = np.asarray(obs.ColorFiber.gellMann(1))
+    ev.persistenceLifetime = 3.0
+    return ev
+
+
+def _diquark_evidence(columns=None, second_turns=1):
+    """A two-quark composite bundle with the certified anti-triplet wedge
+    occupation det(C^dag Gamma C) of the pair's carried Slater state."""
+    pc = obs.ParticleClusters()
+    ev = obs.CompositeCandidateEvidence()
+    ev.bindingComponent = obs.ComponentId("4d" * 16, 2)
+    ev.first = pc.classifyQuark(_certified_evidence(turns=1))
+    ev.second = pc.classifyQuark(
+        _certified_evidence(turns=second_turns, band_base=51))
+    C = (np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]], dtype=complex)
+         if columns is None else np.asarray(columns, dtype=complex))
+    slater = qm.CovarianceState.fromSlaterFrame(
+        np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]], dtype=complex))
+    ev.antiTripletRead = slater.wickGramDeterminant(C, C)
+    ev.occupationRead = slater.wickTotalNumber()
+    ev.persistenceLifetime = 3.0
+    return ev
+
+
+class TestOctetBilinearRead(unittest.TestCase):
+    """Exact small-sector fixtures of the quasi-free octet read."""
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+
+    def test_anti_triplet_slater_exact_values(self):
+        read = self.pc.octetBilinearRead(_rank2_state(), [0, 1, 2])
+        self.assertAlmostEqual(read.occupation, 2.0, delta=MACHINE)
+        self.assertEqual(read.subsetParity, +1)
+        self.assertAlmostEqual(read.octetWeight, 2.0 / 3.0, delta=MACHINE)
+        self.assertAlmostEqual(read.singletWeight, 4.0 / 3.0, delta=MACHINE)
+        self.assertAlmostEqual(read.casimir, 3.0, delta=1e-12)
+        # C2(3bar) = 4/3 by quartic Wick sums -- exact algebra.
+        self.assertAlmostEqual(read.casimirExpectation, 4.0 / 3.0,
+                               delta=1e-12)
+        self.assertLessEqual(read.octetProjectorResidual, 1e-14)
+        self.assertTrue(read.certificate.holds())
+        self.assertEqual(read.certificate.grade,
+                         cob.CertificateGrade.AlgebraicallyExact)
+
+    def test_fundamental_exact_values(self):
+        c = np.array([1.0, 0.0, 0.0], dtype=complex)
+        state = qm.CovarianceState(np.outer(c, c.conj()))
+        read = self.pc.octetBilinearRead(state, [0, 1, 2])
+        self.assertAlmostEqual(read.occupation, 1.0, delta=MACHINE)
+        self.assertEqual(read.subsetParity, -1)
+        self.assertAlmostEqual(read.octetWeight, 2.0 / 3.0, delta=MACHINE)
+        self.assertAlmostEqual(read.singletWeight, 1.0 / 3.0, delta=MACHINE)
+        # C2(3) = 4/3 on the fundamental.
+        self.assertAlmostEqual(read.casimirExpectation, 4.0 / 3.0,
+                               delta=1e-12)
+
+    def test_vacuum_and_full_singlet_read_zero_casimir(self):
+        vacuum = qm.CovarianceState(np.zeros((3, 3), dtype=complex))
+        read = self.pc.octetBilinearRead(vacuum, [0, 1, 2])
+        self.assertEqual(read.occupation, 0.0)
+        self.assertEqual(read.subsetParity, +1)
+        self.assertEqual(read.octetWeight, 0.0)
+        # a vanished excitation is UNKNOWN, never zero
+        self.assertTrue(math.isnan(read.casimir))
+        self.assertTrue(math.isnan(read.octetProjectorResidual))
+        self.assertAlmostEqual(read.casimirExpectation, 0.0, delta=1e-12)
+
+        full = qm.CovarianceState(np.eye(3, dtype=complex))
+        read = self.pc.octetBilinearRead(full, [0, 1, 2])
+        self.assertAlmostEqual(read.occupation, 3.0, delta=MACHINE)
+        self.assertEqual(read.subsetParity, -1)
+        self.assertAlmostEqual(read.octetWeight, 0.0, delta=1e-15)
+        # the fully occupied top wedge is a color SINGLET: C2 = 0 exactly.
+        self.assertAlmostEqual(read.casimirExpectation, 0.0, delta=1e-12)
+
+    def test_bilinear_is_the_transposed_submatrix(self):
+        rng = np.random.default_rng(81)
+        z = rng.normal(size=(3, 3)) + 1j * rng.normal(size=(3, 3))
+        q = np.linalg.qr(z)[0]
+        gamma = q @ np.diag([0.9, 0.4, 0.1]) @ q.conj().T
+        state = qm.CovarianceState(gamma)
+        read = self.pc.octetBilinearRead(state, [0, 1, 2])
+        self.assertTrue(np.array_equal(read.bilinear, gamma.T))
+
+    def test_split_delegates_to_color_fiber_bitwise(self):
+        read = self.pc.octetBilinearRead(_rank2_state((0.3, 0.5, 0.9)),
+                                         [0, 1, 2])
+        want = obs.ColorFiber.octetRead(read.bilinear)
+        self.assertEqual(read.octetWeight, want.octet)
+        self.assertEqual(read.singletWeight, want.singlet)
+        self.assertTrue(np.array_equal(
+            read.octetComponent,
+            obs.ColorFiber.tracelessPart(read.bilinear)))
+        self.assertAlmostEqual(
+            read.casimir, obs.ColorFiber.adjointCasimir(read.octetComponent),
+            delta=1e-15)
+
+    def test_gell_mann_components_reconstruct_the_bilinear(self):
+        read = self.pc.octetBilinearRead(_rank2_state((0.2, 0.7, 0.4)),
+                                         [0, 1, 2])
+        m = np.asarray(read.bilinear)
+        recon = (np.trace(m) / 3.0) * np.eye(3, dtype=complex)
+        for a in range(1, 9):
+            recon = recon + read.gellMannComponents[a - 1] \
+                * np.asarray(obs.ColorFiber.gellMann(a))
+        self.assertLessEqual(np.max(np.abs(recon - m)), 1e-13)
+
+    def test_dense_lazy_oracle_cross_validation(self):
+        # #771 is the dense oracle: the SAME Slater state through the lazy
+        # engine's exact covariance read gives the SAME octet read.
+        rng = np.random.default_rng(82)
+        orbitals = rng.normal(size=(3, 2)) + 1j * rng.normal(size=(3, 2))
+        eng = qm.LazyFockEngine(3)
+        wedge = eng.wedgeState([0, 1, 2], orbitals)
+        gamma = np.asarray(eng.covarianceMatrix(wedge).matrix)
+        via_oracle = self.pc.octetBilinearRead(
+            qm.CovarianceState(gamma), [0, 1, 2])
+        direct = self.pc.octetBilinearRead(
+            qm.CovarianceState.fromSlaterFrame(orbitals), [0, 1, 2])
+        for field in ("occupation", "octetWeight", "singletWeight",
+                      "casimir", "casimirExpectation"):
+            self.assertAlmostEqual(getattr(via_oracle, field),
+                                   getattr(direct, field), delta=1e-12,
+                                   msg=field)
+        self.assertEqual(via_oracle.subsetParity, direct.subsetParity)
+
+    def test_mode_validation(self):
+        state = _rank2_state()
+        with self.assertRaises(ValueError):
+            self.pc.octetBilinearRead(state, [0, 1])
+        with self.assertRaises(ValueError):
+            self.pc.octetBilinearRead(state, [0, 1, 1])
+        with self.assertRaises(ValueError):
+            self.pc.octetBilinearRead(state, [0, 1, 7])
+
+    def test_embedded_triad_reads_like_the_small_fixture(self):
+        # the color triad on modes (2, 3, 4) of a 6-mode state reads
+        # exactly like the standalone 3-mode fixture
+        small = self.pc.octetBilinearRead(_rank2_state(), [0, 1, 2])
+        gamma = np.zeros((6, 6), dtype=complex)
+        gamma[2:5, 2:5] = np.asarray(_rank2_state().gamma())
+        embedded = self.pc.octetBilinearRead(qm.CovarianceState(gamma),
+                                             [2, 3, 4])
+        for field in ("occupation", "subsetParity", "octetWeight",
+                      "singletWeight", "casimir", "casimirExpectation"):
+            self.assertEqual(getattr(small, field),
+                             getattr(embedded, field), msg=field)
+
+    def test_global_relabeling_invariance(self):
+        # permute the whole mode universe and carry the declared color
+        # modes through the permutation: the read is IDENTICAL
+        state = _rank2_state((0.1, 0.6, 0.5))
+        gamma = np.asarray(state.gamma())
+        perm = [2, 0, 1]  # new index of old mode i
+        p = np.zeros((3, 3))
+        for old, new in enumerate(perm):
+            p[new, old] = 1.0
+        relabeled = qm.CovarianceState(p @ gamma @ p.T)
+        base = self.pc.octetBilinearRead(state, [0, 1, 2])
+        moved = self.pc.octetBilinearRead(relabeled,
+                                          [perm[0], perm[1], perm[2]])
+        # the echoed color-mode LABELS legitimately track the relabeling;
+        # every physical channel is invariant (the permutation reorders
+        # the Wick trace accumulation: identical algebra, double
+        # round-off ~1e-16)
+        rec_base, rec_moved = base.toRecord(), moved.toRecord()
+        self.assertEqual(rec_moved["color_modes"], perm)
+        del rec_base["color_modes"], rec_moved["color_modes"]
+        self.assertLessEqual(
+            obs.ObservableGates.report_delta(rec_base, rec_moved), 1e-14)
+        self.assertEqual(base.subsetParity, moved.subsetParity)
+        self.assertEqual(base.occupation, moved.occupation)
+
+    def test_color_order_is_the_recorded_trivialization(self):
+        # reordering the DECLARED color modes conjugates the bilinear by
+        # the permutation: invariant weights/casimir/occupation/parity,
+        # covariant components
+        state = _rank2_state((0.1, 0.6, 0.5))
+        base = self.pc.octetBilinearRead(state, [0, 1, 2])
+        swapped = self.pc.octetBilinearRead(state, [1, 0, 2])
+        for field in ("occupation", "subsetParity", "octetWeight",
+                      "singletWeight", "casimir", "casimirExpectation"):
+            self.assertAlmostEqual(getattr(base, field),
+                                   getattr(swapped, field), delta=1e-12,
+                                   msg=field)
+        p = np.array([[0, 1, 0], [1, 0, 0], [0, 0, 1]], dtype=complex)
+        self.assertLessEqual(
+            np.max(np.abs(np.asarray(swapped.bilinear)
+                          - p @ np.asarray(base.bilinear) @ p.T)), 1e-15)
+
+    def test_read_is_read_only_on_the_state(self):
+        state = _rank2_state()
+        before = state.covarianceHash()
+        self.pc.octetBilinearRead(state, [0, 1, 2])
+        self.assertEqual(state.covarianceHash(), before)
+
+    def test_record_roundtrip_is_exact(self):
+        read = self.pc.octetBilinearRead(_rank2_state((0.2, 0.3, 0.9)),
+                                         [0, 1, 2])
+        rec = read.toRecord()
+        back = obs.OctetBilinearRead.fromRecord(rec)
+        self.assertEqual(
+            obs.ObservableGates.report_delta(rec, back.toRecord()), 0.0)
+
+    def test_from_record_rejects_unknown_schema(self):
+        rec = self.pc.octetBilinearRead(_rank2_state(), [0, 1, 2]).toRecord()
+        rec["schema_version"] = 99
+        with self.assertRaises(ValueError):
+            obs.OctetBilinearRead.fromRecord(rec)
+
+
+class TestOctetCollectiveGrowth(unittest.TestCase):
+    """Arbitrarily many collective excitations by ADDING microscopic
+    modes: the vacuum embedding changes no sector read and no
+    two-dimensional edge-mode factor."""
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+
+    def test_zero_block_vacuum_extension_leaves_the_read_unchanged(self):
+        base = self.pc.octetBilinearRead(_rank2_state(), [0, 1, 2])
+        for extra in (1, 5, 13):
+            gamma = np.zeros((3 + extra, 3 + extra), dtype=complex)
+            gamma[:3, :3] = np.asarray(_rank2_state().gamma())
+            grown = self.pc.octetBilinearRead(qm.CovarianceState(gamma),
+                                              [0, 1, 2])
+            self.assertEqual(obs.ObservableGates.report_delta(
+                base.toRecord(), grown.toRecord()), 0.0,
+                msg=f"extra={extra}")
+
+    def test_lazy_vacuum_embedding_leaves_the_read_unchanged(self):
+        # the #771 inductive-limit route: iota(psi) = psi (x) |0> adds
+        # microscopic modes; every existing sector read is unchanged
+        rng = np.random.default_rng(83)
+        orbitals = rng.normal(size=(3, 2)) + 1j * rng.normal(size=(3, 2))
+        eng = qm.LazyFockEngine(8)
+        small = eng.wedgeState([0, 1, 2], orbitals)
+        grown = eng.embedInVacuum(small, [3, 4, 5, 6, 7])
+        g_small = np.asarray(eng.covarianceMatrix(small).matrix)
+        g_grown = np.asarray(eng.covarianceMatrix(grown).matrix)
+        a = self.pc.octetBilinearRead(qm.CovarianceState(g_small),
+                                      [0, 1, 2])
+        b = self.pc.octetBilinearRead(qm.CovarianceState(g_grown),
+                                      [0, 1, 2])
+        # identical algebra; the engine's closed-form Slater covariance
+        # evaluates through a different GEMM shape after the embedding,
+        # so the doubles agree to round-off (~1e-16), not bitwise
+        self.assertLessEqual(obs.ObservableGates.report_delta(
+            a.toRecord(), b.toRecord()), 1e-14)
+        self.assertEqual(a.subsetParity, b.subsetParity)
+        # the added modes carry NOTHING: their covariance rows are
+        # EXACTLY zero -- the two-level factor of every new mode is
+        # untouched vacuum
+        self.assertEqual(np.max(np.abs(g_grown[3:, :])), 0.0)
+
+    def test_two_level_edge_mode_factor_never_changes(self):
+        # each finite edge-mode factor remains TWO-dimensional: the stage
+        # dimension exactly doubles per added microscopic mode, before and
+        # after any collective excitation
+        for m in range(1, 12):
+            self.assertEqual(qm.LazyFockEngine.stageDimension(m + 1),
+                             2 * qm.LazyFockEngine.stageDimension(m))
+
+    def test_multiple_collective_excitations_coexist(self):
+        # two independent octet excitations on disjoint triads of a
+        # 6-mode state: each triad's read equals its standalone fixture
+        gamma = np.zeros((6, 6), dtype=complex)
+        gamma[:3, :3] = np.asarray(_rank2_state().gamma())
+        gamma[3:, 3:] = np.asarray(_rank2_state((0.5, 0.5, 0.0)).gamma())
+        state = qm.CovarianceState(gamma)
+        a = self.pc.octetBilinearRead(state, [0, 1, 2])
+        b = self.pc.octetBilinearRead(state, [3, 4, 5])
+        ref_a = self.pc.octetBilinearRead(_rank2_state(), [0, 1, 2])
+        ref_b = self.pc.octetBilinearRead(_rank2_state((0.5, 0.5, 0.0)),
+                                          [0, 1, 2])
+        for read, ref in ((a, ref_a), (b, ref_b)):
+            self.assertEqual(read.occupation, ref.occupation)
+            self.assertEqual(read.octetWeight, ref.octetWeight)
+            self.assertEqual(read.subsetParity, ref.subsetParity)
+            self.assertAlmostEqual(read.casimirExpectation,
+                                   ref.casimirExpectation, delta=1e-12)
+
+    def test_scaling_with_mode_count(self):
+        # scaling test: the SAME embedded triad read at growing mode
+        # count -- values constant, cost polynomial (timed and printed)
+        base = self.pc.octetBilinearRead(_rank2_state(), [0, 1, 2])
+        timings = []
+        for total in (3, 12, 24, 48):
+            gamma = np.zeros((total, total), dtype=complex)
+            gamma[:3, :3] = np.asarray(_rank2_state().gamma())
+            state = qm.CovarianceState(gamma)
+            t0 = time.perf_counter()
+            read = self.pc.octetBilinearRead(state, [0, 1, 2])
+            timings.append((total, time.perf_counter() - t0))
+            self.assertEqual(read.occupation, base.occupation)
+            self.assertEqual(read.octetWeight, base.octetWeight)
+            self.assertAlmostEqual(read.casimirExpectation,
+                                   base.casimirExpectation, delta=1e-12)
+        print("\n[benchmark] octetBilinearRead scaling: "
+              + "; ".join(f"M={m}: {dt * 1e3:.2f} ms" for m, dt in timings))
+        self.assertLess(timings[-1][1], 1.0)
+
+
+class TestOctetReadCache(unittest.TestCase):
+    """The #764 AnalyticCache contract of the cached octet read."""
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+        self.st = _from_simplices(7, _TETRA_CHAIN, timelike=False)
+        self.ids = [0, 1, 2, 3]
+
+    def test_cached_equals_cold(self):
+        cache = cob.AnalyticCache(self.st)
+        state = _rank2_state()
+        cold = self.pc.octetBilinearRead(state, [0, 1, 2])
+        first = self.pc.octetBilinearReadCached(cache, self.ids, state,
+                                                [0, 1, 2])
+        served = self.pc.octetBilinearReadCached(cache, self.ids, state,
+                                                 [0, 1, 2])
+        self.assertEqual(obs.ObservableGates.report_delta(
+            cold.toRecord(), first.toRecord()), 0.0)
+        self.assertEqual(obs.ObservableGates.report_delta(
+            cold.toRecord(), served.toRecord()), 0.0)
+        self.assertGreaterEqual(cache.hits, 1)
+
+    def test_touched_star_invalidates(self):
+        cache = cob.AnalyticCache(self.st)
+        self.pc.octetBilinearReadCached(cache, self.ids, _rank2_state(),
+                                        [0, 1, 2])
+        self.assertEqual(cache.size, 1)
+        star = cob.TouchedStar()
+        star.addChangedEdge(0, 1)
+        cache.publish(star)
+        self.assertEqual(cache.size, 0)
+
+    def test_gamma_change_never_serves_a_stale_read(self):
+        cache = cob.AnalyticCache(self.st)
+        a = self.pc.octetBilinearReadCached(cache, self.ids, _rank2_state(),
+                                            [0, 1, 2])
+        changed = _rank2_state((1.0, 0.0, 0.0))
+        b = self.pc.octetBilinearReadCached(cache, self.ids, changed,
+                                            [0, 1, 2])
+        cold = self.pc.octetBilinearRead(changed, [0, 1, 2])
+        self.assertEqual(obs.ObservableGates.report_delta(
+            b.toRecord(), cold.toRecord()), 0.0)
+        self.assertFalse(np.array_equal(np.asarray(a.bilinear),
+                                        np.asarray(b.bilinear)))
+
+    def test_fingerprint_sensitivity(self):
+        state = _rank2_state()
+        base = self.pc.octetFingerprint(state, [0, 1, 2])
+        self.assertNotEqual(base,
+                            self.pc.octetFingerprint(state, [1, 0, 2]))
+        self.assertNotEqual(
+            base, self.pc.octetFingerprint(_rank2_state((1.0, 0.0, 0.0)),
+                                           [0, 1, 2]))
+        strict_cfg = obs.ParticleClustersConfig()
+        strict_cfg.parityTolerance = 1e-3
+        self.assertNotEqual(
+            base, obs.ParticleClusters(strict_cfg).octetFingerprint(
+                state, [0, 1, 2]))
+
+
+class TestGluonClassification(unittest.TestCase):
+    """Design spec section 14.3: a gluon candidate is a persistent
+    transported octet excitation with zero baryon flux and even parity."""
+
+    GATES = ["parity-even", "octet-excitation", "octet-purity",
+             "octet-transport", "winding-zero", "persistence"]
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+
+    def test_certified_gluon_candidate(self):
+        read = self.pc.classifyGluon(_gluon_evidence())
+        self.assertEqual(read.classification, "gluon-candidate")
+        self.assertEqual(read.confidence, 1.0)
+        self.assertEqual(read.failedCertificates, [])
+        self.assertEqual(read.exteriorParity, +1)
+        self.assertEqual(read.determinantWinding, 0)
+        # a CERTIFIED zero flux -- 0.0 as evidence, not a default
+        self.assertEqual(read.baryonFlux, 0.0)
+        self.assertAlmostEqual(read.occupationTotal, 2.0, delta=MACHINE)
+        self.assertAlmostEqual(read.casimir, 3.0, delta=1e-12)
+        self.assertLessEqual(read.octetProjectorResidual, 1e-14)
+        self.assertEqual(read.windingClosure, "closed-family")
+        self.assertTrue(read.certificate.holds())
+        self.assertEqual(read.certificate.grade,
+                         cob.CertificateGrade.StructureExact)
+
+    def test_candidate_is_the_strongest_claim(self):
+        # ticket out-of-scope: no even octet excitation is claimed to be a
+        # physical gluon -- the accepted verdict string is EXACTLY
+        # "gluon-candidate"
+        read = self.pc.classifyGluon(_gluon_evidence())
+        self.assertEqual(read.classification, "gluon-candidate")
+        self.assertNotEqual(read.classification, "gluon")
+
+    def test_odd_carried_state_is_rejected_from_the_even_read(self):
+        # negative control: an ODD-sector object (N = 1 fundamental) fails
+        # the even-parity gate by name
+        c = np.array([1.0, 0.0, 0.0], dtype=complex)
+        odd = qm.CovarianceState(np.outer(c, c.conj()))
+        read = self.pc.classifyGluon(_gluon_evidence(state=odd))
+        self.assertEqual(read.classification, "none")
+        self.assertEqual(read.exteriorParity, -1)
+        self.assertIn("parity-even", read.failedCertificates)
+        self.assertNotIn("winding-zero", read.failedCertificates)
+
+    def test_nonzero_winding_octet_excitation_is_not_a_gluon(self):
+        # negative control: certified nu = 1 is honest evidence (B = 1/3
+        # reported) but NOT a gluon candidate
+        read = self.pc.classifyGluon(_gluon_evidence(turns=1))
+        self.assertEqual(read.classification, "none")
+        self.assertIn("winding-zero", read.failedCertificates)
+        self.assertEqual(read.determinantWinding, 1)
+        self.assertAlmostEqual(read.baryonFlux, 1.0 / 3.0, delta=MACHINE)
+
+    def test_unknown_winding_leaves_flux_unknown(self):
+        ev = _gluon_evidence()
+        conn = obs.FiberConnection()
+        A, B = _unit_fiber(1, 3), _unit_fiber(11, 3)
+        segment = [_phase_link(conn, A, B, p) for p in (0.0, 0.3, 0.6)]
+        ev.winding = conn.openSegmentWinding(segment,
+                                             obs.WindingClosureSpec())
+        read = self.pc.classifyGluon(ev)
+        self.assertIsNone(read.determinantWinding)
+        self.assertIsNone(read.baryonFlux)  # UNKNOWN, never zero
+        self.assertIn("winding-zero", read.failedCertificates)
+
+    def test_missing_octet_read_fails_by_name(self):
+        ev = _gluon_evidence()
+        ev.octet = obs.OctetBilinearRead()
+        read = self.pc.classifyGluon(ev)
+        self.assertIn("octet-excitation", read.failedCertificates)
+        self.assertIn("octet-purity", read.failedCertificates)
+        self.assertTrue(math.isnan(read.casimir))
+
+    def test_vacuum_carries_no_excitation(self):
+        vacuum = qm.CovarianceState(np.zeros((3, 3), dtype=complex))
+        read = self.pc.classifyGluon(_gluon_evidence(state=vacuum))
+        self.assertEqual(read.classification, "none")
+        self.assertIn("octet-excitation", read.failedCertificates)
+        # vacuum parity is even -- that gate PASSES; the excitation gate
+        # is what refuses
+        self.assertNotIn("parity-even", read.failedCertificates)
+
+    def test_rank_two_transport_is_not_an_octet_transport(self):
+        ev = _gluon_evidence()
+        conn = obs.FiberConnection()
+        A2, B2 = _unit_fiber(61, 2), _unit_fiber(71, 2)
+        ev.lifetimeTransports = [conn.transport(A2, B2,
+                                                np.eye(2, dtype=complex))]
+        read = self.pc.classifyGluon(ev)
+        self.assertIn("octet-transport", read.failedCertificates)
+
+    def test_leaky_transport_fails(self):
+        ev = _gluon_evidence()
+        conn = obs.FiberConnection()
+        A, B = _unit_fiber(1, 3), _unit_fiber(11, 3)
+        leaky = conn.transport(A, B, np.diag([0.4, 1.0, 1.0]))
+        ev.lifetimeTransports = list(ev.lifetimeTransports) + [leaky]
+        read = self.pc.classifyGluon(ev)
+        self.assertIn("octet-transport", read.failedCertificates)
+
+    def test_missing_transports_fail(self):
+        ev = _gluon_evidence()
+        ev.lifetimeTransports = []
+        read = self.pc.classifyGluon(ev)
+        self.assertIn("octet-transport", read.failedCertificates)
+        self.assertTrue(math.isnan(read.transportLeakageMax))
+
+    def test_insufficient_persistence(self):
+        read = self.pc.classifyGluon(_gluon_evidence(lifetime=1.0))
+        self.assertIn("persistence", read.failedCertificates)
+        self.assertEqual(read.classification, "none")
+
+    def test_uncertified_parity_never_emits_a_sign(self):
+        ev = _gluon_evidence()
+        ev.parityRead = qm.WickCertificateRead()
+        read = self.pc.classifyGluon(ev)
+        self.assertEqual(read.exteriorParity, 0)
+        self.assertIn("parity-even", read.failedCertificates)
+
+    def test_confidence_is_the_passed_fraction(self):
+        ev = _gluon_evidence(turns=1, lifetime=1.0)  # two gates fail
+        read = self.pc.classifyGluon(ev)
+        self.assertAlmostEqual(read.confidence, 4.0 / 6.0, delta=MACHINE)
+        self.assertEqual(sorted(read.failedCertificates),
+                         ["persistence", "winding-zero"])
+
+    def test_thresholds_are_recorded(self):
+        cfg = obs.ParticleClustersConfig()
+        cfg.minOctetWeight = 0.123
+        read = obs.ParticleClusters(cfg).classifyGluon(_gluon_evidence())
+        self.assertEqual(read.thresholds.minOctetWeight, 0.123)
+
+    def test_record_roundtrip_and_null_semantics(self):
+        read = self.pc.classifyGluon(_gluon_evidence())
+        rec = read.toRecord()
+        back = obs.GluonRead.fromRecord(rec)
+        self.assertEqual(
+            obs.ObservableGates.report_delta(rec, back.toRecord()), 0.0)
+        empty = self.pc.classifyGluon(obs.GluonCandidateEvidence())
+        rec = empty.toRecord()
+        self.assertIsNone(rec["determinant_winding"])
+        self.assertIsNone(rec["baryon_flux"])
+        self.assertEqual(rec["exterior_parity"], 0)
+        self.assertTrue(math.isnan(rec["occupation_total"]))
+        for name in self.GATES:
+            self.assertIn(name, empty.failedCertificates)
+
+    def test_relabeling_preserves_the_read(self):
+        base = self.pc.classifyGluon(_gluon_evidence(band_base=1))
+        shifted = self.pc.classifyGluon(_gluon_evidence(band_base=901))
+        self.assertEqual(obs.ObservableGates.report_delta(
+            base.toRecord(), shifted.toRecord()), 0.0)
+
+    def test_cold_replay_is_deterministic(self):
+        a = self.pc.classifyGluon(_gluon_evidence())
+        b = obs.ParticleClusters().classifyGluon(_gluon_evidence())
+        self.assertEqual(obs.ObservableGates.report_delta(
+            a.toRecord(), b.toRecord()), 0.0)
+        # and the checkpoint replay: fromRecord(toRecord) re-serializes
+        # bit-identically (the cold-replay acceptance channel)
+        rec = a.toRecord()
+        self.assertEqual(obs.ObservableGates.report_delta(
+            rec, obs.GluonRead.fromRecord(rec).toRecord()), 0.0)
+
+    def test_describe_smoke(self):
+        text = self.pc.classifyGluon(_gluon_evidence()).describe()
+        self.assertIn("gluon-candidate", text)
+        self.assertIn("B=0", text)
+
+
+class TestMesonClassification(unittest.TestCase):
+    """Quark-antiquark singlet composites as meson candidates."""
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+
+    def test_certified_meson_candidate(self):
+        read = self.pc.classifyMeson(_meson_evidence())
+        self.assertEqual(read.classification, "meson-candidate")
+        self.assertEqual(read.failedCertificates, [])
+        # EVEN color singlet with ZERO total baryon flux (acceptance)
+        self.assertEqual(read.exteriorParity, +1)
+        self.assertEqual(read.totalWinding, 0)
+        self.assertEqual(read.totalBaryonFlux, 0.0)
+        self.assertLessEqual(read.pairingOctetFraction, 1e-15)
+        self.assertAlmostEqual(read.occupationTotal, 2.0, delta=MACHINE)
+        self.assertTrue(read.certificate.holds())
+
+    def test_order_insensitive(self):
+        ev = _meson_evidence()
+        swapped = _meson_evidence()
+        swapped.first, swapped.second = ev.second, ev.first
+        a = self.pc.classifyMeson(ev)
+        b = self.pc.classifyMeson(swapped)
+        self.assertEqual(a.classification, b.classification)
+        self.assertEqual(a.totalWinding, b.totalWinding)
+        self.assertEqual(a.exteriorParity, b.exteriorParity)
+
+    def test_octet_pairing_is_not_a_meson(self):
+        # a q-qbar pair in the OCTET channel is a gluon-sector object,
+        # not a color-singlet meson
+        read = self.pc.classifyMeson(_meson_evidence(pairing="octet"))
+        self.assertEqual(read.classification, "none")
+        self.assertIn("color-singlet", read.failedCertificates)
+        self.assertAlmostEqual(read.pairingOctetFraction, 1.0,
+                               delta=1e-15)
+
+    def test_missing_pairing_fails_by_name(self):
+        read = self.pc.classifyMeson(_meson_evidence(pairing="none"))
+        self.assertIn("color-singlet", read.failedCertificates)
+        self.assertTrue(math.isnan(read.pairingOctetFraction))
+
+    def test_two_quarks_are_not_a_meson(self):
+        read = self.pc.classifyMeson(
+            _meson_evidence(first_turns=1, second_turns=1))
+        self.assertEqual(read.classification, "none")
+        self.assertIn("constituent-antiquark", read.failedCertificates)
+        self.assertNotIn("constituent-quark", read.failedCertificates)
+        # and the flux channel refuses too: nu total = 2, not 0
+        self.assertIn("flux-zero", read.failedCertificates)
+
+    def test_two_antiquarks_are_not_a_meson(self):
+        read = self.pc.classifyMeson(
+            _meson_evidence(first_turns=-1, second_turns=-1))
+        self.assertIn("constituent-quark", read.failedCertificates)
+        self.assertNotIn("constituent-antiquark", read.failedCertificates)
+
+    def test_singular_constituent_leaves_flux_unknown(self):
+        ev = _meson_evidence()
+        conn = obs.FiberConnection()
+        A, B = _unit_fiber(1, 3), _unit_fiber(11, 3)
+        bad_ev = _certified_evidence(turns=-1)
+        bad = conn.transport(A, B, np.diag([0.1, 1.0, 1.0]))
+        bad_ev.winding = conn.closedFamilyWinding(
+            _winding_family(conn, A, B, turns=-1) + [bad])
+        ev.second = self.pc.classifyQuark(bad_ev)
+        read = self.pc.classifyMeson(ev)
+        self.assertIsNone(read.totalWinding)
+        self.assertIsNone(read.totalBaryonFlux)  # UNKNOWN, never zero
+        self.assertIn("flux-zero", read.failedCertificates)
+
+    def test_uncertified_constituent_parity_is_unknown(self):
+        ev = _meson_evidence()
+        blind = _certified_evidence(turns=-1, band_base=31)
+        blind.parityRead = qm.WickCertificateRead()
+        ev.second = self.pc.classifyQuark(blind)
+        read = self.pc.classifyMeson(ev)
+        self.assertEqual(read.exteriorParity, 0)
+        self.assertIn("parity-even", read.failedCertificates)
+
+    def test_composite_parity_is_the_exact_graded_product(self):
+        # whitepaper parity table: two odd constituents compose EVEN
+        ev = _meson_evidence()
+        read = self.pc.classifyMeson(ev)
+        self.assertEqual(read.exteriorParity,
+                         ev.first.exteriorParity * ev.second.exteriorParity)
+        self.assertEqual(read.exteriorParity, +1)
+
+    def test_record_roundtrip_and_describe(self):
+        read = self.pc.classifyMeson(_meson_evidence())
+        rec = read.toRecord()
+        back = obs.MesonRead.fromRecord(rec)
+        self.assertEqual(
+            obs.ObservableGates.report_delta(rec, back.toRecord()), 0.0)
+        self.assertIn("meson-candidate", read.describe())
+        rec["schema_version"] = 99
+        with self.assertRaises(ValueError):
+            obs.MesonRead.fromRecord(rec)
+
+    def test_relabeling_and_cold_replay(self):
+        a = self.pc.classifyMeson(_meson_evidence())
+        b = obs.ParticleClusters().classifyMeson(_meson_evidence())
+        self.assertEqual(obs.ObservableGates.report_delta(
+            a.toRecord(), b.toRecord()), 0.0)
+
+
+class TestDiquarkClassification(unittest.TestCase):
+    """Two-quark anti-triplet even composites with preserved B = 2/3."""
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+
+    def test_certified_diquark_candidate(self):
+        read = self.pc.classifyDiquark(_diquark_evidence())
+        self.assertEqual(read.classification, "diquark-candidate")
+        self.assertEqual(read.failedCertificates, [])
+        # even 3bar state with B = 2/3 (acceptance)
+        self.assertEqual(read.exteriorParity, +1)
+        self.assertEqual(read.totalWinding, 2)
+        self.assertEqual(read.totalBaryonFlux, 2.0 / 3.0)
+        self.assertAlmostEqual(read.antiTripletWeight, 1.0, delta=MACHINE)
+        self.assertAlmostEqual(read.occupationTotal, 2.0, delta=MACHINE)
+        self.assertTrue(read.certificate.holds())
+
+    def test_explicitly_not_an_antiquark(self):
+        # The #773 distinction fixture, composed: the SAME two-quark
+        # carried state fed to the QUARK classifier (anti-triplet color,
+        # nu = -1 tube) refuses on occupation/parity; the diquark read
+        # accepts with B = +2/3 -- opposite sign and triple the magnitude
+        # of an antiquark's B = -1/3.
+        quark_view = self.pc.classifyQuark(
+            _certified_evidence(turns=-1, occupations=(1.0, 1.0, 0.0)))
+        self.assertEqual(quark_view.classification, "none")
+        self.assertIn("parity-odd", quark_view.failedCertificates)
+        self.assertIn("occupation-one", quark_view.failedCertificates)
+
+        read = self.pc.classifyDiquark(_diquark_evidence())
+        self.assertEqual(read.classification, "diquark-candidate")
+        self.assertEqual(read.totalBaryonFlux, 2.0 / 3.0)
+        self.assertNotEqual(read.totalBaryonFlux, -1.0 / 3.0)
+        self.assertAlmostEqual(read.occupationTotal, 2.0, delta=MACHINE)
+        self.assertEqual(read.exteriorParity, +1)
+
+    def test_duplicated_color_mode_is_pauli_zero(self):
+        # det(C^dag Gamma C) with a repeated color column is EXACTLY zero
+        # (the Gram/Pauli identity): the anti-triplet gate refuses
+        dup = np.array([[1.0, 1.0], [0.0, 0.0], [0.0, 0.0]], dtype=complex)
+        ev = _diquark_evidence(columns=dup)
+        self.assertEqual(ev.antiTripletRead.value, 0.0 + 0.0j)
+        read = self.pc.classifyDiquark(ev)
+        self.assertEqual(read.classification, "none")
+        self.assertIn("anti-triplet", read.failedCertificates)
+        self.assertEqual(read.antiTripletWeight, 0.0)
+
+    def test_quark_antiquark_pair_is_not_a_diquark(self):
+        read = self.pc.classifyDiquark(_diquark_evidence(second_turns=-1))
+        self.assertEqual(read.classification, "none")
+        self.assertIn("constituent-quarks", read.failedCertificates)
+        # nu total = 0, not 2: the flux channel refuses independently
+        self.assertIn("baryon-flux-two-thirds", read.failedCertificates)
+        self.assertEqual(read.totalWinding, 0)
+
+    def test_missing_wedge_read_fails_by_name(self):
+        ev = _diquark_evidence()
+        ev.antiTripletRead = qm.WickCertificateRead()
+        read = self.pc.classifyDiquark(ev)
+        self.assertIn("anti-triplet", read.failedCertificates)
+        self.assertTrue(math.isnan(read.antiTripletWeight))
+
+    def test_constituent_flux_is_preserved(self):
+        ev = _diquark_evidence()
+        read = self.pc.classifyDiquark(ev)
+        self.assertEqual(read.totalBaryonFlux,
+                         ev.first.baryonFlux + ev.second.baryonFlux)
+
+    def test_singular_constituent_leaves_flux_unknown(self):
+        ev = _diquark_evidence()
+        conn = obs.FiberConnection()
+        A, B = _unit_fiber(1, 3), _unit_fiber(11, 3)
+        bad_ev = _certified_evidence(turns=1, band_base=51)
+        bad = conn.transport(A, B, np.diag([0.1, 1.0, 1.0]))
+        bad_ev.winding = conn.closedFamilyWinding(
+            _winding_family(conn, A, B, turns=1) + [bad])
+        ev.second = self.pc.classifyQuark(bad_ev)
+        read = self.pc.classifyDiquark(ev)
+        self.assertIsNone(read.totalWinding)
+        self.assertIsNone(read.totalBaryonFlux)
+        self.assertIn("baryon-flux-two-thirds", read.failedCertificates)
+
+    def test_record_roundtrip_and_describe(self):
+        read = self.pc.classifyDiquark(_diquark_evidence())
+        rec = read.toRecord()
+        back = obs.DiquarkRead.fromRecord(rec)
+        self.assertEqual(
+            obs.ObservableGates.report_delta(rec, back.toRecord()), 0.0)
+        self.assertIn("diquark-candidate", read.describe())
+
+    def test_cold_replay_is_deterministic(self):
+        a = self.pc.classifyDiquark(_diquark_evidence())
+        b = obs.ParticleClusters().classifyDiquark(_diquark_evidence())
+        self.assertEqual(obs.ObservableGates.report_delta(
+            a.toRecord(), b.toRecord()), 0.0)
+
+
+class TestEvenSectorGuardsAndBenchmark(unittest.TestCase):
+    """Shared #763 merge gates for the even sectors."""
+
+    def test_no_even_sector_quantity_enters_the_emergence_objective(self):
+        objective_homes = [REPO_ROOT / "src" / "cobordism",
+                           REPO_ROOT / "include" / "cobordism",
+                           REPO_ROOT / "src" / "rl",
+                           REPO_ROOT / "include" / "rl",
+                           REPO_ROOT / "src" / "simulations",
+                           REPO_ROOT / "include" / "simulations"]
+        needles = ("GluonRead", "MesonRead", "DiquarkRead",
+                   "OctetBilinearRead", "classifyGluon", "classifyMeson",
+                   "classifyDiquark")
+        offenders = []
+        for home in objective_homes:
+            if not home.exists():
+                continue
+            for path in home.rglob("*"):
+                if path.suffix not in (".h", ".cpp", ".cu", ".hpp"):
+                    continue
+                text = path.read_text(errors="ignore")
+                if any(needle in text for needle in needles):
+                    offenders.append(str(path))
+        self.assertEqual(offenders, [])
+
+    def test_old_threshold_records_still_rehydrate(self):
+        # pre-#774 checkpoints lack the new threshold keys: the reader
+        # falls back to the defaults instead of rejecting
+        pc = obs.ParticleClusters()
+        rec = pc.classifyQuark(_certified_evidence()).toRecord()
+        for key in ("min_octet_weight", "octet_purity_tolerance",
+                    "composite_octet_tolerance", "min_anti_triplet_weight"):
+            self.assertIn(key, rec["thresholds"])
+            del rec["thresholds"][key]
+        back = obs.QuarkRead.fromRecord(rec)
+        defaults = obs.ParticleClustersConfig()
+        self.assertEqual(back.thresholds.minOctetWeight,
+                         defaults.minOctetWeight)
+        self.assertEqual(back.thresholds.minAntiTripletWeight,
+                         defaults.minAntiTripletWeight)
+
+    def test_new_thresholds_enter_the_evidence_fingerprint(self):
+        ev = _certified_evidence()
+        base = obs.ParticleClusters()
+        cfg = obs.ParticleClustersConfig()
+        cfg.minOctetWeight = 0.5
+        self.assertNotEqual(base.evidenceFingerprint(ev),
+                            obs.ParticleClusters(cfg).evidenceFingerprint(ev))
+
+    def test_classification_cost_per_candidate(self):
+        # merge-gate benchmark: even-sector classification cost (numbers
+        # reported in the PR body)
+        pc = obs.ParticleClusters()
+        gluon_ev = _gluon_evidence()
+        meson_ev = _meson_evidence()
+        diquark_ev = _diquark_evidence()
+        state = _rank2_state()
+        n = 200
+        t0 = time.perf_counter()
+        for _ in range(n):
+            pc.octetBilinearRead(state, [0, 1, 2])
+        octet = (time.perf_counter() - t0) / n
+        t0 = time.perf_counter()
+        for _ in range(n):
+            pc.classifyGluon(gluon_ev)
+        gluon = (time.perf_counter() - t0) / n
+        t0 = time.perf_counter()
+        for _ in range(n):
+            pc.classifyMeson(meson_ev)
+        meson = (time.perf_counter() - t0) / n
+        t0 = time.perf_counter()
+        for _ in range(n):
+            pc.classifyDiquark(diquark_ev)
+        diquark = (time.perf_counter() - t0) / n
+        print(f"\n[benchmark] octetBilinearRead: {octet * 1e6:.1f} us; "
+              f"classifyGluon: {gluon * 1e6:.1f} us; "
+              f"classifyMeson: {meson * 1e6:.1f} us; "
+              f"classifyDiquark: {diquark * 1e6:.1f} us per candidate")
+        for cost in (octet, gluon, meson, diquark):
+            self.assertLess(cost, 0.05)
+
+
 if __name__ == "__main__":
     unittest.main()
