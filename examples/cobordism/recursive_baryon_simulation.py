@@ -181,8 +181,15 @@ DECLARED_SEED = 7
 #: The host construction seed, held fixed so "size" varies alone.
 DECLARED_HOST_SEED = 3
 
-#: Hodge degrees the register/band layer is enumerated at.
+#: Hodge degrees the post-hoc ANALYSIS enumerates bands at.
 DECLARED_DEGREES = (1,)
+
+#: The degrees the emergence objective's register term is configured at.
+#: Fixed at one: `MultiCobordism` refuses joint Hodge-entropy stationarity
+#: below degree one (there is no d(Hodge)/dz there), so this is the
+#: objective's domain, not a tuning choice. The ANALYSIS degrees above are a
+#: separate, post-hoc knob.
+DECLARED_REGISTER_DEGREES = (1,)
 
 #: The resolution the component/fiber/reduction layer is READ at: gamma = 1,
 #: the standard Newman-Girvan value — a literature default, declared here so
@@ -978,27 +985,30 @@ def fock_block(readout, checkpoint, config):
             continue
         projector = np.array(fiber.projector())
         modes = int(projector.shape[0])
-        if modes > QU.LazyFockEngine.kMaxSupportModes:
-            out["reason"] = "band support exceeds the lazy DAG mode cap"
-            continue
+        out["modes"] = modes
+        # ‖P − P†‖ in the PLAIN inner product. The engine's own premise is
+        # P² = P = P^t̄ in the band's signed (Krein) inner product, so this
+        # number is a diagnostic beside the engine's verdict, never a
+        # substitute for it: the refusal message below is the authority.
+        out["hermiticity_defect"] = _finite(float(
+            np.abs(projector - projector.conj().T).max()))
         try:
             engine = QU.LazyFockEngine(modes)
             slater = engine.slaterFromProjector(list(range(modes)),
                                                 projector, 1e-9)
             out["present"] = bool(slater.state.valid())
-            out["modes"] = modes
             out["nodes"] = (int(slater.state.nodeCount())
                             if out["present"] else None)
             out["discarded_norm"] = (_finite(slater.state.discardedNorm())
                                      if out["present"] else None)
             out["exact"] = bool(engine.exactMode())
-            out["reason"] = None if out["present"] else "the engine refused"
-            out["projector_idempotence_defect"] = _finite(float(
-                np.abs(projector @ projector - projector).max()))
+            out["reason"] = (None if out["present"]
+                             else "the engine returned an invalid state")
         except Exception as error:                        # noqa: BLE001
+            # The engine's OWN refusal message is the named reason (#776
+            # finding 7): at k >= 1 the signed-weight operator's band
+            # projectors are oblique, so no exact Slater reference exists.
             out["reason"] = f"{type(error).__name__}: {error}"
-            out["projector_idempotence_defect"] = _finite(float(
-                np.abs(projector @ projector - projector).max()))
         break
     return out
 
@@ -1930,6 +1940,7 @@ def make_config(size=DECLARED_SIZE_FAST, seed=DECLARED_SEED,
         "refine": bool(refine),
         "fock_oracle": bool(fock_oracle),
         "degrees": list(degrees),
+        "register_degrees": list(DECLARED_REGISTER_DEGREES),
         "resolution_scan": list(resolution_scan),
         "analysis_resolution": float(analysis_resolution),
         "candidate_moves": DECLARED_CANDIDATE_MOVES,
@@ -1989,7 +2000,10 @@ def run_simulation(config, commit=None, sidecar_path=None, progress=False):
 
     host = build_neutral_host(config["size"], config["host_seed"])
     host_cells = len(host.getTopSimplices())
-    node = MC(host, [], [], list(config["degrees"]), 1.0, config["seed"])
+    # The node's REGISTER degrees are the objective's domain (>= 1); the
+    # analysis degrees below are a separate, post-hoc knob.
+    node = MC(host, [], [], list(config["register_degrees"]), 1.0,
+              config["seed"])
     node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
     node.set_simulation_mode(MC.SimulationMode.EMERGENCE, submode)
     node.set_provenance(config_hash, commit)
@@ -2138,6 +2152,17 @@ def run_simulation(config, commit=None, sidecar_path=None, progress=False):
                     "the only channel from the carried state to the geometry "
                     "is carried_state_energy, identically zero outside the "
                     "labeled certificates_blind_mean_field sub-mode"),
+                "carried_state_present": bool(
+                    checkpoint["edge_quantum_data"]["carried_state_present"]),
+                "mean_field_note": (
+                    "this driver adopts NO carried state, so even under the "
+                    "certificates_blind_mean_field sub-mode the one permitted "
+                    "coupling is exactly zero; #776 owns the mean-field "
+                    "schedule and this run does not exercise it"
+                    if config["emergence_submode"]
+                    == "certificates-blind-mean-field"
+                    else "the strict sub-mode zeroes the coupling weight by "
+                         "construction"),
             },
         },
         "checkpoints": checkpoints,
@@ -2647,7 +2672,14 @@ def run_campaign(sizes, seeds, base_config, out_dir=None, progress=False):
                     print(f"  size {size} seed {seed}: FAILED "
                           f"{record['error']}", flush=True)
                 continue
+            # Cache statistics over EVERY analysis pass the member ran, not
+            # just the last: the last pass is warm by construction (two
+            # passes already ran on the same complex), so quoting it alone
+            # would report a hit rate the run did not pay for.
             cache = document["checkpoint"]["analysis"]
+            passes = [step["cache"] for step in document["drive"]["steps"]]
+            passes.append(document["scan_checkpoint"]["analysis"])
+            passes.append(cache)
             record.update({
                 "ok": True,
                 "config_hash": document["provenance"]["config_hash"],
@@ -2686,10 +2718,14 @@ def run_campaign(sizes, seeds, base_config, out_dir=None, progress=False):
                     if (document["runtime"]["rss_bytes"] is not None
                         and rss_before is not None) else None),
                 "peak_rss_bytes": document["runtime"]["peak_rss_bytes"],
-                "cache_hits": cache["cache_hits"],
-                "cache_misses": cache["cache_misses"],
-                "cache_invalidations": cache["cache_invalidations"],
+                "analysis_passes": len(passes),
+                "cache_hits": sum(p["cache_hits"] for p in passes),
+                "cache_misses": sum(p["cache_misses"] for p in passes),
+                "cache_invalidations": sum(p["cache_invalidations"]
+                                           for p in passes),
                 "cache_entries": cache["cache_entries"],
+                "cache_hits_final_pass": cache["cache_hits"],
+                "cache_misses_final_pass": cache["cache_misses"],
                 "exactness_all_exact": all(f["exact"]
                                            for f in document["exactness"]),
             })
@@ -2741,8 +2777,12 @@ def aggregate_campaign(members):
             "analysis_seconds": mean_sd(m["analysis_seconds"] for m in group),
             "readout_seconds": mean_sd(m["readout_seconds"] for m in group),
             "rss_bytes": mean_sd(m["rss_bytes"] for m in group),
+            "rss_delta_bytes": mean_sd(m["rss_delta_bytes"] for m in group),
             "peak_rss_bytes": mean_sd(m["peak_rss_bytes"] for m in group),
+            "analysis_passes": mean_sd(m["analysis_passes"] for m in group),
             "cache_hits": mean_sd(m["cache_hits"] for m in group),
+            "cache_hits_final_pass": mean_sd(m["cache_hits_final_pass"]
+                                             for m in group),
             "cache_misses": mean_sd(m["cache_misses"] for m in group),
             "cache_invalidations": mean_sd(m["cache_invalidations"]
                                            for m in group),
@@ -3495,16 +3535,23 @@ def _add_run_arguments(parser):
     parser.add_argument("--fock-oracle", action="store_true",
                         help="build the lazy Fock DAG (oracle / non-Gaussian "
                              "boundary path only)")
+    parser.add_argument("--degrees", default=",".join(
+        str(k) for k in DECLARED_DEGREES),
+        help="comma-separated Hodge degrees the bands are enumerated at "
+             "(default: %(default)s; degree 0 is the POSITIVE graph "
+             "Laplacian, where the Fock oracle has an exact reference)")
 
 
 def _config_from_arguments(args):
     size = DECLARED_SIZE_LARGE if args.large else args.size
     steps = (DECLARED_DRIVE_STEPS_LARGE if args.large
              else args.drive_steps)
+    degrees = tuple(int(k) for k in args.degrees.split(",") if k.strip())
     return make_config(size=size, seed=args.seed, host_seed=args.host_seed,
                        drive_steps=steps, submode=args.submode,
                        refine=not args.no_refine,
-                       fock_oracle=args.fock_oracle)
+                       fock_oracle=args.fock_oracle,
+                       degrees=degrees or DECLARED_DEGREES)
 
 
 def build_parser():
