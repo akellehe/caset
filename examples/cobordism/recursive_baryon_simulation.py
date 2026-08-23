@@ -810,23 +810,35 @@ class RecursiveReadout:
         # The composite's rotation character needs a spinor carrier on the
         # emergent geometry. The rotation read stays default-constructed and
         # `rotation-character` fails by name.
-        if not self.spinor_carrier()["supplied"]:
-            missing.append(self.spinor_carrier()["reason"])
+        carrier = self.spinor_carrier()
+        if not carrier["supplied"]:
+            missing.append(carrier["reason"])
 
-        # The quasi-free spin reads: supplied only from a carried state of
-        # the bound object, which no accepted class here provides.
+        # The quasi-free spin reads. This driver supplies NO composite
+        # covariance state, and says so as a statement about itself rather
+        # than as a claim about the geometry: `wickSpinSquaredExpectation`
+        # takes CALLER-SUPPLIED one-particle spin matrices, and #777 §9
+        # measured that a declared pairing convention dominates Var(J^2)
+        # almost entirely. Quoting a convention-dependent number as a
+        # physical one is exactly what a rigorous readout must not do.
+        found = bool(binding is not None and binding.found)
         missing.append(
-            "no covariance state of a certified bound composite exists, so "
-            "<J^2> and Var(J^2) are UNSUPPLIED; per #777 §9 a declared "
-            "one-particle spin convention would dominate them anyway")
+            ("a bound supercomponent WAS found, but this driver supplies no "
+             if found else
+             "no certified bound composite was found, and this driver "
+             "supplies no ")
+            + "composite covariance state, so <J^2> and Var(J^2) are "
+              "UNSUPPLIED; #777 §9 measured that a declared one-particle "
+              "spin convention would dominate them anyway")
 
-        # The mass-radius battery needs register holes to seed its shells;
-        # the neutral host grows none, so no refinement-window sample is
-        # supplied and `finite-radius`/`profile-stability` fail by name.
+        # The mass-radius battery seeds its shells from register holes, and
+        # the neutral host is built WITHOUT any — a property of the host's
+        # construction, not of this run. No `ScaleProfileSample` is supplied
+        # and `finite-radius`/`profile-stability` fail by name.
         missing.append(
-            "the neutral host carries no register hole, so the existing "
-            "mass-radius battery has no shell seed and no refinement-window "
-            "sample is supplied")
+            "this driver supplies no refinement-window ScaleProfileSample: "
+            "the existing mass-radius battery seeds its shells from register "
+            "holes, and the documented neutral host is built without any")
         return evidence, missing
 
     def spinor_carrier(self):
