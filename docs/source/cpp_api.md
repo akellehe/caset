@@ -251,6 +251,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} GradedFock.h
 ```
+```{doxygenfile} LazyFock.h
+```
 
 ## Graph
 

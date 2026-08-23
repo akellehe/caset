@@ -197,6 +197,15 @@ _EXPORTS = (
     # order and relabeling parity.
     "OccupationBitset", "ExteriorAlgebra", "GradedTensorComplex",
     "FockDirectSum", "EdgeModeRecord", "EdgeModeRegistry",
+    # Lazy graded Fock oracle and boundary carrier (issue #771): the
+    # expression-DAG engine over the #766 primitives — lazy graded tensor
+    # products with crossing-only expansion, sector direct sums, Slater
+    # wedges with the exact projector covariance, bit-level dGamma, the
+    # vacuum embedding + inductive compatibility read, exact certification
+    # / stated truncation, and content-hashed DAG checkpoints.
+    "LazyNodeKind", "LazySectorKind", "LazyFockState", "LazyScalarRead",
+    "LazySlaterReference", "LazyCovarianceRead", "LazyCompatibilityRead",
+    "LazyFockEngine",
     # KI + QuantumSimplex (Van Raamsdonk-metric simplex factory)
     "QuantumSimplex", "QuantumSimplexPosition", "QuantumVertex",
     "createQuantumVertex",
