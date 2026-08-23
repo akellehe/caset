@@ -1767,6 +1767,36 @@ class TestGluonClassification(unittest.TestCase):
         self.assertEqual(obs.ObservableGates.report_delta(
             base.toRecord(), shifted.toRecord()), 0.0)
 
+    def test_simplex_reorientation_preserves_the_verdict(self):
+        # the ORIENTATION channel: a common row sign flip (reversing a
+        # cell's orientation flips its cochain component on every column
+        # alike).  det C picks up det(S) = +-1 and the SINGLET certificate
+        # |det C|^2 is exactly invariant.
+        base = self.pc.classifyBaryon(_baryon_evidence())
+        for signs in ([1, 1, -1], [-1, -1, -1], [-1, 1, -1]):
+            columns = np.diag(signs).astype(complex) @ _color_triad()
+            read = self.pc.classifyBaryon(_baryon_evidence(color=columns))
+            self.assertEqual(read.classification, base.classification)
+            self.assertAlmostEqual(read.colorGramDeterminant,
+                                   base.colorGramDeterminant, delta=MACHINE)
+            expected = base.colorWedge * float(np.prod(signs))
+            self.assertLess(abs(read.colorWedge - expected), 1e-13)
+
+    def test_refinement_sample_order_does_not_change_stability(self):
+        samples = _scale_samples()
+        forward = self.pc.scaleProfile(samples)
+        backward = self.pc.scaleProfile(list(reversed(samples)))
+        self.assertEqual(forward.stable, backward.stable)
+        self.assertEqual(forward.radiusRatioSpread,
+                         backward.radiusRatioSpread)
+        self.assertEqual(forward.profileMaxDeviation,
+                         backward.profileMaxDeviation)
+        drifting = _scale_samples(drift=0.05)
+        self.assertEqual(
+            self.pc.scaleProfile(drifting).failedCertificates,
+            self.pc.scaleProfile(list(reversed(drifting)))
+            .failedCertificates)
+
     def test_cold_replay_is_deterministic(self):
         a = self.pc.classifyGluon(_gluon_evidence())
         b = obs.ParticleClusters().classifyGluon(_gluon_evidence())
@@ -3207,7 +3237,8 @@ class TestBaryonClassification(unittest.TestCase):
                          .id.canonicalHash())
 
     def test_describe_names_the_verdict_and_gaps(self):
-        text = self.pc.classifyBaryon(_baryon_evidence(spin="generic")).describe()
+        read = self.pc.classifyBaryon(_baryon_evidence(spin="generic"))
+        text = read.describe()
         self.assertIn("baryon-candidate", text)
         self.assertIn("sharp-spin", text)
 

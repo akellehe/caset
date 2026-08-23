@@ -2151,8 +2151,8 @@ ParticleClusters::boundSupercomponentSearch(
       std::size_t inside = 0;
       for (const std::uint64_t id : cand.support)
         if (support.find(id) != support.end()) ++inside;
-      const double fraction =
-          static_cast<double>(inside) / static_cast<double>(cand.support.size());
+      const double fraction = static_cast<double>(inside) /
+                              static_cast<double>(cand.support.size());
       minContainment =
           std::isnan(minContainment) ? fraction
                                      : std::min(minContainment, fraction);
@@ -2213,8 +2213,8 @@ ParticleClusters::boundSupercomponentSearch(
     ConsumedCertificates consumed;
     for (const std::size_t i : members)
       consumed.consume(candidates[i].quark.certificate);
-    read.certificate =
-        consumed.verdict(read.found, candidates[members.front()].quark.certificate);
+    read.certificate = consumed.verdict(
+        read.found, candidates[members.front()].quark.certificate);
     out.push_back(std::move(read));
   }
   return out;
@@ -2449,9 +2449,10 @@ BaryonRead ParticleClusters::classifyBaryon(
 
   // 8. the reused #773 charge read: summed CERTIFIED Gauss fluxes = +1.
   read.electricFlux = totals.electricFlux;
-  passed += gate(totals.electricFlux.has_value() &&
-                     std::abs(*totals.electricFlux - 1.0) <= cfg_.gaussTolerance,
-                 "electric-flux-unit", failed);
+  const bool electricOk =
+      totals.electricFlux.has_value() &&
+      std::abs(*totals.electricFlux - 1.0) <= cfg_.gaussTolerance;
+  passed += gate(electricOk, "electric-flux-unit", failed);
 
   // 9. the total-space ⟨J²⟩ = 3/4.  The #780 Wick expectation is the
   //    quasi-free path; a candidate carried as an explicit composite state
@@ -2471,8 +2472,9 @@ BaryonRead ParticleClusters::classifyBaryon(
   //     certificate (spec §5.12) — an absent variance is UNKNOWN, not zero.
   if (evidence.spinVarianceRead.certificate.holds())
     read.totalJ2Variance = evidence.spinVarianceRead.value.real();
-  read.sharpSpin = read.totalJ2Variance.has_value() &&
-                   std::abs(*read.totalJ2Variance) <= cfg_.spinVarianceTolerance;
+  read.sharpSpin =
+      read.totalJ2Variance.has_value() &&
+      std::abs(*read.totalJ2Variance) <= cfg_.spinVarianceTolerance;
   passed += gate(read.sharpSpin, "sharp-spin", failed);
 
   // 11. the reference-normalized physical 2π character (#772): channel
