@@ -1029,6 +1029,28 @@ void MultiCobordism::runRecursiveAnalysisOn(
     }
   }
 
+  // The candidate band of each component read: the FIRST accepted band, the
+  // one every downstream read is assembled around.
+  std::vector<int> candidateBand(bandReads.size(), -1);
+  for (std::size_t index = 0; index < bandReads.size(); ++index)
+    for (std::size_t band = 0; band < bandReads[index].fibers.size(); ++band)
+      if (bandReads[index].fibers[band].accepted()) {
+        candidateBand[index] = static_cast<int>(band);
+        break;
+      }
+
+  // MUTUAL transports: one derived link per ordered pair of candidate bands
+  // at the same degree — the cross-component family the bound-supercomponent
+  // search reads. Deliberately NOT every band against every band: a
+  // component's bands are alternative carriers, not links, and pairing them
+  // all costs O(bands²) derived transports per component pair (measured 663
+  // at 62 cells, 30x the optimizer step) for links no certificate consumes.
+  //
+  // The LIFETIME family — the world-tube transports of ONE candidate across
+  // frames — is a different object, and one analysis pass sees exactly one
+  // frame, so it stays empty here and the corresponding certificate is
+  // NAMED as missing rather than filled with cross-component links that do
+  // not mean that.
   const FiberConnection connection;
   struct TransportRecord {
     std::size_t fromRead = 0;
@@ -1037,22 +1059,22 @@ void MultiCobordism::runRecursiveAnalysisOn(
   };
   std::vector<TransportRecord> transports;
   for (std::size_t a = 0; a < bandReads.size(); ++a) {
-    for (std::size_t b = a + 1; b < bandReads.size(); ++b) {
+    if (candidateBand[a] < 0) continue;
+    for (std::size_t b = 0; b < bandReads.size(); ++b) {
+      if (a == b || candidateBand[b] < 0) continue;
       if (bandReads[a].degree != bandReads[b].degree) continue;
-      for (const auto &toFiber : bandReads[a].fibers) {
-        if (!toFiber.accepted()) continue;
-        for (const auto &fromFiber : bandReads[b].fibers) {
-          if (!fromFiber.accepted()) continue;
-          if (fromFiber.rank() != toFiber.rank()) continue;
-          try {
-            transports.push_back(
-                {b, a,
-                 connection.transportOnSpacetimeCached(*cache, spacetime,
-                                                       toFiber, fromFiber)});
-          } catch (const std::exception &) {
-            // A shape the transfer refuses is an unknown link, not a fault.
-          }
-        }
+      const auto &toFiber =
+          bandReads[a].fibers[static_cast<std::size_t>(candidateBand[a])];
+      const auto &fromFiber =
+          bandReads[b].fibers[static_cast<std::size_t>(candidateBand[b])];
+      if (fromFiber.rank() != toFiber.rank()) continue;
+      try {
+        transports.push_back(
+            {b, a,
+             connection.transportOnSpacetimeCached(*cache, spacetime, toFiber,
+                                                   fromFiber)});
+      } catch (const std::exception &) {
+        // A shape the transfer refuses is an unknown link, not a fault.
       }
     }
   }
@@ -1094,37 +1116,37 @@ void MultiCobordism::runRecursiveAnalysisOn(
   // ── §17.6 particle reads ─────────────────────────────────────────────
   const ParticleClusters classifier;
   std::vector<QuarkRead> quarkReads;
+  std::vector<std::size_t> quarkBandRead;
   std::vector<::tessera::observables::BoundSupercomponentRead> bindings;
   for (std::size_t index = 0; index < bandReads.size(); ++index) {
+    if (candidateBand[index] < 0) continue;
     const auto &bandRead = bandReads[index];
-    for (const auto &fiber : bandRead.fibers) {
-      if (!fiber.accepted()) continue;
-      QuarkCandidateEvidence evidence;
-      const auto &componentId = components[bandComponent[index]].id;
-      evidence.component = componentId;
-      evidence.colorBand = fiber;
-      // The calibrated oriented-triangle anchor, when the band's cells carry
-      // a triangle atlas (a rank-three degree-one band). Missing evidence is
-      // a NAMED failed certificate downstream — never a presumed pass.
-      if (bandRead.degree == 1 && fiber.rank() == 3)
-        evidence.anchor = BandAnchor::of(spacetime, fiber);
-      for (const auto &record : transports)
-        if (record.toRead == index || record.fromRead == index)
-          evidence.lifetimeTransports.push_back(record.read);
-      if (bandStates[index].has_value()) {
-        evidence.parityRead = bandStates[index]->wickParity();
-        evidence.occupationRead = bandStates[index]->wickTotalNumber();
-      }
-      for (const auto &track : report.tracks)
-        for (const auto &member : track.members)
-          if (member == componentId) {
-            evidence.persistenceLifetime =
-                static_cast<double>(track.lastSlice - track.firstSlice + 1);
-            evidence.persistenceMinOverlap = track.minAdjacentOverlap;
-          }
-      quarkReads.push_back(classifier.classifyQuarkCached(*cache, evidence));
-      break;  // one candidate per component read
+    const auto &fiber =
+        bandRead.fibers[static_cast<std::size_t>(candidateBand[index])];
+    QuarkCandidateEvidence evidence;
+    const auto &componentId = components[bandComponent[index]].id;
+    evidence.component = componentId;
+    evidence.colorBand = fiber;
+    // The calibrated oriented-triangle anchor, when the band's cells carry a
+    // triangle atlas (a rank-three degree-one band). Missing evidence is a
+    // NAMED failed certificate downstream — never a presumed pass, and the
+    // LIFETIME transport family is deliberately left unsupplied: one pass is
+    // one frame, and a world tube needs more than one.
+    if (bandRead.degree == 1 && fiber.rank() == 3)
+      evidence.anchor = BandAnchor::of(spacetime, fiber);
+    if (bandStates[index].has_value()) {
+      evidence.parityRead = bandStates[index]->wickParity();
+      evidence.occupationRead = bandStates[index]->wickTotalNumber();
     }
+    for (const auto &track : report.tracks)
+      for (const auto &member : track.members)
+        if (member == componentId) {
+          evidence.persistenceLifetime =
+              static_cast<double>(track.lastSlice - track.firstSlice + 1);
+          evidence.persistenceMinOverlap = track.minAdjacentOverlap;
+        }
+    quarkReads.push_back(classifier.classifyQuarkCached(*cache, evidence));
+    quarkBandRead.push_back(index);
   }
   if (!nextLevelComponents.empty() && !quarkReads.empty()) {
     std::vector<::tessera::observables::BoundCandidateEvidence> candidates;
@@ -1132,7 +1154,12 @@ void MultiCobordism::runRecursiveAnalysisOn(
     for (std::size_t index = 0; index < quarkReads.size(); ++index) {
       ::tessera::observables::BoundCandidateEvidence candidate;
       candidate.quark = quarkReads[index];
-      if (index < bandReads.size()) candidate.support = bandReads[index].support;
+      const std::size_t readIndex = quarkBandRead[index];
+      candidate.support = bandReads[readIndex].support;
+      // The cross-component links ARE this candidate's mutual transports.
+      for (const auto &record : transports)
+        if (record.toRead == readIndex || record.fromRead == readIndex)
+          candidate.mutualTransports.push_back(record.read);
       candidates.push_back(std::move(candidate));
     }
     bindings = classifier.boundSupercomponentSearch(nextLevelComponents,

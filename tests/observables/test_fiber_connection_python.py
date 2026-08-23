@@ -1238,6 +1238,36 @@ class TestCaching(unittest.TestCase):
         self._assert_reads_equal(cold, first)
         self._assert_reads_equal(first, second)
 
+    def test_two_bands_of_one_component_pair_do_not_collide(self):
+        """Distinct BANDS of one component pair get distinct cache entries.
+
+        Every band of a component restricts to the same cells, so the
+        component key — the fingerprint of that cell-vertex set — is shared
+        across them. Keying on it alone served the first band's read for
+        every later band of the pair (measured in the #776
+        incremental-versus-cold comparison: 169 of 170 transports stale).
+        """
+        st = _from_simplices(4, [(0, 1), (1, 2), (2, 3), (3, 0)])
+        _set_phase(st, 0, 1, 0.5)
+        cache = cob.AnalyticCache(st)
+        conn = obs.FiberConnection()
+        left = obs.SpectralFiberTracker(st).enumerateBands([0, 1], 0)
+        right = obs.SpectralFiberTracker(st).enumerateBands([2, 3], 0)
+        if len(left.fibers) < 2 or len(right.fibers) < 2:
+            self.skipTest("fixture did not produce two bands per component")
+        # Every band combination of the SAME component pair, in one cache:
+        # each must equal its own cold recomputation, none may be served the
+        # first combination's read.
+        for i in range(2):
+            for j in range(2):
+                cached = conn.transportOnSpacetimeCached(
+                    cache, st, left.fibers[i], right.fibers[j])
+                cold = conn.transportOnSpacetime(st, left.fibers[i],
+                                                 right.fibers[j])
+                self._assert_reads_equal(cached, cold)
+        # Four distinct band pairs over one component pair: four entries.
+        self.assertGreaterEqual(cache.size, 4)
+
     def test_direction_and_pair_do_not_collide(self):
         st, fibers = self._square()
         cache = cob.AnalyticCache(st)

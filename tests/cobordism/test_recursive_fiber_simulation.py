@@ -1054,12 +1054,21 @@ class AnalysisOverlayTest(unittest.TestCase):
             self.assertIn("leakage", transport)
             self.assertIn("accepted", transport)
 
-    def test_distinct_bands_get_distinct_transports(self):
-        """Regression for the #770 cache-key collision the incremental-versus-
-        cold comparison found: every band of one component shares its cell
-        set, so a component-keyed cache served one read for all of them."""
-        gaps = {(t["to_gap"], t["from_gap"]) for t in self.doc["transports"]}
-        self.assertGreater(len(gaps), 1)
+    def test_the_transports_are_the_cross_component_mutual_family(self):
+        """One derived link per ordered pair of candidate bands.
+
+        Not every band against every band: a component's bands are
+        alternative carriers, not links. The LIFETIME family is a different
+        object that one frame cannot supply, and is left unsupplied rather
+        than filled with cross-component links (measured: the all-pairs
+        enumeration cost 663 derived transports at 62 cells, 30x the
+        optimizer step, for links no certificate consumes).
+        """
+        candidates = len(self.doc["particles"]["quarks"])
+        self.assertLessEqual(len(self.doc["transports"]),
+                             candidates * max(candidates - 1, 1))
+        for quark in self.doc["particles"]["quarks"]:
+            self.assertEqual(quark["transport_count"], 0)
 
     def test_the_covariance_layer_is_exact_and_pure(self):
         covariance = self.doc["covariance"]
