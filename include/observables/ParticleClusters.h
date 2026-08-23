@@ -339,18 +339,36 @@ struct ParticleClustersConfig {
   /// appropriate isometry defect); mirrors
   /// `FiberConnectionConfig::leakageTolerance`.
   double maxTransportLeakage = 1e-6;
-  /// Minimum persistence lifetime (#765 track diagnostics: covered
-  /// slices/frames).
+  /// Minimum persistence lifetime: the number of COBORDISM FRAMES the
+  /// candidate was tracked through
+  /// (`QuarkCandidateEvidence::frameLifetime`, supplied by
+  /// `PersistentModularity::trackAcrossFrames`) — the whitepaper conjunct
+  /// "lifetime across multiple cobordism frames".  The modularity
+  /// RESOLUTION-slice lifetime is a different quantity: it is reported
+  /// beside this one and never gates, because a modularity read may not
+  /// veto an otherwise certified fiber.
   double minPersistenceLifetime = 2.0;
-  /// Minimum adjacent-slice support overlap along the persistence track.
+  /// Minimum adjacent-FRAME support overlap along the cobordism-frame
+  /// track (the whitepaper conjunct "overlap with its predecessor and
+  /// successor components").
   double minPersistenceOverlap = 0.5;
   /// Band-localization floor (inverse participation ratio of the color
-  /// band, ∈ [1/n, 1]).  The default 0 accepts any MEASURED localization
-  /// (an unmeasured NaN still fails); raise it to demand concentration.
+  /// band, ∈ [1/n, 1/rank]).  The whitepaper's localization conjunct is
+  /// enforced UPSTREAM, in fiber acceptance
+  /// (`SpectralFiberConfig::maxLocalizationSupportFraction`), so a
+  /// delocalized band never arrives here accepted; this floor remains as
+  /// an additional analysis knob and its default 0 adds nothing beyond the
+  /// upstream conjunct (an unmeasured NaN still fails).
   double minLocalization = 0.0;
   /// Minimum band subspace overlap across a refinement for the
   /// refinement-stability certificate.
   double minRefinementOverlap = 0.9;
+  /// Minimum number of FRAMES a "stable" quark condition must hold at.
+  /// The whitepaper's conditions two and three ("its selected color fiber
+  /// has STABLE rank three"; "its calibrated triangle-anchor profile and
+  /// determinant-line coherence are STABLE") are across-frame statements,
+  /// so a single frame can never establish them.
+  std::size_t minStabilityFrames = 2;
   /// Subspace-overlap threshold of the flavor-doublet tracking (passed to
   /// `SpectralFiberTracker::matchFibers`).
   double doubletOverlapThreshold = 0.5;
@@ -514,11 +532,33 @@ struct QuarkCandidateEvidence {
   ComponentId component{};
   /// The candidate's selected color band (#769) — the classifier only
   /// reads its rank/acceptance/localization; rank three is REQUIRED,
-  /// never requested from the detector.
+  /// never requested from the detector.  This is the REPORTED band; the
+  /// STABILITY of its rank is decided on `colorBandFrames`.
   SpectralFiber colorBand{};
+  /// The candidate's color band AT EACH COBORDISM FRAME of its tracked
+  /// lifetime, in frame order (`colorBand` is conventionally the first).
+  /// Whitepaper quark condition two — "its selected color fiber has STABLE
+  /// rank three" — is decided here: every frame's band accepted at rank
+  /// three AND consecutive frames CERTIFIED CONTINUATIONS
+  /// (`SpectralFiberTracker::matchFibers`: equal rank, both accepted,
+  /// subspace overlap at or above `doubletOverlapThreshold`), over at
+  /// least `minStabilityFrames` frames.  Fewer frames means the stability
+  /// was never measured: the certificate fails BY NAME rather than
+  /// silently falling back to a single-frame threshold test.
+  std::vector<SpectralFiber> colorBandFrames{};
   /// The #767 calibrated oriented-triangle anchor profile of `colorBand`
   /// (`ColorAnchor::evaluate` output with its pre-declared weighting).
+  /// The REPORTED profile; its STABILITY is decided on `anchorFrames`.
   AnchorProfile anchor{};
+  /// The candidate's anchor profile AT EACH COBORDISM FRAME, in frame
+  /// order (`anchor` is conventionally the first).  Whitepaper quark
+  /// condition three — "its calibrated triangle-anchor profile and
+  /// determinant-line coherence are STABLE" — is decided here: every
+  /// frame's profile certified, with its score and its OVERLAP-RESTRICTED
+  /// determinant-phase coherence above their floors, over at least
+  /// `minStabilityFrames` frames.  The measured across-frame spreads
+  /// travel on the read as diagnostics.
+  std::vector<AnchorProfile> anchorFrames{};
   /// The candidate's lifetime transports (#770 world-tube family): every
   /// link must be accepted with leakage under the configured cap.
   std::vector<FiberTransportRead> lifetimeTransports{};
@@ -533,11 +573,24 @@ struct QuarkCandidateEvidence {
   /// The #780 Wick total occupation ⟨N⟩
   /// (`CovarianceState::wickTotalNumber`).
   quantum::WickCertificateRead occupationRead{};
-  /// #765 persistence-track lifetime (covered slices/frames; NaN =
-  /// missing).
+  /// #765 modularity RESOLUTION-slice lifetime (covered slices; NaN =
+  /// missing).  REPORT-ONLY: a resolution-scan count states how stable a
+  /// modularity proposal is under the resolution parameter, not how long
+  /// the candidate lived, and modularity may not veto a certified fiber.
   double persistenceLifetime = std::numeric_limits<double>::quiet_NaN();
-  /// #765 smallest adjacent-slice support overlap along the track.
+  /// #765 smallest adjacent-SLICE support overlap along the resolution
+  /// track.  REPORT-ONLY, for the same reason.
   double persistenceMinOverlap = std::numeric_limits<double>::quiet_NaN();
+  /// COBORDISM-FRAME lifetime: consecutive frames the candidate was
+  /// tracked through (`FrameTrack::frames` from
+  /// `PersistentModularity::trackAcrossFrames`; NaN = missing).  THE GATED
+  /// quantity — the whitepaper's "lifetime across multiple cobordism
+  /// frames".
+  double frameLifetime = std::numeric_limits<double>::quiet_NaN();
+  /// Smallest adjacent-FRAME support overlap along that track
+  /// (`FrameTrack::minAdjacentOverlap`; NaN = missing) — the whitepaper's
+  /// "overlap with its predecessor and successor components".
+  double frameMinOverlap = std::numeric_limits<double>::quiet_NaN();
   /// Band subspace overlap across a refinement
   /// (`SpectralFiber::overlap(...).subspaceOverlap` between the band and
   /// its refined re-extraction; NaN = missing).
@@ -608,10 +661,11 @@ struct QuarkRead {
   /// (#773 acceptance: a missing/unstable doublet yields unknown flavor
   /// AND charge).
   std::optional<double> electricFlux{};
-  /// Passed-fraction of the ten core quark certificates (persistence,
-  /// localization, parity-odd, occupation-one, color-rank-three, anchor,
-  /// transport-leakage, winding, winding-unit, refinement-stability):
-  /// 1.0 exactly when the candidate is a certified quark/antiquark.
+  /// Passed-fraction of the twelve core quark certificates (persistence,
+  /// localization, parity-odd, occupation-one, color-rank-three,
+  /// color-rank-stability, anchor, anchor-stability, transport-leakage,
+  /// winding, winding-unit, refinement-stability): 1.0 exactly when the
+  /// candidate is a certified quark/antiquark.
   double confidence = 0.0;
   /// Names of every failed/missing certificate, in the fixed core order
   /// then the flavor/charge order ("flavor-doublet", "isospin",
@@ -631,12 +685,36 @@ struct QuarkRead {
   std::size_t transportCount = 0;
   /// Worst lifetime transport leakage (NaN when none supplied).
   double transportLeakageMax = std::numeric_limits<double>::quiet_NaN();
-  /// #765 persistence lifetime consumed (NaN = missing).
+  /// #765 modularity RESOLUTION-slice lifetime consumed (NaN = missing).
+  /// REPORTED, never gated (see `QuarkCandidateEvidence`).
   double persistenceLifetime = std::numeric_limits<double>::quiet_NaN();
-  /// #765 minimum track overlap consumed.
+  /// #765 minimum adjacent-SLICE overlap consumed.  Reported, never gated.
   double persistenceMinOverlap = std::numeric_limits<double>::quiet_NaN();
+  /// COBORDISM-FRAME lifetime consumed — the GATED persistence quantity
+  /// (NaN = missing).
+  double frameLifetime = std::numeric_limits<double>::quiet_NaN();
+  /// Smallest adjacent-FRAME overlap consumed — the GATED overlap
+  /// quantity (NaN = missing).
+  double frameMinOverlap = std::numeric_limits<double>::quiet_NaN();
+  /// Number of frames the color band / anchor stability was measured over
+  /// (0 = never measured; the stability certificates then fail by name).
+  std::size_t stabilityFrames = 0;
+  /// Measured across-frame spread (max − min) of the anchor atlas score
+  /// and of its overlap-restricted determinant-phase coherence.  Reported
+  /// diagnostics: the stability certificate requires each frame's value to
+  /// clear its floor, not the spread to clear a cap.  NaN when the
+  /// stability was never measured.
+  double anchorScoreSpread = std::numeric_limits<double>::quiet_NaN();
+  double anchorCoherenceSpread = std::numeric_limits<double>::quiet_NaN();
+  /// Smallest certified-continuation subspace overlap between consecutive
+  /// color-band frames (NaN when fewer than two frames were supplied).
+  double bandContinuationOverlap = std::numeric_limits<double>::quiet_NaN();
   /// Band localization consumed (from the color-band certificate).
   double localization = std::numeric_limits<double>::quiet_NaN();
+  /// The band's effective support fraction consumed (the upstream
+  /// localization conjunct's quantity; NaN = missing).
+  double localizationSupportFraction =
+      std::numeric_limits<double>::quiet_NaN();
   /// Refinement subspace overlap consumed (NaN = missing).
   double refinementOverlap = std::numeric_limits<double>::quiet_NaN();
   /// Whether Q = I3 + B/2 was tested AND held — the proposed u/d
@@ -809,8 +887,12 @@ struct GluonCandidateEvidence {
   /// gate requires a CERTIFIED ν = 0 (zero baryon flux is evidence, never
   /// a default: an unknown winding leaves the flux unknown).
   DeterminantWindingRead winding{};
-  /// #765 persistence-track lifetime (NaN = missing).
+  /// #765 modularity RESOLUTION-slice lifetime (NaN = missing).
+  /// REPORT-ONLY, exactly as on `QuarkCandidateEvidence`.
   double persistenceLifetime = std::numeric_limits<double>::quiet_NaN();
+  /// COBORDISM-FRAME lifetime (NaN = missing) — the GATED persistence
+  /// quantity ("lifetime across multiple cobordism frames").
+  double frameLifetime = std::numeric_limits<double>::quiet_NaN();
 };
 
 /// # GluonRead
@@ -864,9 +946,11 @@ struct GluonRead {
   std::size_t transportCount = 0;
   /// Worst lifetime transport leakage (NaN when none supplied).
   double transportLeakageMax = std::numeric_limits<double>::quiet_NaN();
-  /// #765 persistence lifetime consumed (the "lifetime" report; NaN =
-  /// missing).
+  /// #765 modularity RESOLUTION-slice lifetime consumed (report-only;
+  /// NaN = missing).
   double persistenceLifetime = std::numeric_limits<double>::quiet_NaN();
+  /// COBORDISM-FRAME lifetime consumed — the GATED persistence quantity.
+  double frameLifetime = std::numeric_limits<double>::quiet_NaN();
   /// Passed-fraction of the six gluon certificates; 1.0 exactly for a
   /// certified gluon candidate.
   double confidence = 0.0;
@@ -1146,6 +1230,36 @@ struct ScaleProfileSample {
   /// shell seeds (no register holes): then the profile is UNKNOWN and the
   /// stability certificate fails by name.
   std::vector<double> radialWeightProfile{};
+
+  // ── the remaining DIMENSIONLESS certificate channels ─────────────────
+  //
+  // The whitepaper's proton certificate requires "stability of EVERY
+  // dimensionless certificate under refinement", not of the mass-radius
+  // battery alone.  These channels carry the candidate's own certificate
+  // values AT THIS REFINEMENT; the caller fills them from the same
+  // constituent reads `classifyBaryon` consumes.  An unfilled channel is
+  // NaN / 0-sign — unknown, never zero — and its stability certificate
+  // then fails BY NAME rather than passing vacuously.
+
+  /// det(C†C) of the three normalized color columns at this refinement.
+  double colorGramDeterminant = std::numeric_limits<double>::quiet_NaN();
+  /// The #772 Berry-cancelled 2π rotation character at this refinement.
+  std::complex<double> rotationCharacter{
+      std::numeric_limits<double>::quiet_NaN(),
+      std::numeric_limits<double>::quiet_NaN()};
+  /// B = ν/3 over the certified constituent windings at this refinement.
+  double baryonFlux = std::numeric_limits<double>::quiet_NaN();
+  /// The summed certified constituent electric Gauss flux at this
+  /// refinement.
+  double electricFlux = std::numeric_limits<double>::quiet_NaN();
+  /// The composite exterior parity at this refinement: −1 (odd) / +1
+  /// (even) / 0 = unknown.  An INTEGER channel: stability is exact
+  /// equality across the window, never a tolerance.
+  int compositeParity = 0;
+  /// The anchor atlas score a² carried by the composite at this
+  /// refinement: the MINIMUM over the three constituents' certified
+  /// scores (the worst leg governs the composite's stability).
+  double anchorScore = std::numeric_limits<double>::quiet_NaN();
 };
 
 /// # ScaleProfileRead
@@ -1158,7 +1272,11 @@ struct ScaleProfileSample {
 ///
 /// Certificate name vocabulary (fixed order): "refinement-window",
 /// "finite-radius", "radius-ratio-stability", "spectral-mass-stability",
-/// "localization-stability", "profile-stability".
+/// "localization-stability", "profile-stability", "color-gram-stability",
+/// "rotation-character-stability", "baryon-flux-stability",
+/// "electric-flux-stability", "composite-parity-stability",
+/// "anchor-score-stability" — every DIMENSIONLESS certificate of the
+/// proton conjunction, not the mass-radius battery alone.
 struct ScaleProfileRead {
   /// Number of refinement samples consumed.
   std::size_t sampleCount = 0;
@@ -1187,6 +1305,28 @@ struct ScaleProfileRead {
   double profileMaxDeviation = std::numeric_limits<double>::quiet_NaN();
   /// Number of shells the profiles share (0 when unavailable).
   std::size_t profileShells = 0;
+  /// The remaining DIMENSIONLESS certificate channels: the first sample's
+  /// value and its spread over the refinement window, under the same
+  /// normalization as the scalars above.  NaN = the channel was never
+  /// supplied, and its certificate fails by name.
+  double colorGramDeterminant = std::numeric_limits<double>::quiet_NaN();
+  double colorGramSpread = std::numeric_limits<double>::quiet_NaN();
+  std::complex<double> rotationCharacter{
+      std::numeric_limits<double>::quiet_NaN(),
+      std::numeric_limits<double>::quiet_NaN()};
+  /// max |χ_i − χ_j| over the window (a complex-plane deviation).
+  double rotationCharacterSpread = std::numeric_limits<double>::quiet_NaN();
+  double baryonFlux = std::numeric_limits<double>::quiet_NaN();
+  double baryonFluxSpread = std::numeric_limits<double>::quiet_NaN();
+  double electricFlux = std::numeric_limits<double>::quiet_NaN();
+  double electricFluxSpread = std::numeric_limits<double>::quiet_NaN();
+  /// The composite parity of the first sample (0 = unknown) and whether
+  /// every sample carried the SAME definite parity (exact integer
+  /// equality — no tolerance).
+  int compositeParity = 0;
+  bool compositeParityStable = false;
+  double anchorScore = std::numeric_limits<double>::quiet_NaN();
+  double anchorScoreSpread = std::numeric_limits<double>::quiet_NaN();
   /// The DIMENSIONFUL mass — ALWAYS empty: unknown until a physical scale
   /// is independently established (never zero, never a lattice number
   /// relabeled as a mass).
@@ -1454,8 +1594,9 @@ struct BaryonRead {
 ///
 /// **Certificate name vocabulary** (`failedCertificates`): "persistence",
 /// "localization", "parity-odd", "occupation-one", "color-rank-three",
-/// "anchor", "transport-leakage", "winding", "winding-unit",
-/// "refinement-stability" (the ten core gates, in that order), then
+/// "color-rank-stability", "anchor", "anchor-stability",
+/// "transport-leakage", "winding", "winding-unit", "refinement-stability"
+/// (the twelve core gates, in that order), then
 /// "flavor-doublet", "isospin", "gauss-consistency", "ud-identification"
 /// (the flavor/charge gates, which never veto quark-ness — they only
 /// leave their own fields unknown).

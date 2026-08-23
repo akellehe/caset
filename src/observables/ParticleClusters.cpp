@@ -34,7 +34,13 @@ using cd = std::complex<double>;
 
 namespace {
 
-constexpr std::int64_t kRecordSchemaVersion = 1;
+// Schema 2 (#808): the quark/gluon reads carry the COBORDISM-FRAME
+// lifetime and the across-frame stability diagnostics beside the
+// modularity resolution-slice numbers, and the threshold echo carries
+// `min_stability_frames`.  Schema 1 stays readable with the new leaves
+// unknown (NaN / 0) — never zero-filled with a claim.
+constexpr std::int64_t kRecordSchemaVersion = 2;
+constexpr std::int64_t kOldestReadableRecordSchema = 1;
 constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 
 // ---------------------------------------------------------------------------
@@ -128,10 +134,19 @@ Certificate certificateFromRecord(const Record &record) {
   return cert;
 }
 
+/// A double leaf an older schema may not carry: absent = UNKNOWN (NaN),
+/// never zero.
+double optionalLeaf(const Record::Map &m, const char *key) {
+  const auto it = m.find(key);
+  return it == m.end() ? std::numeric_limits<double>::quiet_NaN()
+                       : it->second.asDouble();
+}
+
 void requireSchema(const Record::Map &m, const char *type) {
   const auto version = m.find("schema_version");
   if (version == m.end() ||
-      version->second.asInt() != kRecordSchemaVersion)
+      version->second.asInt() < kOldestReadableRecordSchema ||
+      version->second.asInt() > kRecordSchemaVersion)
     throw std::invalid_argument(
         "ParticleClusters: unknown schema_version (reader rejects unknown "
         "checkpoint schemas)");
@@ -197,6 +212,14 @@ std::vector<std::uint64_t> fiberVertexIds(const SpectralFiber &fiber) {
   for (const auto &cell : fiber.cellVertices())
     ids.insert(cell.begin(), cell.end());
   return {ids.begin(), ids.end()};
+}
+
+/// NaN-ignoring running min (mirror of `maxFinite`): an unmeasured
+/// channel never lowers a minimum, and an all-unmeasured set stays NaN.
+double minFinite(double current, double candidate) {
+  if (!std::isfinite(candidate)) return current;
+  if (!std::isfinite(current)) return candidate;
+  return std::min(current, candidate);
 }
 
 /// max of `current` and `candidate` ignoring NaN candidates.
@@ -368,6 +391,8 @@ Record thresholdsToRecord(const ParticleClustersConfig &cfg) {
   m["min_persistence_overlap"] = Record(cfg.minPersistenceOverlap);
   m["min_localization"] = Record(cfg.minLocalization);
   m["min_refinement_overlap"] = Record(cfg.minRefinementOverlap);
+  m["min_stability_frames"] =
+      Record(static_cast<std::int64_t>(cfg.minStabilityFrames));
   m["doublet_overlap_threshold"] = Record(cfg.doubletOverlapThreshold);
   m["min_doublet_frames"] =
       Record(static_cast<std::int64_t>(cfg.minDoubletFrames));
@@ -403,6 +428,9 @@ ParticleClustersConfig thresholdsFromRecord(const Record &record) {
   cfg.minPersistenceOverlap = m.at("min_persistence_overlap").asDouble();
   cfg.minLocalization = m.at("min_localization").asDouble();
   cfg.minRefinementOverlap = m.at("min_refinement_overlap").asDouble();
+  if (m.count("min_stability_frames"))
+    cfg.minStabilityFrames =
+        static_cast<std::size_t>(m.at("min_stability_frames").asInt());
   cfg.doubletOverlapThreshold = m.at("doublet_overlap_threshold").asDouble();
   cfg.minDoubletFrames =
       static_cast<std::size_t>(m.at("min_doublet_frames").asInt());
@@ -476,7 +504,14 @@ Record QuarkRead::toRecord() const {
   m["transport_leakage_max"] = Record(transportLeakageMax);
   m["persistence_lifetime"] = Record(persistenceLifetime);
   m["persistence_min_overlap"] = Record(persistenceMinOverlap);
+  m["frame_lifetime"] = Record(frameLifetime);
+  m["frame_min_overlap"] = Record(frameMinOverlap);
+  m["stability_frames"] = Record(static_cast<std::int64_t>(stabilityFrames));
+  m["anchor_score_spread"] = Record(anchorScoreSpread);
+  m["anchor_coherence_spread"] = Record(anchorCoherenceSpread);
+  m["band_continuation_overlap"] = Record(bandContinuationOverlap);
   m["localization"] = Record(localization);
+  m["localization_support_fraction"] = Record(localizationSupportFraction);
   m["refinement_overlap"] = Record(refinementOverlap);
   m["ud_identification_proposed"] = Record(udIdentificationProposed);
   m["doublet_orientation"] = Record(doubletOrientation);
@@ -517,7 +552,18 @@ QuarkRead QuarkRead::fromRecord(const Record &record) {
   read.transportLeakageMax = m.at("transport_leakage_max").asDouble();
   read.persistenceLifetime = m.at("persistence_lifetime").asDouble();
   read.persistenceMinOverlap = m.at("persistence_min_overlap").asDouble();
+  read.frameLifetime = optionalLeaf(m, "frame_lifetime");
+  read.frameMinOverlap = optionalLeaf(m, "frame_min_overlap");
+  read.stabilityFrames =
+      m.count("stability_frames")
+          ? static_cast<std::size_t>(m.at("stability_frames").asInt())
+          : 0;
+  read.anchorScoreSpread = optionalLeaf(m, "anchor_score_spread");
+  read.anchorCoherenceSpread = optionalLeaf(m, "anchor_coherence_spread");
+  read.bandContinuationOverlap = optionalLeaf(m, "band_continuation_overlap");
   read.localization = m.at("localization").asDouble();
+  read.localizationSupportFraction =
+      optionalLeaf(m, "localization_support_fraction");
   read.refinementOverlap = m.at("refinement_overlap").asDouble();
   read.udIdentificationProposed =
       m.at("ud_identification_proposed").asBool();
@@ -548,21 +594,31 @@ QuarkRead ParticleClusters::classifyQuark(
 
   std::vector<std::string> failed;
   int passedCore = 0;
-  constexpr int kCoreCertificates = 10;
+  constexpr int kCoreCertificates = 12;
 
-  // 1. persistence (#765 track diagnostics; NaN = missing evidence).
+  // 1. persistence: "lifetime across multiple cobordism FRAMES" (#808).
+  //    The modularity RESOLUTION-slice lifetime travels beside it as a
+  //    report — a modularity read may not veto a certified fiber, and a
+  //    resolution count never was a lifetime.  NaN = missing evidence.
   read.persistenceLifetime = evidence.persistenceLifetime;
   read.persistenceMinOverlap = evidence.persistenceMinOverlap;
+  read.frameLifetime = evidence.frameLifetime;
+  read.frameMinOverlap = evidence.frameMinOverlap;
   const bool persistenceOk =
-      std::isfinite(evidence.persistenceLifetime) &&
-      evidence.persistenceLifetime >= cfg_.minPersistenceLifetime &&
-      std::isfinite(evidence.persistenceMinOverlap) &&
-      evidence.persistenceMinOverlap >= cfg_.minPersistenceOverlap;
+      std::isfinite(evidence.frameLifetime) &&
+      evidence.frameLifetime >= cfg_.minPersistenceLifetime &&
+      std::isfinite(evidence.frameMinOverlap) &&
+      evidence.frameMinOverlap >= cfg_.minPersistenceOverlap;
   passedCore += gate(persistenceOk, "persistence", failed);
 
-  // 2. localization (from the color band's own certificate).
+  // 2. localization (from the color band's own certificate).  The
+  //    whitepaper conjunct itself is enforced UPSTREAM, in fiber
+  //    acceptance (SpectralFiberConfig::maxLocalizationSupportFraction),
+  //    so a delocalized band is already uncertified when it arrives here;
+  //    this gate keeps the classifier's own floor.
   const SpectralBandCertificate &band = evidence.colorBand.certificate();
   read.localization = band.localization;
+  read.localizationSupportFraction = band.localizationSupportFraction;
   const bool localizationOk = std::isfinite(band.localization) &&
                               band.localization >= cfg_.minLocalization;
   passedCore += gate(localizationOk, "localization", failed);
@@ -600,7 +656,34 @@ QuarkRead ParticleClusters::classifyQuark(
       evidence.colorBand.accepted() && evidence.colorBand.rank() == 3;
   passedCore += gate(rankThreeOk, "color-rank-three", failed);
 
-  // 6. calibrated oriented-triangle anchor (#767).  A default-constructed
+  // 6. STABLE rank three (whitepaper quark condition two): rank three
+  //    accepted at EVERY supplied cobordism frame, with consecutive frames
+  //    linked by CERTIFIED continuations.  One frame cannot establish a
+  //    stability claim, so an under-supplied window fails BY NAME.
+  const std::vector<SpectralFiber> &bandFrames = evidence.colorBandFrames;
+  read.stabilityFrames = bandFrames.size();
+  bool rankStableOk = bandFrames.size() >= cfg_.minStabilityFrames;
+  for (const SpectralFiber &frame : bandFrames)
+    rankStableOk = rankStableOk && frame.accepted() && frame.rank() == 3;
+  double continuationOverlap = kNaN;
+  for (std::size_t t = 0; t + 1 < bandFrames.size(); ++t) {
+    const std::vector<FiberMatchRead> links = SpectralFiberTracker::matchFibers(
+        {bandFrames[t]}, {bandFrames[t + 1]}, cfg_.doubletOverlapThreshold);
+    if (links.empty() || !links.front().certifiedContinuation) {
+      rankStableOk = false;
+      continuationOverlap = links.empty()
+                                ? 0.0
+                                : std::min(minFinite(continuationOverlap, 0.0),
+                                           links.front().overlap.subspaceOverlap);
+      continue;
+    }
+    continuationOverlap =
+        minFinite(continuationOverlap, links.front().overlap.subspaceOverlap);
+  }
+  read.bandContinuationOverlap = continuationOverlap;
+  passedCore += gate(rankStableOk, "color-rank-stability", failed);
+
+  // 7. calibrated oriented-triangle anchor (#767).  A default-constructed
   //    profile (no weighting declared) is MISSING evidence: the anchor
   //    fields stay NaN/unknown.
   const AnchorProfile &anchor = evidence.anchor;
@@ -613,12 +696,39 @@ QuarkRead ParticleClusters::classifyQuark(
     read.anchorPhaseCoherence = anchor.phaseCoherence;
     read.anchorWeightingId = anchor.weightingId;
   }
-  const bool anchorOk = anchorSupplied && anchor.certificate.holds() &&
-                        anchor.score >= cfg_.minAnchorScore &&
-                        anchor.phaseCoherence >= cfg_.minPhaseCoherence;
-  passedCore += gate(anchorOk, "anchor", failed);
+  const auto anchorHolds = [&](const AnchorProfile &profile) {
+    return !profile.weightingId.empty() && profile.certificate.holds() &&
+           profile.score >= cfg_.minAnchorScore &&
+           profile.phaseCoherence >= cfg_.minPhaseCoherence;
+  };
+  passedCore += gate(anchorHolds(anchor), "anchor", failed);
 
-  // 7. bounded transport leakage over the lifetime (#770).
+  // 8. STABLE anchor profile AND determinant-line coherence (whitepaper
+  //    quark condition three): both hold at EVERY supplied frame, over a
+  //    window of at least minStabilityFrames.  The across-frame spreads
+  //    are measured and reported; the certificate is the conjunction, not
+  //    a spread cap (no defensible spread cap exists for a genuinely
+  //    evolving geometry).
+  const std::vector<AnchorProfile> &anchorFrames = evidence.anchorFrames;
+  bool anchorStableOk = anchorFrames.size() >= cfg_.minStabilityFrames;
+  double scoreLo = kNaN;
+  double scoreHi = kNaN;
+  double coherenceLo = kNaN;
+  double coherenceHi = kNaN;
+  for (const AnchorProfile &profile : anchorFrames) {
+    anchorStableOk = anchorStableOk && anchorHolds(profile);
+    scoreLo = minFinite(scoreLo, profile.score);
+    scoreHi = maxFinite(scoreHi, profile.score);
+    coherenceLo = minFinite(coherenceLo, profile.phaseCoherence);
+    coherenceHi = maxFinite(coherenceHi, profile.phaseCoherence);
+  }
+  if (anchorFrames.size() >= 2) {
+    read.anchorScoreSpread = scoreHi - scoreLo;
+    read.anchorCoherenceSpread = coherenceHi - coherenceLo;
+  }
+  passedCore += gate(anchorStableOk, "anchor-stability", failed);
+
+  // 9. bounded transport leakage over the lifetime (#770).
   read.transportCount = evidence.lifetimeTransports.size();
   bool allTransportsAccepted = !evidence.lifetimeTransports.empty();
   double maxLeakage = kNaN;
@@ -632,7 +742,7 @@ QuarkRead ParticleClusters::classifyQuark(
                          maxLeakage <= cfg_.maxTransportLeakage;
   passedCore += gate(leakageOk, "transport-leakage", failed);
 
-  // 8/9. certified determinant-line winding and unit magnitude (#770).
+  // 10/11. certified determinant-line winding and unit magnitude (#770).
   //      The closure SPECIFICATION travels with the read; B = nu/3 exists
   //      exactly when the winding certificate does (a certified nu = 0 is
   //      a certified zero flux), and quark-ness additionally needs
@@ -651,7 +761,7 @@ QuarkRead ParticleClusters::classifyQuark(
       windingOk && std::abs(*winding.winding) == 1;
   passedCore += gate(windingUnitOk, "winding-unit", failed);
 
-  // 10. refinement stability (band subspace overlap across a refinement).
+  // 12. refinement stability (band subspace overlap across a refinement).
   read.refinementOverlap = evidence.refinementOverlap;
   const bool refinementOk =
       std::isfinite(evidence.refinementOverlap) &&
@@ -778,6 +888,7 @@ std::uint64_t ParticleClusters::evidenceFingerprint(
   h = hashDouble(h, cfg_.minPersistenceOverlap);
   h = hashDouble(h, cfg_.minLocalization);
   h = hashDouble(h, cfg_.minRefinementOverlap);
+  h = chainHash(h, cfg_.minStabilityFrames);
   h = hashDouble(h, cfg_.doubletOverlapThreshold);
   h = chainHash(h, cfg_.minDoubletFrames);
   h = hashDouble(h, cfg_.isospinTolerance);
@@ -810,6 +921,26 @@ std::uint64_t ParticleClusters::evidenceFingerprint(
   h = chainHash(h, evidence.colorBand.rank());
   h = chainHash(h, evidence.colorBand.accepted() ? 1u : 0u);
   h = hashDouble(h, evidence.colorBand.certificate().localization);
+
+  // The across-frame stability window: every frame's decision channels
+  // (rank, acceptance, cells) is part of the verdict.
+  h = chainHash(h, evidence.colorBandFrames.size());
+  for (const SpectralFiber &frame : evidence.colorBandFrames) {
+    h = chainHash(h, frame.rank());
+    h = chainHash(h, frame.accepted() ? 1u : 0u);
+    for (const auto &cell : frame.cellVertices()) {
+      h = chainHash(h, cell.size());
+      for (const std::uint64_t id : cell) h = chainHash(h, id);
+    }
+    for (const cd &lambda : frame.eigenvalues()) h = hashComplex(h, lambda);
+  }
+  h = chainHash(h, evidence.anchorFrames.size());
+  for (const AnchorProfile &profile : evidence.anchorFrames) {
+    h = hashDouble(h, profile.score);
+    h = hashDouble(h, profile.phaseCoherence);
+    h = hashString(h, profile.weightingId);
+    h = hashCertificateHolds(h, profile.certificate);
+  }
 
   // Anchor profile (decision channels + declared weighting).
   h = hashDouble(h, evidence.anchor.score);
@@ -848,6 +979,8 @@ std::uint64_t ParticleClusters::evidenceFingerprint(
 
   h = hashDouble(h, evidence.persistenceLifetime);
   h = hashDouble(h, evidence.persistenceMinOverlap);
+  h = hashDouble(h, evidence.frameLifetime);
+  h = hashDouble(h, evidence.frameMinOverlap);
   h = hashDouble(h, evidence.refinementOverlap);
 
   h = chainHash(h, evidence.flavor.has_value() ? 1u : 0u);
@@ -1435,6 +1568,7 @@ Record GluonRead::toRecord() const {
   m["transport_count"] = Record(static_cast<std::int64_t>(transportCount));
   m["transport_leakage_max"] = Record(transportLeakageMax);
   m["persistence_lifetime"] = Record(persistenceLifetime);
+  m["frame_lifetime"] = Record(frameLifetime);
   m["confidence"] = Record(confidence);
   Record::List failed;
   failed.reserve(failedCertificates.size());
@@ -1468,6 +1602,7 @@ GluonRead GluonRead::fromRecord(const Record &record) {
       static_cast<std::size_t>(m.at("transport_count").asInt());
   read.transportLeakageMax = m.at("transport_leakage_max").asDouble();
   read.persistenceLifetime = m.at("persistence_lifetime").asDouble();
+  read.frameLifetime = optionalLeaf(m, "frame_lifetime");
   read.confidence = m.at("confidence").asDouble();
   for (const auto &entry : m.at("failed_certificates").asList())
     read.failedCertificates.push_back(entry.asString());
@@ -1549,10 +1684,13 @@ GluonRead ParticleClusters::classifyGluon(
                  failed);
 
   // 6. persistence (design spec §14.3: a gluon candidate is PERSISTENT).
+  //     Gated on the COBORDISM-FRAME lifetime (#808), exactly as the quark
+  //     classifier is; the modularity resolution-slice count is reported.
   read.persistenceLifetime = evidence.persistenceLifetime;
+  read.frameLifetime = evidence.frameLifetime;
   const bool persistenceOk =
-      std::isfinite(evidence.persistenceLifetime) &&
-      evidence.persistenceLifetime >= cfg_.minPersistenceLifetime;
+      std::isfinite(evidence.frameLifetime) &&
+      evidence.frameLifetime >= cfg_.minPersistenceLifetime;
   passed += gate(persistenceOk, "persistence", failed);
 
   read.confidence = static_cast<double>(passed) / kGates;
@@ -2273,7 +2411,7 @@ ScaleProfileRead ParticleClusters::scaleProfile(
 
   std::vector<std::string> failed;
   int passed = 0;
-  constexpr int kGates = 6;
+  constexpr int kGates = 12;
 
   // 1. a refinement WINDOW: stability is unmeasurable from one sample.
   passed += gate(samples.size() >= 2, "refinement-window", failed);
@@ -2357,15 +2495,88 @@ ScaleProfileRead ParticleClusters::scaleProfile(
                      profileDeviation <= cfg_.maxProfileDeviation,
                  "profile-stability", failed);
 
+  // 7-12. EVERY REMAINING DIMENSIONLESS CERTIFICATE under refinement
+  //       (whitepaper: "stability of every dimensionless certificate under
+  //       refinement" — the mass-radius battery is not the whole list).
+  //       A channel the caller never filled is UNKNOWN, so its spread is
+  //       NaN and the certificate fails BY NAME.
+  std::vector<double> colorGrams;
+  std::vector<double> baryonFluxes;
+  std::vector<double> electricFluxes;
+  std::vector<double> anchorScores;
+  colorGrams.reserve(samples.size());
+  baryonFluxes.reserve(samples.size());
+  electricFluxes.reserve(samples.size());
+  anchorScores.reserve(samples.size());
+  for (const ScaleProfileSample &sample : samples) {
+    colorGrams.push_back(sample.colorGramDeterminant);
+    baryonFluxes.push_back(sample.baryonFlux);
+    electricFluxes.push_back(sample.electricFlux);
+    anchorScores.push_back(sample.anchorScore);
+  }
+  if (!samples.empty()) {
+    read.colorGramDeterminant = samples.front().colorGramDeterminant;
+    read.rotationCharacter = samples.front().rotationCharacter;
+    read.baryonFlux = samples.front().baryonFlux;
+    read.electricFlux = samples.front().electricFlux;
+    read.compositeParity = samples.front().compositeParity;
+    read.anchorScore = samples.front().anchorScore;
+  }
+  read.colorGramSpread = normalizedSpread(colorGrams);
+  read.baryonFluxSpread = normalizedSpread(baryonFluxes);
+  read.electricFluxSpread = normalizedSpread(electricFluxes);
+  read.anchorScoreSpread = normalizedSpread(anchorScores);
+  // The 2pi character is complex: its deviation is the max pairwise
+  // distance in the plane, never a real-part comparison.
+  double rotationSpread = samples.size() >= 2 ? 0.0 : kNaN;
+  for (std::size_t i = 0; i < samples.size() && samples.size() >= 2; ++i) {
+    const cd a = samples[i].rotationCharacter;
+    if (!std::isfinite(a.real()) || !std::isfinite(a.imag())) {
+      rotationSpread = kNaN;
+      break;
+    }
+    for (std::size_t j = i + 1; j < samples.size(); ++j)
+      rotationSpread = std::max(rotationSpread,
+                                std::abs(a - samples[j].rotationCharacter));
+  }
+  read.rotationCharacterSpread = rotationSpread;
+  // Composite parity is an INTEGER channel: stability is exact equality of
+  // a DEFINITE sign across the window, never a tolerance.
+  bool parityStable = samples.size() >= 2;
+  for (const ScaleProfileSample &sample : samples)
+    parityStable = parityStable && sample.compositeParity != 0 &&
+                   sample.compositeParity == samples.front().compositeParity;
+  read.compositeParityStable = parityStable;
+
+  passed += gate(std::isfinite(read.colorGramSpread) &&
+                     read.colorGramSpread <= cfg_.maxProfileDeviation,
+                 "color-gram-stability", failed);
+  passed += gate(std::isfinite(read.rotationCharacterSpread) &&
+                     read.rotationCharacterSpread <= cfg_.maxProfileDeviation,
+                 "rotation-character-stability", failed);
+  passed += gate(std::isfinite(read.baryonFluxSpread) &&
+                     read.baryonFluxSpread <= cfg_.maxProfileDeviation,
+                 "baryon-flux-stability", failed);
+  passed += gate(std::isfinite(read.electricFluxSpread) &&
+                     read.electricFluxSpread <= cfg_.maxProfileDeviation,
+                 "electric-flux-stability", failed);
+  passed += gate(parityStable, "composite-parity-stability", failed);
+  passed += gate(std::isfinite(read.anchorScoreSpread) &&
+                     read.anchorScoreSpread <= cfg_.maxProfileDeviation,
+                 "anchor-score-stability", failed);
+
   read.stable = (passed == kGates);
   read.failedCertificates = std::move(failed);
 
   // The measured deviations of finite sums: CertifiedNumerical against the
   // configured refinement cap.  A dimensionful mass is NEVER emitted.
   double residual = kNaN;
-  for (const double channel : {read.radiusRatioSpread, read.spectralMassSpread,
-                               read.localizationSpread,
-                               read.profileMaxDeviation})
+  for (const double channel :
+       {read.radiusRatioSpread, read.spectralMassSpread,
+        read.localizationSpread, read.profileMaxDeviation,
+        read.colorGramSpread, read.rotationCharacterSpread,
+        read.baryonFluxSpread, read.electricFluxSpread,
+        read.anchorScoreSpread})
     residual = maxFinite(residual, channel);
   read.certificate =
       read.stable

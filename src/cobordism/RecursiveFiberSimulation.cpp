@@ -1210,6 +1210,14 @@ void MultiCobordism::runRecursiveAnalysisOn(
               static_cast<double>(track.lastSlice - track.firstSlice + 1);
           evidence.persistenceMinOverlap = track.minAdjacentOverlap;
         }
+    // This driver reads ONE cobordism frame, so the frame lifetime is one
+    // and its adjacent-frame overlap is vacuously one (there is no adjacent
+    // pair).  Both are MEASURED facts about this read, not placeholders:
+    // the persistence certificate fails because the candidate was seen in a
+    // single frame, which is a physical statement about the evidence, not
+    // an artifact of reading a single modularity resolution.
+    evidence.frameLifetime = 1.0;
+    evidence.frameMinOverlap = 1.0;
     quarkReads.push_back(classifier.classifyQuarkCached(*cache, evidence));
     quarkBandRead.push_back(index);
   }
@@ -1378,7 +1386,10 @@ void MultiCobordism::runRecursiveAnalysisOn(
          Json::integer(static_cast<long long>(read.transportCount))},
         {"transport_leakage_max", Json::number(read.transportLeakageMax)},
         {"persistence_lifetime", Json::number(read.persistenceLifetime)},
+        {"frame_lifetime", Json::number(read.frameLifetime)},
         {"localization", Json::number(read.localization)},
+        {"localization_support_fraction",
+         Json::number(read.localizationSupportFraction)},
         {"failed_certificates", Json::stringArray(read.failedCertificates)},
     });
   }

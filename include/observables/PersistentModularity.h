@@ -164,6 +164,31 @@ struct ComponentMatch {
   std::optional<double> projectorOverlap;
 };
 
+/// A component track across COBORDISM FRAMES: the same emergent support
+/// followed through consecutive frames by maximum support overlap.
+///
+/// DISTINCT from :class:`PersistenceTrack`, which follows a component
+/// across the MODULARITY RESOLUTION SLICES of a single frame.  The two are
+/// different quantities and are never interchanged: the whitepaper's fiber
+/// acceptance conjunct is "lifetime across multiple cobordism frames", and
+/// that lifetime is ``frames()`` here.  A resolution-slice count says how
+/// stable a modularity proposal is under the resolution parameter; it says
+/// nothing about how long anything lived.
+struct FrameTrack {
+  /// One member per covered frame, consecutive from ``firstFrame``.
+  std::vector<ComponentId> members;
+  /// Positional index of each member within its frame's component list.
+  std::vector<std::size_t> memberIndices;
+  std::size_t firstFrame = 0;
+  std::size_t lastFrame = 0;
+  /// Smallest adjacent-frame support overlap along the track (1.0 for a
+  /// single-frame track, which has no adjacent pair).
+  double minAdjacentOverlap = 1.0;
+  /// Number of consecutive cobordism frames covered — the lifetime the
+  /// whitepaper names.
+  [[nodiscard]] std::size_t frames() const noexcept { return members.size(); }
+};
+
 /// A component track across the resolution scan: the same emergent support
 /// followed through consecutive slices by maximum support overlap.
 struct PersistenceTrack {
@@ -336,6 +361,24 @@ public:
       const std::vector<ComponentRead> &a,
       const std::vector<ComponentRead> &b) const;
 
+  /// Follow components across COBORDISM FRAMES: ``frames[t]`` is the
+  /// component list read from cobordism frame ``t`` over a common cell-id
+  /// universe (the same evolving complex).  Consecutive frames are matched
+  /// with :func:`matchComponents` and chained into tracks by best overlap
+  /// at or above ``overlapThreshold``, exactly the rule
+  /// :func:`scanResolutions` chains its resolution slices with — this is
+  /// the SAME chaining over a DIFFERENT axis, and it is the supplier of
+  /// the whitepaper's "lifetime across multiple cobordism frames".  A
+  /// component that appears in only one frame gets a one-frame track: a
+  /// lifetime of one is a measured fact about the candidate, never a
+  /// structural artifact of reading a single resolution.
+  ///
+  /// One track is emitted per emergent support, in first-appearance order.
+  /// An empty frame list yields no tracks.
+  std::vector<FrameTrack> trackAcrossFrames(
+      const std::vector<std::vector<ComponentRead>> &frames,
+      double overlapThreshold = 0.5) const;
+
   /// The documented interface hook for spectral-projector overlap.  The
   /// callback receives the two component ids and returns their projector
   /// overlap in [0, 1].  This ticket only plumbs the hook: no projector is
@@ -388,6 +431,25 @@ private:
                     const PersistentModularityConfig &cfg) const;
   ResolutionSlice buildSlice(double gamma, const RunResult &winner,
                              std::vector<RestartRead> restarts) const;
+
+  /// One chained track over consecutive component lists (the shared core of
+  /// the resolution-slice and cobordism-frame trackers): members, their
+  /// positions, the covered index window, and the worst adjacent overlap.
+  struct Chain {
+    std::vector<ComponentId> members;
+    std::vector<std::size_t> memberIndices;
+    std::size_t first = 0;
+    std::size_t last = 0;
+    double minAdjacentOverlap = 1.0;
+  };
+  /// Chain `steps` into tracks by best support overlap at or above
+  /// `overlapThreshold`; every emitted match is appended to `matchesOut`
+  /// when supplied.  The axis (resolution or cobordism time) is the
+  /// caller's; the chaining rule is identical and lives here once.
+  std::vector<Chain> chainTracks(
+      const std::vector<const std::vector<ComponentRead> *> &steps,
+      double overlapThreshold,
+      std::vector<ComponentMatch> *matchesOut) const;
 };
 
 }  // namespace tessera

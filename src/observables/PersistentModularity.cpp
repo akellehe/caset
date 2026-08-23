@@ -906,38 +906,77 @@ ScanReport PersistentModularity::scanResolutions(
     report.slices.push_back(discover(gamma, cfg));
   }
 
-  // Adjacent-slice best matches and persistence tracks.
+  // Adjacent-slice best matches and persistence tracks (the same chaining
+  // rule trackAcrossFrames applies over cobordism time).
+  std::vector<const std::vector<ComponentRead> *> steps;
+  steps.reserve(report.slices.size());
+  for (const auto &slice : report.slices) steps.push_back(&slice.components);
+  const std::vector<Chain> chains =
+      chainTracks(steps, cfg.overlapThreshold, &report.matches);
+  report.tracks.reserve(chains.size());
+  for (const Chain &chain : chains) {
+    PersistenceTrack t;
+    t.members = chain.members;
+    t.memberIndices = chain.memberIndices;
+    t.firstSlice = chain.first;
+    t.lastSlice = chain.last;
+    t.gammaFirst = report.slices[chain.first].gamma;
+    t.gammaLast = report.slices[chain.last].gamma;
+    t.minAdjacentOverlap = chain.minAdjacentOverlap;
+    report.tracks.push_back(std::move(t));
+  }
+
+  for (auto &t : report.tracks) {
+    double c = 0.0;
+    for (std::size_t i = 0; i < t.members.size(); ++i) {
+      const std::size_t s = t.firstSlice + i;
+      c += report.slices[s].components[t.memberIndices[i]].conductance;
+    }
+    t.meanConductance = t.members.empty()
+                            ? 0.0
+                            : c / static_cast<double>(t.members.size());
+    // weightAwareStatus stays Null: the weight-aware gap / localization /
+    // persistence certificates belong to later tickets; unknown is never
+    // encoded as zero.
+  }
+  return report;
+}
+
+// ───────────────────────── matching and invalidation ────────────────────
+
+std::vector<PersistentModularity::Chain> PersistentModularity::chainTracks(
+    const std::vector<const std::vector<ComponentRead> *> &steps,
+    double overlapThreshold, std::vector<ComponentMatch> *matchesOut) const {
+  std::vector<Chain> chains;
   struct Active {
-    std::size_t track;
-    std::size_t index;  // component index in the current slice
+    std::size_t chain;
+    std::size_t index;  // component index in the current step
   };
   std::vector<Active> active;
-  if (!report.slices.empty()) {
-    for (std::size_t j = 0; j < report.slices[0].components.size(); ++j) {
-      PersistenceTrack t;
-      t.members = {report.slices[0].components[j].id};
-      t.memberIndices = {j};
-      t.firstSlice = 0;
-      t.lastSlice = 0;
-      t.gammaFirst = report.slices[0].gamma;
-      t.gammaLast = report.slices[0].gamma;
-      t.minAdjacentOverlap = 1.0;
-      report.tracks.push_back(std::move(t));
-      active.push_back(Active{report.tracks.size() - 1, j});
-    }
+  if (steps.empty()) return chains;
+  for (std::size_t j = 0; j < steps[0]->size(); ++j) {
+    Chain c;
+    c.members = {(*steps[0])[j].id};
+    c.memberIndices = {j};
+    c.first = 0;
+    c.last = 0;
+    c.minAdjacentOverlap = 1.0;
+    chains.push_back(std::move(c));
+    active.push_back(Active{chains.size() - 1, j});
   }
-  for (std::size_t r = 0; r + 1 < report.slices.size(); ++r) {
-    const auto &a = report.slices[r].components;
-    const auto &b = report.slices[r + 1].components;
+  for (std::size_t r = 0; r + 1 < steps.size(); ++r) {
+    const auto &a = *steps[r];
+    const auto &b = *steps[r + 1];
     const std::vector<ComponentMatch> matches = matchComponents(a, b);
-    for (const auto &m : matches) report.matches.push_back(m);
+    if (matchesOut != nullptr)
+      for (const auto &m : matches) matchesOut->push_back(m);
 
-    // For each b-component pick the continuing track: the a-side match with
+    // For each b-component pick the continuing chain: the a-side match with
     // the largest overlap >= threshold; ties by hash then index.
     std::vector<std::ptrdiff_t> chosenA(b.size(), -1);
     std::vector<double> chosenOverlap(b.size(), 0.0);
     for (const auto &m : matches) {
-      if (m.supportOverlap < cfg.overlapThreshold) continue;
+      if (m.supportOverlap < overlapThreshold) continue;
       const std::size_t j = m.toIndex;
       const bool better =
           m.supportOverlap > chosenOverlap[j] ||
@@ -958,52 +997,55 @@ ScanReport PersistentModularity::scanResolutions(
       if (chosenA[j] >= 0) {
         for (const auto &act : active) {
           if (act.index == static_cast<std::size_t>(chosenA[j])) {
-            PersistenceTrack &t = report.tracks[act.track];
-            t.members.push_back(b[j].id);
-            t.memberIndices.push_back(j);
-            t.lastSlice = r + 1;
-            t.gammaLast = report.slices[r + 1].gamma;
-            t.minAdjacentOverlap =
-                std::min(t.minAdjacentOverlap, chosenOverlap[j]);
-            nextActive.push_back(Active{act.track, j});
+            Chain &c = chains[act.chain];
+            c.members.push_back(b[j].id);
+            c.memberIndices.push_back(j);
+            c.last = r + 1;
+            c.minAdjacentOverlap =
+                std::min(c.minAdjacentOverlap, chosenOverlap[j]);
+            nextActive.push_back(Active{act.chain, j});
             continued = true;
             break;
           }
         }
       }
       if (!continued) {
-        PersistenceTrack t;
-        t.members = {b[j].id};
-        t.memberIndices = {j};
-        t.firstSlice = r + 1;
-        t.lastSlice = r + 1;
-        t.gammaFirst = report.slices[r + 1].gamma;
-        t.gammaLast = report.slices[r + 1].gamma;
-        t.minAdjacentOverlap = 1.0;
-        report.tracks.push_back(std::move(t));
-        nextActive.push_back(Active{report.tracks.size() - 1, j});
+        Chain c;
+        c.members = {b[j].id};
+        c.memberIndices = {j};
+        c.first = r + 1;
+        c.last = r + 1;
+        c.minAdjacentOverlap = 1.0;
+        chains.push_back(std::move(c));
+        nextActive.push_back(Active{chains.size() - 1, j});
       }
     }
     active = std::move(nextActive);
   }
-
-  for (auto &t : report.tracks) {
-    double c = 0.0;
-    for (std::size_t i = 0; i < t.members.size(); ++i) {
-      const std::size_t s = t.firstSlice + i;
-      c += report.slices[s].components[t.memberIndices[i]].conductance;
-    }
-    t.meanConductance = t.members.empty()
-                            ? 0.0
-                            : c / static_cast<double>(t.members.size());
-    // weightAwareStatus stays Null: the weight-aware gap / localization /
-    // persistence certificates belong to later tickets; unknown is never
-    // encoded as zero.
-  }
-  return report;
+  return chains;
 }
 
-// ───────────────────────── matching and invalidation ────────────────────
+std::vector<FrameTrack> PersistentModularity::trackAcrossFrames(
+    const std::vector<std::vector<ComponentRead>> &frames,
+    double overlapThreshold) const {
+  std::vector<const std::vector<ComponentRead> *> steps;
+  steps.reserve(frames.size());
+  for (const auto &frame : frames) steps.push_back(&frame);
+  const std::vector<Chain> chains =
+      chainTracks(steps, overlapThreshold, /*matchesOut=*/nullptr);
+  std::vector<FrameTrack> tracks;
+  tracks.reserve(chains.size());
+  for (const Chain &chain : chains) {
+    FrameTrack t;
+    t.members = chain.members;
+    t.memberIndices = chain.memberIndices;
+    t.firstFrame = chain.first;
+    t.lastFrame = chain.last;
+    t.minAdjacentOverlap = chain.minAdjacentOverlap;
+    tracks.push_back(std::move(t));
+  }
+  return tracks;
+}
 
 std::vector<ComponentMatch> PersistentModularity::matchComponents(
     const std::vector<ComponentRead> &a,

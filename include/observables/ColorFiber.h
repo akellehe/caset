@@ -32,8 +32,12 @@
 //                    DECLARED before any data are examined (post-hoc
 //                    re-weighting is rejected), and the reported profile:
 //                    maximal term, participation ratio of {|det A_τ|²}, and
-//                    determinant-phase dispersion/coherence on overlapping
-//                    oriented triangles.  Signed sectors restrict with
+//                    determinant-phase dispersion/coherence on OVERLAPPING
+//                    oriented triangles — the resultant runs only over
+//                    triangles that share a boundary edge with another
+//                    declared triangle, so a disjoint atlas reports the
+//                    coherence as unknown rather than as a value with no
+//                    overlap content.  Signed sectors restrict with
 //                    |W_τ|^{1/2} and report the restricted block's Krein
 //                    signature separately.
 //
@@ -118,15 +122,27 @@ struct AnchorProfile {
     /// arg det A_τ per triangle; NaN where |det A_τ| = 0 (an undefined
     /// determinant phase is reported as unknown, never as zero).
     std::vector<double> detPhases{};
-    /// Determinant-phase coherence on overlapping oriented triangles: the
+    /// Determinant-phase coherence on OVERLAPPING oriented triangles: the
     /// circular resultant length |Σ_τ u_τ e^{i φ_τ}| with contribution
-    /// weights u_τ ∝ w_τ t_τ over the nonzero-determinant triangles
+    /// weights u_τ ∝ w_τ t_τ, RESTRICTED to the nonzero-determinant
+    /// triangles that genuinely overlap another declared triangle
     /// (∈ [0, 1]; 1 = one common determinant-line trivialization).
     /// Invariant under in-band SU(3) frame changes; a full U(3) change
     /// rotates every phase by the same det g, leaving coherence unchanged.
+    /// A DISJOINT atlas has no overlap content and reports coherence as
+    /// UNKNOWN (NaN), never as a value read off non-overlapping faces.
     double phaseCoherence{0.0};
-    /// Circular dispersion 1 − phaseCoherence.
+    /// Circular dispersion 1 − phaseCoherence (NaN when unknown).
     double phaseDispersion{0.0};
+    /// How many declared triangles genuinely overlap another declared
+    /// triangle — the triangles the coherence resultant runs over.  Zero
+    /// on a disjoint atlas.
+    std::size_t overlappingTriangles{0};
+    /// The sharing relation the overlap was recorded under: "shared-edge",
+    /// the only relation an `OrientedTriangle` atlas determines (a triangle
+    /// declares its three boundary EDGE rows and their incidence signs, so
+    /// a vertex-sharing relation is not derivable here).
+    std::string overlapRelation{"shared-edge"};
     /// Krein signature (n₊, n₀, n₋) of each triangle's restricted weight
     /// block S_τ W_τ S_τ (reported separately from the |W_τ|-restricted
     /// score; all-positive in the positive regime).
@@ -515,6 +531,23 @@ class ColorAnchor {
         return triangles_;
     }
 
+    /// Whether declared triangle `index` shares a boundary EDGE with some
+    /// other declared triangle — the overlap relation the determinant-phase
+    /// coherence is recorded on (whitepaper: "their coherence on
+    /// OVERLAPPING triangles is recorded separately").  An
+    /// `OrientedTriangle` names only its three boundary edge rows, so
+    /// shared-edge is the only sharing relation this atlas determines.
+    [[nodiscard]] bool overlapsAnother(std::size_t index) const {
+        return index < overlapping_.size() &&
+               overlapping_[index] != 0;
+    }
+
+    /// How many declared triangles overlap another declared triangle
+    /// (0 on a disjoint atlas, where the coherence is UNKNOWN).
+    [[nodiscard]] std::size_t overlappingTriangleCount() const {
+        return overlapCount_;
+    }
+
     /// The declared convex weights.
     [[nodiscard]] const std::vector<double>& weights() const {
         return weights_;
@@ -595,9 +628,19 @@ class ColorAnchor {
         const Eigen::MatrixXcd& gram, double gramTolerance,
         bool diagonalWeights);
 
+    /// Fill `overlapping_` / `overlapCount_` from the declared atlas: a
+    /// triangle overlaps when one of its three edge rows also appears in a
+    /// DIFFERENT declared triangle.  Computed once, at declaration time,
+    /// before any datum is examined.
+    void markOverlaps();
+
     std::vector<OrientedTriangle> triangles_{};
     std::vector<double> weights_{};
     std::string weightingId_{};
+    /// Per-triangle shared-edge overlap flags (char to keep an addressable
+    /// element type; 1 = overlaps another declared triangle).
+    std::vector<char> overlapping_{};
+    std::size_t overlapCount_{0};
     bool sealed_{false};
 };
 
