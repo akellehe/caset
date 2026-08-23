@@ -20,6 +20,8 @@
 #include "mesh/Fingerprint.h"
 #include "mesh/Vertex.h"
 #include "mesh/VertexList.h"
+#include "observables/InteriorHinges.h"
+#include "observables/RegisterContext.h"
 #include "spacetime/Spacetime.h"
 
 namespace tessera::observables {
@@ -378,6 +380,14 @@ Record thresholdsToRecord(const ParticleClustersConfig &cfg) {
   m["octet_purity_tolerance"] = Record(cfg.octetPurityTolerance);
   m["composite_octet_tolerance"] = Record(cfg.compositeOctetTolerance);
   m["min_anti_triplet_weight"] = Record(cfg.minAntiTripletWeight);
+  m["color_gram_tolerance"] = Record(cfg.colorGramTolerance);
+  m["color_flux_tolerance"] = Record(cfg.colorFluxTolerance);
+  m["spin_expectation_tolerance"] = Record(cfg.spinExpectationTolerance);
+  m["spin_variance_tolerance"] = Record(cfg.spinVarianceTolerance);
+  m["min_support_containment"] = Record(cfg.minSupportContainment);
+  m["min_lifetime_overlap"] = Record(cfg.minLifetimeOverlap);
+  m["min_radius"] = Record(cfg.minRadius);
+  m["max_profile_deviation"] = Record(cfg.maxProfileDeviation);
   return Record(std::move(m));
 }
 
@@ -413,6 +423,22 @@ ParticleClustersConfig thresholdsFromRecord(const Record &record) {
       readOr("composite_octet_tolerance", cfg.compositeOctetTolerance);
   cfg.minAntiTripletWeight =
       readOr("min_anti_triplet_weight", cfg.minAntiTripletWeight);
+  // #775 keys — same default-fallback contract for pre-#775 checkpoints.
+  cfg.colorGramTolerance =
+      readOr("color_gram_tolerance", cfg.colorGramTolerance);
+  cfg.colorFluxTolerance =
+      readOr("color_flux_tolerance", cfg.colorFluxTolerance);
+  cfg.spinExpectationTolerance =
+      readOr("spin_expectation_tolerance", cfg.spinExpectationTolerance);
+  cfg.spinVarianceTolerance =
+      readOr("spin_variance_tolerance", cfg.spinVarianceTolerance);
+  cfg.minSupportContainment =
+      readOr("min_support_containment", cfg.minSupportContainment);
+  cfg.minLifetimeOverlap =
+      readOr("min_lifetime_overlap", cfg.minLifetimeOverlap);
+  cfg.minRadius = readOr("min_radius", cfg.minRadius);
+  cfg.maxProfileDeviation =
+      readOr("max_profile_deviation", cfg.maxProfileDeviation);
   return cfg;
 }
 
@@ -762,6 +788,14 @@ std::uint64_t ParticleClusters::evidenceFingerprint(
   h = hashDouble(h, cfg_.octetPurityTolerance);
   h = hashDouble(h, cfg_.compositeOctetTolerance);
   h = hashDouble(h, cfg_.minAntiTripletWeight);
+  h = hashDouble(h, cfg_.colorGramTolerance);
+  h = hashDouble(h, cfg_.colorFluxTolerance);
+  h = hashDouble(h, cfg_.spinExpectationTolerance);
+  h = hashDouble(h, cfg_.spinVarianceTolerance);
+  h = hashDouble(h, cfg_.minSupportContainment);
+  h = hashDouble(h, cfg_.minLifetimeOverlap);
+  h = hashDouble(h, cfg_.minRadius);
+  h = hashDouble(h, cfg_.maxProfileDeviation);
 
   h = hashString(h, evidence.component.canonicalHash());
   h = chainHash(h, evidence.component.level());
@@ -1800,6 +1834,729 @@ DiquarkRead ParticleClusters::classifyDiquark(
   consumed.consume(wedge.certificate);
   read.certificate = consumed.verdict(read.classification != "none",
                                       evidence.first.certificate);
+  return read;
+}
+
+// ---------------------------------------------------------------------------
+// #775 — bound supercomponent, color singlet, and the proton certificate
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// The spread (max − min) of a finite-sample channel, normalized by
+/// max(|mean|, 1): RELATIVE for O(1)-and-larger channels, ABSOLUTE for
+/// channels near zero (so a near-zero channel is never reported as
+/// infinitely unstable).  NaN (unmeasured) for fewer than two samples or
+/// when any sample is not finite — unknown, never zero.
+double normalizedSpread(const std::vector<double> &values) {
+  if (values.size() < 2) return kNaN;
+  double lo = values.front();
+  double hi = values.front();
+  double sum = 0.0;
+  for (const double v : values) {
+    if (!std::isfinite(v)) return kNaN;
+    lo = std::min(lo, v);
+    hi = std::max(hi, v);
+    sum += v;
+  }
+  const double mean = sum / static_cast<double>(values.size());
+  return (hi - lo) / std::max(std::abs(mean), 1.0);
+}
+
+/// The totals of a set of constituent #773 reads: the summed CERTIFIED
+/// determinant windings (with B = ν/3), the summed certified baryon
+/// fluxes, and the exact graded parity product.  Any uncertified leg
+/// leaves its total UNKNOWN — never zero (the shared integer-sum core of
+/// `conjugatePair` and `classifyBaryon`).
+struct ConstituentTotals {
+  std::optional<int> winding{};
+  std::optional<double> baryonFlux{};
+  int parity = 0;
+  std::optional<double> isospin{};
+  std::optional<double> electricFlux{};
+  /// The certified isospin occupation pattern in CANONICAL order (every
+  /// 'u' before every 'd'), so a constituent permutation cannot change
+  /// it; empty when any constituent's isospin is unknown.
+  std::string flavorPattern{};
+};
+
+ConstituentTotals constituentTotals(const std::vector<const QuarkRead *> &reads,
+                                    double isospinTolerance) {
+  ConstituentTotals out;
+  if (reads.empty()) return out;
+
+  int windingSum = 0;
+  double fluxSum = 0.0;
+  double isospinSum = 0.0;
+  double electricSum = 0.0;
+  int parityProduct = 1;
+  bool windingOk = true;
+  bool fluxOk = true;
+  bool parityOk = true;
+  bool isospinOk = true;
+  bool electricOk = true;
+  std::size_t ups = 0;
+  std::size_t downs = 0;
+  for (const QuarkRead *read : reads) {
+    windingOk = windingOk && read->determinantWinding.has_value();
+    if (read->determinantWinding.has_value())
+      windingSum += *read->determinantWinding;
+    fluxOk = fluxOk && read->baryonFlux.has_value();
+    if (read->baryonFlux.has_value()) fluxSum += *read->baryonFlux;
+    parityOk = parityOk && read->exteriorParity != 0;
+    parityProduct *= read->exteriorParity;
+    electricOk = electricOk && read->electricFlux.has_value();
+    if (read->electricFlux.has_value()) electricSum += *read->electricFlux;
+    if (!read->isospin.has_value()) {
+      isospinOk = false;
+      continue;
+    }
+    isospinSum += *read->isospin;
+    if (std::abs(*read->isospin - 0.5) <= isospinTolerance)
+      ++ups;
+    else if (std::abs(*read->isospin + 0.5) <= isospinTolerance)
+      ++downs;
+    else
+      isospinOk = false;
+  }
+  if (windingOk) out.winding = windingSum;
+  if (fluxOk) out.baryonFlux = fluxSum;
+  if (parityOk) out.parity = parityProduct;
+  if (electricOk) out.electricFlux = electricSum;
+  if (isospinOk) {
+    out.isospin = isospinSum;
+    out.flavorPattern = std::string(ups, 'u') + std::string(downs, 'd');
+  }
+  return out;
+}
+
+}  // namespace
+
+std::string BoundSupercomponentRead::describe() const {
+  std::ostringstream out;
+  out << "BoundSupercomponentRead[" << (found ? "bound" : "unbound") << ", "
+      << quarks.size() << " quark(s), overlap " << lifetimeOverlap
+      << " slice(s), containment " << minContainment << "]";
+  if (!failedCertificates.empty()) {
+    out << " failed:";
+    for (const auto &name : failedCertificates) out << " " << name;
+  }
+  return out.str();
+}
+
+std::string ScaleProfileRead::describe() const {
+  std::ostringstream out;
+  out << "ScaleProfileRead[" << (stable ? "stable" : "unstable") << ", "
+      << sampleCount << " sample(s), r=" << radius
+      << (radiusFinite ? " (finite)" : " (not finite)")
+      << ", m_shell=" << spectralMass << ", worst dimensionless deviation "
+      << profileMaxDeviation << ", physical mass unknown]";
+  if (!failedCertificates.empty()) {
+    out << " failed:";
+    for (const auto &name : failedCertificates) out << " " << name;
+  }
+  return out.str();
+}
+
+std::string BaryonRead::describe() const {
+  std::ostringstream out;
+  out << "BaryonRead[" << classification;
+  out << ", det(C^dag C)=" << colorGramDeterminant
+      << ", color flux=" << colorFlux;
+  if (baryonFlux.has_value())
+    out << ", B=" << *baryonFlux;
+  else
+    out << ", B=unknown";
+  if (electricFlux.has_value())
+    out << ", Q=" << *electricFlux;
+  else
+    out << ", Q=unknown";
+  out << ", flavor=" << (flavorPattern.empty() ? "unknown" : flavorPattern);
+  if (totalJ2.has_value())
+    out << ", J2=" << *totalJ2;
+  else
+    out << ", J2=unknown";
+  if (totalJ2Variance.has_value())
+    out << ", Var(J2)=" << *totalJ2Variance;
+  else
+    out << ", Var(J2)=unknown";
+  out << ", parity=" << exteriorParity << ", confidence " << confidence << "]";
+  if (!failedCertificates.empty()) {
+    out << " failed:";
+    for (const auto &name : failedCertificates) out << " " << name;
+  }
+  return out.str();
+}
+
+Record BaryonRead::toRecord() const {
+  Record::Map m;
+  m["schema_version"] = Record(kRecordSchemaVersion);
+  m["record_type"] = Record("baryon_read");
+  for (std::size_t i = 0; i < quarks.size(); ++i)
+    componentToRecord(m, "quark" + std::to_string(i), quarks[i]);
+  componentToRecord(m, "bound_component", boundComponent);
+  m["color_gram_determinant"] = Record(colorGramDeterminant);
+  m["color_flux"] = Record(colorFlux);
+  m["baryon_flux"] = optionalDouble(baryonFlux);
+  m["electric_flux"] = optionalDouble(electricFlux);
+  m["total_j2"] = optionalDouble(totalJ2);
+  m["total_j2_variance"] = optionalDouble(totalJ2Variance);
+  m["rotation_character_re"] =
+      rotationCharacter.has_value() ? Record(rotationCharacter->real())
+                                    : Record();
+  m["rotation_character_im"] =
+      rotationCharacter.has_value() ? Record(rotationCharacter->imag())
+                                    : Record();
+  m["classification"] = Record(classification);
+  m["persistence"] = Record(persistence);
+  Record::List failed;
+  failed.reserve(failedCertificates.size());
+  for (const auto &name : failedCertificates) failed.emplace_back(name);
+  m["failed_certificates"] = Record(std::move(failed));
+  m["color_wedge_re"] = Record(colorWedge.real());
+  m["color_wedge_im"] = Record(colorWedge.imag());
+  m["total_winding"] = optionalInt(totalWinding);
+  m["exterior_parity"] = Record(exteriorParity);
+  m["flavor_pattern"] = Record(flavorPattern);
+  m["total_isospin"] = optionalDouble(totalIsospin);
+  m["rotation_character_sign"] = Record(rotationCharacterSign);
+  m["spin_lift_applicable"] = Record(spinLiftApplicable);
+  m["spin_lift_accepted"] = Record(spinLiftAccepted);
+  m["sharp_spin"] = Record(sharpSpin);
+  m["quasi_free_class_swept"] = Record(quasiFreeClassSwept);
+  m["class_variance_floor"] = Record(classVarianceFloor);
+  m["radius"] = Record(radius);
+  m["radius_finite"] = Record(radiusFinite);
+  m["spectral_mass"] = Record(spectralMass);
+  m["radius_ratio"] = Record(radiusRatio);
+  m["profile_max_deviation"] = Record(profileMaxDeviation);
+  m["profile_stable"] = Record(profileStable);
+  m["physical_mass"] = optionalDouble(physicalMass);
+  m["lifetime_overlap"] = Record(lifetimeOverlap);
+  m["transport_count"] = Record(static_cast<std::int64_t>(transportCount));
+  m["transport_leakage_max"] = Record(transportLeakageMax);
+  m["confidence"] = Record(confidence);
+  m["thresholds"] = thresholdsToRecord(thresholds);
+  m["certificate"] = certificateToRecord(certificate);
+  return Record(std::move(m));
+}
+
+BaryonRead BaryonRead::fromRecord(const Record &record) {
+  const auto &m = record.asMap();
+  requireSchema(m, "baryon_read");
+  BaryonRead read;
+  for (std::size_t i = 0; i < read.quarks.size(); ++i)
+    read.quarks[i] = componentFromRecord(m, "quark" + std::to_string(i));
+  read.boundComponent = componentFromRecord(m, "bound_component");
+  read.colorGramDeterminant = m.at("color_gram_determinant").asDouble();
+  read.colorFlux = m.at("color_flux").asDouble();
+  read.baryonFlux = optionalDoubleFrom(m.at("baryon_flux"));
+  read.electricFlux = optionalDoubleFrom(m.at("electric_flux"));
+  read.totalJ2 = optionalDoubleFrom(m.at("total_j2"));
+  read.totalJ2Variance = optionalDoubleFrom(m.at("total_j2_variance"));
+  {
+    const Record &re = m.at("rotation_character_re");
+    const Record &im = m.at("rotation_character_im");
+    if (!re.isNull() && !im.isNull())
+      read.rotationCharacter = cd(re.asDouble(), im.asDouble());
+  }
+  read.classification = m.at("classification").asString();
+  read.persistence = m.at("persistence").asDouble();
+  for (const auto &entry : m.at("failed_certificates").asList())
+    read.failedCertificates.push_back(entry.asString());
+  read.colorWedge = cd(m.at("color_wedge_re").asDouble(),
+                       m.at("color_wedge_im").asDouble());
+  read.totalWinding = optionalIntFrom(m.at("total_winding"));
+  read.exteriorParity = static_cast<int>(m.at("exterior_parity").asInt());
+  read.flavorPattern = m.at("flavor_pattern").asString();
+  read.totalIsospin = optionalDoubleFrom(m.at("total_isospin"));
+  read.rotationCharacterSign =
+      static_cast<int>(m.at("rotation_character_sign").asInt());
+  read.spinLiftApplicable = m.at("spin_lift_applicable").asBool();
+  read.spinLiftAccepted = m.at("spin_lift_accepted").asBool();
+  read.sharpSpin = m.at("sharp_spin").asBool();
+  read.quasiFreeClassSwept = m.at("quasi_free_class_swept").asBool();
+  read.classVarianceFloor = m.at("class_variance_floor").asDouble();
+  read.radius = m.at("radius").asDouble();
+  read.radiusFinite = m.at("radius_finite").asBool();
+  read.spectralMass = m.at("spectral_mass").asDouble();
+  read.radiusRatio = m.at("radius_ratio").asDouble();
+  read.profileMaxDeviation = m.at("profile_max_deviation").asDouble();
+  read.profileStable = m.at("profile_stable").asBool();
+  read.physicalMass = optionalDoubleFrom(m.at("physical_mass"));
+  read.lifetimeOverlap = m.at("lifetime_overlap").asDouble();
+  read.transportCount =
+      static_cast<std::size_t>(m.at("transport_count").asInt());
+  read.transportLeakageMax = m.at("transport_leakage_max").asDouble();
+  read.confidence = m.at("confidence").asDouble();
+  read.thresholds = thresholdsFromRecord(m.at("thresholds"));
+  read.certificate = certificateFromRecord(m.at("certificate"));
+  return read;
+}
+
+std::vector<BoundSupercomponentRead>
+ParticleClusters::boundSupercomponentSearch(
+    const std::vector<ComponentRead> &nextLevelComponents,
+    const std::vector<BoundCandidateEvidence> &candidates) const {
+  std::vector<BoundSupercomponentRead> out;
+
+  for (const ComponentRead &component : nextLevelComponents) {
+    const std::unordered_set<std::uint64_t> support(component.support.begin(),
+                                                    component.support.end());
+
+    // Membership: a CERTIFIED quark candidate whose level-0 support meets
+    // this component (design spec §16.2 — "components containing three
+    // persistent quark candidates").  An uncertified candidate is not a
+    // quark candidate and is never counted.
+    std::vector<std::size_t> members;
+    for (std::size_t i = 0; i < candidates.size(); ++i) {
+      const BoundCandidateEvidence &cand = candidates[i];
+      if (!certifiedConstituent(cand.quark, "quark")) continue;
+      if (cand.support.empty()) continue;
+      const bool meets =
+          std::any_of(cand.support.begin(), cand.support.end(),
+                      [&support](std::uint64_t id) {
+                        return support.find(id) != support.end();
+                      });
+      if (meets) members.push_back(i);
+    }
+    if (members.empty()) continue;
+
+    BoundSupercomponentRead read;
+    read.boundComponent = component.id;
+    read.thresholds = cfg_;
+    read.quarkIndices = members;
+    for (const std::size_t i : members)
+      read.quarks.push_back(candidates[i].quark.component);
+
+    std::vector<std::string> failed;
+    int passed = 0;
+    constexpr int kGates = 5;
+
+    // 1. the NEXT modular level: strictly above every constituent's level.
+    bool levelOk = true;
+    for (const std::size_t i : members)
+      levelOk = levelOk &&
+                component.id.level() > candidates[i].quark.component.level();
+    passed += gate(levelOk, "supercomponent-level", failed);
+
+    // 2. exactly three certified quark candidates.
+    passed += gate(members.size() == 3, "quark-count", failed);
+
+    // 3. support containment: every member's level-0 support lies inside
+    //    the supercomponent (the set-level "inside" statement).
+    double minContainment = kNaN;
+    for (const std::size_t i : members) {
+      const auto &cand = candidates[i];
+      std::size_t inside = 0;
+      for (const std::uint64_t id : cand.support)
+        if (support.find(id) != support.end()) ++inside;
+      const double fraction =
+          static_cast<double>(inside) / static_cast<double>(cand.support.size());
+      minContainment =
+          std::isnan(minContainment) ? fraction
+                                     : std::min(minContainment, fraction);
+    }
+    read.minContainment = minContainment;
+    passed += gate(std::isfinite(minContainment) &&
+                       minContainment >= cfg_.minSupportContainment,
+                   "support-containment", failed);
+
+    // 4. overlapping #765 lifetimes: the intersection of the members'
+    //    persistence windows.  A missing window is missing evidence.
+    bool lifetimesKnown = true;
+    std::size_t first = 0;
+    std::size_t last = std::numeric_limits<std::size_t>::max();
+    for (const std::size_t i : members) {
+      const auto &window = candidates[i].lifetime;
+      if (!window.has_value()) {
+        lifetimesKnown = false;
+        break;
+      }
+      first = std::max(first, window->first);
+      last = std::min(last, window->second);
+    }
+    double overlap = 0.0;
+    if (lifetimesKnown && last >= first) {
+      overlap = static_cast<double>(last - first + 1);
+      read.lifetimeWindow = std::make_pair(first, last);
+    }
+    read.lifetimeOverlap = overlap;
+    passed += gate(lifetimesKnown && overlap >= cfg_.minLifetimeOverlap,
+                   "lifetime-overlap", failed);
+
+    // 5. mutual transport stays inside: every member supplied at least one
+    //    #770 transport to its partners and every supplied link is accepted
+    //    with leakage under the cap (a leaking transfer IS the tracked
+    //    subspace turning away from its successor).
+    bool transportsOk = true;
+    double maxLeakage = kNaN;
+    std::size_t transportCount = 0;
+    for (const std::size_t i : members) {
+      const auto &links = candidates[i].mutualTransports;
+      transportsOk = transportsOk && !links.empty();
+      transportCount += links.size();
+      for (const FiberTransportRead &link : links) {
+        transportsOk = transportsOk && link.accepted;
+        maxLeakage = maxFinite(maxLeakage, link.leakage);
+      }
+    }
+    read.transportCount = transportCount;
+    read.transportLeakageMax = maxLeakage;
+    transportsOk = transportsOk && std::isfinite(maxLeakage) &&
+                   maxLeakage <= cfg_.maxTransportLeakage;
+    passed += gate(transportsOk, "transport-containment", failed);
+
+    read.found = (passed == kGates);
+    read.failedCertificates = std::move(failed);
+
+    ConsumedCertificates consumed;
+    for (const std::size_t i : members)
+      consumed.consume(candidates[i].quark.certificate);
+    read.certificate =
+        consumed.verdict(read.found, candidates[members.front()].quark.certificate);
+    out.push_back(std::move(read));
+  }
+  return out;
+}
+
+ScaleProfileSample ParticleClusters::scaleProfileSample(
+    const RegisterContext &ctx) {
+  const std::shared_ptr<InteriorHinges> &hinges = ctx.interiorHinges();
+  ScaleProfileSample sample;
+  if (!hinges) return sample;
+
+  // The EXISTING #575/#566/#593 battery, read exactly as EmergentRadius /
+  // EmergentMass read it — nothing recomputed, no solver called.
+  const InteriorHinges::Radii radii = hinges->radii();
+  const InteriorHinges::Masses masses = hinges->masses();
+  const InteriorHinges::Localization localization = hinges->localization();
+
+  sample.radius = radii.rDual;
+  sample.radiusCrossCheck = radii.rPrimal;
+  sample.spectralMass = masses.empty ? kNaN : masses.mShell;
+  sample.localization = localization.empty ? kNaN : localization.pr;
+  sample.radialWeightProfile.reserve(localization.shellProfile.size());
+  for (const auto &entry : localization.shellProfile)
+    sample.radialWeightProfile.push_back(entry.second.weightShare);
+  return sample;
+}
+
+ScaleProfileRead ParticleClusters::scaleProfile(
+    const std::vector<ScaleProfileSample> &samples) const {
+  ScaleProfileRead read;
+  read.thresholds = cfg_;
+  read.sampleCount = samples.size();
+
+  std::vector<std::string> failed;
+  int passed = 0;
+  constexpr int kGates = 6;
+
+  // 1. a refinement WINDOW: stability is unmeasurable from one sample.
+  passed += gate(samples.size() >= 2, "refinement-window", failed);
+
+  // 2. a finite emergent radius in EVERY sample (dimensionful: only the
+  //    finiteness is certified, never an absolute value).
+  bool radiusOk = !samples.empty();
+  for (const ScaleProfileSample &sample : samples)
+    radiusOk = radiusOk && std::isfinite(sample.radius) &&
+               sample.radius > cfg_.minRadius;
+  if (!samples.empty()) read.radius = samples.front().radius;
+  read.radiusFinite = radiusOk;
+  passed += gate(radiusOk, "finite-radius", failed);
+
+  // 3-5. the DIMENSIONLESS scalar channels and their refinement spreads.
+  std::vector<double> ratios;
+  std::vector<double> masses;
+  std::vector<double> localizations;
+  ratios.reserve(samples.size());
+  masses.reserve(samples.size());
+  localizations.reserve(samples.size());
+  for (const ScaleProfileSample &sample : samples) {
+    ratios.push_back(sample.radiusCrossCheck == 0.0
+                         ? kNaN
+                         : sample.radius / sample.radiusCrossCheck);
+    masses.push_back(sample.spectralMass);
+    localizations.push_back(sample.localization);
+  }
+  if (!samples.empty()) {
+    read.radiusRatio = ratios.front();
+    read.spectralMass = masses.front();
+    read.localization = localizations.front();
+  }
+  read.radiusRatioSpread = normalizedSpread(ratios);
+  read.spectralMassSpread = normalizedSpread(masses);
+  read.localizationSpread = normalizedSpread(localizations);
+  passed += gate(std::isfinite(read.radiusRatioSpread) &&
+                     read.radiusRatioSpread <= cfg_.maxProfileDeviation,
+                 "radius-ratio-stability", failed);
+  passed += gate(std::isfinite(read.spectralMassSpread) &&
+                     read.spectralMassSpread <= cfg_.maxProfileDeviation,
+                 "spectral-mass-stability", failed);
+  passed += gate(std::isfinite(read.localizationSpread) &&
+                     read.localizationSpread <= cfg_.maxProfileDeviation,
+                 "localization-stability", failed);
+
+  // 6. the dimensionless RADIAL WEIGHT PROFILE (see the header banner:
+  //    a radial curvature-weight density, NOT a form factor): present in
+  //    every sample, the same shell count, and stable per shell.
+  bool profileShapeOk = samples.size() >= 2;
+  std::size_t shells = 0;
+  if (!samples.empty()) {
+    shells = samples.front().radialWeightProfile.size();
+    profileShapeOk = profileShapeOk && shells > 0;
+    for (const ScaleProfileSample &sample : samples)
+      profileShapeOk =
+          profileShapeOk && sample.radialWeightProfile.size() == shells;
+  }
+  double profileDeviation = kNaN;
+  if (profileShapeOk) {
+    profileDeviation = 0.0;
+    for (std::size_t k = 0; k < shells; ++k) {
+      double lo = samples.front().radialWeightProfile[k];
+      double hi = lo;
+      for (const ScaleProfileSample &sample : samples) {
+        const double v = sample.radialWeightProfile[k];
+        if (!std::isfinite(v)) {
+          profileDeviation = kNaN;
+          break;
+        }
+        lo = std::min(lo, v);
+        hi = std::max(hi, v);
+      }
+      if (std::isnan(profileDeviation)) break;
+      profileDeviation = std::max(profileDeviation, hi - lo);
+    }
+    read.profileShells = shells;
+  }
+  read.profileMaxDeviation = profileDeviation;
+  passed += gate(std::isfinite(profileDeviation) &&
+                     profileDeviation <= cfg_.maxProfileDeviation,
+                 "profile-stability", failed);
+
+  read.stable = (passed == kGates);
+  read.failedCertificates = std::move(failed);
+
+  // The measured deviations of finite sums: CertifiedNumerical against the
+  // configured refinement cap.  A dimensionful mass is NEVER emitted.
+  double residual = kNaN;
+  for (const double channel : {read.radiusRatioSpread, read.spectralMassSpread,
+                               read.localizationSpread,
+                               read.profileMaxDeviation})
+    residual = maxFinite(residual, channel);
+  read.certificate =
+      read.stable
+          ? Certificate::certifiedNumerical(
+                CertificateDomain::Static, CertificateRegime::NonNormal,
+                residual, /*conditioning=*/kNaN, cfg_.maxProfileDeviation)
+          : Certificate::heuristicDiscovery(CertificateDomain::Static,
+                                            CertificateRegime::NonNormal);
+  return read;
+}
+
+BaryonRead ParticleClusters::classifyBaryon(
+    const BaryonCandidateEvidence &evidence) const {
+  BaryonRead read;
+  read.thresholds = cfg_;
+  read.boundComponent = evidence.boundComponent;
+  for (std::size_t i = 0; i < read.quarks.size(); ++i)
+    read.quarks[i] = evidence.quarks[i].component;
+  read.persistence = evidence.persistenceLifetime;
+  read.lifetimeOverlap = evidence.binding.lifetimeOverlap;
+  read.transportCount = evidence.lifetimeTransports.size();
+  double compositeLeakage = kNaN;
+  for (const FiberTransportRead &transport : evidence.lifetimeTransports)
+    compositeLeakage = maxFinite(compositeLeakage, transport.leakage);
+  read.transportLeakageMax = compositeLeakage;
+
+  std::vector<const QuarkRead *> constituents;
+  constituents.reserve(evidence.quarks.size());
+  for (const QuarkRead &quark : evidence.quarks) constituents.push_back(&quark);
+  const ConstituentTotals totals =
+      constituentTotals(constituents, cfg_.isospinTolerance);
+
+  std::vector<std::string> failed;
+  int passed = 0;
+  constexpr int kGates = 14;
+
+  // ── structural gates (a failure of either is "no baryon") ────────────
+
+  // 1. three CERTIFIED quark constituents (the #773 verdicts consumed
+  //    verbatim — each already carries its accepted oriented-triangle
+  //    anchor and its determinant-winding certificate).
+  bool constituentsOk = true;
+  for (const QuarkRead &quark : evidence.quarks)
+    constituentsOk = constituentsOk && certifiedConstituent(quark, "quark");
+  const bool structuralQuarks =
+      gate(constituentsOk, "constituent-quarks", failed);
+  passed += structuralQuarks;
+
+  // 2. one persistent bound supercomponent (the §16.2 search result).
+  const bool bindingOk =
+      evidence.binding.found && evidence.binding.certificate.holds();
+  const bool structuralBinding =
+      gate(bindingOk, "bound-supercomponent", failed);
+  passed += structuralBinding;
+
+  // ── the proton certificate (design spec §16.4) ───────────────────────
+
+  // 3. the color SINGLET.  The three color columns are normalized once and
+  //    the three-mode wedge S_ABC = det[c_A c_B c_C] is built EXACTLY ONCE
+  //    (ColorFiber::colorWedge); the Gram certificate is its squared
+  //    magnitude — the ColorFiber::singletGram identity read off the SAME
+  //    wedge, never a second determinant, and never an extra fermion sign
+  //    multiplied onto the color epsilon.
+  bool singletOk = false;
+  if (evidence.colorColumns.norm() > 0.0) {
+    Eigen::Matrix3cd columns = evidence.colorColumns;
+    for (Eigen::Index j = 0; j < 3; ++j) {
+      const double norm = columns.col(j).norm();
+      if (norm > 0.0) columns.col(j) /= norm;
+    }
+    read.colorWedge = ColorFiber::colorWedge(columns);
+    read.colorGramDeterminant = std::norm(read.colorWedge);
+    singletOk = std::abs(read.colorGramDeterminant - 1.0) <=
+                cfg_.colorGramTolerance;
+  }
+  passed += gate(singletOk, "color-singlet", failed);
+
+  // 4. the INDEPENDENT vanishing net-color-flux diagnostic: the octet
+  //    (traceless) weight of the bound object's color bilinear under the
+  //    exact 1 ⊕ 8 split (#774 octetBilinearRead, reused).  On a finite
+  //    complex this is a diagnostic, never by itself a proof of
+  //    confinement.
+  const bool colorFluxCertified = evidence.colorFlux.certificate.holds() &&
+                                  std::isfinite(evidence.colorFlux.octetWeight);
+  if (colorFluxCertified) read.colorFlux = evidence.colorFlux.octetWeight;
+  passed += gate(colorFluxCertified &&
+                     evidence.colorFlux.octetWeight <= cfg_.colorFluxTolerance,
+                 "color-flux-zero", failed);
+
+  // 5. summed CERTIFIED determinant winding: ν = 3 ⇒ B = ν/3 = +1.
+  read.totalWinding = totals.winding;
+  read.baryonFlux = totals.baryonFlux;
+  passed += gate(totals.winding.has_value() && *totals.winding == 3,
+                 "baryon-flux-unit", failed);
+
+  // 6. ODD composite exterior parity (the exact graded product).
+  read.exteriorParity = totals.parity;
+  passed += gate(read.exteriorParity == -1, "composite-parity-odd", failed);
+
+  // 7. the reused #773 flavor read: the `uud` occupation pattern.
+  read.flavorPattern = totals.flavorPattern;
+  read.totalIsospin = totals.isospin;
+  passed += gate(read.flavorPattern == "uud", "flavor-uud", failed);
+
+  // 8. the reused #773 charge read: summed CERTIFIED Gauss fluxes = +1.
+  read.electricFlux = totals.electricFlux;
+  passed += gate(totals.electricFlux.has_value() &&
+                     std::abs(*totals.electricFlux - 1.0) <= cfg_.gaussTolerance,
+                 "electric-flux-unit", failed);
+
+  // 9. the total-space ⟨J²⟩ = 3/4.  The #780 Wick expectation is the
+  //    quasi-free path; a candidate carried as an explicit composite state
+  //    supplies the #772 dense oracle instead (which never supplies a
+  //    variance).  Never a product of per-hole or per-edge spinors.
+  if (evidence.spinSquaredRead.certificate.holds())
+    read.totalJ2 = evidence.spinSquaredRead.value.real();
+  else if (evidence.totalSpaceJ2.has_value())
+    read.totalJ2 = *evidence.totalSpaceJ2;
+  passed += gate(read.totalJ2.has_value() &&
+                     std::abs(*read.totalJ2 - 0.75) <=
+                         cfg_.spinExpectationTolerance,
+                 "spin-expectation", failed);
+
+  // 10. SHARP spin: Var(J²) ≈ 0, evaluated by exact Wick contraction on
+  //     the #780 covariance.  Expectation alone is never a sharp-spin
+  //     certificate (spec §5.12) — an absent variance is UNKNOWN, not zero.
+  if (evidence.spinVarianceRead.certificate.holds())
+    read.totalJ2Variance = evidence.spinVarianceRead.value.real();
+  read.sharpSpin = read.totalJ2Variance.has_value() &&
+                   std::abs(*read.totalJ2Variance) <= cfg_.spinVarianceTolerance;
+  passed += gate(read.sharpSpin, "sharp-spin", failed);
+
+  // 11. the reference-normalized physical 2π character (#772): channel
+  //     PhysicalRotation, certified, and equal to −1.
+  const HolonomyCharacterRead &rotation = evidence.rotation;
+  const bool rotationCertified =
+      rotation.certificate.holds() &&
+      rotation.channel == HolonomyChannel::PhysicalRotation;
+  if (rotationCertified) {
+    read.rotationCharacter = rotation.character;
+    read.rotationCharacterSign = rotation.characterSign;
+  }
+  passed += gate(rotationCertified && rotation.characterSign == -1,
+                 "rotation-character", failed);
+
+  // 12. the SO(d) → Spin(d) lift — demanded ONLY when the caller declares a
+  //     continuum spin claim (spec §16.4).
+  read.spinLiftApplicable = evidence.continuumSpinClaim;
+  read.spinLiftAccepted = evidence.spinLift.has_value() &&
+                          evidence.spinLift->certificate.holds() &&
+                          evidence.spinLift->liftExists;
+  passed += gate(!evidence.continuumSpinClaim || read.spinLiftAccepted,
+                 "spin-lift", failed);
+
+  // 13/14. the EXISTING mass-radius battery over the refinement window: a
+  //        finite radius and refinement-stable DIMENSIONLESS profiles.  The
+  //        dimensionful mass stays unknown (physicalMass is always empty).
+  const ScaleProfileRead scale = scaleProfile(evidence.scaleSamples);
+  read.radius = scale.radius;
+  read.radiusFinite = scale.radiusFinite;
+  read.spectralMass = scale.spectralMass;
+  read.radiusRatio = scale.radiusRatio;
+  read.profileMaxDeviation = scale.profileMaxDeviation;
+  read.profileStable = scale.stable;
+  passed += gate(scale.radiusFinite, "finite-radius", failed);
+  passed += gate(scale.stable, "profile-stability", failed);
+
+  // ── the accepted covariance-only class (the obstruction premise) ─────
+
+  bool classSwept = !evidence.classVarianceReads.empty();
+  double floor = kNaN;
+  for (const quantum::WickCertificateRead &variance :
+       evidence.classVarianceReads) {
+    classSwept = classSwept && variance.certificate.holds();
+    const double magnitude = std::abs(variance.value);
+    floor = std::isnan(floor) ? magnitude : std::min(floor, magnitude);
+  }
+  read.quasiFreeClassSwept = classSwept;
+  read.classVarianceFloor = classSwept ? floor : kNaN;
+
+  // ── the four-way verdict ─────────────────────────────────────────────
+
+  read.confidence = static_cast<double>(passed) / kGates;
+  if (!structuralQuarks || !structuralBinding) {
+    read.classification = "no-baryon";
+  } else if (passed == kGates) {
+    read.classification = "certified-proton";
+  } else if (failed.size() == 1 && failed.front() == "sharp-spin" &&
+             read.quasiFreeClassSwept &&
+             read.classVarianceFloor > cfg_.spinVarianceTolerance) {
+    // Every other certificate passes and Var(J²) fails to converge to zero
+    // across the ACCEPTED covariance-only class: the structural branch
+    // point.  It mandates an explicit non-Gaussian mechanism (its own scope
+    // decision and ticket) — nothing here adds one, and this is not a
+    // refutation of the geometry.
+    read.classification = "quasi-free-sharp-spin-obstruction";
+  } else {
+    read.classification = "baryon-candidate";
+  }
+  read.failedCertificates = std::move(failed);
+
+  ConsumedCertificates consumed;
+  for (const QuarkRead &quark : evidence.quarks)
+    consumed.consume(quark.certificate);
+  consumed.consume(evidence.binding.certificate);
+  consumed.consume(evidence.colorFlux.certificate);
+  consumed.consume(evidence.rotation.certificate);
+  consumed.consume(evidence.spinSquaredRead.certificate);
+  consumed.consume(evidence.spinVarianceRead.certificate);
+  consumed.consume(scale.certificate);
+  if (evidence.spinLift.has_value())
+    consumed.consume(evidence.spinLift->certificate);
+  read.certificate = consumed.verdict(read.classification == "certified-proton",
+                                      evidence.quarks.front().certificate);
   return read;
 }
 

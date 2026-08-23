@@ -2482,7 +2482,41 @@ reported, and the whole configuration is echoed on every read
       .def_readwrite("minAntiTripletWeight",
                      &ParticleClustersConfig::minAntiTripletWeight,
                      "#774: floor on the certified anti-triplet wedge "
-                     "occupation det(C^dag Gamma C) of a diquark.");
+                     "occupation det(C^dag Gamma C) of a diquark.")
+      .def_readwrite("colorGramTolerance",
+                     &ParticleClustersConfig::colorGramTolerance,
+                     "#775: |det(C^dag C) - 1| cap of the color-singlet "
+                     "certificate (exactly 1 for an orthonormal triad, "
+                     "exactly 0 for duplicate color modes).")
+      .def_readwrite("colorFluxTolerance",
+                     &ParticleClustersConfig::colorFluxTolerance,
+                     "#775: cap on the NET COLOR FLUX -- the octet weight "
+                     "of the bound object's color bilinear.  An "
+                     "INDEPENDENT finite-complex diagnostic, never on its "
+                     "own a proof of confinement.")
+      .def_readwrite("spinExpectationTolerance",
+                     &ParticleClustersConfig::spinExpectationTolerance,
+                     "#775: |<J^2> - 3/4| cap of the total-space spin "
+                     "expectation.")
+      .def_readwrite("spinVarianceTolerance",
+                     &ParticleClustersConfig::spinVarianceTolerance,
+                     "#775: |Var(J^2)| cap of the SHARP-spin certificate "
+                     "(design spec 5.12).")
+      .def_readwrite("minSupportContainment",
+                     &ParticleClustersConfig::minSupportContainment,
+                     "#775: minimum fraction of a constituent's level-0 "
+                     "support inside the supercomponent (1.0 = full).")
+      .def_readwrite("minLifetimeOverlap",
+                     &ParticleClustersConfig::minLifetimeOverlap,
+                     "#775: minimum number of SHARED persistence slices "
+                     "across the three constituents' lifetimes.")
+      .def_readwrite("minRadius", &ParticleClustersConfig::minRadius,
+                     "#775: strict floor a finite emergent radius must "
+                     "exceed.")
+      .def_readwrite("maxProfileDeviation",
+                     &ParticleClustersConfig::maxProfileDeviation,
+                     "#775: cap on the deviation of every DIMENSIONLESS "
+                     "scale channel across the refinement window.");
 
   py::class_<GaussFluxRead>(m, "GaussFluxRead",
       R"doc(The electric Gauss-flux consistency read over nested enclosing
@@ -2976,6 +3010,293 @@ recorded distinction channels.  failedCertificates vocabulary:
                   py::arg("record"),
                   "Rehydrate; rejects an unknown schema_version.");
 
+  py::class_<BoundCandidateEvidence>(m, "BoundCandidateEvidence",
+      R"doc(One constituent's datum for the #775 bound-supercomponent
+search (design spec 16.2): the #773 quark verdict, the #765 level-0
+support, the #765 persistence window (first, last) -- None = no lifetime
+evidence, the overlap certificate then fails by name -- and the #770
+mutual transports to the other constituents.)doc")
+      .def(py::init<>())
+      .def_readwrite("quark", &BoundCandidateEvidence::quark,
+                     "The candidate's #773 QuarkRead (only a CERTIFIED "
+                     "'quark' verdict counts toward the three-quark "
+                     "census).")
+      .def_readwrite("support", &BoundCandidateEvidence::support,
+                     "Level-0 cell support (ComponentRead.support); empty "
+                     "= missing evidence.")
+      .def_readwrite("lifetime", &BoundCandidateEvidence::lifetime,
+                     "(firstSlice, lastSlice) of the #765 PersistenceTrack "
+                     "window, inclusive; None = unknown.")
+      .def_readwrite("mutualTransports",
+                     &BoundCandidateEvidence::mutualTransports,
+                     "#770 transports to the other constituents; every "
+                     "supplied link must be accepted under the leakage "
+                     "cap.");
+
+  py::class_<BoundSupercomponentRead>(m, "BoundSupercomponentRead",
+      R"doc(One next-modular-level component examined by the #775
+bound-supercomponent search: the contained certified quark candidates,
+their shared #765 lifetime window, and the containment/transport
+certificates.  failedCertificates vocabulary: "supercomponent-level",
+"quark-count", "support-containment", "lifetime-overlap",
+"transport-containment".)doc")
+      .def(py::init<>())
+      .def_readonly("boundComponent",
+                    &BoundSupercomponentRead::boundComponent)
+      .def_readonly("quarks", &BoundSupercomponentRead::quarks,
+                    "Contained certified quark candidates' #765 ids.")
+      .def_readonly("quarkIndices", &BoundSupercomponentRead::quarkIndices,
+                    "Their indices in the input candidate list.")
+      .def_readonly("found", &BoundSupercomponentRead::found,
+                    "A certified bound supercomponent of exactly three "
+                    "lifetime-overlapping certified quark candidates.")
+      .def_readonly("lifetimeWindow",
+                    &BoundSupercomponentRead::lifetimeWindow,
+                    "Shared (first, last) window; None = disjoint/unknown.")
+      .def_readonly("lifetimeOverlap",
+                    &BoundSupercomponentRead::lifetimeOverlap,
+                    "Number of SHARED persistence slices.")
+      .def_readonly("minContainment",
+                    &BoundSupercomponentRead::minContainment,
+                    "Smallest per-constituent support-containment "
+                    "fraction; NaN = unknown.")
+      .def_readonly("transportLeakageMax",
+                    &BoundSupercomponentRead::transportLeakageMax)
+      .def_readonly("transportCount",
+                    &BoundSupercomponentRead::transportCount)
+      .def_readonly("failedCertificates",
+                    &BoundSupercomponentRead::failedCertificates)
+      .def_readonly("thresholds", &BoundSupercomponentRead::thresholds)
+      .def_readonly("certificate", &BoundSupercomponentRead::certificate)
+      .def("describe", &BoundSupercomponentRead::describe)
+      .def("__repr__", &BoundSupercomponentRead::describe);
+
+  py::class_<ScaleProfileSample>(m, "ScaleProfileSample",
+      R"doc(One refinement-window sample of the EXISTING #575/#566/#593
+mass-radius battery (InteriorHinges).  radialWeightProfile is the
+per-BFS-shell share of the |Re eps * star h| curvature weight -- a radial
+CURVATURE-WEIGHT density, NOT a momentum-transfer form factor: no Fourier
+transform of a charge density is computed anywhere in this tree.)doc")
+      .def(py::init<>())
+      .def_readwrite("radius", &ScaleProfileSample::radius,
+                     "r = V_dual^(1/4) (InteriorHinges.Radii.rDual) -- "
+                     "DIMENSIONFUL; only its finiteness is certified.")
+      .def_readwrite("radiusCrossCheck",
+                     &ScaleProfileSample::radiusCrossCheck,
+                     "r = V_primal^(1/4); its RATIO to radius is the "
+                     "dimensionless channel.")
+      .def_readwrite("spectralMass", &ScaleProfileSample::spectralMass,
+                     "The intensive shell mass m_shell -- a mean interior "
+                     "deficit ANGLE, dimensionless in lattice units.")
+      .def_readwrite("localization", &ScaleProfileSample::localization,
+                     "Curvature-weight participation ratio (dimensionless).")
+      .def_readwrite("radialWeightProfile",
+                     &ScaleProfileSample::radialWeightProfile,
+                     "Per-shell curvature-weight shares, shell ascending "
+                     "(dimensionless); empty = no shell seeds, profile "
+                     "UNKNOWN.");
+
+  py::class_<ScaleProfileRead>(m, "ScaleProfileRead",
+      R"doc(The #775 refinement-window certificate: a FINITE emergent
+radius plus the refinement stability of every DIMENSIONLESS channel.
+physicalMass is ALWAYS None -- a dimensionful mass stays unknown until a
+physical scale is independently established.  failedCertificates
+vocabulary: "refinement-window", "finite-radius",
+"radius-ratio-stability", "spectral-mass-stability",
+"localization-stability", "profile-stability".)doc")
+      .def(py::init<>())
+      .def_readonly("sampleCount", &ScaleProfileRead::sampleCount)
+      .def_readonly("radius", &ScaleProfileRead::radius)
+      .def_readonly("radiusFinite", &ScaleProfileRead::radiusFinite)
+      .def_readonly("radiusRatio", &ScaleProfileRead::radiusRatio)
+      .def_readonly("radiusRatioSpread",
+                    &ScaleProfileRead::radiusRatioSpread)
+      .def_readonly("spectralMass", &ScaleProfileRead::spectralMass)
+      .def_readonly("spectralMassSpread",
+                    &ScaleProfileRead::spectralMassSpread)
+      .def_readonly("localization", &ScaleProfileRead::localization)
+      .def_readonly("localizationSpread",
+                    &ScaleProfileRead::localizationSpread)
+      .def_readonly("profileMaxDeviation",
+                    &ScaleProfileRead::profileMaxDeviation,
+                    "Max absolute per-shell deviation across the window; "
+                    "NaN = unknown, never zero.")
+      .def_readonly("profileShells", &ScaleProfileRead::profileShells)
+      .def_readonly("physicalMass", &ScaleProfileRead::physicalMass,
+                    "ALWAYS None: unknown until a physical scale is "
+                    "independently established.")
+      .def_readonly("stable", &ScaleProfileRead::stable)
+      .def_readonly("failedCertificates",
+                    &ScaleProfileRead::failedCertificates)
+      .def_readonly("thresholds", &ScaleProfileRead::thresholds)
+      .def_readonly("certificate", &ScaleProfileRead::certificate)
+      .def("describe", &ScaleProfileRead::describe)
+      .def("__repr__", &ScaleProfileRead::describe);
+
+  py::class_<BaryonCandidateEvidence>(m, "BaryonCandidateEvidence",
+      R"doc(The assembled evidence bundle of ONE #775 three-cluster
+candidate: the three #773 constituent verdicts consumed VERBATIM, the
+bound-supercomponent search result, the three normalized anchored color
+columns (the wedge is built ONCE from them), the #774 octet bilinear read
+of the bound object (the INDEPENDENT net-color-flux diagnostic), the #772
+Berry-cancelled 2pi rotation character and optional Spin(d) lift, the
+#780 Wick <J^2> and Var(J^2), the accepted covariance-only class's
+variance reads, and the refinement-window mass-radius samples.)doc")
+      .def(py::init<>())
+      .def_readwrite("boundComponent",
+                     &BaryonCandidateEvidence::boundComponent)
+      .def_readwrite("quarks", &BaryonCandidateEvidence::quarks,
+                     "The three constituents' #773 QuarkReads.")
+      .def_readwrite("binding", &BaryonCandidateEvidence::binding,
+                     "The boundSupercomponentSearch result.")
+      .def_readwrite("colorColumns", &BaryonCandidateEvidence::colorColumns,
+                     "The 3x3 matrix of normalized anchored color columns "
+                     "C = [c_A c_B c_C]; the three-mode wedge is built "
+                     "ONCE from it -- no extra fermion sign is multiplied "
+                     "onto the color epsilon.")
+      .def_readwrite("colorFlux", &BaryonCandidateEvidence::colorFlux,
+                     "The bound object's OctetBilinearRead -- the "
+                     "INDEPENDENT net-color-flux diagnostic.")
+      .def_readwrite("rotation", &BaryonCandidateEvidence::rotation,
+                     "#772 PhysicalRotation character of the closed 2pi "
+                     "total-space cluster-frame cycle.")
+      .def_readwrite("continuumSpinClaim",
+                     &BaryonCandidateEvidence::continuumSpinClaim,
+                     "When True the SO(d)->Spin(d) lift is REQUIRED; when "
+                     "False it is never demanded (spec 16.4).")
+      .def_readwrite("spinLift", &BaryonCandidateEvidence::spinLift,
+                     "#772 spinLift decision; None = none made.")
+      .def_readwrite("spinSquaredRead",
+                     &BaryonCandidateEvidence::spinSquaredRead,
+                     "#780 wickSpinSquaredExpectation of the carried "
+                     "quasi-free state.")
+      .def_readwrite("spinVarianceRead",
+                     &BaryonCandidateEvidence::spinVarianceRead,
+                     "#780 wickSpinSquaredVariance -- the sharp-spin "
+                     "certificate.")
+      .def_readwrite("classVarianceReads",
+                     &BaryonCandidateEvidence::classVarianceReads,
+                     "Var(J^2) of every candidate of the ACCEPTED "
+                     "covariance-only class; empty/uncertified = the class "
+                     "was NOT swept, so a variance failure is an unknown, "
+                     "never an obstruction.")
+      .def_readwrite("totalSpaceJ2", &BaryonCandidateEvidence::totalSpaceJ2,
+                     "The #772 DENSE ExchangeHolonomy.totalJSquared "
+                     "oracle, consulted only when the #780 Wick "
+                     "expectation is absent; it never supplies a variance.")
+      .def_readwrite("scaleSamples", &BaryonCandidateEvidence::scaleSamples,
+                     "Refinement-window ScaleProfileSamples.")
+      .def_readwrite("persistenceLifetime",
+                     &BaryonCandidateEvidence::persistenceLifetime,
+                     "#765 lifetime of the BOUND component (report-only).")
+      .def_readwrite("lifetimeTransports",
+                     &BaryonCandidateEvidence::lifetimeTransports,
+                     "#770 composite transports (report-only).");
+
+  py::class_<BaryonRead>(m, "BaryonRead",
+      R"doc(The #775 three-quark baryon read and complete proton
+certificate (design spec 6.8, 16.2-16.4).  classification is one of
+"no-baryon", "baryon-candidate", "certified-proton", or
+"quasi-free-sharp-spin-obstruction" (the hyphenated spelling of the
+spec's quasi_free_sharp_spin_obstruction).
+
+failedCertificates vocabulary -- the two STRUCTURAL gates first (a
+failure of either is "no-baryon"): "constituent-quarks",
+"bound-supercomponent"; then the proton gates: "color-singlet",
+"color-flux-zero", "baryon-flux-unit", "composite-parity-odd",
+"flavor-uud", "electric-flux-unit", "spin-expectation", "sharp-spin",
+"rotation-character", "spin-lift", "finite-radius", "profile-stability".
+
+Unknown values are None/NaN/0-sign, never zero-filled; physicalMass is
+ALWAYS None.)doc")
+      .def(py::init<>())
+      .def_readonly("quarks", &BaryonRead::quarks,
+                    "The three constituents' #765 ids, in evidence order.")
+      .def_readonly("boundComponent", &BaryonRead::boundComponent)
+      .def_readonly("colorGramDeterminant",
+                    &BaryonRead::colorGramDeterminant,
+                    "det(C^dag C) = |det C|^2; NaN = no color evidence.")
+      .def_readonly("colorFlux", &BaryonRead::colorFlux,
+                    "The NET COLOR FLUX diagnostic (octet weight of the "
+                    "bound object's color bilinear); NaN = unknown.  An "
+                    "independent finite-complex diagnostic -- never on its "
+                    "own a proof of confinement.")
+      .def_readonly("baryonFlux", &BaryonRead::baryonFlux,
+                    "B = nu/3 over the three certified windings (+1 for a "
+                    "proton); None = unknown, never zero.")
+      .def_readonly("electricFlux", &BaryonRead::electricFlux,
+                    "Summed certified constituent Gauss fluxes (+1 for a "
+                    "proton); None = unknown.")
+      .def_readonly("totalJ2", &BaryonRead::totalJ2,
+                    "Certified total-space <J^2> (3/4 proton, 15/4 Delta); "
+                    "None = unknown.")
+      .def_readonly("totalJ2Variance", &BaryonRead::totalJ2Variance,
+                    "Certified Var(J^2); None = UNKNOWN, never zero and "
+                    "never inferred from the expectation.")
+      .def_readonly("rotationCharacter", &BaryonRead::rotationCharacter,
+                    "The #772 Berry-cancelled 2pi character; None = "
+                    "uncertified.")
+      .def_readonly("classification", &BaryonRead::classification)
+      .def_readonly("persistence", &BaryonRead::persistence)
+      .def_readonly("failedCertificates", &BaryonRead::failedCertificates)
+      .def_readonly("colorWedge", &BaryonRead::colorWedge,
+                    "S_ABC = det[c_A c_B c_C], built ONCE.  A constituent "
+                    "transposition flips this sign and leaves "
+                    "colorGramDeterminant invariant.")
+      .def_readonly("totalWinding", &BaryonRead::totalWinding,
+                    "nu = nu_A + nu_B + nu_C (3 for a proton); None = "
+                    "unknown.")
+      .def_readonly("exteriorParity", &BaryonRead::exteriorParity,
+                    "Exact graded product of the constituent parities; "
+                    "0 = unknown.")
+      .def_readonly("flavorPattern", &BaryonRead::flavorPattern,
+                    "Certified isospin occupation pattern in canonical "
+                    "order ('uud', ...); '' = unknown.")
+      .def_readonly("totalIsospin", &BaryonRead::totalIsospin)
+      .def_readonly("rotationCharacterSign",
+                    &BaryonRead::rotationCharacterSign)
+      .def_readonly("spinLiftApplicable", &BaryonRead::spinLiftApplicable)
+      .def_readonly("spinLiftAccepted", &BaryonRead::spinLiftAccepted)
+      .def_readonly("sharpSpin", &BaryonRead::sharpSpin)
+      .def_readonly("quasiFreeClassSwept",
+                    &BaryonRead::quasiFreeClassSwept,
+                    "Whether the accepted covariance-only class was swept "
+                    "-- the premise the obstruction verdict quantifies "
+                    "over.")
+      .def_readonly("classVarianceFloor", &BaryonRead::classVarianceFloor,
+                    "min |Var(J^2)| over the swept class; NaN = not swept.")
+      .def_readonly("radius", &BaryonRead::radius)
+      .def_readonly("radiusFinite", &BaryonRead::radiusFinite)
+      .def_readonly("spectralMass", &BaryonRead::spectralMass)
+      .def_readonly("radiusRatio", &BaryonRead::radiusRatio)
+      .def_readonly("profileMaxDeviation",
+                    &BaryonRead::profileMaxDeviation)
+      .def_readonly("profileStable", &BaryonRead::profileStable)
+      .def_readonly("physicalMass", &BaryonRead::physicalMass,
+                    "ALWAYS None (see ScaleProfileRead.physicalMass).")
+      .def_readonly("lifetimeOverlap", &BaryonRead::lifetimeOverlap)
+      .def_readonly("transportCount", &BaryonRead::transportCount)
+      .def_readonly("transportLeakageMax",
+                    &BaryonRead::transportLeakageMax)
+      .def_readonly("confidence", &BaryonRead::confidence,
+                    "Passed-fraction of the fourteen certificates; 1.0 "
+                    "exactly for a certified proton.")
+      .def_readonly("thresholds", &BaryonRead::thresholds)
+      .def_readonly("certificate", &BaryonRead::certificate)
+      .def("describe", &BaryonRead::describe)
+      .def("__repr__", &BaryonRead::describe)
+      .def("toRecord",
+           [](const BaryonRead &self) {
+             return recordToPython(self.toRecord());
+           },
+           "Checkpoint serialization.")
+      .def_static("fromRecord",
+                  [](const py::handle &record) {
+                    return BaryonRead::fromRecord(pythonToRecord(record));
+                  },
+                  py::arg("record"),
+                  "Rehydrate; rejects an unknown schema_version.");
+
   py::class_<ParticleClusters>(m, "ParticleClusters",
       R"doc(The #773 quark/antiquark classifier over persistent modular
 spectral components (design spec section 16.1; whitepaper "Quarks as
@@ -3095,5 +3416,33 @@ evidence.)doc")
            "Classify one diquark candidate: two certified quarks, even "
            "composite parity, a certified anti-triplet wedge occupation, "
            "and the preserved constituent baryon flux B = 2/3 (not an "
-           "antiquark).");
+           "antiquark).")
+      .def("boundSupercomponentSearch",
+           &ParticleClusters::boundSupercomponentSearch,
+           py::arg("nextLevelComponents"), py::arg("candidates"),
+           "The #775 bound-supercomponent search (design spec 16.2): one "
+           "read per next-level component containing at least one "
+           "certified quark candidate; found requires a strictly higher "
+           "modular level, EXACTLY three contained certified quark "
+           "candidates, full support containment, overlapping #765 "
+           "lifetimes, and bounded mutual #770 transports.")
+      .def_static("scaleProfileSample",
+                  &ParticleClusters::scaleProfileSample, py::arg("ctx"),
+                  "One refinement sample of the EXISTING #575/#566/#593 "
+                  "mass-radius battery, read through the #593 context "
+                  "exactly as EmergentRadius/EmergentMass read it "
+                  "(RegisterContext.interiorHinges).  Read-only.")
+      .def("scaleProfile", &ParticleClusters::scaleProfile,
+           py::arg("samples"),
+           "The #775 refinement-window certificate: a finite emergent "
+           "radius plus the refinement stability of every DIMENSIONLESS "
+           "channel.  Nothing here is a form factor and no dimensionful "
+           "mass is ever emitted.")
+      .def("classifyBaryon", &ParticleClusters::classifyBaryon,
+           py::arg("evidence"),
+           "Classify one three-cluster candidate and evaluate the "
+           "complete proton certificate (design spec 16.2-16.4).  Returns "
+           "'no-baryon', 'baryon-candidate', 'certified-proton', or "
+           "'quasi-free-sharp-spin-obstruction' with every failed or "
+           "unknown certificate NAMED.");
 }
