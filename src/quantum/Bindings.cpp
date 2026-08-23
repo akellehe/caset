@@ -2179,6 +2179,7 @@ the imaginary rounding leakage for real-by-construction observables), the
 normal-ordered observable / contraction-plan identifier, the covariance
 fingerprint the value was read from, and the #764 Certificate grading the
 claim (AlgebraicallyExact / Static; regime VERIFIED on the covariance).)doc")
+        .def(py::init<>())
         .def_readonly("value", &WickCertificateRead::value)
         .def_readonly("residual", &WickCertificateRead::residual)
         .def_readonly("polynomialId", &WickCertificateRead::polynomialId)

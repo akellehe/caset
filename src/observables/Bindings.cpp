@@ -1471,6 +1471,7 @@ signatures (n+, n0, n-) of the restricted weight blocks (reported
 separately from the |W_tau|-restricted score), the frame-normalization
 residual, the numerically-checked calibration margin, and the pre-declared
 convex weighting that produced the score.)doc")
+      .def(py::init<>())
       .def_readonly("score", &AnchorProfile::score)
       .def_readonly("terms", &AnchorProfile::terms)
       .def_readonly("max_term", &AnchorProfile::maxTerm)
