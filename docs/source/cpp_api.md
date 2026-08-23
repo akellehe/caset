@@ -141,6 +141,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} FiberConnection.h
 ```
+```{doxygenfile} ParticleClusters.h
+```
 
 ### Emergent-proton readout battery (#593)
 

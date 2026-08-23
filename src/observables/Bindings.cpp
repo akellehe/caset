@@ -46,6 +46,7 @@
 #include "observables/ColorFiber.h"
 #include "observables/ExchangeHolonomy.h"
 #include "observables/FiberConnection.h"
+#include "observables/ParticleClusters.h"
 #include "cobordism/Proton.h"
 #include "spacetime/Spacetime.h"
 #include "ForceLayout.h"
@@ -249,6 +250,11 @@ from oriented incidence structure and parent lineage (never raw vertex
 numbers) plus the multilevel-aggregation level.  Used for persistence
 matching and deterministic tie-breaking, never as a physical observable.
 Structurally identical (automorphic) components share a hash.)doc")
+      .def(py::init<>())
+      .def(py::init<std::string, std::size_t>(), py::arg("hash"),
+           py::arg("level"),
+           "Assemble an identity from its parts (replay/synthetic-fixture "
+           "route; discovery normally mints these).")
       .def("canonicalHash", &ComponentId::canonicalHash,
            "The canonical structural hash (32 lowercase hex chars).")
       .def("level", &ComponentId::level,
@@ -2382,4 +2388,349 @@ leakage certificate, never sampled independently.)doc")
       .def_static("fiberKey", &FiberConnection::fiberKey, py::arg("fiber"),
                   "Order-independent key of a fiber (Fingerprint over its "
                   "deduplicated cell-vertex-id set).");
+
+  // ---- ParticleClusters (#773): quark/antiquark classification ---------
+
+  py::class_<ParticleClustersConfig>(m, "ParticleClustersConfig",
+      R"doc(Analysis thresholds of the particle classification (#773).
+Every value selects which reads are CERTIFIED, never which value is
+reported, and the whole configuration is echoed on every read
+(QuarkRead.thresholds).)doc")
+      .def(py::init<>())
+      .def_readwrite("parityTolerance",
+                     &ParticleClustersConfig::parityTolerance,
+                     "|<(-1)^N> -+ 1| cap for a definite parity sign.")
+      .def_readwrite("occupationTolerance",
+                     &ParticleClustersConfig::occupationTolerance,
+                     "|<N> - 1| cap for the single-fermion occupation.")
+      .def_readwrite("minAnchorScore",
+                     &ParticleClustersConfig::minAnchorScore,
+                     "Calibrated anchor atlas-score floor (a^2 in [0,1]).")
+      .def_readwrite("minPhaseCoherence",
+                     &ParticleClustersConfig::minPhaseCoherence,
+                     "Determinant-phase coherence floor of the anchor.")
+      .def_readwrite("maxTransportLeakage",
+                     &ParticleClustersConfig::maxTransportLeakage,
+                     "Cap on the worst lifetime transport leakage (#770).")
+      .def_readwrite("minPersistenceLifetime",
+                     &ParticleClustersConfig::minPersistenceLifetime,
+                     "Minimum #765 persistence lifetime (covered frames).")
+      .def_readwrite("minPersistenceOverlap",
+                     &ParticleClustersConfig::minPersistenceOverlap,
+                     "Minimum adjacent-slice track overlap.")
+      .def_readwrite("minLocalization",
+                     &ParticleClustersConfig::minLocalization,
+                     "Band-localization floor (0 accepts any MEASURED "
+                     "localization; NaN still fails).")
+      .def_readwrite("minRefinementOverlap",
+                     &ParticleClustersConfig::minRefinementOverlap,
+                     "Minimum band subspace overlap across a refinement.")
+      .def_readwrite("doubletOverlapThreshold",
+                     &ParticleClustersConfig::doubletOverlapThreshold,
+                     "Subspace-overlap threshold of the doublet tracking.")
+      .def_readwrite("minDoubletFrames",
+                     &ParticleClustersConfig::minDoubletFrames,
+                     "Minimum frames a flavor subclass must persist.")
+      .def_readwrite("isospinTolerance",
+                     &ParticleClustersConfig::isospinTolerance,
+                     "|I3 -+ 1/2| cap for a definite doublet member.")
+      .def_readwrite("gaussTolerance",
+                     &ParticleClustersConfig::gaussTolerance,
+                     "Max nested-surface deviation (and |Im| leakage) for "
+                     "a consistent Gauss flux.")
+      .def_readwrite("minEnclosingSurfaces",
+                     &ParticleClustersConfig::minEnclosingSurfaces,
+                     "Minimum nested surfaces for a consistency claim.")
+      .def_readwrite("udTolerance", &ParticleClustersConfig::udTolerance,
+                     "|Q_gauss - (I3 + B/2)| cap for the proposed u/d "
+                     "identification.");
+
+  py::class_<GaussFluxRead>(m, "GaussFluxRead",
+      R"doc(The electric Gauss-flux consistency read over nested enclosing
+surfaces: each per-surface flux is the EXISTING
+EigenstateSynthesis.gaussLawCharge value (an exact signed sum of the
+supplied field-strength 2-cochain over the closed-star boundary,
+restricted to electric/timelike-leg plaquettes when electricOnly).
+Charge is certified only when consistent across at least
+minEnclosingSurfaces surfaces; otherwise electricFlux is None (unknown),
+never zero.  No metric regime is verified by the sum, so the certificate
+carries the non-normal (no self-adjointness claimed) regime tag.)doc")
+      .def(py::init<>())
+      .def_readonly("fluxes", &GaussFluxRead::fluxes,
+                    "Per-surface complex fluxes, in input surface order.")
+      .def_readonly("surfaceVertexCounts",
+                    &GaussFluxRead::surfaceVertexCounts,
+                    "Distinct enclosed vertices per surface (nesting "
+                    "witness).")
+      .def_readonly("electricOnly", &GaussFluxRead::electricOnly)
+      .def_readonly("maxDeviation", &GaussFluxRead::maxDeviation,
+                    "Max |flux_i - flux_j| over surface pairs.")
+      .def_readonly("imagLeakage", &GaussFluxRead::imagLeakage,
+                    "Max |Im flux_i| (never silently discarded).")
+      .def_readonly("consistent", &GaussFluxRead::consistent)
+      .def_readonly("electricFlux", &GaussFluxRead::electricFlux,
+                    "Re(mean) of the agreeing surfaces; None = unknown.")
+      .def_readonly("failedCertificates",
+                    &GaussFluxRead::failedCertificates)
+      .def_readonly("certificate", &GaussFluxRead::certificate);
+
+  py::class_<FlavorDoubletRead>(m, "FlavorDoubletRead",
+      R"doc(The emergent, unlabeled, transported two-state spectral
+subclass that could carry isospin (design spec section 16.1).  The search
+runs WITHOUT a requested dimension: stableSubclassRanks reports every
+stable rank found, and "two-state" is an outcome.  The stored first-frame
+doublet fiber is the RECORDED member trivialization -- a compilation
+convention, never a physical u/d label.)doc")
+      .def(py::init<>())
+      .def_readonly("found", &FlavorDoubletRead::found,
+                    "Exactly one stable two-state subclass emerged.")
+      .def_readonly("degree", &FlavorDoubletRead::degree)
+      .def_readonly("rank", &FlavorDoubletRead::rank,
+                    "2 when found; never requested.")
+      .def_readonly("framesTracked", &FlavorDoubletRead::framesTracked)
+      .def_readonly("minContinuationOverlap",
+                    &FlavorDoubletRead::minContinuationOverlap,
+                    "Smallest certified continuation overlap on the track.")
+      .def_readonly("minIsolation", &FlavorDoubletRead::minIsolation,
+                    "Worst band isolation min(lowerGap, upperGap) along "
+                    "the track.")
+      .def_readonly("stableSubclassRanks",
+                    &FlavorDoubletRead::stableSubclassRanks,
+                    "Ranks of ALL stable subclasses (the no-requested-"
+                    "dimension witness).")
+      .def_readonly("twoStateCount", &FlavorDoubletRead::twoStateCount,
+                    "Stable two-state subclasses (found needs exactly 1).")
+      .def_readonly("doublet", &FlavorDoubletRead::doublet,
+                    "First-frame fiber of the winning subclass (the "
+                    "recorded trivialization).")
+      .def_readonly("failedCertificates",
+                    &FlavorDoubletRead::failedCertificates)
+      .def_readonly("invalidationReason",
+                    &FlavorDoubletRead::invalidationReason)
+      .def_readonly("certificate", &FlavorDoubletRead::certificate);
+
+  py::class_<QuarkCandidateEvidence>(m, "QuarkCandidateEvidence",
+      R"doc(The assembled evidence bundle of one candidate -- every field
+is a read PRODUCED BY the merged upstream kernels (#765 persistence, #769
+bands, #767 anchors, #770 transports/windings, #780 Wick reads, the
+existing Gauss read); the classifier never recomputes any of them.
+Unsupplied evidence is MISSING evidence: the corresponding certificate
+fails by name, never presumed to pass.)doc")
+      .def(py::init<>())
+      .def_readwrite("component", &QuarkCandidateEvidence::component,
+                     "#765 label-free identity.")
+      .def_readwrite("colorBand", &QuarkCandidateEvidence::colorBand,
+                     "The selected #769 band (rank is read, never "
+                     "requested).")
+      .def_readwrite("anchor", &QuarkCandidateEvidence::anchor,
+                     "#767 calibrated anchor profile of the band.")
+      .def_readwrite("lifetimeTransports",
+                     &QuarkCandidateEvidence::lifetimeTransports,
+                     "#770 world-tube transports (all must be accepted).")
+      .def_readwrite("winding", &QuarkCandidateEvidence::winding,
+                     "#770 determinant-line winding with its RECORDED "
+                     "closure specification.")
+      .def_readwrite("parityRead", &QuarkCandidateEvidence::parityRead,
+                     "#780 CovarianceState.wickParity of the carried "
+                     "state.")
+      .def_readwrite("occupationRead",
+                     &QuarkCandidateEvidence::occupationRead,
+                     "#780 CovarianceState.wickTotalNumber.")
+      .def_readwrite("persistenceLifetime",
+                     &QuarkCandidateEvidence::persistenceLifetime,
+                     "#765 track lifetime (NaN = missing).")
+      .def_readwrite("persistenceMinOverlap",
+                     &QuarkCandidateEvidence::persistenceMinOverlap,
+                     "#765 smallest adjacent-slice overlap.")
+      .def_readwrite("refinementOverlap",
+                     &QuarkCandidateEvidence::refinementOverlap,
+                     "Band subspace overlap across a refinement "
+                     "(SpectralFiber.overlap).")
+      .def_readwrite("flavor", &QuarkCandidateEvidence::flavor,
+                     "flavorDoubletSearch result; None = flavor unknown.")
+      .def_readwrite("doubletOccupancy",
+                     &QuarkCandidateEvidence::doubletOccupancy,
+                     "Amplitudes on the two doublet members in the "
+                     "recorded trivialization; None = unknown.")
+      .def_readwrite("doubletOrientation",
+                     &QuarkCandidateEvidence::doubletOrientation,
+                     "Declared orientation s in {+1,-1}: which member "
+                     "carries I3=+1/2 under the PROPOSED identification "
+                     "(a recorded convention, never a hidden label).")
+      .def_readwrite("charge", &QuarkCandidateEvidence::charge,
+                     "gaussFluxOnSurfaces result; None = charge unknown.");
+
+  py::class_<QuarkRead>(m, "QuarkRead",
+      R"doc(The quark/antiquark particle read (design spec section 6.8 --
+spec field names preserved), plus the evidence summary the classification
+consumed, the recorded thresholds, and the #764 certificate.  Unknown or
+uncertified values are None/NaN/0-sign, never zero-filled, and every gap
+is NAMED in failedCertificates.  B = nu/3 exists exactly when the winding
+certificate does; quark-ness additionally needs |nu| = 1.)doc")
+      .def(py::init<>())
+      .def_readonly("component", &QuarkRead::component)
+      .def_readonly("exteriorParity", &QuarkRead::exteriorParity,
+                    "-1 odd / +1 even / 0 unknown (an uncertified parity "
+                    "read never emits a sign).")
+      .def_readonly("colorRank", &QuarkRead::colorRank)
+      .def_readonly("triangleAnchorScore", &QuarkRead::triangleAnchorScore)
+      .def_readonly("triangleAnchorMaxTerm",
+                    &QuarkRead::triangleAnchorMaxTerm)
+      .def_readonly("triangleAnchorParticipation",
+                    &QuarkRead::triangleAnchorParticipation)
+      .def_readonly("anchorPhaseDispersion",
+                    &QuarkRead::anchorPhaseDispersion)
+      .def_readonly("anchorPhaseCoherence",
+                    &QuarkRead::anchorPhaseCoherence)
+      .def_readonly("anchorWeightingId", &QuarkRead::anchorWeightingId)
+      .def_readonly("determinantWinding", &QuarkRead::determinantWinding,
+                    "Certified nu; None when invalidated/unclosed.")
+      .def_readonly("windingClosure", &QuarkRead::windingClosure,
+                    "The recorded closure specification.")
+      .def_readonly("windingReferenceId", &QuarkRead::windingReferenceId)
+      .def_readonly("baryonFlux", &QuarkRead::baryonFlux,
+                    "B = nu/3 under a certified winding; None = unknown, "
+                    "never inserted.")
+      .def_readonly("isospin", &QuarkRead::isospin,
+                    "I3 = +-1/2 under the certified doublet hypothesis; "
+                    "None = unknown.")
+      .def_readonly("electricFlux", &QuarkRead::electricFlux,
+                    "Gauss-consistent charge; None unless BOTH the Gauss "
+                    "read and the flavor doublet are certified.")
+      .def_readonly("confidence", &QuarkRead::confidence,
+                    "Passed fraction of the ten core certificates.")
+      .def_readonly("failedCertificates", &QuarkRead::failedCertificates,
+                    "Every failed/missing certificate, by name.")
+      .def_readonly("classification", &QuarkRead::classification,
+                    "'quark' (nu=+1) / 'antiquark' (nu=-1) / 'none'.")
+      .def_readonly("occupationTotal", &QuarkRead::occupationTotal)
+      .def_readonly("transportCount", &QuarkRead::transportCount)
+      .def_readonly("transportLeakageMax", &QuarkRead::transportLeakageMax)
+      .def_readonly("persistenceLifetime", &QuarkRead::persistenceLifetime)
+      .def_readonly("persistenceMinOverlap",
+                    &QuarkRead::persistenceMinOverlap)
+      .def_readonly("localization", &QuarkRead::localization)
+      .def_readonly("refinementOverlap", &QuarkRead::refinementOverlap)
+      .def_readonly("udIdentificationProposed",
+                    &QuarkRead::udIdentificationProposed,
+                    "Q = I3 + B/2 was tested AND held (the proposed u/d "
+                    "identification, never a charge definition).")
+      .def_readonly("doubletOrientation", &QuarkRead::doubletOrientation)
+      .def_readonly("thresholds", &QuarkRead::thresholds,
+                    "The configuration that produced this read.")
+      .def_readonly("certificate", &QuarkRead::certificate)
+      .def("describe", &QuarkRead::describe)
+      .def("__repr__", &QuarkRead::describe)
+      .def("toRecord",
+           [](const QuarkRead &self) { return recordToPython(self.toRecord()); },
+           "Checkpoint serialization (design spec section 20 "
+           "particles.quarks): spec fields, evidence summary, failed "
+           "certificates, and the threshold echo; unknown values are "
+           "null, never zero.")
+      .def_static("fromRecord",
+                  [](const py::handle &record) {
+                    return QuarkRead::fromRecord(pythonToRecord(record));
+                  },
+                  py::arg("record"),
+                  "Rehydrate; rejects an unknown schema_version.");
+
+  py::class_<ConjugatePairRead>(m, "ConjugatePairRead",
+      R"doc(Pair-conservation verification of a conjugate quark-antiquark
+creation path: total certified winding, total baryon flux, and total
+parity.  A singular (gap/rank-closing) leg leaves the totals UNKNOWN
+(None) -- never zero by assumption.)doc")
+      .def(py::init<>())
+      .def_readonly("totalWinding", &ConjugatePairRead::totalWinding,
+                    "nu_a + nu_b when both certified; None otherwise.")
+      .def_readonly("totalBaryonFlux", &ConjugatePairRead::totalBaryonFlux,
+                    "B_a + B_b when both known; None = unknown flux.")
+      .def_readonly("totalParity", &ConjugatePairRead::totalParity,
+                    "Product of certified parities; 0 = unknown.")
+      .def_readonly("parityEven", &ConjugatePairRead::parityEven)
+      .def_readonly("conserved", &ConjugatePairRead::conserved,
+                    "Both windings certified, total 0, even parity.")
+      .def_readonly("failedCertificates",
+                    &ConjugatePairRead::failedCertificates)
+      .def_readonly("certificate", &ConjugatePairRead::certificate);
+
+  py::class_<ParticleClusters>(m, "ParticleClusters",
+      R"doc(The #773 quark/antiquark classifier over persistent modular
+spectral components (design spec section 16.1; whitepaper "Quarks as
+modular clusters").  Composes the merged Wave 1/2 certificates -- #765
+persistence, #769 bands/tracking, #767 anchors, #770 transports and
+determinant windings with recorded closures, #780 Wick parity/occupation,
+and the EXISTING Gauss-flux read -- into QuarkReads; its own claim is the
+exact boolean combination (StructureExact given the consumed held
+certificates).
+
+Certificate name vocabulary (failedCertificates): "persistence",
+"localization", "parity-odd", "occupation-one", "color-rank-three",
+"anchor", "transport-leakage", "winding", "winding-unit",
+"refinement-stability" (the ten core gates), then "flavor-doublet",
+"isospin", "gauss-consistency", "ud-identification" (flavor/charge gates
+that never veto quark-ness -- they only leave their own fields unknown).
+
+Read-only observable: never calls a solver, never mutates the spacetime,
+and no output enters any emergence objective.  No "quark = hole", no
+hard-coded u/d labels, no baryon number without determinant-winding
+evidence.)doc")
+      .def(py::init<ParticleClustersConfig>(),
+           py::arg("config") = ParticleClustersConfig{})
+      .def("config", &ParticleClusters::config,
+           py::return_value_policy::reference_internal)
+      .def("classifyQuark", &ParticleClusters::classifyQuark,
+           py::arg("evidence"),
+           "Classify one candidate from its assembled evidence: the ten "
+           "core certificates, quark vs antiquark from the determinant-"
+           "line orientation, B = nu/3 under the certified winding, and "
+           "isospin/charge from their own independent certificates.  "
+           "Missing evidence is a NAMED failed certificate, never an "
+           "error.")
+      .def("classifyQuarks", &ParticleClusters::classifyQuarks,
+           py::arg("candidates"),
+           "classifyQuark over a candidate stream, in input order.")
+      .def("classifyQuarkCached", &ParticleClusters::classifyQuarkCached,
+           py::arg("cache"), py::arg("evidence"),
+           "classifyQuark through the #764 AnalyticCache contract (key: "
+           "the color band's cell-vertex set; parameter: the evidence "
+           "fingerprint).  Cached equals cold.")
+      .def("evidenceFingerprint", &ParticleClusters::evidenceFingerprint,
+           py::arg("evidence"),
+           "Content fingerprint of the decision-relevant evidence AND the "
+           "thresholds (the cache parameter).")
+      .def("conjugatePair", &ParticleClusters::conjugatePair,
+           py::arg("first"), py::arg("second"),
+           "Verify pair conservation of a conjugate creation path from "
+           "the two endpoint reads; a singular leg leaves the totals "
+           "unknown.")
+      .def("flavorDoubletSearch", &ParticleClusters::flavorDoubletSearch,
+           py::arg("frames"),
+           "Search the candidate's band enumeration across frames for a "
+           "stable transported two-state subclass (certified #769 "
+           "continuations, unambiguous, full length).  No dimension is "
+           "ever requested; every stable rank is reported.")
+      .def("gaussFluxOnSurfaces", &ParticleClusters::gaussFluxOnSurfaces,
+           py::arg("st"), py::arg("field_strength"),
+           py::arg("enclosed_vertex_sets"), py::arg("electric_only") = true,
+           "The EXISTING Gauss-flux read "
+           "(EigenstateSynthesis.gaussLawCharge) on nested enclosing "
+           "surfaces, then the consistency combination.  Read-only on the "
+           "spacetime.")
+      .def("gaussFluxConsistency", &ParticleClusters::gaussFluxConsistency,
+           py::arg("fluxes"),
+           py::arg("surface_vertex_counts") = std::vector<std::size_t>{},
+           py::arg("electric_only") = true,
+           "Pure consistency combination over precomputed per-surface "
+           "fluxes (the spacetime path delegates here).")
+      .def_static("nestedEnclosures", &ParticleClusters::nestedEnclosures,
+                  py::arg("st"), py::arg("seed_vertex_ids"),
+                  py::arg("shells"),
+                  "Nested enclosing vertex sets by breadth-first shell "
+                  "growth (returns exactly `shells` sets; sets[0] = the "
+                  "seed).")
+      .def_static("trackCandidates", &ParticleClusters::trackCandidates,
+                  py::arg("from_candidates"), py::arg("to_candidates"),
+                  py::arg("overlap_threshold") = 0.5,
+                  "Track candidates across scale/time by their color "
+                  "bands (#769 matchFibers delegation).");
 }
