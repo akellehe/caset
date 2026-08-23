@@ -189,8 +189,10 @@ DECLARED_VAR_J2_ZERO_TOLERANCE = (
 #: Certificate gates, in the exact order `ParticleClusters` evaluates them.
 #: `failedCertificates[0]` is therefore the FIRST failing certificate.
 QUARK_GATE_ORDER = (
-    "persistence", "parity-odd", "occupation-one", "color-rank-three",
-    "anchor", "transport-leakage", "winding", "winding-unit",
+    "persistence", "localization", "parity-odd", "occupation-one",
+    "color-rank-three", "color-rank-stability", "anchor",
+    "anchor-stability", "transport-leakage", "winding", "winding-unit",
+    "refinement-stability",
 )
 
 
@@ -571,11 +573,12 @@ def run_member(size, seed, config, commit, config_hash):
     #     gamma = 1, whose component layer is the one every Python-side read
     #     and every aggregate below is taken on.
     #
-    # Both are recorded. The difference between them is not an implementation
-    # detail: with a single resolution the overlay's persistence lifetime is
-    # identically 1, so `persistence` is the first failing certificate for
-    # STRUCTURAL reasons, and that has to be visible rather than mistaken for
-    # a physical result.
+    # Both are recorded. Since #808 the `persistence` certificate reads the
+    # COBORDISM-FRAME lifetime, not the modularity resolution-slice count, so
+    # a single-resolution pass no longer makes that gate structurally
+    # unpassable; the two passes are still both recorded, because the
+    # resolution-slice numbers are a real diagnostic of how stable the
+    # modularity PROPOSAL is under the resolution parameter.
     node.set_analysis_config(_overlay_config(config["degrees"],
                                              config["resolution_scan"]))
     node.run_recursive_analysis()
@@ -1987,12 +1990,14 @@ def dichotomy(runs, proton_verdicts=None):
         "resolution_scan_pass": scan,
         "resolution_scan_note": (
             "the `particles` block is read at the declared analysis "
-            "resolution gamma = 1, where the overlay sees ONE resolution and "
-            "the persistence lifetime is structurally 1, so `persistence` is "
-            "the first failure for a reason that is not physics; the "
-            "`resolution_scan_pass` block is the same classifier fed the "
-            "whole declared resolution scan, where persistence is reachable "
-            "and the first failure is the informative one"),
+            "resolution gamma = 1; the `resolution_scan_pass` block is the "
+            "same classifier fed the whole declared resolution scan.  Since "
+            "#808 the `persistence` certificate reads the COBORDISM-FRAME "
+            "lifetime, so neither pass can fail it for a reason that is not "
+            "physics -- this overlay reads ONE frame, and the reported "
+            "lifetime of 1 is a measured fact about the evidence.  The two "
+            "passes now differ only in the modularity resolution-slice "
+            "diagnostics, which are reported and never gate"),
         "quark_reads_total": total_reads,
         "var_j2_on_nontrivial_bands": certified,
         "var_j2_on_fully_paired_rank1_bands": trivial,

@@ -279,8 +279,10 @@ DECLARED_EXACT_TOLERANCE = 1e-12
 #: Certificate gates, in the exact order `ParticleClusters` evaluates them.
 #: `failedCertificates[0]` is therefore the FIRST failing certificate.
 QUARK_GATE_ORDER = (
-    "persistence", "parity-odd", "occupation-one", "color-rank-three",
-    "anchor", "transport-leakage", "winding", "winding-unit",
+    "persistence", "localization", "parity-odd", "occupation-one",
+    "color-rank-three", "color-rank-stability", "anchor",
+    "anchor-stability", "transport-leakage", "winding", "winding-unit",
+    "refinement-stability",
 )
 BARYON_GATE_ORDER = (
     "constituent-quarks", "bound-supercomponent", "color-singlet",
