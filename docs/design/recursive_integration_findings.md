@@ -146,7 +146,19 @@ produces it breaks its remaining ties by index. #777 and #778 must not key a
 campaign on the hash across a relabeling. The observation is pinned by a test
 that skips itself if the hash is ever made fully canonical.
 
-**7. On the current fixtures no candidate is certified.** Every emitted quark
+**7. The lazy Slater oracle exists on the positive sector and honestly refuses
+the signed one.** The #771 `LazyFockEngine::slaterFromProjector` requires an
+orthogonal projector. At degree zero — the positive graph Laplacian — the band
+projector is one, and the oracle is built exactly, with one DAG node and zero
+discarded norm. At $k\ge1$ the signed-weight operator's band projectors are
+oblique (measured $\lVert P^2-P\rVert\approx2.6\times10^{-2}$), so no exact
+Slater reference exists and the engine refuses. The checkpoint records
+`present: false` with the refusal's own message in `absent_reason` rather than
+claiming an oracle it does not have. The quasi-free path is unaffected:
+`CovarianceState::fromBandProjector` adopts the oblique projector verbatim and
+reports its defect, which is the documented behaviour.
+
+**8. On the current fixtures no candidate is certified.** Every emitted quark
 read comes back `classification: "none"` with its gaps NAMED — most often the
 missing lifetime-transport family, the missing determinant winding, and an
 unanchored band. That is the designed behaviour of a rigorous negative result,

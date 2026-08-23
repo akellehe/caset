@@ -1123,9 +1123,51 @@ void MultiCobordism::runRecursiveAnalysisOn(
   const double carriedPurityDefect = carriedStatePurityDefect();
 
   // ── §17.5 the lazy Fock expression — ORACLE / non-Gaussian only ──────
+  //
+  // Built ONLY when the oracle is selected, and built for real: the #771
+  // lazy Slater DAG of the first accepted band's projector, reporting its own
+  // node count, discarded norm, and exactness. Never the quasi-free
+  // production representation — the covariance above is that. A band wider
+  // than the DAG's support cap is reported ABSENT with its reason, not
+  // silently claimed.
   std::size_t oracleModes = 0;
-  const bool oraclePresent = analysisConfig_.fockOracle && activeModes > 0;
-  if (oraclePresent) oracleModes = activeModes;
+  std::size_t oracleNodes = 0;
+  bool oracleExact = false;
+  double oracleDiscardedNorm = std::numeric_limits<double>::quiet_NaN();
+  std::string oracleReason;
+  bool oraclePresent = false;
+  if (analysisConfig_.fockOracle) {
+    oracleReason = "no accepted band";
+    for (std::size_t index = 0; index < bandReads.size(); ++index) {
+      if (candidateBand[index] < 0) continue;
+      const auto &fiber =
+          bandReads[index].fibers[static_cast<std::size_t>(candidateBand[index])];
+      const Eigen::MatrixXcd projector = fiber.projector();
+      const auto modeCount = static_cast<std::size_t>(projector.rows());
+      if (modeCount > ::tessera::quantum::LazyFockEngine::kMaxSupportModes) {
+        oracleReason = "band support exceeds the lazy DAG mode cap";
+        continue;
+      }
+      std::vector<std::size_t> modes(modeCount);
+      for (std::size_t mode = 0; mode < modeCount; ++mode) modes[mode] = mode;
+      try {
+        const ::tessera::quantum::LazyFockEngine engine(modeCount);
+        const auto slater =
+            engine.slaterFromProjector(modes, projector, 1e-9);
+        oraclePresent = slater.state.valid();
+        oracleModes = modeCount;
+        oracleNodes = oraclePresent ? slater.state.nodeCount() : 0;
+        oracleDiscardedNorm =
+            oraclePresent ? slater.state.discardedNorm()
+                          : std::numeric_limits<double>::quiet_NaN();
+        oracleExact = engine.exactMode();
+        oracleReason.clear();
+      } catch (const std::exception &error) {
+        oracleReason = error.what();
+      }
+      break;
+    }
+  }
 
   // ── §17.6 particle reads ─────────────────────────────────────────────
   const ParticleClusters classifier;
@@ -1414,9 +1456,12 @@ void MultiCobordism::runRecursiveAnalysisOn(
            {"present", Json::boolean(oraclePresent)},
            {"active_modes", Json::integer(
                                 static_cast<long long>(oracleModes))},
-           {"exact", Json::boolean(oraclePresent)},
-           {"discarded_norm",
-            oraclePresent ? Json::number(0.0) : std::string("null")},
+           {"nodes", Json::integer(static_cast<long long>(oracleNodes))},
+           {"exact", Json::boolean(oracleExact)},
+           {"discarded_norm", Json::number(oracleDiscardedNorm)},
+           {"absent_reason",
+            oracleReason.empty() ? std::string("null")
+                                 : Json::str(oracleReason)},
        })},
       {"particles",
        Json::object({

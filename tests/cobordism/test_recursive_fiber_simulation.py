@@ -1134,12 +1134,38 @@ class AnalysisOverlayTest(unittest.TestCase):
         self.assertLess(covariance["purity_defect"], 1e-9)
 
     def test_the_fock_oracle_is_absent_unless_selected(self):
-        self.assertFalse(self.doc["fock_oracle"]["present"])
+        oracle = self.doc["fock_oracle"]
+        self.assertFalse(oracle["present"])
+        self.assertIsNone(oracle["absent_reason"])
+        self.assertEqual(oracle["nodes"], 0)
+
+    def test_the_selected_oracle_is_built_for_real_on_a_positive_band(self):
+        """Degree zero is the positive graph Laplacian, whose band projector
+        IS an orthogonal projector, so the #771 lazy Slater DAG exists."""
         node = _node()
-        node.set_analysis_config(_overlay_config(fock=True))
+        node.set_analysis_config(_overlay_config(degrees=(0,), fock=True))
         node.run_recursive_analysis()
-        self.assertTrue(json.loads(node.checkpoint_json)
-                        ["fock_oracle"]["present"])
+        oracle = json.loads(node.checkpoint_json)["fock_oracle"]
+        self.assertTrue(oracle["present"])
+        self.assertGreater(oracle["active_modes"], 0)
+        self.assertGreater(oracle["nodes"], 0)
+        self.assertTrue(oracle["exact"])
+        self.assertEqual(oracle["discarded_norm"], 0.0)
+        self.assertIsNone(oracle["absent_reason"])
+
+    def test_the_oracle_refuses_an_oblique_band_and_names_why(self):
+        """At k >= 1 the signed-weight operator's band projector is oblique,
+        so no exact Slater reference exists. The refusal is NAMED, never a
+        silently claimed oracle."""
+        node = _node()
+        node.set_analysis_config(_overlay_config(degrees=(1,), fock=True))
+        node.run_recursive_analysis()
+        oracle = json.loads(node.checkpoint_json)["fock_oracle"]
+        if oracle["present"]:
+            self.skipTest("the k>=1 band projector became orthogonal")
+        self.assertIsNotNone(oracle["absent_reason"])
+        self.assertIn("projector", oracle["absent_reason"])
+        self.assertIsNone(oracle["discarded_norm"])
 
     def test_particle_reads_are_produced_with_named_gaps(self):
         quarks = self.doc["particles"]["quarks"]
