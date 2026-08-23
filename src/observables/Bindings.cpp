@@ -1570,6 +1570,27 @@ solver call, no mutation, nothing enters the emergence objective.)doc")
                   "column-major vec(M).")
       .def_static("tracelessPart", &ColorFiber::tracelessPart, py::arg("m"),
                   "M - (tr M / 3) I: the octet component of a bilinear.")
+      .def_static("adjointSingletProjector",
+                  &ColorFiber::adjointSingletProjector,
+                  "The 9x9 projector vec(I)vec(I)^dag/3 onto the trace "
+                  "(singlet) part -- implemented literally as I9 - "
+                  "adjointOctetProjector(), so P1 + P8 = I9 resolves "
+                  "3 x 3bar = 1 + 8 exactly (#774).")
+      .def_static("octetBilinear", &ColorFiber::octetBilinear,
+                  py::arg("i"), py::arg("j"),
+                  "The 8x8 traceless even bilinear "
+                  "T_ij = a_i^dag a_j - (delta_ij/3) N on Fock space "
+                  "(= dGamma(tracelessPart(matrixUnit(i, j)))): conserves N "
+                  "(even fermion parity) and the nine T_ij span the octet "
+                  "(#774).")
+      .def_static("adjointCasimirMatrix", &ColorFiber::adjointCasimirMatrix,
+                  "The 9x9 quadratic Casimir of the adjoint action, "
+                  "C = sum_a K_a^2 with K_a vec(M) = vec([lambda_a/2, M]); "
+                  "exactly C = 3 P8 (#774).")
+      .def_static("adjointCasimir", &ColorFiber::adjointCasimir,
+                  py::arg("m"),
+                  "The adjoint-Casimir Rayleigh quotient in [0, 3]: exactly "
+                  "3 for traceless M, 0 for M ~ I, NaN for M = 0 (#774).")
       .def_static("omega", &ColorFiber::omega,
                   "The primitive cube root of unity as its algebraic value "
                   "(-1 + i sqrt(3))/2 (never exp), so 1 + omega + omega^2 "
@@ -2444,7 +2465,24 @@ reported, and the whole configuration is echoed on every read
                      "Minimum nested surfaces for a consistency claim.")
       .def_readwrite("udTolerance", &ParticleClustersConfig::udTolerance,
                      "|Q_gauss - (I3 + B/2)| cap for the proposed u/d "
-                     "identification.");
+                     "identification.")
+      .def_readwrite("minOctetWeight",
+                     &ParticleClustersConfig::minOctetWeight,
+                     "#774: floor on a gluon candidate's octet Frobenius "
+                     "weight (a genuinely nonzero color polarization).")
+      .def_readwrite("octetPurityTolerance",
+                     &ParticleClustersConfig::octetPurityTolerance,
+                     "#774: cap on the (I9 - P8) residual of the excitation "
+                     "(machine-level: the traceless bilinear is octet "
+                     "exactly).")
+      .def_readwrite("compositeOctetTolerance",
+                     &ParticleClustersConfig::compositeOctetTolerance,
+                     "#774: cap on the octet fraction of a meson's pair "
+                     "color bilinear (the color-singlet certificate).")
+      .def_readwrite("minAntiTripletWeight",
+                     &ParticleClustersConfig::minAntiTripletWeight,
+                     "#774: floor on the certified anti-triplet wedge "
+                     "occupation det(C^dag Gamma C) of a diquark.");
 
   py::class_<GaussFluxRead>(m, "GaussFluxRead",
       R"doc(The electric Gauss-flux consistency read over nested enclosing
@@ -2654,6 +2692,288 @@ parity.  A singular (gap/rank-closing) leg leaves the totals UNKNOWN
                     &ConjugatePairRead::failedCertificates)
       .def_readonly("certificate", &ConjugatePairRead::certificate);
 
+  // ---- #774 even sectors: octet bilinear + gluon/meson/diquark ----------
+
+  py::class_<OctetBilinearRead>(m, "OctetBilinearRead",
+      R"doc(The #774 quasi-free traceless-bilinear (octet) read of three
+declared color modes of a carried #780 CovarianceState: the bilinear
+matrix M_ij = <a_i^dag a_j> (the transposed principal submatrix of
+Gamma), its EXACT 1+8 split (delegated to ColorFiber.octetRead /
+tracelessPart / adjointOctetProjector), the adjoint Casimir (= 3 for a
+nonzero excitation, by C = 3 P8), the quartic-Wick color Casimir
+expectation <sum_a dGamma(lambda_a/2)^2> (exactly 4/3 on the fundamental
+and anti-triplet Slater states, 0 on the vacuum and full singlet), the
+octet coordinates Tr(lambda_a M)/2, and the certified subset
+occupation/parity.  Evaluated ON THE COVARIANCE (polynomial in the mode
+count, no Fock vector); adding vacuum-embedded microscopic modes leaves
+the read unchanged.  Unknown values are NaN / 0-sign, never zero.)doc")
+      .def(py::init<>())
+      .def_readwrite("colorModes", &OctetBilinearRead::colorModes,
+                     "The three declared color modes (the recorded color "
+                     "trivialization order).")
+      .def_readonly("occupation", &OctetBilinearRead::occupation,
+                    "Certified subset occupation <N_S>; NaN = unknown.")
+      .def_readonly("subsetParity", &OctetBilinearRead::subsetParity,
+                    "+1 / -1 / 0 = unknown or indefinite.")
+      .def_readonly("bilinear", &OctetBilinearRead::bilinear,
+                    "M_ij = <a_i^dag a_j> on the declared modes.")
+      .def_readonly("octetComponent", &OctetBilinearRead::octetComponent,
+                    "ColorFiber.tracelessPart(bilinear) -- the excitation.")
+      .def_readonly("octetWeight", &OctetBilinearRead::octetWeight,
+                    "||M - (tr M/3) I||_F^2 (ColorFiber.octetRead).")
+      .def_readonly("singletWeight", &OctetBilinearRead::singletWeight,
+                    "|tr M|^2 / 3.")
+      .def_readonly("octetProjectorResidual",
+                    &OctetBilinearRead::octetProjectorResidual,
+                    "||(I9 - P8) vec(M8)|| / ||M8||_F -- rounding-level; "
+                    "NaN when the excitation vanishes.")
+      .def_readonly("casimir", &OctetBilinearRead::casimir,
+                    "ColorFiber.adjointCasimir(octetComponent) in [0, 3].")
+      .def_readonly("casimirExpectation",
+                    &OctetBilinearRead::casimirExpectation,
+                    "<sum_a dGamma(lambda_a/2)^2> by quartic Wick sums.")
+      .def_readonly("gellMannComponents",
+                    &OctetBilinearRead::gellMannComponents,
+                    "Tr(lambda_a M)/2 for a = 1..8.")
+      .def_readonly("residual", &OctetBilinearRead::residual,
+                    "Max residual of the consumed #780 Wick reads.")
+      .def_readonly("certificate", &OctetBilinearRead::certificate)
+      .def("describe", &OctetBilinearRead::describe)
+      .def("__repr__", &OctetBilinearRead::describe)
+      .def("toRecord",
+           [](const OctetBilinearRead &self) {
+             return recordToPython(self.toRecord());
+           },
+           "Checkpoint serialization (complex leaves split _re/_im).")
+      .def_static("fromRecord",
+                  [](const py::handle &record) {
+                    return OctetBilinearRead::fromRecord(
+                        pythonToRecord(record));
+                  },
+                  py::arg("record"),
+                  "Rehydrate; rejects an unknown schema_version.");
+
+  py::class_<GluonCandidateEvidence>(m, "GluonCandidateEvidence",
+      R"doc(The assembled evidence bundle of one #774 gluon candidate
+(design spec section 14.3): the quasi-free octet bilinear read of the
+carried state, the #780 carried-state Wick parity/occupation, the #770
+lifetime transports and determinant winding, and the #765 persistence
+lifetime.  Missing evidence fails its certificate BY NAME.)doc")
+      .def(py::init<>())
+      .def_readwrite("component", &GluonCandidateEvidence::component,
+                     "#765 label-free identity of the excitation.")
+      .def_readwrite("bindingComponent",
+                     &GluonCandidateEvidence::bindingComponent,
+                     "The component the excitation is bound to (reported "
+                     "verbatim -- the ticket's binding component).")
+      .def_readwrite("octet", &GluonCandidateEvidence::octet,
+                     "octetBilinearRead output of the carried state.")
+      .def_readwrite("parityRead", &GluonCandidateEvidence::parityRead,
+                     "#780 CovarianceState.wickParity of the WHOLE carried "
+                     "state (the even-parity gate).")
+      .def_readwrite("occupationRead",
+                     &GluonCandidateEvidence::occupationRead,
+                     "#780 wickTotalNumber (report-only).")
+      .def_readwrite("lifetimeTransports",
+                     &GluonCandidateEvidence::lifetimeTransports,
+                     "#770 transports: accepted, rank three, leakage under "
+                     "the cap (the accepted-octet-transport gate).")
+      .def_readwrite("winding", &GluonCandidateEvidence::winding,
+                     "#770 determinant winding -- a certified nu = 0 is the "
+                     "zero-baryon-flux evidence.")
+      .def_readwrite("persistenceLifetime",
+                     &GluonCandidateEvidence::persistenceLifetime,
+                     "#765 track lifetime (NaN = missing).");
+
+  py::class_<GluonRead>(m, "GluonRead",
+      R"doc(The #774 gluon-candidate read: a persistent transported octet
+excitation with certified even parity and certified ZERO total
+determinant winding / baryon flux.  classification is "gluon-candidate"
+or "none" -- NEVER "gluon": no even octet excitation is claimed to be a
+physical gluon.  Unknown values are None/NaN/0-sign, never zero-filled;
+every gap is NAMED in failedCertificates ("parity-even",
+"octet-excitation", "octet-purity", "octet-transport", "winding-zero",
+"persistence").)doc")
+      .def(py::init<>())
+      .def_readonly("component", &GluonRead::component)
+      .def_readonly("bindingComponent", &GluonRead::bindingComponent)
+      .def_readonly("classification", &GluonRead::classification,
+                    "'gluon-candidate' or 'none'.")
+      .def_readonly("exteriorParity", &GluonRead::exteriorParity,
+                    "+1 even / -1 odd / 0 unknown.")
+      .def_readonly("occupationTotal", &GluonRead::occupationTotal)
+      .def_readonly("octet", &GluonRead::octet,
+                    "The embedded octet bilinear read the verdict "
+                    "consumed.")
+      .def_readonly("casimir", &GluonRead::casimir)
+      .def_readonly("octetProjectorResidual",
+                    &GluonRead::octetProjectorResidual)
+      .def_readonly("octetWeight", &GluonRead::octetWeight)
+      .def_readonly("singletWeight", &GluonRead::singletWeight)
+      .def_readonly("determinantWinding", &GluonRead::determinantWinding,
+                    "Certified nu (0 for a candidate); None = unknown.")
+      .def_readonly("windingClosure", &GluonRead::windingClosure)
+      .def_readonly("windingReferenceId", &GluonRead::windingReferenceId)
+      .def_readonly("baryonFlux", &GluonRead::baryonFlux,
+                    "0.0 is a CERTIFIED zero flux; None = unknown, never "
+                    "zero by default.")
+      .def_readonly("transportCount", &GluonRead::transportCount)
+      .def_readonly("transportLeakageMax", &GluonRead::transportLeakageMax)
+      .def_readonly("persistenceLifetime", &GluonRead::persistenceLifetime)
+      .def_readonly("confidence", &GluonRead::confidence,
+                    "Passed fraction of the six gluon certificates.")
+      .def_readonly("failedCertificates", &GluonRead::failedCertificates)
+      .def_readonly("thresholds", &GluonRead::thresholds)
+      .def_readonly("certificate", &GluonRead::certificate)
+      .def("describe", &GluonRead::describe)
+      .def("__repr__", &GluonRead::describe)
+      .def("toRecord",
+           [](const GluonRead &self) {
+             return recordToPython(self.toRecord());
+           },
+           "Checkpoint serialization (design spec section 20 "
+           "particles.gluons).")
+      .def_static("fromRecord",
+                  [](const py::handle &record) {
+                    return GluonRead::fromRecord(pythonToRecord(record));
+                  },
+                  py::arg("record"),
+                  "Rehydrate; rejects an unknown schema_version.");
+
+  py::class_<CompositeCandidateEvidence>(m, "CompositeCandidateEvidence",
+      R"doc(The assembled evidence bundle of one #774 TWO-cluster
+composite (meson/diquark; three-cluster composites belong to #775): the
+two constituent #773 QuarkReads consumed VERBATIM, the carried composite
+occupation, the meson-channel pair color bilinear, the diquark-channel
+certified anti-triplet wedge read, composite transports, and the
+composite persistence lifetime.)doc")
+      .def(py::init<>())
+      .def_readwrite("bindingComponent",
+                     &CompositeCandidateEvidence::bindingComponent,
+                     "The component binding the two clusters.")
+      .def_readwrite("first", &CompositeCandidateEvidence::first,
+                     "First constituent's #773 QuarkRead.")
+      .def_readwrite("second", &CompositeCandidateEvidence::second,
+                     "Second constituent's #773 QuarkRead.")
+      .def_readwrite("occupationRead",
+                     &CompositeCandidateEvidence::occupationRead,
+                     "#780 wickTotalNumber of the carried composite state "
+                     "(report-only).")
+      .def_readwrite("colorPairing",
+                     &CompositeCandidateEvidence::colorPairing,
+                     "Meson channel: the 3x3 pair color bilinear in "
+                     "3 x 3bar (singlet composite: M ~ I); None = missing "
+                     "-- the color-singlet certificate fails by name.")
+      .def_readwrite("antiTripletRead",
+                     &CompositeCandidateEvidence::antiTripletRead,
+                     "Diquark channel: the certified Lambda^2 C^3 wedge "
+                     "occupation det(C^dag Gamma C) (#780 "
+                     "wickGramDeterminant) -- exactly zero for duplicated "
+                     "color modes (Pauli).")
+      .def_readwrite("lifetimeTransports",
+                     &CompositeCandidateEvidence::lifetimeTransports,
+                     "#770 composite transports (report-only for the "
+                     "two-cluster reads).")
+      .def_readwrite("persistenceLifetime",
+                     &CompositeCandidateEvidence::persistenceLifetime,
+                     "#765 composite track lifetime (NaN = missing).");
+
+  py::class_<MesonRead>(m, "MesonRead",
+      R"doc(The #774 meson-candidate read: one certified quark plus one
+certified antiquark (order-insensitive), EVEN composite parity (the
+exact graded product of the certified constituent parities -- the
+whitepaper parity table), a color-SINGLET pair bilinear under the exact
+1+8 split, and zero total certified winding/baryon flux (the #773
+conjugate-pair integer sums).  failedCertificates vocabulary:
+"constituent-quark", "constituent-antiquark", "parity-even",
+"color-singlet", "flux-zero".)doc")
+      .def(py::init<>())
+      .def_readonly("bindingComponent", &MesonRead::bindingComponent)
+      .def_readonly("firstConstituent", &MesonRead::firstConstituent)
+      .def_readonly("secondConstituent", &MesonRead::secondConstituent)
+      .def_readonly("classification", &MesonRead::classification,
+                    "'meson-candidate' or 'none'.")
+      .def_readonly("exteriorParity", &MesonRead::exteriorParity,
+                    "Exact constituent-parity product; 0 = unknown.")
+      .def_readonly("occupationTotal", &MesonRead::occupationTotal)
+      .def_readonly("pairingSingletWeight",
+                    &MesonRead::pairingSingletWeight)
+      .def_readonly("pairingOctetWeight", &MesonRead::pairingOctetWeight)
+      .def_readonly("pairingOctetFraction",
+                    &MesonRead::pairingOctetFraction,
+                    "octet/(octet+singlet) of the pairing; NaN = missing.")
+      .def_readonly("totalWinding", &MesonRead::totalWinding,
+                    "nu1 + nu2 when both certified; None = unknown.")
+      .def_readonly("totalBaryonFlux", &MesonRead::totalBaryonFlux,
+                    "B1 + B2 when both known; None = unknown, never zero.")
+      .def_readonly("transportCount", &MesonRead::transportCount)
+      .def_readonly("transportLeakageMax", &MesonRead::transportLeakageMax)
+      .def_readonly("persistenceLifetime", &MesonRead::persistenceLifetime)
+      .def_readonly("confidence", &MesonRead::confidence)
+      .def_readonly("failedCertificates", &MesonRead::failedCertificates)
+      .def_readonly("thresholds", &MesonRead::thresholds)
+      .def_readonly("certificate", &MesonRead::certificate)
+      .def("describe", &MesonRead::describe)
+      .def("__repr__", &MesonRead::describe)
+      .def("toRecord",
+           [](const MesonRead &self) {
+             return recordToPython(self.toRecord());
+           },
+           "Checkpoint serialization.")
+      .def_static("fromRecord",
+                  [](const py::handle &record) {
+                    return MesonRead::fromRecord(pythonToRecord(record));
+                  },
+                  py::arg("record"),
+                  "Rehydrate; rejects an unknown schema_version.");
+
+  py::class_<DiquarkRead>(m, "DiquarkRead",
+      R"doc(The #774 diquark-candidate read: TWO certified quarks
+(nu = +1 each), EVEN composite parity, a certified anti-triplet wedge
+occupation, and the PRESERVED constituent baryon flux B = 2/3.
+Explicitly NOT an antiquark: the 3bar color representation coincides,
+but occupation TWO, EVEN parity, and B = +2/3 (vs one/odd/-1/3) are the
+recorded distinction channels.  failedCertificates vocabulary:
+"constituent-quarks", "parity-even", "anti-triplet",
+"baryon-flux-two-thirds".)doc")
+      .def(py::init<>())
+      .def_readonly("bindingComponent", &DiquarkRead::bindingComponent)
+      .def_readonly("firstConstituent", &DiquarkRead::firstConstituent)
+      .def_readonly("secondConstituent", &DiquarkRead::secondConstituent)
+      .def_readonly("classification", &DiquarkRead::classification,
+                    "'diquark-candidate' or 'none'.")
+      .def_readonly("exteriorParity", &DiquarkRead::exteriorParity,
+                    "Exact constituent-parity product; 0 = unknown.")
+      .def_readonly("occupationTotal", &DiquarkRead::occupationTotal)
+      .def_readonly("antiTripletWeight", &DiquarkRead::antiTripletWeight,
+                    "Certified wedge occupation; NaN = unknown.")
+      .def_readonly("totalWinding", &DiquarkRead::totalWinding,
+                    "nu1 + nu2 when both certified (2 for a candidate).")
+      .def_readonly("totalBaryonFlux", &DiquarkRead::totalBaryonFlux,
+                    "B1 + B2 (2/3 for a candidate); None = unknown.")
+      .def_readonly("transportCount", &DiquarkRead::transportCount)
+      .def_readonly("transportLeakageMax",
+                    &DiquarkRead::transportLeakageMax)
+      .def_readonly("persistenceLifetime",
+                    &DiquarkRead::persistenceLifetime)
+      .def_readonly("confidence", &DiquarkRead::confidence)
+      .def_readonly("failedCertificates", &DiquarkRead::failedCertificates)
+      .def_readonly("thresholds", &DiquarkRead::thresholds)
+      .def_readonly("certificate", &DiquarkRead::certificate)
+      .def("describe", &DiquarkRead::describe)
+      .def("__repr__", &DiquarkRead::describe)
+      .def("toRecord",
+           [](const DiquarkRead &self) {
+             return recordToPython(self.toRecord());
+           },
+           "Checkpoint serialization.")
+      .def_static("fromRecord",
+                  [](const py::handle &record) {
+                    return DiquarkRead::fromRecord(pythonToRecord(record));
+                  },
+                  py::arg("record"),
+                  "Rehydrate; rejects an unknown schema_version.");
+
   py::class_<ParticleClusters>(m, "ParticleClusters",
       R"doc(The #773 quark/antiquark classifier over persistent modular
 spectral components (design spec section 16.1; whitepaper "Quarks as
@@ -2733,5 +3053,45 @@ evidence.)doc")
                   py::arg("from_candidates"), py::arg("to_candidates"),
                   py::arg("overlap_threshold") = 0.5,
                   "Track candidates across scale/time by their color "
-                  "bands (#769 matchFibers delegation).");
+                  "bands (#769 matchFibers delegation).")
+      // ---- #774 even sectors ------------------------------------------
+      .def("octetBilinearRead", &ParticleClusters::octetBilinearRead,
+           py::arg("state"), py::arg("color_modes"),
+           "The quasi-free traceless-bilinear (octet) read of three "
+           "declared color modes of a carried #780 covariance: exact Wick "
+           "sums on the covariance layer (no Fock vector); the 1+8 split "
+           "is DELEGATED to ColorFiber.  Throws unless exactly three "
+           "distinct in-range modes are named.")
+      .def("octetBilinearReadCached",
+           &ParticleClusters::octetBilinearReadCached,
+           py::arg("cache"), py::arg("component_vertex_ids"),
+           py::arg("state"), py::arg("color_modes"),
+           "octetBilinearRead through the #764 AnalyticCache contract "
+           "(key: the caller's component vertex set; parameter: the "
+           "covariance hash + declared modes + thresholds).  Cached "
+           "equals cold; a Gamma change recomputes.")
+      .def("octetFingerprint", &ParticleClusters::octetFingerprint,
+           py::arg("state"), py::arg("color_modes"),
+           "Content fingerprint of an octet-read request (the cache "
+           "parameter).")
+      .def("classifyGluon", &ParticleClusters::classifyGluon,
+           py::arg("evidence"),
+           "Classify one gluon candidate (design spec section 14.3): "
+           "certified even parity, a nonzero certified octet excitation "
+           "with machine-level octet purity, accepted rank-three "
+           "transports, a CERTIFIED zero total determinant winding (zero "
+           "baryon flux as evidence), and persistence.  Missing evidence "
+           "is a NAMED failed certificate.")
+      .def("classifyMeson", &ParticleClusters::classifyMeson,
+           py::arg("evidence"),
+           "Classify one meson candidate: certified quark + antiquark "
+           "(order-insensitive), even composite parity (exact constituent "
+           "product), color-singlet pairing, zero total certified "
+           "winding/flux.")
+      .def("classifyDiquark", &ParticleClusters::classifyDiquark,
+           py::arg("evidence"),
+           "Classify one diquark candidate: two certified quarks, even "
+           "composite parity, a certified anti-triplet wedge occupation, "
+           "and the preserved constituent baryon flux B = 2/3 (not an "
+           "antiquark).");
 }

@@ -23,11 +23,54 @@
 //                              two-state flavor subclass; adapts the
 //                              EXISTING Gauss-flux read onto nested
 //                              enclosing surfaces; and verifies conjugate-
-//                              pair conservation.  #774 (octet/gluon/meson/
-//                              diquark) and #775 (bound supercomponent,
-//                              color singlet, proton) extend this class
-//                              BESIDE the quark surface — nothing here
-//                              classifies those sectors.
+//                              pair conservation.  #774 adds the EVEN
+//                              sector reads BESIDE the quark surface: the
+//                              quasi-free octet bilinear read on the #780
+//                              covariance layer, and the gluon-candidate /
+//                              meson-candidate / diquark-candidate
+//                              classifiers (see below).  #775 (bound
+//                              supercomponent, color singlet, proton)
+//                              extends further beside these — nothing here
+//                              classifies three-cluster sectors.
+//   • OctetBilinearRead      — the #774 quasi-free traceless-bilinear read
+//                              of three declared color modes of a carried
+//                              #780 CovarianceState: the bilinear matrix
+//                              M_ij = ⟨a_i†a_j⟩ = (Γ_S)ᵀ, its exact
+//                              1 ⊕ 8 split (delegated to
+//                              ColorFiber::octetRead / tracelessPart /
+//                              adjointOctetProjector — never re-derived),
+//                              the adjoint Casimir, the quartic-Wick color
+//                              Casimir expectation, subset occupation and
+//                              parity.  Dense Fock vectors appear only in
+//                              tests; #771 stays the oracle layer.
+//   • GluonCandidateEvidence / GluonRead
+//                            — the #774 gluon-candidate classifier: a
+//                              persistent transported octet excitation
+//                              with certified even parity, certified ZERO
+//                              total determinant winding (zero baryon
+//                              flux), and accepted rank-three transports.
+//                              "Candidate" is the strongest claim ever
+//                              emitted — no even octet excitation is
+//                              classified a physical gluon.
+//   • CompositeCandidateEvidence / MesonRead / DiquarkRead
+//                            — the #774 TWO-cluster composite classifiers
+//                              over constituent QuarkReads: meson = one
+//                              certified quark + one certified antiquark,
+//                              even composite parity (the exact graded
+//                              product of the certified constituent
+//                              parities), color-singlet pairing (the 1 ⊕ 8
+//                              split of the caller-assembled pair
+//                              bilinear), and zero total winding/baryon
+//                              flux; diquark = two certified quarks, even
+//                              parity, a certified Λ²C³ anti-triplet
+//                              wedge occupation (#780 Gram determinant —
+//                              exactly zero for duplicated color modes),
+//                              and the PRESERVED constituent baryon flux
+//                              B = 2/3 (≠ an antiquark's −1/3; occupation
+//                              two and even parity are the recorded
+//                              distinction channels, exactly the #773
+//                              anti-triplet fixture).  Three-quark
+//                              composites belong to #775.
 //   • QuarkCandidateEvidence — the assembled evidence bundle: every field
 //                              is a read produced by the merged upstream
 //                              kernels (#765/#767/#769/#770/#772/#780);
@@ -180,6 +223,25 @@ struct ParticleClustersConfig {
   std::size_t minEnclosingSurfaces = 2;
   /// |Q_gauss − (I3 + B/2)| cap for the proposed u/d identification.
   double udTolerance = 1e-9;
+
+  // ── #774 even-sector thresholds ────────────────────────────────────────
+
+  /// Floor on the octet Frobenius weight ‖M − (Tr M/3) I‖_F² of a gluon
+  /// candidate's bilinear — a genuinely nonzero color polarization (the
+  /// vacuum reads exactly zero and fails by name).
+  double minOctetWeight = 1e-9;
+  /// Cap on the octet-projector residual ‖(I₉ − P₈) vec(M₈)‖ / ‖M₈‖_F of
+  /// the excitation: the traceless bilinear lies in the 8 EXACTLY (the
+  /// residual is rounding), so this is a machine-precision certificate.
+  double octetPurityTolerance = 1e-9;
+  /// Cap on the octet fraction octet/(octet + singlet) of a meson's pair
+  /// color bilinear — the color-SINGLET certificate of the q-q̄ composite.
+  double compositeOctetTolerance = 1e-9;
+  /// Floor on the certified Λ²C³ anti-triplet wedge occupation
+  /// det(C†ΓC) ∈ [0, 1] of a diquark candidate (exactly 1 for the
+  /// two-orthonormal-column Slater fixture, exactly 0 for a duplicated
+  /// color mode — the Pauli/Gram identity).
+  double minAntiTripletWeight = 0.5;
 };
 
 /// # GaussFluxRead
@@ -462,6 +524,347 @@ struct ConjugatePairRead {
   cobordism::Certificate certificate{};
 };
 
+/// # OctetBilinearRead
+///
+/// The #774 quasi-free traceless-bilinear (octet) read of THREE declared
+/// color modes of a carried #780 `quantum::CovarianceState` — evaluated on
+/// the covariance layer (polynomial in the mode count, no Fock vector;
+/// the #771 lazy engine remains the dense oracle in tests and the carrier
+/// of explicitly non-Gaussian boundary data).
+///
+/// Exact identities (all delegations, tested to rounding):
+///   • M_ij = ⟨a_i†a_j⟩ = Γ_{ji} on the declared modes — `bilinear` is the
+///     transposed principal submatrix of Γ.
+///   • 1 ⊕ 8 resolution: `singletWeight`/`octetWeight` are EXACTLY
+///     `ColorFiber::octetRead(bilinear)`; `octetComponent` is EXACTLY
+///     `ColorFiber::tracelessPart(bilinear)`, which lies in the octet BY
+///     THE ALGEBRA — `octetProjectorResidual` measures
+///     ‖(I₉ − P₈) vec(M₈)‖/‖M₈‖_F ≈ 0 (rounding only).
+///   • `casimir` = `ColorFiber::adjointCasimir(octetComponent)` = 3 for a
+///     nonzero excitation (C = 3 P₈).
+///   • `casimirExpectation` = ⟨Σ_a dΓ(λ_a/2)²⟩ by quartic Wick sums
+///     (#780 `wickBilinearMoment` with the embedded Gell-Mann halves):
+///     exactly 0 on the vacuum and the fully occupied singlet, exactly
+///     C₂ = 4/3 on the fundamental (N = 1) and anti-triplet (N = 2)
+///     Slater states.
+///   • `gellMannComponents[a-1]` = Tr(λ_a M)/2 — the octet coordinates:
+///     M = (Tr M/3) I + Σ_a comp_a λ_a exactly.
+///
+/// Adding microscopic modes (vacuum embedding, #771 `embedInVacuum` or a
+/// zero-block covariance extension) leaves this read unchanged: arbitrarily
+/// many collective excitations are represented WITHOUT changing any
+/// two-dimensional edge-mode factor.  Unknown values are NaN/0-sign, never
+/// zero-filled.
+struct OctetBilinearRead {
+  /// The three declared color modes, in the caller's recorded order (the
+  /// color trivialization; a compilation convention like a declared anchor
+  /// weighting).
+  std::vector<std::size_t> colorModes{};
+  /// Certified subset occupation ⟨N_S⟩ = tr Γ_S (NaN when the constituent
+  /// Wick reads did not certify).
+  double occupation = std::numeric_limits<double>::quiet_NaN();
+  /// Certified subset parity sign of ⟨(−1)^{N_S}⟩: +1 / −1 / 0 = unknown
+  /// or indefinite (never a forced sign).
+  int subsetParity = 0;
+  /// The bilinear matrix M_ij = ⟨a_i†a_j⟩ on the declared modes.
+  Eigen::Matrix3cd bilinear = Eigen::Matrix3cd::Zero();
+  /// The traceless octet component `ColorFiber::tracelessPart(bilinear)`.
+  Eigen::Matrix3cd octetComponent = Eigen::Matrix3cd::Zero();
+  /// ‖M − (Tr M/3) I‖_F² — the octet Frobenius weight
+  /// (`ColorFiber::octetRead`).
+  double octetWeight = std::numeric_limits<double>::quiet_NaN();
+  /// |Tr M|²/3 — the singlet (trace/number) Frobenius weight.
+  double singletWeight = std::numeric_limits<double>::quiet_NaN();
+  /// ‖(I₉ − P₈) vec(octetComponent)‖ / ‖octetComponent‖_F — rounding-level
+  /// for any state (the excitation is octet by the algebra); NaN when the
+  /// excitation vanishes (an undefined residual is unknown, never zero).
+  double octetProjectorResidual = std::numeric_limits<double>::quiet_NaN();
+  /// `ColorFiber::adjointCasimir(octetComponent)` ∈ [0, 3]; 3 exactly for
+  /// a nonzero excitation; NaN when it vanishes.
+  double casimir = std::numeric_limits<double>::quiet_NaN();
+  /// ⟨Σ_a dΓ(λ_a/2)²⟩ — the quartic-Wick color Casimir expectation of the
+  /// carried state on the declared modes (NaN when uncertified).
+  double casimirExpectation = std::numeric_limits<double>::quiet_NaN();
+  /// Tr(λ_a M)/2 for a = 1..8 — the octet coordinates of the bilinear.
+  std::vector<std::complex<double>> gellMannComponents{};
+  /// Max residual of the consumed #780 Wick reads (their certificates all
+  /// travel through `certificate`).
+  double residual = std::numeric_limits<double>::quiet_NaN();
+  /// AlgebraicallyExact / Static in the covariance's verified regime
+  /// (residual = the consumed Wick residual maximum against the #780 read
+  /// tolerance): the read is a finite exact Wick sum on the covariance.
+  cobordism::Certificate certificate{};
+
+  /// One-line human-readable summary.
+  [[nodiscard]] std::string describe() const;
+  /// Checkpoint serialization (complex leaves split `{name}_re`/`{name}_im`
+  /// per #580; unknown values serialize as null/NaN, never zero).
+  [[nodiscard]] Record toRecord() const;
+  /// Rehydrate; rejects an unknown `schema_version`.
+  [[nodiscard]] static OctetBilinearRead fromRecord(const Record &record);
+};
+
+/// # GluonCandidateEvidence
+///
+/// The assembled evidence bundle of ONE gluon candidate (#774; design spec
+/// §14.3): every field is a read produced by a merged upstream kernel —
+/// the #780 carried-state Wick parity/occupation, this class's own
+/// quasi-free octet bilinear read, the #770 lifetime transports and
+/// determinant winding, and the #765 persistence diagnostics.  Missing
+/// evidence fails its certificate BY NAME, it is never presumed.
+struct GluonCandidateEvidence {
+  /// The excitation's #765 label-free identity.
+  ComponentId component{};
+  /// The component the excitation is bound to / lives on (reported
+  /// verbatim — the "binding component" of the ticket's report set).
+  ComponentId bindingComponent{};
+  /// The quasi-free octet bilinear read of the carried state
+  /// (`octetBilinearRead`).
+  OctetBilinearRead octet{};
+  /// The #780 Wick parity ⟨(−1)^N⟩ of the WHOLE carried state
+  /// (`CovarianceState::wickParity`) — the even-parity gate.
+  quantum::WickCertificateRead parityRead{};
+  /// The #780 Wick total occupation ⟨N⟩ (`wickTotalNumber`; report-only).
+  quantum::WickCertificateRead occupationRead{};
+  /// The candidate's lifetime transports (#770): every link must be
+  /// accepted, rank three, with leakage under the configured cap — the
+  /// "accepted octet transport" gate (the adjoint action on the octet is
+  /// exact GIVEN the accepted rank-three factor:
+  /// `FiberConnection::adjointRepresentation`).
+  std::vector<FiberTransportRead> lifetimeTransports{};
+  /// The #770 determinant-line winding of the lifetime family — the gluon
+  /// gate requires a CERTIFIED ν = 0 (zero baryon flux is evidence, never
+  /// a default: an unknown winding leaves the flux unknown).
+  DeterminantWindingRead winding{};
+  /// #765 persistence-track lifetime (NaN = missing).
+  double persistenceLifetime = std::numeric_limits<double>::quiet_NaN();
+};
+
+/// # GluonRead
+///
+/// The #774 gluon-candidate read: a persistent transported octet
+/// excitation with certified even parity and certified zero total
+/// determinant winding / baryon flux.  `classification` is
+/// "gluon-candidate" or "none" — NEVER "gluon": no even octet excitation
+/// is claimed to be a physical gluon (ticket out-of-scope list).  Unknown
+/// or uncertified values are NULL (empty optional / NaN / 0-sign), never
+/// zero-filled, and every gap is NAMED in `failedCertificates`.
+///
+/// Certificate name vocabulary (fixed order): "parity-even",
+/// "octet-excitation", "octet-purity", "octet-transport", "winding-zero",
+/// "persistence".
+struct GluonRead {
+  /// The excitation's #765 identity.
+  ComponentId component{};
+  /// The reported binding component.
+  ComponentId bindingComponent{};
+  /// "gluon-candidate" or "none".
+  std::string classification{"none"};
+  /// Certified carried-state exterior parity: +1 (even) / −1 (odd) / 0 =
+  /// unknown.
+  int exteriorParity = 0;
+  /// ⟨N⟩ of the whole carried state (NaN when unmeasured).
+  double occupationTotal = std::numeric_limits<double>::quiet_NaN();
+  /// The embedded quasi-free octet read the verdict consumed.
+  OctetBilinearRead octet{};
+  /// Flat report copies of the octet read's decision channels (NaN when
+  /// missing): the adjoint Casimir, the octet-projector residual, and the
+  /// 1 ⊕ 8 Frobenius weights.
+  double casimir = std::numeric_limits<double>::quiet_NaN();
+  double octetProjectorResidual = std::numeric_limits<double>::quiet_NaN();
+  double octetWeight = std::numeric_limits<double>::quiet_NaN();
+  double singletWeight = std::numeric_limits<double>::quiet_NaN();
+  /// The certified determinant winding (0 for a certified gluon
+  /// candidate); EMPTY when invalidated/unclosed.
+  std::optional<int> determinantWinding{};
+  /// The recorded winding closure specification (#770 vocabulary).
+  std::string windingClosure{"none"};
+  /// The caller's closure reference identifier ("" when none).
+  std::string windingReferenceId{};
+  /// B = ν/3 under a CERTIFIED winding — 0.0 is a CERTIFIED zero flux;
+  /// EMPTY (unknown) without the winding certificate, never zero.
+  std::optional<double> baryonFlux{};
+  /// Number of lifetime transports supplied.
+  std::size_t transportCount = 0;
+  /// Worst lifetime transport leakage (NaN when none supplied).
+  double transportLeakageMax = std::numeric_limits<double>::quiet_NaN();
+  /// #765 persistence lifetime consumed (the "lifetime" report; NaN =
+  /// missing).
+  double persistenceLifetime = std::numeric_limits<double>::quiet_NaN();
+  /// Passed-fraction of the six gluon certificates; 1.0 exactly for a
+  /// certified gluon candidate.
+  double confidence = 0.0;
+  /// Names of every failed/missing certificate, in the fixed order above.
+  std::vector<std::string> failedCertificates{};
+  /// The thresholds that produced this read (echoed configuration).
+  ParticleClustersConfig thresholds{};
+  /// StructureExact (exact boolean combination GIVEN the consumed held
+  /// certificates) for a certified candidate; HeuristicDiscovery
+  /// otherwise.
+  cobordism::Certificate certificate{};
+
+  /// One-line human-readable summary.
+  [[nodiscard]] std::string describe() const;
+  /// Checkpoint serialization (design spec §20 `particles.gluons`).
+  [[nodiscard]] Record toRecord() const;
+  /// Rehydrate; rejects an unknown `schema_version`.
+  [[nodiscard]] static GluonRead fromRecord(const Record &record);
+};
+
+/// # CompositeCandidateEvidence
+///
+/// The assembled evidence bundle of ONE two-cluster composite (#774 meson
+/// and diquark candidates; three-cluster composites belong to #775).  The
+/// constituents are #773 `QuarkRead`s CONSUMED VERBATIM — their windings,
+/// parities, and certificates are never recomputed here; the composite
+/// channels (carried-state occupation, the pair color bilinear, the
+/// anti-triplet wedge read) are caller-assembled upstream reads.
+struct CompositeCandidateEvidence {
+  /// The component binding the two clusters (reported verbatim).
+  ComponentId bindingComponent{};
+  /// The first constituent's #773 read.
+  QuarkRead first{};
+  /// The second constituent's #773 read.
+  QuarkRead second{};
+  /// The #780 Wick total occupation ⟨N⟩ of the carried composite state
+  /// (report-only; NaN/uncertified = unknown).
+  quantum::WickCertificateRead occupationRead{};
+  /// Meson channel: the pair color bilinear M_ij pairing constituent color
+  /// i with conjugate color j (3 ⊗ 3̄) — a singlet composite has M ∝ I.
+  /// ABSENT = no pairing evidence: the color-singlet certificate fails by
+  /// name.
+  std::optional<Eigen::Matrix3cd> colorPairing{};
+  /// Diquark channel: the certified Λ²C³ wedge occupation det(C†ΓC) of
+  /// the two constituent color columns on the carried state (#780
+  /// `wickGramDeterminant` / `wickColorWedgeSquared` family) — exactly
+  /// zero for duplicated color modes (Pauli).  Default-constructed =
+  /// missing evidence.
+  quantum::WickCertificateRead antiTripletRead{};
+  /// The composite's lifetime transports (#770; report-only for the
+  /// two-cluster reads — the max leakage travels on the read).
+  std::vector<FiberTransportRead> lifetimeTransports{};
+  /// #765 persistence-track lifetime of the composite (NaN = missing).
+  double persistenceLifetime = std::numeric_limits<double>::quiet_NaN();
+};
+
+/// # MesonRead
+///
+/// The #774 meson-candidate read: one certified quark plus one certified
+/// antiquark (order-insensitive), EVEN composite parity — the exact graded
+/// product of the certified constituent parities (whitepaper "Fermion
+/// statistics from simplicial orientation": parity adds mod 2) — a
+/// color-SINGLET pair bilinear under the exact 1 ⊕ 8 split, and zero total
+/// certified winding/baryon flux (the #773 conjugate-pair integer sums).
+///
+/// Certificate name vocabulary (fixed order): "constituent-quark",
+/// "constituent-antiquark", "parity-even", "color-singlet", "flux-zero".
+struct MesonRead {
+  /// The reported binding component.
+  ComponentId bindingComponent{};
+  /// The two constituents' #765 identities, in evidence order.
+  ComponentId firstConstituent{};
+  ComponentId secondConstituent{};
+  /// "meson-candidate" or "none".
+  std::string classification{"none"};
+  /// The composite exterior parity: the exact product of the two certified
+  /// constituent parities (+1 even / −1 odd / 0 = unknown).
+  int exteriorParity = 0;
+  /// ⟨N⟩ of the carried composite state (NaN when unmeasured).
+  double occupationTotal = std::numeric_limits<double>::quiet_NaN();
+  /// The 1 ⊕ 8 Frobenius weights of the pair color bilinear
+  /// (`ColorFiber::octetRead`; NaN when no pairing evidence).
+  double pairingSingletWeight = std::numeric_limits<double>::quiet_NaN();
+  double pairingOctetWeight = std::numeric_limits<double>::quiet_NaN();
+  /// octet/(octet + singlet) of the pairing (NaN when missing or zero).
+  double pairingOctetFraction = std::numeric_limits<double>::quiet_NaN();
+  /// ν₁ + ν₂ when both constituent windings are certified; EMPTY
+  /// otherwise (unknown, never zero).
+  std::optional<int> totalWinding{};
+  /// B₁ + B₂ when both baryon fluxes are known; EMPTY otherwise.
+  std::optional<double> totalBaryonFlux{};
+  /// Number of composite lifetime transports supplied.
+  std::size_t transportCount = 0;
+  /// Worst composite transport leakage (NaN when none supplied).
+  double transportLeakageMax = std::numeric_limits<double>::quiet_NaN();
+  /// #765 composite persistence lifetime (the "lifetime" report).
+  double persistenceLifetime = std::numeric_limits<double>::quiet_NaN();
+  /// Passed-fraction of the five meson certificates.
+  double confidence = 0.0;
+  /// Names of every failed/missing certificate, in the fixed order above.
+  std::vector<std::string> failedCertificates{};
+  /// The thresholds that produced this read (echoed configuration).
+  ParticleClustersConfig thresholds{};
+  /// StructureExact GIVEN the consumed held certificates when certified;
+  /// HeuristicDiscovery otherwise.
+  cobordism::Certificate certificate{};
+
+  /// One-line human-readable summary.
+  [[nodiscard]] std::string describe() const;
+  /// Checkpoint serialization.
+  [[nodiscard]] Record toRecord() const;
+  /// Rehydrate; rejects an unknown `schema_version`.
+  [[nodiscard]] static MesonRead fromRecord(const Record &record);
+};
+
+/// # DiquarkRead
+///
+/// The #774 diquark-candidate read: TWO certified quarks (ν = +1 each),
+/// EVEN composite parity (exact graded product), a certified Λ²C³
+/// anti-triplet wedge occupation, and the PRESERVED constituent baryon
+/// flux B = B₁ + B₂ = 2/3.  A diquark is explicitly NOT an antiquark: the
+/// color representation alone (3̄) coincides, but the recorded distinction
+/// channels are total occupation TWO, EVEN parity, and B = +2/3 (an
+/// antiquark is occupation one, odd, B = −1/3) — exactly the #773
+/// anti-triplet fixture's channels.
+///
+/// Certificate name vocabulary (fixed order): "constituent-quarks",
+/// "parity-even", "anti-triplet", "baryon-flux-two-thirds".
+struct DiquarkRead {
+  /// The reported binding component.
+  ComponentId bindingComponent{};
+  /// The two constituents' #765 identities, in evidence order.
+  ComponentId firstConstituent{};
+  ComponentId secondConstituent{};
+  /// "diquark-candidate" or "none".
+  std::string classification{"none"};
+  /// The composite exterior parity (exact constituent product; 0 =
+  /// unknown).
+  int exteriorParity = 0;
+  /// ⟨N⟩ of the carried composite state (NaN when unmeasured).
+  double occupationTotal = std::numeric_limits<double>::quiet_NaN();
+  /// The certified anti-triplet wedge occupation det(C†ΓC) (NaN when the
+  /// wedge read is missing/uncertified).
+  double antiTripletWeight = std::numeric_limits<double>::quiet_NaN();
+  /// ν₁ + ν₂ when both constituent windings are certified (2 for a
+  /// certified diquark); EMPTY otherwise.
+  std::optional<int> totalWinding{};
+  /// B₁ + B₂ (2/3 for a certified diquark — the constituent flux is
+  /// PRESERVED, never re-derived); EMPTY when unknown.
+  std::optional<double> totalBaryonFlux{};
+  /// Number of composite lifetime transports supplied.
+  std::size_t transportCount = 0;
+  /// Worst composite transport leakage (NaN when none supplied).
+  double transportLeakageMax = std::numeric_limits<double>::quiet_NaN();
+  /// #765 composite persistence lifetime (the "lifetime" report).
+  double persistenceLifetime = std::numeric_limits<double>::quiet_NaN();
+  /// Passed-fraction of the four diquark certificates.
+  double confidence = 0.0;
+  /// Names of every failed/missing certificate, in the fixed order above.
+  std::vector<std::string> failedCertificates{};
+  /// The thresholds that produced this read (echoed configuration).
+  ParticleClustersConfig thresholds{};
+  /// StructureExact GIVEN the consumed held certificates when certified;
+  /// HeuristicDiscovery otherwise.
+  cobordism::Certificate certificate{};
+
+  /// One-line human-readable summary.
+  [[nodiscard]] std::string describe() const;
+  /// Checkpoint serialization.
+  [[nodiscard]] Record toRecord() const;
+  /// Rehydrate; rejects an unknown `schema_version`.
+  [[nodiscard]] static DiquarkRead fromRecord(const Record &record);
+};
+
 /// # ParticleClusters
 ///
 /// The #773 quark/antiquark classifier over persistent modular spectral
@@ -540,6 +943,66 @@ class ParticleClusters {
     /// winding) leaves the totals unknown.
     [[nodiscard]] ConjugatePairRead conjugatePair(const QuarkRead &first,
                                                   const QuarkRead &second) const;
+
+    // ── #774 even sectors: octet bilinear read + gluon/meson/diquark ────
+
+    /// `AnalyticCache` kind string of a cached octet bilinear read.
+    static constexpr const char *kOctetCacheKind = "octet-bilinear-read";
+
+    /// The quasi-free traceless-bilinear (octet) read of three declared
+    /// color modes of a carried #780 covariance (see `OctetBilinearRead`
+    /// for the exact identities).  Every quantity is a finite exact Wick
+    /// sum evaluated through the PUBLIC `CovarianceState` reads — dense
+    /// Fock objects never appear on this path; adding vacuum-embedded
+    /// microscopic modes leaves the read unchanged.
+    /// @throws std::invalid_argument unless `colorModes` names exactly
+    ///   three DISTINCT in-range modes.
+    [[nodiscard]] OctetBilinearRead octetBilinearRead(
+        const quantum::CovarianceState &state,
+        const std::vector<std::size_t> &colorModes) const;
+
+    /// `octetBilinearRead` through the #764 `AnalyticCache` contract:
+    /// keyed by the caller's component vertex set (kind `kOctetCacheKind`,
+    /// parameter = `octetFingerprint` — the covariance hash, the declared
+    /// modes, and the sign-extraction threshold), served while the
+    /// component's star is untouched AND the fingerprint matches (a Γ
+    /// change is a state change), recomputed and re-stored otherwise.
+    /// Cached results equal cold recomputation.
+    [[nodiscard]] OctetBilinearRead octetBilinearReadCached(
+        cobordism::AnalyticCache &cache,
+        const std::vector<std::uint64_t> &componentVertexIds,
+        const quantum::CovarianceState &state,
+        const std::vector<std::size_t> &colorModes) const;
+
+    /// Order-sensitive content fingerprint of an octet-read request: the
+    /// exact covariance hash, the declared color modes, and the decision
+    /// thresholds (the cache parameter of `octetBilinearReadCached`).
+    [[nodiscard]] std::uint64_t octetFingerprint(
+        const quantum::CovarianceState &state,
+        const std::vector<std::size_t> &colorModes) const;
+
+    /// Classify one gluon candidate from its assembled evidence (design
+    /// spec §14.3): certified even parity, a nonzero certified octet
+    /// excitation with machine-level octet purity, accepted rank-three
+    /// lifetime transports under the leakage cap, a CERTIFIED zero total
+    /// determinant winding (zero baryon flux — evidence, never a default),
+    /// and sufficient persistence.  Never throws on missing evidence —
+    /// missing evidence is a NAMED failed certificate.
+    [[nodiscard]] GluonRead classifyGluon(
+        const GluonCandidateEvidence &evidence) const;
+
+    /// Classify one meson candidate: a certified quark + certified
+    /// antiquark pair (order-insensitive), even composite parity (exact
+    /// constituent product), color-singlet pairing, and zero total
+    /// certified winding/flux (see `MesonRead`).
+    [[nodiscard]] MesonRead classifyMeson(
+        const CompositeCandidateEvidence &evidence) const;
+
+    /// Classify one diquark candidate: two certified quarks, even
+    /// composite parity, a certified anti-triplet wedge occupation, and
+    /// the preserved constituent baryon flux B = 2/3 (see `DiquarkRead`).
+    [[nodiscard]] DiquarkRead classifyDiquark(
+        const CompositeCandidateEvidence &evidence) const;
 
     // ── the emergent flavor doublet (no requested dimension) ────────────
 

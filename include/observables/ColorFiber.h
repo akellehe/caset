@@ -267,6 +267,44 @@ class ColorFiber {
     [[nodiscard]] static Eigen::Matrix3cd tracelessPart(
         const Eigen::Matrix3cd& m);
 
+    // ── #774 additions BESIDE the octet projector (nothing above is
+    //    re-derived): the singlet complement resolving 3 ⊗ 3̄, the literal
+    //    traceless even bilinear on Fock space, and the adjoint quadratic
+    //    Casimir — each an exact constant of the same algebra. ────────────
+
+    /// The 9×9 orthogonal projector P₁ = vec(I)vec(I)†/3 onto the trace
+    /// (singlet) part of a 3×3 bilinear — implemented literally as
+    /// I₉ − adjointOctetProjector(), so P₁ + P₈ = I₉ is an exact (bitwise)
+    /// complement: the singlet and octet projectors RESOLVE 3 ⊗ 3̄ = 1 ⊕ 8.
+    /// P₁ vec(M) = vec((Tr M / 3) I).  (#774)
+    [[nodiscard]] static Eigen::MatrixXcd adjointSingletProjector();
+
+    /// The 8×8 traceless even bilinear T_ij = a_i†a_j − (δ_ij/3) N̂ on Fock
+    /// space (whitepaper "Fock space as an inductive limit of
+    /// interactions") — implemented literally as
+    /// dGamma(tracelessPart(matrixUnit(i, j))), so the delegation is exact:
+    /// T_ij = E_ij − (δ_ij/3) Σ_k E_kk, Σ_i T_ii = 0 exactly, T_ij
+    /// conserves N (even fermion parity: [T_ij, (−1)^N] = 0), and the nine
+    /// T_ij span the 8-dimensional octet of 3 ⊗ 3̄ = 1 ⊕ 8.  (#774)
+    /// @throws std::invalid_argument for i or j ≥ 3.
+    [[nodiscard]] static Eigen::MatrixXcd octetBilinear(std::size_t i,
+                                                        std::size_t j);
+
+    /// The 9×9 quadratic Casimir of the ADJOINT action on 3 ⊗ 3̄:
+    /// C = Σ_a K_a² with K_a vec(M) = vec([λ_a/2, M]).  Exact identity
+    /// (checked by verifyConstantAlgebra): C = 3 P₈ — the Casimir
+    /// eigenvalue is 0 on the singlet and C₂(adjoint) = 3 on the octet, so
+    /// the Casimir and the octet projector are the SAME certificate up to
+    /// the constant 3.  (#774)
+    [[nodiscard]] static Eigen::MatrixXcd adjointCasimirMatrix();
+
+    /// The adjoint-Casimir Rayleigh quotient
+    /// ⟨vec M, C vec M⟩ / ‖M‖_F² ∈ [0, 3] of a 3×3 bilinear: exactly 3 for
+    /// a traceless (pure octet) M, exactly 0 for M ∝ I, and 3 × (octet
+    /// weight fraction) in between — by C = 3 P₈.  NaN for M = 0 (an
+    /// undefined quotient is reported unknown, never zero).  (#774)
+    [[nodiscard]] static double adjointCasimir(const Eigen::Matrix3cd& m);
+
     // ── the exact Fourier color frame from ω = e^{2πi/3} ─────────────────
 
     /// The primitive cube root of unity as its ALGEBRAIC value
