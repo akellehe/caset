@@ -44,10 +44,13 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include "cobordism/AnalyticCache.h"
+#include "observables/Record.h"
 #include "quantum/CausalCompare.hpp"
 #include "quantum/CausetChain.hpp"
 #include "quantum/ChoiJamiolkowski.h"
 #include "quantum/ChoiState.hpp"
+#include "quantum/CovarianceState.h"
 #include "quantum/DMRGRunner.hpp"
 #include "quantum/GradedFock.h"
 #include "quantum/Holography.hpp"
@@ -90,6 +93,60 @@ py::tuple sparseOpToCoo(
     }
     return py::make_tuple(rows, cols, vals,
                           static_cast<std::int64_t>(op.rows()));
+}
+
+// A JSON-able observable Record -> a native Python object (dict/list/scalar)
+// and back — the same conversion the observables bindings use for their
+// checkpoint records (internal linkage per TU).
+py::object quantumRecordToPython(const tessera::observables::Record& r) {
+    using Record = tessera::observables::Record;
+    switch (r.type()) {
+        case Record::Type::Null:
+            return py::none();
+        case Record::Type::Bool:
+            return py::bool_(r.asBool());
+        case Record::Type::Int:
+            return py::int_(r.asInt());
+        case Record::Type::Double:
+            return py::float_(r.asDouble());
+        case Record::Type::String:
+            return py::str(r.asString());
+        case Record::Type::List: {
+            py::list out;
+            for (const auto& e : r.asList()) out.append(quantumRecordToPython(e));
+            return out;
+        }
+        case Record::Type::Map: {
+            py::dict out;
+            for (const auto& [key, value] : r.asMap())
+                out[py::str(key)] = quantumRecordToPython(value);
+            return out;
+        }
+    }
+    return py::none();
+}
+
+tessera::observables::Record quantumPythonToRecord(const py::handle& o) {
+    using Record = tessera::observables::Record;
+    if (o.is_none()) return Record();
+    if (py::isinstance<py::bool_>(o)) return Record(o.cast<bool>());
+    if (py::isinstance<py::int_>(o))
+        return Record(static_cast<std::int64_t>(o.cast<long long>()));
+    if (py::isinstance<py::float_>(o)) return Record(o.cast<double>());
+    if (py::isinstance<py::str>(o)) return Record(o.cast<std::string>());
+    if (py::isinstance<py::dict>(o)) {
+        Record::Map m;
+        for (const auto item : o.cast<py::dict>())
+            m[item.first.cast<std::string>()] = quantumPythonToRecord(item.second);
+        return Record(std::move(m));
+    }
+    if (py::isinstance<py::list>(o) || py::isinstance<py::tuple>(o)) {
+        Record::List l;
+        for (const auto& e : o) l.push_back(quantumPythonToRecord(e));
+        return Record(std::move(l));
+    }
+    throw std::invalid_argument(
+        "CovarianceState record: unsupported Python leaf type");
 }
 }  // namespace
 
@@ -2112,4 +2169,205 @@ enters the emergence objective, and nothing here classifies particles.)doc")
         .def("deserialize", &LazyFockEngine::deserialize, py::arg("json"),
              "Rebuild a checkpoint; verifies schema, universe, and every "
              "recomputed content hash.");
+
+    // ── The quasi-free covariance layer (#780) ─────────────────────────────
+
+    py::class_<WickCertificateRead>(m, "WickCertificateRead",
+        R"doc(One Wick-evaluated polynomial certificate (design spec 6.7): the
+value, the measured residual (covariance Hermiticity defect, maximized with
+the imaginary rounding leakage for real-by-construction observables), the
+normal-ordered observable / contraction-plan identifier, the covariance
+fingerprint the value was read from, and the #764 Certificate grading the
+claim (AlgebraicallyExact / Static; regime VERIFIED on the covariance).)doc")
+        .def_readonly("value", &WickCertificateRead::value)
+        .def_readonly("residual", &WickCertificateRead::residual)
+        .def_readonly("polynomialId", &WickCertificateRead::polynomialId)
+        .def_readonly("covarianceHash", &WickCertificateRead::covarianceHash)
+        .def_readonly("certificate", &WickCertificateRead::certificate);
+
+    py::class_<MeanFieldStepRead>(m, "MeanFieldStepRead",
+        R"doc(The per-iteration record of the mean-field self-consistency loop:
+the measured generator/covariance Hermiticity defects, the purity defect
+||Gamma^2 - Gamma||_F (pure-Slater path), the covariance-spectrum constraint
+(mixed path), and the purity/Gaussianity Certificate of the step.)doc")
+        .def_readonly("step", &MeanFieldStepRead::step)
+        .def_readonly("time", &MeanFieldStepRead::time)
+        .def_readonly("generatorHermiticityDefect",
+                      &MeanFieldStepRead::generatorHermiticityDefect)
+        .def_readonly("hermiticityDefect", &MeanFieldStepRead::hermiticityDefect)
+        .def_readonly("purityDefect", &MeanFieldStepRead::purityDefect)
+        .def_readonly("occupationSpectrumDefect",
+                      &MeanFieldStepRead::occupationSpectrumDefect)
+        .def_readonly("certificate", &MeanFieldStepRead::certificate);
+
+    py::class_<CovarianceState>(m, "CovarianceState",
+        R"doc(The number-conserving quasi-free state stored EXACTLY as its
+covariance matrix Gamma_ij = <a_j^dagger a_i> (#780; design spec 5.9, 6.7,
+13 "Algorithm F").
+
+Every polynomial observable is a finite exact Wick sum over Gamma —
+occupations, parities, Gram/Pauli determinants, the color wedge |S_ABC|^2,
+<J^2> and Var(J^2) (quartic and octic Wick sums) — evaluated in polynomial
+cost in the mode count: NO code path here allocates a 2^M object. Dense
+Fock constructions (#766 ExteriorAlgebra, Jordan-Wigner chains) are TEST
+references; the lazy graded Fock engine (#771) remains the oracle layer and
+the carrier for explicitly non-Gaussian boundary data. Nothing in this
+class enters the emergence objective: the mean-field loop takes h from the
+CALLER, and the geometry coupling h = h(Gamma, g) is wired by #776.
+
+Propagation (both entry points): evolve(h, dt) applies the EXACT solution
+Gamma <- exp(-i h dt) Gamma exp(+i h dt) of i dGamma/dt = [h, Gamma];
+applyTransport(U) conjugates by the one-particle transport of a cobordism
+step. Quadratic evolution — including the declared mean-field
+self-consistency — never leaves the Gaussian manifold; purity is a
+MEASURED certificate ||Gamma^2 - Gamma||_F, never an assumption. The API
+shape is Nambu-ready (numberConserving / pairing / nambuCovariance); the
+pairing sector itself is a later extension.)doc")
+        .def(py::init<Eigen::MatrixXcd>(), py::arg("gamma"),
+             "Adopt an explicit covariance matrix (no symmetrization, no "
+             "clamping: defects are measured and reported, never repaired).")
+        .def_static("fromBandProjector", &CovarianceState::fromBandProjector,
+             py::arg("projector"),
+             R"doc(Gamma = P from an accepted #769 band projector (SpectralFiber.
+projector() output consumed as a plain matrix). Self-adjoint-path
+projectors are orthogonal, hence pure Slater covariances; an oblique
+projector is adopted verbatim and its Hermiticity defect reported.)doc")
+        .def_static("fromOccupations", &CovarianceState::fromOccupations,
+             py::arg("occupations"),
+             "Diagonal Gamma = diag(n) from boundary-register occupation "
+             "data.")
+        .def_static("fromSlaterFrame", &CovarianceState::fromSlaterFrame,
+             py::arg("orbitals"), py::arg("rankTolerance") = 1e-12,
+             R"doc(Pure Slater covariance Gamma = Phi (Phi+ Phi)^-1 Phi+ from an
+M x N frame of occupied one-particle orbitals (boundary-register state
+vectors enter as occupied columns; the frame need not be orthonormal).)doc")
+        .def("modeCount", &CovarianceState::modeCount)
+        .def("gamma", &CovarianceState::gamma,
+             py::return_value_policy::copy,
+             "The covariance matrix Gamma_ij = <a_j^dagger a_i>.")
+        .def("numberConserving", &CovarianceState::numberConserving,
+             "True in this implementation; a pairing extension reports "
+             "False and populates pairing().")
+        .def("pairing", &CovarianceState::pairing,
+             "The anomalous block F_ij = <a_j a_i> — identically zero in "
+             "the number-conserving sector (Nambu-shaped API).")
+        .def("nambuCovariance", &CovarianceState::nambuCovariance,
+             R"doc(The 2M x 2M Nambu covariance over alpha = (a, a+): blocks
+[[Gamma, F], [-conj(F), I - Gamma^T]] (number-conserving: F = 0);
+idempotent exactly when Gamma is.)doc")
+        .def("occupation", &CovarianceState::occupation, py::arg("mode"),
+             "<n_mode> = Gamma_mm (complex diagonal entry — real up to the "
+             "Hermiticity defect).")
+        .def("occupations", &CovarianceState::occupations,
+             "The diagonal <n_i> for every mode.")
+        .def("particleNumber", &CovarianceState::particleNumber,
+             "<N> = tr Gamma.")
+        .def("hermiticityDefect", &CovarianceState::hermiticityDefect,
+             "||Gamma - Gamma+||_F / max(1, ||Gamma||_F).")
+        .def("purityDefect", &CovarianceState::purityDefect,
+             "||Gamma^2 - Gamma||_F — exactly zero for a pure Slater state; "
+             "an O(1) value is a mixed covariance reporting itself.")
+        .def("occupationSpectrumDefect",
+             &CovarianceState::occupationSpectrumDefect,
+             "max_i dist(lambda_i, [0, 1]) of the Hermitian part — the "
+             "mixed-state covariance-spectrum constraint.")
+        .def("purityCertificate", &CovarianceState::purityCertificate,
+             py::arg("tolerance") = 1e-9,
+             "The #764 purity certificate of the pure-Slater path (a mixed "
+             "state simply does not hold() it).")
+        .def("covarianceHash", &CovarianceState::covarianceHash,
+             "Order-sensitive fingerprint of the exact double bit patterns "
+             "of Gamma (16 hex digits) — replay-stable.")
+        .def("evolve", &CovarianceState::evolve, py::arg("h"), py::arg("dt"),
+             py::arg("hermitianTolerance") = 1e-9,
+             R"doc(Gamma <- exp(-i h dt) Gamma exp(+i h dt): the EXACT solution of
+i dGamma/dt = [h, Gamma] (no step-size error; preserves Hermiticity,
+spectrum, and purity to round-off). Throws when h fails Hermiticity
+verification.)doc")
+        .def_static("propagator", &CovarianceState::propagator, py::arg("h"),
+             py::arg("dt"), py::arg("hermitianTolerance") = 1e-9,
+             "The one-particle propagator exp(-i h dt) evolve conjugates "
+             "by: evolve(h, dt) == applyTransport(propagator(h, dt)).")
+        .def("applyTransport", &CovarianceState::applyTransport,
+             py::arg("transport"),
+             R"doc(Gamma <- U Gamma U+ — conjugation by the one-particle transport
+of a cobordism step. A unitary U preserves Hermiticity, spectrum, and
+purity exactly; a leaky transport's effect is MEASURED by the defect
+reads afterwards, never repaired.)doc")
+        .def("meanFieldEvolve", &CovarianceState::meanFieldEvolve,
+             py::arg("hamiltonian"), py::arg("dt"), py::arg("steps"),
+             py::arg("hermitianTolerance") = 1e-9,
+             py::arg("purityTolerance") = 1e-9,
+             R"doc(The certificates-blind mean-field loop: each iteration obtains
+h = hamiltonian(Gamma) from the CALLER (classical geometry is closed over
+by the caller — the geometry coupling is #776's), advances by dt via
+evolve, and records the purity/Gaussianity certificate. Generalized
+Hartree-Fock: nonlinear in Gamma but Gaussian-closed — MEASURED every
+step, never assumed.)doc")
+        .def("wickOccupation", &CovarianceState::wickOccupation,
+             py::arg("mode"), "<n_mode> as a certified Wick read.")
+        .def("wickTotalNumber", &CovarianceState::wickTotalNumber,
+             "<N> = tr Gamma as a certified Wick read.")
+        .def("wickParity", &CovarianceState::wickParity,
+             "Fermion parity <(-1)^N> = det(I - 2 Gamma).")
+        .def("wickSubsetParity", &CovarianceState::wickSubsetParity,
+             py::arg("modes"),
+             "Subset parity <(-1)^{N_S}> = det(I_S - 2 Gamma_S) on the "
+             "principal submatrix.")
+        .def("wickNormalOrdered", &CovarianceState::wickNormalOrdered,
+             py::arg("creators"), py::arg("annihilators"),
+             R"doc(<a+_{c1}...a+_{cp} a_{ap}...a_{a1}> = det[Gamma_{a_l c_k}] in
+PAIRED SLOT ORDER (annihilators applied in reversed list order, so equal
+distinct lists give the joint occupation <n_{c1}...n_{cp}>). Mismatched
+lengths are exactly zero on a number-conserving state; duplicate creators
+give a repeated determinant row — exact Pauli zero.)doc")
+        .def("wickGramDeterminant", &CovarianceState::wickGramDeterminant,
+             py::arg("creatorFrame"), py::arg("annihilatorFrame"),
+             R"doc(The smeared Gram/Pauli determinant
+<a+(v_1)...a+(v_p) a(w_p)...a(w_1)> = det(W+ Gamma V) with the #766
+smearing conventions (columns of V create, columns of W annihilate).)doc")
+        .def("wickColorWedgeSquared", &CovarianceState::wickColorWedgeSquared,
+             py::arg("colorColumns"),
+             R"doc(|S_ABC|^2 = det(C+ Gamma C) of three color columns. When Gamma
+is the Slater projector onto colspan(C) this equals det(C+ C) = |det C|^2
+— exactly ColorFiber.singletGram / |ColorFiber.colorWedge|^2 (#767).)doc")
+        .def("wickBilinearMoment", &CovarianceState::wickBilinearMoment,
+             py::arg("oneParticleFactors"),
+             R"doc(The ordered bilinear moment <dGamma(A_1)...dGamma(A_n)> —
+the general quartic (n = 2) and octic (n = 4) Wick engine, evaluated by
+the exact set-partition/ordered-composition trace expansion of
+det(I + (prod_k(I + s_k A_k) - I) Gamma). Polynomial in the mode count.)doc")
+        .def("wickSpinSquaredExpectation",
+             &CovarianceState::wickSpinSquaredExpectation, py::arg("jx"),
+             py::arg("jy"), py::arg("jz"),
+             "<J^2> = sum_alpha <dGamma(J_alpha)^2> from CALLER-SUPPLIED "
+             "one-particle spin matrices (quartic Wick sums).")
+        .def("wickSpinSquaredVariance",
+             &CovarianceState::wickSpinSquaredVariance, py::arg("jx"),
+             py::arg("jy"), py::arg("jz"),
+             "Var(J^2) = <(J^2)^2> - <J^2>^2 (octic Wick sums); exactly "
+             "zero on a J^2 eigenstate.")
+        .def("wickReadCached", &CovarianceState::wickReadCached,
+             py::arg("cache"), py::arg("componentVertexIds"),
+             py::arg("polynomialId"), py::arg("compute"),
+             R"doc(Fetch-or-compute one Wick read through the #764 AnalyticCache
+contract (kind "wick-read"; parameter = a mixed fingerprint of the
+polynomialId and the current covarianceHash). A hit is served only when
+the cache's geometry-freshness contract holds AND the stored polynomialId
+and covarianceHash both match — a Gamma change can only cause
+recomputation, never a wrong serve.)doc")
+        .def("toRecord",
+             [](const CovarianceState& self) {
+                 return quantumRecordToPython(self.toRecord());
+             },
+             "Checkpoint serialization of Gamma (schema-versioned; complex "
+             "leaves split gamma_re / gamma_im per the #580 convention).")
+        .def_static("fromRecord",
+             [](const py::handle& record) {
+                 return CovarianceState::fromRecord(
+                     quantumPythonToRecord(record));
+             },
+             py::arg("record"),
+             "Rehydrate from toRecord() output; rejects an unknown "
+             "schema_version.");
 }

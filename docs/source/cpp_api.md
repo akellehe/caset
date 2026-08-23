@@ -205,6 +205,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} DenseReference.h
 ```
+```{doxygenfile} RecursiveQuotient.h
+```
 
 ## Reinforcement Learning
 
@@ -252,6 +254,8 @@ exclusions to see the entire interface.
 ```{doxygenfile} GradedFock.h
 ```
 ```{doxygenfile} LazyFock.h
+```
+```{doxygenfile} CovarianceState.h
 ```
 
 ## Graph

@@ -206,6 +206,13 @@ _EXPORTS = (
     "LazyNodeKind", "LazySectorKind", "LazyFockState", "LazyScalarRead",
     "LazySlaterReference", "LazyCovarianceRead", "LazyCompatibilityRead",
     "LazyFockEngine",
+
+    # Quasi-free covariance layer (issue #780): the number-conserving
+    # covariance state Gamma_ij = <a_j+ a_i> with exact Wick contraction of
+    # every polynomial certificate, exact one-particle propagation, the
+    # certificates-blind mean-field loop, cached Wick reads (#764), and
+    # checkpoint serialization of Gamma.
+    "CovarianceState", "WickCertificateRead", "MeanFieldStepRead",
     # KI + QuantumSimplex (Van Raamsdonk-metric simplex factory)
     "QuantumSimplex", "QuantumSimplexPosition", "QuantumVertex",
     "createQuantumVertex",
