@@ -1209,6 +1209,38 @@ class TestTrackingCheckpointCache(unittest.TestCase):
         self.assertNotEqual(loose.evidenceFingerprint(ev),
                             strict.evidenceFingerprint(ev))
 
+    def test_the_stability_window_is_part_of_the_cache_key(self):
+        # #808: the frame lifetime and the two stability windows are
+        # DECISION evidence, so a change in any of them must recompute
+        # rather than serve another window's verdict.
+        base = _certified_evidence()
+        fingerprint = self.pc.evidenceFingerprint(base)
+        for mutate in (
+                lambda e: setattr(e, "frameLifetime", 9.0),
+                lambda e: setattr(e, "frameMinOverlap", 0.6),
+                lambda e: setattr(e, "colorBandFrames",
+                                  list(e.colorBandFrames)[:2]),
+                lambda e: setattr(e, "anchorFrames",
+                                  list(e.anchorFrames)[:2]),
+        ):
+            with self.subTest(mutate=mutate):
+                ev = _certified_evidence()
+                mutate(ev)
+                self.assertNotEqual(fingerprint,
+                                    self.pc.evidenceFingerprint(ev))
+
+    def test_a_changed_stability_window_never_serves_a_stale_read(self):
+        st, ev = self._spacetime_backed_evidence()
+        cache = cob.AnalyticCache(st)
+        stable = self.pc.classifyQuarkCached(cache, ev)
+        ev.colorBandFrames = [ev.colorBandFrames[0], _unit_fiber(1, 2)]
+        unstable = self.pc.classifyQuarkCached(cache, ev)
+        self.assertNotIn("color-rank-stability", stable.failedCertificates)
+        self.assertIn("color-rank-stability", unstable.failedCertificates)
+        cold = obs.ParticleClusters().classifyQuark(ev)
+        self.assertEqual(obs.ObservableGates.report_delta(
+            cold.toRecord(), unstable.toRecord()), 0.0)
+
 
 # =========================================================================== #
 # the emergence objective stays particle-blind; performance contract

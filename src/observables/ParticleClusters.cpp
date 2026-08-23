@@ -669,16 +669,13 @@ QuarkRead ParticleClusters::classifyQuark(
   for (std::size_t t = 0; t + 1 < bandFrames.size(); ++t) {
     const std::vector<FiberMatchRead> links = SpectralFiberTracker::matchFibers(
         {bandFrames[t]}, {bandFrames[t + 1]}, cfg_.doubletOverlapThreshold);
-    if (links.empty() || !links.front().certifiedContinuation) {
+    // No link at all means the two frames share no support: the measured
+    // continuation overlap is zero, not unknown.
+    const double measured =
+        links.empty() ? 0.0 : links.front().overlap.subspaceOverlap;
+    continuationOverlap = minFinite(continuationOverlap, measured);
+    if (links.empty() || !links.front().certifiedContinuation)
       rankStableOk = false;
-      continuationOverlap = links.empty()
-                                ? 0.0
-                                : std::min(minFinite(continuationOverlap, 0.0),
-                                           links.front().overlap.subspaceOverlap);
-      continue;
-    }
-    continuationOverlap =
-        minFinite(continuationOverlap, links.front().overlap.subspaceOverlap);
   }
   read.bandContinuationOverlap = continuationOverlap;
   passedCore += gate(rankStableOk, "color-rank-stability", failed);
