@@ -512,5 +512,10 @@ OMP_NUM_THREADS=8 .venv-build/bin/python \
 
 at commit `e1f0fa3`; the emitted `config_hash` must be
 `040e208c420f70f2328ab7b1d6235f76`. Per the repository convention that issue
-artifacts do not live in the repository tree, the JSON is attached to the pull
-request rather than committed here.
+artifacts do not live in the repository tree, the raw documents are published
+on the `issue-attachments` release rather than committed here:
+
+* [`777-multiscale-validation-full.json.gz`](https://github.com/akellehe/tessera/releases/download/issue-attachments/777-multiscale-validation-full.json.gz)
+  — the 25-member run every number above comes from;
+* [`777-multiscale-validation-quick.json`](https://github.com/akellehe/tessera/releases/download/issue-attachments/777-multiscale-validation-quick.json)
+  — the 6-member `--quick` run, for comparison at reduced scale.
