@@ -110,6 +110,9 @@ MultiCobordism::MultiCobordism(
   // reorder-warn. It is a plain bool with an in-class default, so nothing depends
   // on it being set earlier.
   shouldProposeDispositions_ = shouldProposeDispositions;
+  // #776: the deterministic provenance stamp of every checkpoint this node
+  // writes. Assigned in the body for the same declaration-order reason.
+  seed_ = seed;
   // Pre-grow the seed by `precone` gated cone-ins before any optimization, so the
   // stage-1 search starts from a larger complex grown emergently from the host (no
   // input/output block is seeded yet, so nothing is pinned — the gate is the only
@@ -669,24 +672,55 @@ void MultiCobordism::setReggeWeight(double weight) {
   reggeWeight_ = weight;
 }
 
-double MultiCobordism::objectiveFor(
+std::vector<std::string> MultiCobordism::objectiveTermNames() {
+  // The declaration order of `ObjectiveTerms`. Enumerated as data so the
+  // no-feedback firewall is CHECKABLE rather than asserted in a comment: a
+  // test reads this list and confirms no particle, fiber, transport, or
+  // amplitude quantity is on it.
+  return {"regge_stationarity", "hodge_stationarity", "register_residual",
+          "action_magnitude", "carried_state_energy"};
+}
+
+double MultiCobordism::objectiveOf(const ObjectiveTerms &terms) {
+  // STATIC: no `this`, so the scalar the optimizer descends provably depends
+  // on nothing but the five declared terms.
+  return terms.reggeStationarity + terms.hodgeStationarity +
+         terms.registerResidual + terms.actionMagnitude +
+         terms.carriedStateEnergy;
+}
+
+MultiCobordism::ObjectiveTerms MultiCobordism::objectiveTermsFor(
     const std::shared_ptr<Spacetime> &spacetime) const {
-  if (!spacetime) return std::numeric_limits<double>::infinity();
+  ObjectiveTerms terms;
+  if (!spacetime) {
+    terms.reggeStationarity = std::numeric_limits<double>::infinity();
+    return terms;
+  }
+  // The one permitted state channel (design spec §17): identically zero
+  // outside the `certificates_blind_mean_field` sub-mode, so every other run
+  // — including every strict-emergence run — sums exactly the terms it summed
+  // before this ticket.
+  terms.carriedStateEnergy =
+      carriedStateEnergyWeight_ * carriedStateEnergy(spacetime);
+
   if (objectiveMode_ == ObjectiveMode::MediatedCorrespondence) {
-    const double actionMagnitude =
+    terms.actionMagnitude =
         einsteinHilbert_ && reggeWeight_ != 0.0
-            ? std::abs(ReggeSolver(spacetime, MatterConfiguration())
-                           .dualReggeAction())
+            ? reggeWeight_ * std::abs(ReggeSolver(spacetime,
+                                                  MatterConfiguration())
+                                          .dualReggeAction())
             : 0.0;
-    return rU(spacetime) + reggeWeight_ * actionMagnitude;
+    terms.registerResidual = rU(spacetime);
+    return terms;
   }
 
-  const double reggeStationarity =
-      einsteinHilbert_ && reggeWeight_ != 0.0
-          ? reggeWeight_ * reggeActionGradient(spacetime)
-          : 0.0;
-  if (objectiveMode_ == ObjectiveMode::Legacy)
-    return reggeStationarity + gamma_ * rU(spacetime);
+  terms.reggeStationarity = einsteinHilbert_ && reggeWeight_ != 0.0
+                                ? reggeWeight_ * reggeActionGradient(spacetime)
+                                : 0.0;
+  if (objectiveMode_ == ObjectiveMode::Legacy) {
+    terms.registerResidual = gamma_ * rU(spacetime);
+    return terms;
+  }
 
   double entropyStationarity = 0.0;
   if (hodgeEntropyWeight_ != 0.0)
@@ -694,8 +728,18 @@ double MultiCobordism::objectiveFor(
       entropyStationarity +=
           HodgeLaplacian(spacetime).spectralEntropyGradientNorm(
               degree, hodgeEntropyPhaseMode_);
-  return reggeStationarity +
-         hodgeEntropyWeight_ * entropyStationarity;
+  terms.hodgeStationarity = hodgeEntropyWeight_ * entropyStationarity;
+  return terms;
+}
+
+MultiCobordism::ObjectiveTerms MultiCobordism::objectiveTerms() const {
+  return objectiveTermsFor(spacetime_);
+}
+
+double MultiCobordism::objectiveFor(
+    const std::shared_ptr<Spacetime> &spacetime) const {
+  if (!spacetime) return std::numeric_limits<double>::infinity();
+  return objectiveOf(objectiveTermsFor(spacetime));
 }
 
 double MultiCobordism::objective() const { return objectiveFor(spacetime_); }
@@ -1082,6 +1126,11 @@ double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth,
     // The first committed move is what starts linking the bulk, so block
     // regions are settled from here on (#737).
     bulkConnected_ = true;
+    // #776: the move is ALREADY committed — `bestObjectiveDelta` is fixed and
+    // `spacetime_` already replaced — before the analysis overlay is offered
+    // the chance to look at it. The overlay is post-hoc by construction: there
+    // is no path from here back to the acceptance test above.
+    noteAcceptedMove();
     return bestObjectiveDelta;
   }
   return 0.0;
@@ -1542,6 +1591,25 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
           scalarAscentDirection([&]() { return rU(spacetime_); });
     }
 
+    // #776: the ONE permitted state channel. `β_E E_carried(Γ, g)` is a plain
+    // real scalar of the covariance and the classical geometry, so it enters
+    // the search direction through its EXACT analytic ∂E/∂z (no finite
+    // differences) and the exact acceptance test below. Identically zero
+    // outside the `certificates_blind_mean_field` sub-mode, where
+    // `carriedStateEnergyGradient` returns an all-zero vector and neither the
+    // direction nor the baseline moves.
+    if (carriedStateEnergyWeight_ != 0.0) {
+      const auto energyGradient = carriedStateEnergyGradient(spacetime_);
+      if (energyGradient.size() == edgeCount) {
+        for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+          descentDirection(edgeIndex) +=
+              carriedStateEnergyWeight_ * energyGradient[edgeIndex];
+        if (objectiveMode_ == ObjectiveMode::JointStationarity)
+          currentObjective +=
+              carriedStateEnergyWeight_ * carriedStateEnergy(spacetime_);
+      }
+    }
+
     restoreEdgeLengths();
     // No coordinate can move, so every backtracking trial would evaluate the
     // unchanged global objective and fail the strict-improvement gate. This is
@@ -1578,6 +1646,10 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
         objectiveTrace.push_back(trialObjective);
         stepScale = std::min(stepScale * 1.3, 1.0);
         objectiveImproved = true;
+        // #776 solver-error indicator: the magnitude of the improvement this
+        // geometric update actually banked (0 once the relaxation is
+        // stationary). A base numerical quantity — nothing derived.
+        lastStage2Improvement_ = std::abs(currentObjective - trialObjective);
         currentObjective = trialObjective;
         break;
       }
@@ -1596,6 +1668,7 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
   if (!objectiveImproved) {
     restoreEdgeLengths();
     lastStage2Stationary_ = true;
+    lastStage2Improvement_ = 0.0;  // #776: stationary means zero solver error
     return false;
   }
   (void)beta;  // run/runStage2 synchronize this with reggeWeight_ before entry.

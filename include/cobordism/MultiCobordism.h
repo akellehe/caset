@@ -18,6 +18,7 @@
 #include <memory>
 #include <random>
 #include <set>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -489,6 +490,340 @@ class MultiCobordism {
   /// `maxClose`; stops when no cap lowers `rU`. Returns #holes capped.
   [[nodiscard]] int directedConeIn(int maxClose = 6);
 
+  // ==================================================================
+  // #776 — modes, the enumerable objective, and the analysis overlay
+  // ==================================================================
+  //
+  // The no-feedback emergence firewall (design spec §17, whitepaper figure
+  // "No-feedback emergence protocol") is enforced STRUCTURALLY here, not by
+  // convention:
+  //
+  //   * `objectiveOf` is a **static** function of `ObjectiveTerms`, a record
+  //     with exactly five named scalar members. `objectiveFor` may therefore
+  //     consult only what `objectiveTermsFor` puts into that record — it has
+  //     no `this` to reach an analysis member through. `objectiveTermNames`
+  //     enumerates the list so a test can assert it, rather than trusting a
+  //     comment.
+  //   * `refinementDecisionOf` is likewise a **static** function of
+  //     `RefinementIndicators` — five particle-independent geometric /
+  //     numerical quantities — and `refinementIndicatorNames` enumerates them.
+  //   * the ONLY channel from the carried quantum state to the geometry is the
+  //     single `carriedStateEnergy` term, which is identically zero unless the
+  //     run declares the `CertificatesBlindMeanField` sub-mode.
+  //   * every recursive/certificate read produced by `runRecursiveAnalysis`
+  //     lands in the checkpoint document and NOWHERE else: no member the
+  //     objective or the refinement decision reads is written by that pass.
+
+  /// Design spec §4 — the three top-level simulation modes.
+  enum class SimulationMode {
+    /// The production scientific mode: only the base geometric objective (plus
+    /// the one permitted state-energy term) drives optimization; every particle
+    /// and gauge quantity is a post-hoc observable.
+    Emergence,
+    /// A pinned carrier / spectral sector, to establish existence, measure a
+    /// residual floor, or build an oracle fixture. Never counted as emergence.
+    Synthesis,
+    /// Recompute every derived hierarchy and certificate from a checkpoint and
+    /// verify that no cached or serialized choice changed the result.
+    Replay
+  };
+
+  /// Design spec §4.1 — the two labeled, Gaussian-closed emergence sub-modes.
+  /// Recorded in provenance on every checkpoint; both carry a covariance
+  /// purity certificate.
+  enum class EmergenceSubmode {
+    /// The carried state does not act back on the geometry at all.
+    Strict,
+    /// The carried state's ENERGY DENSITY may enter the joint stationarity
+    /// objective through `h = h(Γ, g)`, while no component, fiber, transport,
+    /// amplitude, color, particle, charge, flavor, exchange, or spin
+    /// certificate may influence a geometry move.
+    CertificatesBlindMeanField
+  };
+
+  /// The COMPLETE, enumerable term list the scalar objective is the sum of.
+  /// `objectiveOf` is static over this record, so the objective provably reads
+  /// nothing else (see the firewall note above). Every member is a geometric
+  /// or target quantity; the last is the one permitted state channel.
+  struct ObjectiveTerms {
+    /// `β_R ‖∇_z S_Regge‖²` — 0 when the Einstein-Hilbert term is deselected.
+    double reggeStationarity = 0.0;
+    /// `η_H Σ_k ‖∇_z S_Hodge,k‖²` — `JointStationarity` only.
+    double hodgeStationarity = 0.0;
+    /// `γ r_U` — the target-conditioned `Legacy` register residual only.
+    double registerResidual = 0.0;
+    /// `r_U + β|S_Regge(W*)|`'s action magnitude — `MediatedCorrespondence`.
+    double actionMagnitude = 0.0;
+    /// `β_E E_carried(Γ, g)` — the ONE permitted state channel, exactly 0.0
+    /// outside `EmergenceSubmode::CertificatesBlindMeanField`.
+    double carriedStateEnergy = 0.0;
+  };
+
+  /// The names of `ObjectiveTerms`' members, in declaration order — the
+  /// firewall list a structural test asserts against.
+  [[nodiscard]] static std::vector<std::string> objectiveTermNames();
+
+  /// The scalar objective: the plain sum of the declared terms. STATIC by
+  /// design — it cannot reach any analysis state.
+  [[nodiscard]] static double objectiveOf(const ObjectiveTerms &terms);
+
+  /// Decompose the objective on `spacetime` into its declared terms.
+  [[nodiscard]] ObjectiveTerms objectiveTermsFor(
+      const std::shared_ptr<Spacetime> &spacetime) const;
+  /// `objectiveTermsFor` on this node's own complex.
+  [[nodiscard]] ObjectiveTerms objectiveTerms() const;
+
+  /// Select the simulation mode and (for emergence) its labeled sub-mode.
+  /// Selecting anything other than `CertificatesBlindMeanField` sets the
+  /// carried-state energy term to exactly zero.
+  void setSimulationMode(SimulationMode mode,
+                         EmergenceSubmode submode = EmergenceSubmode::Strict);
+  [[nodiscard]] SimulationMode simulationMode() const noexcept {
+    return simulationMode_;
+  }
+  [[nodiscard]] EmergenceSubmode emergenceSubmode() const noexcept {
+    return emergenceSubmode_;
+  }
+  /// `"emergence"` / `"synthesis"` / `"replay"`, as stamped on a checkpoint.
+  [[nodiscard]] static std::string modeName(SimulationMode mode);
+  /// `"strict"` / `"certificates_blind_mean_field"`, as stamped on a
+  /// checkpoint.
+  [[nodiscard]] static std::string submodeName(EmergenceSubmode submode);
+
+  // ---- the carried quasi-free state (design spec §17, §4.1) ----
+
+  /// Adopt the carried state: the covariance `Γ` (flat row-major, `m × m`)
+  /// over `m` one-particle modes, each NAMED by the `degree`-cell it occupies
+  /// (`modeCells[i]`, matched by vertex SET). Nothing here reads a
+  /// certificate; the state is plain numbers plus the cells they live on.
+  /// @throws std::invalid_argument on a non-square covariance, a size
+  ///   mismatch against `modeCells`, or a negative degree.
+  void setCarriedState(
+      const std::vector<std::vector<std::uint64_t>> &modeCells, int degree,
+      const std::vector<std::complex<double>> &covariance);
+  /// Drop the carried state (the energy term becomes exactly zero).
+  void clearCarriedState();
+  [[nodiscard]] bool hasCarriedState() const noexcept {
+    return !carriedModeCells_.empty();
+  }
+  [[nodiscard]] int carriedStateDegree() const noexcept {
+    return carriedStateDegree_;
+  }
+  [[nodiscard]] const std::vector<std::vector<std::uint64_t>> &
+  carriedStateModeCells() const noexcept {
+    return carriedModeCells_;
+  }
+  [[nodiscard]] const std::vector<std::complex<double>> &
+  carriedStateCovariance() const noexcept {
+    return carriedCovariance_;
+  }
+
+  /// The mean-field coefficient `β_E` (checkpointed). Default 0.
+  void setCarriedStateEnergyWeight(double weight);
+  [[nodiscard]] double carriedStateEnergyWeight() const noexcept {
+    return carriedStateEnergyWeight_;
+  }
+
+  /// The carried-state energy density
+  /// \f$ E_{\rm carried}(\Gamma,g)=\operatorname{Re}\operatorname{tr}
+  ///     \bigl(\Gamma_S\,h_S(g)\bigr) \f$,
+  /// the exact quasi-free expectation \f$ \langle d\Gamma(h)\rangle \f$ of the
+  /// one-particle generator \f$ h_S(g)=\tfrac12(L_k+L_k^\dagger)\big|_S \f$ —
+  /// the Hermitian part of the metric Hodge operator at the carried degree,
+  /// restricted to the carried modes' cells. `S` is the set of carried mode
+  /// cells that still exist in `spacetime`: a mode whose cell a move removed
+  /// contributes nothing, and a cell the move created carries no occupation,
+  /// so the term survives combinatorial change without a repair step.
+  ///
+  /// Depends on `Γ` and the classical geometry ONLY. Exactly 0 outside the
+  /// `CertificatesBlindMeanField` sub-mode, with no carried state, or at
+  /// weight zero.
+  [[nodiscard]] double carriedStateEnergy(
+      const std::shared_ptr<Spacetime> &spacetime) const;
+
+  /// Exact analytic gradient of `carriedStateEnergy` with respect to each
+  /// edge's \f$ \ell^2 \f$, in `getEdgeList()` order:
+  /// \f$ \partial E/\partial z_e=\operatorname{Re}\operatorname{tr}
+  ///     (\Gamma_S\,[\partial L_k/\partial z_e]_S) \f$ from
+  /// `HodgeLaplacian::laplacianGradient` — no finite differences. The
+  /// returned component is the real-plane ascent displacement
+  /// \f$ \partial E/\partial(\operatorname{Re}z)+
+  ///     i\,\partial E/\partial(\operatorname{Im}z) \f$, matching the
+  /// convention stage 2 subtracts.
+  [[nodiscard]] std::vector<std::complex<double>> carriedStateEnergyGradient(
+      const std::shared_ptr<Spacetime> &spacetime) const;
+
+  /// The #780 purity defect \f$ \lVert\Gamma^2-\Gamma\rVert_F \f$ of the
+  /// carried covariance (NaN with no carried state) — the Gaussianity
+  /// certificate both emergence sub-modes must report.
+  [[nodiscard]] double carriedStatePurityDefect() const;
+  /// Whether the #780 purity certificate HOLDS at `tolerance`.
+  [[nodiscard]] bool carriedStatePurityHolds(double tolerance = 1e-9) const;
+
+  /// The checkpointed mean-field update schedule: `dt` per step, `steps`
+  /// steps per `advanceCarriedState` call.
+  void setMeanFieldSchedule(double dt, int steps);
+  [[nodiscard]] double meanFieldStepSize() const noexcept {
+    return meanFieldStepSize_;
+  }
+  [[nodiscard]] int meanFieldSteps() const noexcept { return meanFieldSteps_; }
+
+  /// Advance the carried covariance through #780's
+  /// `CovarianceState::meanFieldEvolve` under the SAME generator the energy
+  /// term uses, \f$ h(\Gamma,g)=\tfrac12(L_k+L_k^\dagger)|_S \f$ with the
+  /// classical geometry closed over. Returns the worst purity defect measured
+  /// across the steps (NaN with no carried state); the loop is Gaussian-closed
+  /// by construction and the certificate MEASURES that closure.
+  double advanceCarriedState();
+
+  // ---- particle-independent refinement (design spec §17) ----
+
+  /// The base geometric/numerical indicators emergence-mode refinement is
+  /// allowed to consult. Every member is a quantity of the BASE problem: not
+  /// one is a coarse-response residual, band gap, modularity, transport
+  /// leakage, Wilson/center read, exchange read, anchor score, amplitude Gram
+  /// defect, or particle score.
+  struct RefinementIndicators {
+    /// \f$ \lVert\nabla_z S_{\rm Regge}\rVert^2 \f$ on the current complex.
+    double reggeStationarityResidual = 0.0;
+    /// \f$ \sum_k\lVert\nabla_z S_{\rm Hodge,k}\rVert^2 \f$.
+    double hodgeStationarityResidual = 0.0;
+    /// Curvature concentration: \f$ \max_h|\varepsilon_h| \f$ over the mean
+    /// \f$ |\varepsilon_h| \f$ across the \f$(d-2)\f$-hinges (1 = flat spread,
+    /// large = curvature piling onto one hinge). 0 when no hinge carries any.
+    double curvatureConcentration = 0.0;
+    /// Mesh quality: \f$ \min_\sigma|{\rm vol}\,\sigma| /
+    /// \max_\sigma|{\rm vol}\,\sigma| \f$ over the top cells, in `[0,1]`;
+    /// 0 means a degenerate cell. 1 with no cells.
+    double meshQuality = 1.0;
+    /// Solver discretization error: the magnitude of the LAST accepted
+    /// stage-2 objective improvement (0 at a stationary point).
+    double solverError = 0.0;
+  };
+
+  /// The names of `RefinementIndicators`' members, in declaration order — the
+  /// firewall list a structural test asserts against.
+  [[nodiscard]] static std::vector<std::string> refinementIndicatorNames();
+
+  /// Measure the indicators on this node's current complex.
+  [[nodiscard]] RefinementIndicators refinementIndicators() const;
+
+  /// The thresholds `refinementDecision` compares against. Defaults never
+  /// fire: `reggeStationarityResidual`/`hodgeStationarityResidual`/
+  /// `curvatureConcentration`/`solverError` are UPPER bounds crossed from
+  /// below (infinity = never), `meshQuality` is a LOWER bound crossed from
+  /// above (0 = never).
+  void setRefinementThresholds(const RefinementIndicators &thresholds);
+  [[nodiscard]] const RefinementIndicators &refinementThresholds()
+      const noexcept {
+    return refinementThresholds_;
+  }
+
+  /// Whether to refine, and which indicator asked. `trigger` is one of
+  /// `refinementIndicatorNames()` or empty.
+  struct RefinementDecision {
+    bool refine = false;
+    std::string trigger{};
+    RefinementIndicators indicators{};
+  };
+
+  /// The refinement rule. STATIC over the indicator record by design: it
+  /// cannot reach a certificate, a fiber, a transport, or a particle read.
+  [[nodiscard]] static RefinementDecision refinementDecisionOf(
+      const RefinementIndicators &indicators,
+      const RefinementIndicators &thresholds);
+  /// `refinementDecisionOf` on this node's measured indicators.
+  [[nodiscard]] RefinementDecision refinementDecision() const;
+
+  /// Apply geometry refinement when — and only when — `refinementDecision()`
+  /// asks for it, through the EXISTING gated cone-in surgery
+  /// (`applyMoveSpecification`'s `dualComplexValid` gate, the same primitive
+  /// stage 1 and `preconeCells` use). Nothing is reimplemented and nothing is
+  /// inserted by fiat. Returns the number of refinement cells committed.
+  int refineGeometry(int maxCells = 1);
+
+  // ---- the post-hoc analysis overlay ----
+
+  /// Analysis-overlay configuration. DISABLED by default: with `enabled`
+  /// false not one line of the overlay runs and the engine is bit-identical
+  /// to the pre-#776 build.
+  struct AnalysisConfig {
+    /// Master switch. False = the overlay never runs (the default).
+    bool enabled = false;
+    /// Run one pass after every `cadence` ACCEPTED combinatorial moves.
+    int cadence = 1;
+    /// Hodge degrees the spectral bands are enumerated at.
+    std::vector<int> degrees{1};
+    /// The #765 modularity resolution sequence scanned per pass.
+    std::vector<double> resolutions{1.0};
+    /// Build the #771 lazy Fock expression (oracle / explicit non-Gaussian
+    /// boundary data only — never the quasi-free production representation).
+    bool fockOracle = false;
+    /// Replay switch: serve NOTHING from the #764 `AnalyticCache`, so the
+    /// cold path can be compared against the incremental one.
+    bool coldCaches = false;
+  };
+
+  void setAnalysisConfig(const AnalysisConfig &config);
+  [[nodiscard]] const AnalysisConfig &analysisConfig() const noexcept {
+    return analysisConfig_;
+  }
+
+  /// Deterministic provenance stamped on every checkpoint.
+  void setProvenance(const std::string &configHash, const std::string &commit);
+  [[nodiscard]] const std::string &provenanceConfigHash() const noexcept {
+    return provenanceConfigHash_;
+  }
+  [[nodiscard]] const std::string &provenanceCommit() const noexcept {
+    return provenanceCommit_;
+  }
+
+  /// Committed combinatorial moves since construction (the cadence counter).
+  [[nodiscard]] std::uint64_t acceptedMoveCount() const noexcept {
+    return acceptedMoveCount_;
+  }
+  /// Completed analysis passes since construction.
+  [[nodiscard]] std::uint64_t analysisPassCount() const noexcept {
+    return analysisPassCount_;
+  }
+
+  /// Run ONE post-hoc analysis pass over the CURRENT accepted geometry, in the
+  /// design spec §17 order: publish the accepted move's touched star to the
+  /// #764 `AnalyticCache`; update the #765 component hierarchy and its
+  /// invalidated ancestry; update the #769 spectral projectors and the #768
+  /// labeled retained-fiber sum; update the #770 transports and Wilson/center
+  /// reads; update the #780 quasi-free covariance and its Wick reads; build
+  /// the #771 lazy Fock expression only when the oracle is selected; evaluate
+  /// the #773/#774/#775 particle reads; and record the checkpoint.
+  ///
+  /// Read-only on the geometry: this pass cannot accept, reject, or prioritize
+  /// a move, and writes nothing the objective or the refinement decision
+  /// reads.
+  void runRecursiveAnalysis();
+
+  /// The versioned checkpoint document of the last pass (design spec §20,
+  /// schema version 3), as JSON. Empty before the first pass. Unknown /
+  /// uncertified values serialize as `null`, never as zero.
+  [[nodiscard]] const std::string &checkpointJson() const noexcept {
+    return checkpointJson_;
+  }
+  /// The schema version this build writes and accepts.
+  [[nodiscard]] static int checkpointSchemaVersion() noexcept { return 3; }
+
+  /// Replay mode: rebuild the raw complex recorded in `checkpoint`, disable
+  /// every cache, recompute every derived hierarchy and certificate, and
+  /// return the freshly written checkpoint — stamped `"replay"`. The verdicts
+  /// must equal the incremental run's.
+  /// @throws std::invalid_argument on malformed JSON or an UNKNOWN
+  ///   `schema_version` (a reader never guesses at a version it does not
+  ///   know).
+  [[nodiscard]] static std::string replayCheckpoint(
+      const std::string &checkpoint);
+
+  /// The `schema_version` recorded in `checkpoint`.
+  /// @throws std::invalid_argument on malformed JSON or a missing version.
+  [[nodiscard]] static int checkpointVersionOf(const std::string &checkpoint);
+
   [[nodiscard]] std::shared_ptr<Spacetime> spacetime() const { return spacetime_; }
   [[nodiscard]] const std::vector<BoundaryBlock> &inputs() const {
     return inputBlocks_;
@@ -725,6 +1060,62 @@ class MultiCobordism {
   int lastStage1LookaheadDepth_ = 0;
   std::vector<BoundaryBlock> inputBlocks_;
   std::vector<BoundaryBlock> outputBlocks_;
+
+  // ---- #776 state ----
+  //
+  // NONE of the analysis members below is read by `objectiveFor`,
+  // `objectiveTermsFor`, `deltaF`, `rU`, `step`, `stage1Update`, or
+  // `stage2Update`. The only member on this list the objective touches is the
+  // carried state (`carriedModeCells_` / `carriedCovariance_` /
+  // `carriedStateEnergyWeight_`), and only through the single
+  // `ObjectiveTerms::carriedStateEnergy` scalar, and only while the run
+  // declares `EmergenceSubmode::CertificatesBlindMeanField`.
+  SimulationMode simulationMode_{SimulationMode::Emergence};
+  EmergenceSubmode emergenceSubmode_{EmergenceSubmode::Strict};
+  /// The carried modes' `carriedStateDegree_`-cells, by vertex tuple.
+  std::vector<std::vector<std::uint64_t>> carriedModeCells_{};
+  /// Γ, flat row-major over the carried modes.
+  std::vector<std::complex<double>> carriedCovariance_{};
+  int carriedStateDegree_{1};
+  double carriedStateEnergyWeight_{0.0};
+  double meanFieldStepSize_{0.0};
+  int meanFieldSteps_{0};
+  /// Thresholds for `refinementDecisionOf`; defaults never fire.
+  RefinementIndicators refinementThresholds_{};
+  /// |ΔF| of the last ACCEPTED stage-2 update (the solver-error indicator).
+  double lastStage2Improvement_{0.0};
+  AnalysisConfig analysisConfig_{};
+  std::string provenanceConfigHash_{};
+  std::string provenanceCommit_{};
+  std::uint64_t seed_{0};
+  std::uint64_t acceptedMoveCount_{0};
+  std::uint64_t analysisPassCount_{0};
+  /// The cell set of the complex the LAST analysis pass saw — differenced
+  /// against the current one to publish the accepted move's touched star.
+  std::set<std::vector<std::uint64_t>> analysisCellSet_{};
+  /// The edge lengths the LAST analysis pass saw, so a pure metric change
+  /// publishes only the edges that actually moved and disjoint siblings stay
+  /// served from cache.
+  std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>>
+      analysisEdgeLengths_{};
+  /// Set true once `analysisCellSet_` holds a real observation.
+  bool analysisCellSetValid_{false};
+  /// The last pass's checkpoint document (design spec §20).
+  std::string checkpointJson_{};
+
+  /// Run the overlay when the config asks for it — called ONLY after a move
+  /// has already been committed, so it cannot influence that move.
+  void noteAcceptedMove();
+  /// The overlay pass body (implemented beside the rest of the recursive
+  /// integration, in `src/cobordism/RecursiveFiberSimulation.cpp`).
+  void runRecursiveAnalysisOn(const std::shared_ptr<Spacetime> &spacetime);
+  /// Serialize the current raw complex + edge data for the checkpoint.
+  [[nodiscard]] std::string rawComplexJson(
+      const std::shared_ptr<Spacetime> &spacetime) const;
+  /// The one-particle generator `h_S(g)` of the carried modes on `spacetime`,
+  /// flat row-major over the carried modes; entries for absent cells are 0.
+  [[nodiscard]] std::vector<std::complex<double>> carriedStateGenerator(
+      const std::shared_ptr<Spacetime> &spacetime) const;
 };
 
 }  // namespace tessera::cobordism
