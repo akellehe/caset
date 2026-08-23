@@ -226,8 +226,10 @@
 //   • Verdicts (spec §16.4): "no-baryon" when the structural gates fail;
 //     "certified-proton" when every certificate in the table holds;
 //     "quasi-free-sharp-spin-obstruction" when the ONLY failure is
-//     `sharp-spin` AND the accepted covariance-only class was swept and its
-//     Var(J²) floor stays above tolerance; "baryon-candidate" otherwise.
+//     `sharp-spin`, the candidate's OWN Var(J²) was MEASURED (an absent
+//     variance is an unknown, never an obstruction), and the accepted
+//     covariance-only class was swept with its Var(J²) floor staying above
+//     tolerance; "baryon-candidate" otherwise.
 //     The obstruction is a BRANCH POINT mandating an explicit non-Gaussian
 //     mechanism (its own scope decision and ticket) — never a refutation of
 //     the geometry, and nothing here silently adds such a mechanism.

@@ -2573,7 +2573,7 @@ BaryonRead ParticleClusters::classifyBaryon(
   } else if (passed == kGates) {
     read.classification = "certified-proton";
   } else if (failed.size() == 1 && failed.front() == "sharp-spin" &&
-             read.quasiFreeClassSwept &&
+             read.totalJ2Variance.has_value() && read.quasiFreeClassSwept &&
              read.classVarianceFloor > cfg_.spinVarianceTolerance) {
     // Every other certificate passes and Var(J²) fails to converge to zero
     // across the ACCEPTED covariance-only class: the structural branch

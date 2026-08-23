@@ -3314,6 +3314,17 @@ class TestQuasiFreeSharpSpinObstruction(unittest.TestCase):
         self.assertLess(read.classVarianceFloor, 1e-13)
         self.assertEqual(read.classification, "baryon-candidate")
 
+    def test_unmeasured_own_variance_is_not_an_obstruction(self):
+        # the class does not converge, but THIS candidate's own Var(J^2)
+        # was never measured: unknown is not an obstruction.
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(spin="expectation-only",
+                             class_variances=self._class()))
+        self.assertIsNone(read.totalJ2Variance)
+        self.assertTrue(read.quasiFreeClassSwept)
+        self.assertEqual(read.failedCertificates, ["sharp-spin"])
+        self.assertEqual(read.classification, "baryon-candidate")
+
     def test_obstruction_requires_every_other_certificate(self):
         # the Delta-like case: the expectation ALSO fails, so this is a
         # plain baryon candidate, never the obstruction branch.
