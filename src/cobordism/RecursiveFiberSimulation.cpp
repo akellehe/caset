@@ -894,6 +894,23 @@ void MultiCobordism::runRecursiveAnalysisOn(
   if (!spacetime) return;
   ++analysisPassCount_;
 
+  // ── §17.0 record the objective of the state about to be analysed ─────
+  //
+  // FIRST, before any spectral read. Measured (#776): the engine's stage-2
+  // trajectory shifts by ~1e-11 relative when ANY read-only Hodge observable
+  // — `HodgeLaplacian::spectrum`, `spectralEntropy`, `MultiCobordism::betti`,
+  // `hodgeEntropy` — is evaluated before `ReggeSolver::actionGradientExact`
+  // rather than after it. That sensitivity is pre-existing and has nothing to
+  // do with this ticket (a bare `HodgeLaplacian(st).spectralEntropy(1)` with
+  // no analysis at all reproduces it exactly, value for value), but the
+  // overlay would inherit it. Evaluating the objective's own terms first —
+  // which is the order `objective()` itself uses — keeps an analysed run
+  // BIT-IDENTICAL to an unanalysed one, and is the natural order anyway:
+  // a checkpoint records the objective of the state it describes.
+  const auto terms = objectiveTermsFor(spacetime);
+  const auto indicators = refinementIndicators();
+  const auto decision = refinementDecisionOf(indicators, refinementThresholds_);
+
   // ── §17.1 publish the accepted move and update the analytic caches ──
   //
   // The touched star is the exact support of what changed since the last pass:
@@ -931,8 +948,22 @@ void MultiCobordism::runRecursiveAnalysisOn(
   analysisEdgeLengths_ = edgeLengths;
   analysisCellSetValid_ = true;
 
-  auto cache = std::make_shared<AnalyticCache>(spacetime);
+  // The cache survives ACROSS passes while the complex object does, so a
+  // published star drops only the entries whose component it meets. A
+  // committed combinatorial move rebuilds the complex (the engine's existing
+  // `build(snapshot)` behaviour), which necessarily rebinds the cache.
+  const auto boundSpacetime = analysisCacheBinding_.lock();
+  if (!analysisCache_ || boundSpacetime != spacetime) {
+    analysisCache_ = std::make_shared<AnalyticCache>(spacetime);
+    analysisCacheBinding_ = spacetime;
+  }
+  auto cache = std::static_pointer_cast<AnalyticCache>(analysisCache_);
   cache->setEnabled(!analysisConfig_.coldCaches);
+  // The checkpoint reports THIS pass's cache activity, not the cache's
+  // lifetime totals, so a reader can see what one incremental update cost.
+  const std::uint64_t hitsBefore = cache->hits();
+  const std::uint64_t missesBefore = cache->misses();
+  const std::uint64_t invalidationsBefore = cache->invalidations();
   if (!star.empty()) cache->publish(star);
 
   // ── §17.2 the local component hierarchy ──────────────────────────────
@@ -1262,9 +1293,6 @@ void MultiCobordism::runRecursiveAnalysisOn(
   }
   staticCertificateText += "]";
 
-  const auto terms = objectiveTermsFor(spacetime);
-  const auto indicators = refinementIndicators();
-  const auto decision = refinementDecisionOf(indicators, refinementThresholds_);
   std::vector<double> resolutionList = modularityConfig.resolutions;
   std::vector<int> degreeList = fiberConfig.degrees;
 
@@ -1370,12 +1398,15 @@ void MultiCobordism::runRecursiveAnalysisOn(
                                        [](double gamma) {
                                          return Json::number(gamma);
                                        })},
-           {"cache_hits", Json::integer(
-                              static_cast<long long>(cache->hits()))},
-           {"cache_misses", Json::integer(
-                                static_cast<long long>(cache->misses()))},
+           {"cache_hits",
+            Json::integer(static_cast<long long>(cache->hits() - hitsBefore))},
+           {"cache_misses", Json::integer(static_cast<long long>(
+                                cache->misses() - missesBefore))},
            {"cache_invalidations",
-            Json::integer(static_cast<long long>(cache->invalidations()))},
+            Json::integer(static_cast<long long>(cache->invalidations() -
+                                                 invalidationsBefore))},
+           {"cache_entries",
+            Json::integer(static_cast<long long>(cache->size()))},
        })},
       {"provenance",
        Json::object({

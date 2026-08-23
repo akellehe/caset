@@ -1103,6 +1103,14 @@ class MultiCobordism {
       analysisEdgeLengths_{};
   /// Set true once `analysisCellSet_` holds a real observation.
   bool analysisCellSetValid_{false};
+  /// The #764 analytic cache the overlay reuses ACROSS passes, so a local
+  /// change invalidates only the entries whose component meets the published
+  /// star and disjoint siblings stay served. Held as `void` so this header
+  /// keeps its include list; rebound whenever `spacetime_` becomes a
+  /// different object (every committed combinatorial move rebuilds it).
+  std::shared_ptr<void> analysisCache_{};
+  /// The spacetime `analysisCache_` is bound to (identity comparison only).
+  std::weak_ptr<Spacetime> analysisCacheBinding_{};
   /// The last pass's checkpoint document (design spec §20).
   std::string checkpointJson_{};
 
