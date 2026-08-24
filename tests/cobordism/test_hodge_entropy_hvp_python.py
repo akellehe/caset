@@ -213,6 +213,71 @@ class EntropyHessianAscentDirectionTest(unittest.TestCase):
                     self.assertGreater(_scale_of(contracted), 0.0)
 
 
+class EntropyHessianConnectionBlindnessTest(unittest.TestCase):
+    """The HVP must be exactly blind to the C* connection phase.
+
+    `laplacian(k)` is built from the complex squared lengths alone and is
+    certified blind to `phi`; the connection twists a SEPARATE Aharonov-Bohm
+    operator. The entropy, its gradient and therefore this Hessian-vector
+    product are all functions of `laplacian(k)`, so an arbitrary complex phase
+    on every edge must leave them BITWISE unchanged. Anything less would mean
+    a phase-carrying path had leaked into the geometric operator.
+    """
+
+    def test_an_arbitrary_complex_phase_changes_nothing_bitwise(self):
+        spacetime = _jittered_pentatope_sphere()
+        edges = spacetime.getEdgeList().toVector()
+        squared = _squared_lengths(spacetime)
+        for edge in edges:
+            edge.setPhase(complex(0.0, 0.0))
+
+        baseline = {}
+        for name, mode in MODES:
+            for degree in (0, 1, 2):
+                hodge = cob.HodgeLaplacian(spacetime)
+                baseline[(name, degree)] = (
+                    hodge.spectralEntropyGradient(degree, mode),
+                    hodge.spectralEntropyGradientDirectionalDerivative(
+                        degree, squared, mode))
+
+        # A genuinely C* phase: a compact U(1) part AND a non-compact R+ part.
+        for index, edge in enumerate(edges):
+            edge.setPhase(complex(0.31 * (index % 5) - 0.6,
+                                  0.17 * (index % 3) - 0.2))
+
+        for name, mode in MODES:
+            for degree in (0, 1, 2):
+                with self.subTest(mode=name, degree=degree):
+                    hodge = cob.HodgeLaplacian(spacetime)
+                    gradient = hodge.spectralEntropyGradient(degree, mode)
+                    contracted = (
+                        hodge.spectralEntropyGradientDirectionalDerivative(
+                            degree, squared, mode))
+                    expected_gradient, expected_contracted = baseline[
+                        (name, degree)]
+                    self.assertEqual(list(gradient), list(expected_gradient))
+                    self.assertEqual(list(contracted),
+                                     list(expected_contracted))
+
+    def test_the_euler_identity_still_holds_under_a_phase(self):
+        spacetime = _jittered_pentatope_sphere()
+        for index, edge in enumerate(spacetime.getEdgeList().toVector()):
+            edge.setPhase(complex(0.4 * (index % 4), -0.25 * (index % 3)))
+        squared = _squared_lengths(spacetime)
+        for name, mode in MODES:
+            for degree in (0, 1, 2):
+                with self.subTest(mode=name, degree=degree):
+                    hodge = cob.HodgeLaplacian(spacetime)
+                    gradient = hodge.spectralEntropyGradient(degree, mode)
+                    contracted = (
+                        hodge.spectralEntropyGradientDirectionalDerivative(
+                            degree, squared, mode))
+                    negated = [-g for g in gradient]
+                    self.assertLessEqual(
+                        _relative_sup(contracted, negated, _scale_of(gradient)),
+                        EXACT)
+
+
 class EntropyHessianFiniteDifferenceCrossCheckTest(unittest.TestCase):
     """A roundoff-limited cross-check ONLY.
 
