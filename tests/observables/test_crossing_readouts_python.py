@@ -131,7 +131,15 @@ def _certified_rank_one_record(degree):
     asserted.
     """
     st = _from_simplices(3, [(0, 1), (1, 2), (0, 2)])
-    tracker = obs.SpectralFiberTracker(st, obs.SpectralFiberConfig())
+    # The subject here is the CROSSING readouts, not localization.  Every
+    # band of a vertex-transitive fixture like the 3-cycle has a uniform
+    # projector diagonal and therefore localization excess EXACTLY 1, which
+    # never certifies under the default acceptance conjunct.  Declare the
+    # permissive analysis cap the spectral-fiber suite defines for exactly
+    # this situation; the conjunct itself is exercised there.
+    cfg = obs.SpectralFiberConfig()
+    cfg.maxLocalizationExcess = 1.0
+    tracker = obs.SpectralFiberTracker(st, cfg)
     read = tracker.enumerateBands([0, 1, 2], degree)
     for fiber in read.fibers:
         cert = fiber.certificate()

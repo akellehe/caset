@@ -2705,7 +2705,12 @@ def _crossing_band(cell):
         for e in st.getEdgeList().toVector():
             e.setLength(1.0 + 0j)
             e.setPhase(0.0)
-        tracker = obs.SpectralFiberTracker(st, obs.SpectralFiberConfig())
+        # Subject: the crossing conjunct, not localization.  The 3-cycle is
+        # vertex-transitive, so every band carries localization excess
+        # exactly 1; declare the permissive analysis cap.
+        band_cfg = obs.SpectralFiberConfig()
+        band_cfg.maxLocalizationExcess = 1.0
+        tracker = obs.SpectralFiberTracker(st, band_cfg)
         for fiber in tracker.enumerateBands([0, 1, 2], 1).fibers:
             cert = fiber.certificate()
             if (fiber.rank() == 1 and cert.accepted
