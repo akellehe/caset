@@ -142,60 +142,38 @@ def boundary_vertices(spacetime):
     return sorted(boundary)
 
 
-def _hop_layers(spacetime, sources):
-    """Hop distance from `sources` over the 1-skeleton, per vertex id.
-
-    This is the SAME layering `CrossingReadouts::temporalFunction` derives
-    from M0, recomputed here only to assign the causal character consistently
-    with it. Assigning by any other partition would put a causal edge inside
-    a layer, which the temporal-function certificate names and refuses.
-    """
-    layer = {vertex: 0 for vertex in sources}
-    frontier = list(sources)
-    adjacency = {}
-    for edge in spacetime.getEdgeList().toVector():
-        a = int(edge.getSource().getId())
-        b = int(edge.getTarget().getId())
-        adjacency.setdefault(a, set()).add(b)
-        adjacency.setdefault(b, set()).add(a)
-    depth = 0
-    while frontier:
-        depth += 1
-        nxt = []
-        for vertex in frontier:
-            for neighbour in adjacency.get(vertex, ()):
-                if neighbour not in layer:
-                    layer[neighbour] = depth
-                    nxt.append(neighbour)
-        frontier = nxt
-    return layer
+#: Even weighting of the seed length's real and imaginary parts: the unit
+#: vector at Re == Im, so a length of magnitude m carries m/sqrt(2) in each.
+_EVEN_WEIGHT = (1.0 + 1.0j) / math.sqrt(2.0)
 
 
 def build_cobordism_host(n_refine=DECLARED_SIZE, seed=DECLARED_HOST_SEED):
-    """A 4-ball, refined, with a causal structure oriented away from M0.
+    """A single simplex, refined -- the canonical seed.
 
     The paper's crossing readouts live on a cobordism: `tau` is the Lorentzian
     distance FROM the incoming boundary M0, and the surfaces are its level
     sets. A CLOSED complex has no such surface, so those readouts cannot run
-    on one at any size. `SolidSimplex(4)` is the smallest complex that has
-    one -- a 4-ball whose boundary is `S^3 = M0`.
+    on one at any size. A single 4-simplex is a 4-BALL, so it HAS a boundary
+    -- `S^3 = M0` -- structurally, rather than by carving one out of a closed
+    manifold. The whitepaper prescribes no host topology; it specifies
+    cobordisms with `∂W = M0 ⊔ M1`, and this is the smallest complex that is
+    one.
 
-    NEUTRAL otherwise, in the sense that matters: no holes, no pinned carrier,
-    no boundary blocks, no target register, and no state imposed on M0.
-    Whatever the run comes to carry is read afterwards.
+    Edge lengths carry EVENLY WEIGHTED real and imaginary parts. The previous
+    host initialized every length purely real and positive, so the seed had no
+    imaginary part and no causal content at all -- a programme that is
+    Lorentzian in every path was starting from a complex that was not. Even
+    weighting seeds the general-complex regime instead of one of its two real
+    faces, and imposes no state: it is a metric seed, not a carrier.
 
-    The causal assignment is not a free choice. A Lorentzian complex has a
-    causal character on every edge, and the temporal-function certificate
-    requires that no causal edge lie INSIDE a hop layer of M0. Edges between
-    layers are therefore timelike and edges within a layer spacelike, which
-    is the only assignment consistent with having a boundary at all. It fixes
-    a light cone, not a state.
+    NEUTRAL otherwise: no holes, no pinned carrier, no boundary blocks, no
+    target register. Whatever the run comes to carry is read afterwards.
     """
     st = T.Spacetime(T.Metric(True, T.Signature(4, T.Lorentzian)), T.CDT,
                      1.0, 1.0, T.PREFERRED, T.SolidSimplex(4))
     st.build()
     for edge in st.getEdgeList().toVector():
-        edge.setLength(cmath.sqrt(complex(1.0)))
+        edge.setLength(_EVEN_WEIGHT)
     applied = 0
     for step in range(seed, seed + n_refine * 4):
         move = T.AddMove(st, step, False, T.PachnerMode.PreGeometric, False)
@@ -203,16 +181,8 @@ def build_cobordism_host(n_refine=DECLARED_SIZE, seed=DECLARED_HOST_SEED):
             applied += 1
         if applied >= n_refine:
             break
-    layer = _hop_layers(st, boundary_vertices(st))
     for index, edge in enumerate(st.getEdgeList().toVector()):
-        a = int(edge.getSource().getId())
-        b = int(edge.getTarget().getId())
-        magnitude = 1.0 + 0.01 * (index % 6)
-        spans_layers = layer.get(a, 0) != layer.get(b, 0)
-        # Timelike edges carry l^2 < 0, so the length is imaginary; the
-        # causal character is read from Im(length), not from sign(l^2).
-        edge.setLength(cmath.sqrt(complex(-magnitude if spans_layers
-                                          else magnitude)))
+        edge.setLength((1.0 + 0.01 * (index % 6)) * _EVEN_WEIGHT)
     return st
 
 

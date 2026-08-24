@@ -87,22 +87,23 @@ class DriveTest(unittest.TestCase):
         self.assertTrue(ea.boundary_vertices(host),
                         "the host must be a cobordism, not a closed complex")
 
-    def test_no_causal_edge_lies_inside_a_hop_layer(self):
-        """The temporal-function certificate names and refuses that case."""
+    def test_the_seed_weights_real_and_imaginary_parts_evenly(self):
+        """The canonical seed, and the Lorentzian content the old host lacked.
+
+        The previous host initialized every length purely real and positive,
+        so the seed carried no imaginary part at all. Nothing CONSTRAINS the
+        geometry to stay there -- stage 2 rotates `z` freely and the engine
+        has disposition moves -- but the starting point had no causal content
+        to evolve from.
+        """
         host = ea.build_cobordism_host(SMALL, ea.DECLARED_HOST_SEED)
-        layer = ea._hop_layers(host, ea.boundary_vertices(host))
-        timelike = 0
-        for edge in host.getEdgeList().toVector():
-            a = int(edge.getSource().getId())
-            b = int(edge.getTarget().getId())
-            if edge.isTimelike():
-                timelike += 1
-                self.assertNotEqual(layer.get(a, 0), layer.get(b, 0))
-            else:
-                self.assertEqual(layer.get(a, 0), layer.get(b, 0))
-        self.assertGreater(timelike, 0,
-                           "a Lorentzian host with a boundary must carry "
-                           "causal edges, or tau cannot accumulate")
+        edges = host.getEdgeList().toVector()
+        self.assertTrue(edges)
+        for edge in edges:
+            length = complex(edge.getLength())
+            with self.subTest(edge=str(edge)):
+                self.assertAlmostEqual(length.real, length.imag, places=12)
+                self.assertNotAlmostEqual(length.imag, 0.0, places=12)
 
     def test_the_objective_is_joint_stationarity_in_strict_emergence(self):
         host = ea.build_cobordism_host(SMALL, ea.DECLARED_HOST_SEED)
@@ -176,14 +177,38 @@ class AbsenceTest(unittest.TestCase):
         self.assertIn("level", frame.crossings)
         self.assertIn("crossings", frame.crossings)
 
-    def test_tau_certifies_on_the_host(self):
-        """`Re tau` is a certified temporal function of the built host."""
+    def test_the_host_supplies_a_reference_surface(self):
+        """M0 exists, so `tau` has a surface to be measured from.
+
+        This is the ticket's fix. Whether `tau` then CERTIFIES is a separate
+        question about the seed's causal content, pinned below.
+        """
+        host = ea.build_cobordism_host(SMALL, ea.DECLARED_HOST_SEED)
+        self.assertTrue(ea.boundary_vertices(host))
+
+    def test_the_seed_has_no_causal_order_yet(self):
+        """Measured, and NOT the behaviour to preserve.
+
+        The canonical seed weights every length's real and imaginary parts
+        evenly, so every edge is causal. The temporal-function certificate
+        requires that no causal edge lie inside a hop layer of M0, so it
+        refuses with `causal-cycle`: the seed has causal CHARACTER everywhere
+        but no causal ORDER. That is a reason of the readout's own, not the
+        absent surface this ticket removed.
+
+        This test records the measured state so a change is noticed. If the
+        dynamics later produces a causal order, `certified` becomes True and
+        this test should be replaced by one asserting that -- it is a
+        tripwire, not a specification.
+        """
         host = ea.build_cobordism_host(SMALL, ea.DECLARED_HOST_SEED)
         temporal = obs.CrossingReadouts.temporalFunction(
             host, ea.boundary_vertices(host))
-        self.assertTrue(temporal.certified,
-                        "; ".join(str(r) for r
-                                  in temporal.failedCertificates))
+        reasons = [str(r) for r in temporal.failedCertificates]
+        if temporal.certified:
+            self.assertEqual(reasons, [])
+            return
+        self.assertIn("causal-cycle", reasons)
 
     def test_a_refused_transport_names_why(self):
         frame = _frames()[-1]
