@@ -52,6 +52,26 @@ NAN = float("nan")
 OMEGA = complex(-0.5, 0.5 * math.sqrt(3.0))  # the algebraic cube root
 
 
+def _open_anchor_gate():
+    """An ACCEPTED triangle-anchor gate.
+
+    The exactness contract gates the colour-specific kernels on this
+    certificate, so every lift/projective fixture below has to carry one. A
+    single literal oriented triangle against a |W|-orthonormal band scores
+    exactly one with a single determinant phase — the cleanest accepted
+    profile the anchor kernel produces.
+    """
+    rng = np.random.default_rng(61)
+    weights = np.array([2.0, 0.5, 1.25])
+    frame = rng.normal(size=(3, 3)) + 1j * rng.normal(size=(3, 3))
+    band = obs.ColorAnchor.orthonormalizeFrame(frame, weights)
+    anchor = obs.ColorAnchor([obs.OrientedTriangle([0, 1, 2], [1, 1, 1])])
+    return obs.ColorAnchor.gateFor(anchor.evaluate(band, weights))
+
+
+GATE = _open_anchor_gate()
+
+
 # --------------------------------------------------------------------------- #
 # fiber fixtures (through the sanctioned record-rehydration route)
 # --------------------------------------------------------------------------- #
@@ -715,18 +735,18 @@ class TestRankThreeCenter(unittest.TestCase):
 
     def test_projective_representative_is_special_unitary(self):
         u = _random_unitary(np.random.default_rng(31), 3)
-        rep = np.asarray(obs.FiberConnection.projectiveRepresentative(u))
+        rep = np.asarray(obs.FiberConnection.projectiveRepresentative(u, GATE))
         self.assertLess(abs(np.linalg.det(rep) - 1.0), 1e-10)
         # same projective class for every center twist of the input
         rep_twisted = np.asarray(
-            obs.FiberConnection.projectiveRepresentative(OMEGA * u))
+            obs.FiberConnection.projectiveRepresentative(OMEGA * u, GATE))
         ratios = [np.linalg.norm(rep_twisted - (OMEGA ** s) * rep)
                   for s in range(3)]
         self.assertLess(min(ratios), 1e-10)
 
     def test_fundamental_lift_branches_shift_by_center(self):
         links = self._center_loop(0.4)
-        lifts = [self.conn.fundamentalLift(links, s) for s in range(3)]
+        lifts = [self.conn.fundamentalLift(links, GATE, s) for s in range(3)]
         for lift in lifts:
             self.assertTrue(lift.valid)
             self.assertLess(lift.detResidual, 1e-12)
@@ -754,22 +774,22 @@ class TestRankThreeCenter(unittest.TestCase):
 
     def test_known_center_loop_returns_the_analytic_sector(self):
         # three links of determinant phase 2*pi/3: Theta = 2*pi, sector 1
-        lift = self.conn.fundamentalLift(self._center_loop(TWO_PI / 3.0))
+        lift = self.conn.fundamentalLift(self._center_loop(TWO_PI / 3.0), GATE)
         self.assertTrue(lift.valid)
         self.assertEqual(lift.centerSector, 1)
         self.assertAlmostEqual(lift.accumulatedDeterminantPhase, TWO_PI,
                                delta=MACHINE)
         # conjugate loop: Theta = -2*pi, sector 2 (= -1 mod 3)
-        lift_bar = self.conn.fundamentalLift(self._center_loop(-TWO_PI / 3.0))
+        lift_bar = self.conn.fundamentalLift(self._center_loop(-TWO_PI / 3.0), GATE)
         self.assertEqual(lift_bar.centerSector, 2)
         # trivial loop: sector 0
-        lift0 = self.conn.fundamentalLift(self._center_loop(0.1))
+        lift0 = self.conn.fundamentalLift(self._center_loop(0.1), GATE)
         self.assertEqual(lift0.centerSector, 0)
 
     def test_lift_refuses_generic_rank(self):
         two_a, two_b = _unit_fiber(31, 2), _unit_fiber(41, 2)
         link = self.conn.transport(two_a, two_b, _rotation(0.3))
-        lift = self.conn.fundamentalLift([link])
+        lift = self.conn.fundamentalLift([link], GATE)
         self.assertFalse(lift.valid)
         self.assertIn("rank", lift.invalidReason)
         self.assertFalse(lift.certificate.holds())
@@ -783,13 +803,13 @@ class TestRankThreeCenter(unittest.TestCase):
         link = self.conn.transport(nn, self.B, np.eye(3))
         self.assertTrue(link.accepted)
         self.assertEqual(link.unitaryMap.size, 0)
-        lift = self.conn.fundamentalLift([link])
+        lift = self.conn.fundamentalLift([link], GATE)
         self.assertFalse(lift.valid)
         self.assertIn("GL", lift.invalidReason)
 
     def test_lift_determinant_identity(self):
         links = self._center_loop(0.7)
-        lift = self.conn.fundamentalLift(links)
+        lift = self.conn.fundamentalLift(links, GATE)
         h = np.asarray(self.conn.holonomy(links).holonomy)
         theta = lift.accumulatedDeterminantPhase
         self.assertAlmostEqual(
@@ -801,7 +821,7 @@ class TestRankThreeCenter(unittest.TestCase):
     def test_bad_branch_raises(self):
         links = self._center_loop(0.2)
         with self.assertRaises(ValueError):
-            self.conn.fundamentalLift(links, 3)
+            self.conn.fundamentalLift(links, GATE, 3)
 
 
 # =========================================================================== #
@@ -1046,7 +1066,7 @@ class TestKreinAndNonNormal(unittest.TestCase):
         a = self._krein_fiber(1)
         link = conn.transport(a, a, t)
         self.assertTrue(link.accepted)
-        lift = conn.fundamentalLift([link])
+        lift = conn.fundamentalLift([link], GATE)
         self.assertFalse(lift.valid)
         self.assertIn("positive regime", lift.invalidReason)
 
@@ -1429,9 +1449,9 @@ class TestRecordSerialization(unittest.TestCase):
         # thereby the PU(3) class, which V alone determines)
         np.testing.assert_allclose(
             np.asarray(obs.FiberConnection.projectiveRepresentative(
-                np.asarray(back.unitaryMap))),
+                np.asarray(back.unitaryMap), GATE)),
             np.asarray(obs.FiberConnection.projectiveRepresentative(
-                np.asarray(read.unitaryMap))), rtol=0, atol=0)
+                np.asarray(read.unitaryMap), GATE)), rtol=0, atol=0)
 
     def test_rejected_transport_round_trip(self):
         read = self.conn.transport(self.A, self.B, np.diag([0.5, 2.0, 1.0]))
@@ -1445,7 +1465,7 @@ class TestRecordSerialization(unittest.TestCase):
     def test_lift_round_trip_carries_the_center_sector(self):
         links = [_phase_link(self.conn, self.A, self.B, TWO_PI / 3.0)
                  for _ in range(3)]
-        lift = self.conn.fundamentalLift(links, 2)
+        lift = self.conn.fundamentalLift(links, GATE, 2)
         back = obs.FundamentalLiftRead.fromRecord(lift.toRecord())
         self.assertEqual(self._delta(lift.toRecord(), back.toRecord()), 0.0)
         self.assertEqual(back.centerSector, 1)
@@ -1522,3 +1542,101 @@ class TestSpecHolonomyDiagnostics(unittest.TestCase):
             min(min(l.toGap, l.fromGap) for l in links), delta=MACHINE)
         self.assertEqual(loop.minNumericalRank,
                          min(l.numericalRank for l in links))
+
+
+# --------------------------------------------------------------------------- #
+# the exactness contract's anchor gate on the colour-specific kernels
+# --------------------------------------------------------------------------- #
+class TestAnchorGatedColourKernels(unittest.TestCase):
+    """The contract says the exact 3x3 colour determinants and the centre lift
+    are used "only after a rank-three band passes its triangle-anchor
+    certificate". Rank three and an accepted transport are NOT sufficient, so
+    an ungated call must refuse rather than emit a colour datum."""
+
+    def setUp(self):
+        self.conn = obs.FiberConnection()
+        self.link = self.conn.transport(_unit_fiber(1, 3), _unit_fiber(11, 3),
+                                        np.eye(3))
+        self.assertTrue(self.link.accepted)
+        self.assertEqual(self.link.rank, 3)
+
+    def test_default_constructed_gate_is_closed(self):
+        gate = obs.AnchorGate()
+        self.assertFalse(gate.accepted)
+        self.assertIn("absent", gate.refusal_reason)
+
+    def test_projective_representative_refuses_without_an_anchor(self):
+        with self.assertRaises(ValueError) as caught:
+            obs.FiberConnection.projectiveRepresentative(np.eye(3),
+                                                         obs.AnchorGate())
+        self.assertIn("triangle-anchor", str(caught.exception))
+
+    def test_projective_representative_admits_an_anchored_band(self):
+        rep = np.asarray(
+            obs.FiberConnection.projectiveRepresentative(np.eye(3), GATE))
+        np.testing.assert_allclose(rep, np.eye(3), rtol=0, atol=MACHINE)
+
+    def test_fundamental_lift_refuses_without_an_anchor(self):
+        lift = self.conn.fundamentalLift([self.link], obs.AnchorGate())
+        self.assertFalse(lift.valid)
+        self.assertIn("triangle-anchor", lift.invalidReason)
+
+    def test_fundamental_lift_admits_an_anchored_band(self):
+        lift = self.conn.fundamentalLift([self.link], GATE)
+        self.assertTrue(lift.valid)
+        self.assertEqual(lift.rank, 3)
+
+    def test_the_gate_is_checked_before_rank(self):
+        # An unanchored GENERIC-rank family must name the anchor, not the rank:
+        # the contract gates the kernel, so that refusal comes first.
+        link = self.conn.transport(_unit_fiber(31, 2), _unit_fiber(41, 2),
+                                    np.eye(2))
+        lift = self.conn.fundamentalLift([link], obs.AnchorGate())
+        self.assertFalse(lift.valid)
+        self.assertIn("triangle-anchor", lift.invalidReason)
+
+
+class TestAnchorAcceptancePredicate(unittest.TestCase):
+    """One predicate, shared by the quark verdict and the colour kernels."""
+
+    def _profile(self, seed=61, triangles=None):
+        rng = np.random.default_rng(seed)
+        weights = np.array([2.0, 0.5, 1.25])
+        frame = rng.normal(size=(3, 3)) + 1j * rng.normal(size=(3, 3))
+        band = obs.ColorAnchor.orthonormalizeFrame(frame, weights)
+        anchor = obs.ColorAnchor(
+            triangles or [obs.OrientedTriangle([0, 1, 2], [1, 1, 1])])
+        return anchor.evaluate(band, weights)
+
+    def test_a_measured_anchor_passes(self):
+        profile = self._profile()
+        self.assertTrue(obs.ColorAnchor.accepts(profile))
+        self.assertTrue(obs.ColorAnchor.gateFor(profile).accepted)
+
+    def test_missing_evidence_is_refused_not_scored_zero(self):
+        # A default-constructed profile declared no weighting at all: that is
+        # ABSENT evidence, and it must be named as such.
+        gate = obs.ColorAnchor.gateFor(obs.AnchorProfile())
+        self.assertFalse(gate.accepted)
+        self.assertIn("absent", gate.refusal_reason)
+
+    def test_a_score_below_the_floor_is_refused_and_named(self):
+        profile = self._profile()
+        gate = obs.ColorAnchor.gateFor(profile, min_score=1.5)
+        self.assertFalse(gate.accepted)
+        self.assertIn("atlas score", gate.refusal_reason)
+
+    def test_a_coherence_below_the_floor_is_refused_and_named(self):
+        profile = self._profile()
+        gate = obs.ColorAnchor.gateFor(profile, min_phase_coherence=1.5)
+        self.assertFalse(gate.accepted)
+        self.assertIn("coherence", gate.refusal_reason)
+
+    def test_the_gate_records_what_admitted_it(self):
+        profile = self._profile()
+        gate = obs.ColorAnchor.gateFor(profile)
+        self.assertEqual(gate.weighting_id, profile.weighting_id)
+        self.assertAlmostEqual(gate.score, profile.score, delta=MACHINE)
+        self.assertAlmostEqual(gate.phase_coherence, profile.phase_coherence,
+                               delta=MACHINE)
+        self.assertEqual(gate.refusal_reason, "")

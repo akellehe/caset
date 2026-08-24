@@ -693,10 +693,14 @@ QuarkRead ParticleClusters::classifyQuark(
     read.anchorPhaseCoherence = anchor.phaseCoherence;
     read.anchorWeightingId = anchor.weightingId;
   }
+  // ONE acceptance predicate. `ColorAnchor::accepts` is the single definition,
+  // shared with the colour kernels the exactness contract gates on this same
+  // certificate, so the interpretation and the kernels can never drift apart;
+  // this lambda only binds the configured floors for the two call sites below
+  // (the verdict here, and the per-frame stability conjunction at item 8).
   const auto anchorHolds = [&](const AnchorProfile &profile) {
-    return !profile.weightingId.empty() && profile.certificate.holds() &&
-           profile.score >= cfg_.minAnchorScore &&
-           profile.phaseCoherence >= cfg_.minPhaseCoherence;
+    return ColorAnchor::accepts(profile, cfg_.minAnchorScore,
+                                cfg_.minPhaseCoherence);
   };
   passedCore += gate(anchorHolds(anchor), "anchor", failed);
 

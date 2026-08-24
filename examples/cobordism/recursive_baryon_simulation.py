@@ -1334,8 +1334,10 @@ def transports_block(readout):
             "modulus": _finite(abs(complex(holonomy.determinant))),
         }
         if holonomy.unitary:
+            gate = _colour_gate()
             representative = np.array(
-                T.FiberConnection.projectiveRepresentative(holonomy.holonomy))
+                T.FiberConnection.projectiveRepresentative(
+                    holonomy.holonomy, gate))
             out["projective"] = {
                 "available": True,
                 "representative_trace": _complex_pair(
@@ -1359,7 +1361,8 @@ def transports_block(readout):
         centers = {}
         for branch in (0, 1, 2):
             try:
-                lift = readout.connection.fundamentalLift(accepted, branch)
+                lift = readout.connection.fundamentalLift(
+                    accepted, _colour_gate(), branch)
                 centers[str(branch)] = {
                     "valid": bool(lift.valid),
                     "center_sector": int(lift.centerSector),
@@ -1636,6 +1639,19 @@ def spectral_dimension_block(spacetime, config):
 # exactness fixtures — analytic / dense references
 # =====================================================================
 
+
+def _colour_gate(anchor_profile=None):
+    """The triangle-anchor gate the exactness contract requires before any
+    colour-specific kernel runs.
+
+    A band with no measured anchor gets a CLOSED gate, so the projective
+    representative and the centre lift refuse rather than emit an unlicensed
+    colour datum; the refusal travels with the read.
+    """
+    if anchor_profile is None:
+        return T.AnchorGate()
+    return T.ColorAnchor.gateFor(anchor_profile)
+
 def _record_fixture(out, name, residual, tolerance, grade, detail=None):
     out.append({
         "name": name,
@@ -1859,7 +1875,8 @@ def exactness_fixtures():
         np.diag([cmath.exp(2j * math.pi * k / samples), 1.0, 1.0]
                 ).astype(complex)) for k in range(samples)]
     omega = cmath.exp(2j * math.pi / 3.0)
-    lifts = [connection.fundamentalLift(family, branch)
+    gate = _colour_gate(profile)
+    lifts = [connection.fundamentalLift(family, gate, branch)
              for branch in (0, 1, 2)]
     sectors = {int(lift.centerSector) for lift in lifts}
     base = complex(lifts[0].liftTrace)
@@ -1872,9 +1889,9 @@ def exactness_fixtures():
         T.FiberConnection.adjointRepresentation(omega * unitary))
     adjoint_residual = float(np.abs(adjoint - adjoint_shifted).max())
     fundamental_spread = float(np.abs(
-        np.array(T.FiberConnection.projectiveRepresentative(unitary))
+        np.array(T.FiberConnection.projectiveRepresentative(unitary, gate))
         - np.array(T.FiberConnection.projectiveRepresentative(
-            omega * unitary))).max())
+            omega * unitary, gate))).max())
     _record_fixture(out, "center_branch",
                     max(branch_residual, adjoint_residual,
                         0.0 if len(sectors) == 1 else 1.0,

@@ -162,6 +162,7 @@
 #include "cobordism/Certificate.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/RecursiveQuotient.h"
+#include "observables/ColorFiber.h"
 #include "observables/Record.h"
 #include "observables/SpectralFiber.h"
 
@@ -620,9 +621,15 @@ class FiberConnection {
     /// projective CLASS {U, ωU, ω²U} is the faithful datum; this fixes
     /// one representative deterministically (tests exercise all three
     /// branches via `fundamentalLift`).
-    /// @throws std::invalid_argument unless `unitary` is 3×3.
+    ///
+    /// GATED on the triangle-anchor certificate, as the exactness contract
+    /// requires of every colour-specific kernel: rank three and an accepted
+    /// transport are NOT sufficient to emit a colour datum.  A closed
+    /// `AnchorGate` — including the default-constructed one — is refused.
+    /// @throws std::invalid_argument unless `unitary` is 3×3, or when
+    ///   `gate` is closed (the refusal names which conjunct failed).
     [[nodiscard]] static Eigen::MatrixXcd projectiveRepresentative(
-        const Eigen::MatrixXcd &unitary);
+        const Eigen::MatrixXcd &unitary, const AnchorGate &gate);
 
     /// The faithful PU(3) image of a 3×3 unitary: the 9×9 matrix of
     /// M ↦ U M U† restricted to the traceless octet
@@ -635,14 +642,19 @@ class FiberConnection {
     /// Continue a cube-root branch along `links` from the declared base
     /// branch and RECORD the accumulated Z₃ center sector (file banner
     /// for the exact lift identity).  Requires rank three, unitary links,
-    /// and the POSITIVE regime; an invalid request reports
-    /// `valid = false` with the reason — SU(3) is never emitted at
-    /// generic rank, from a GL transport, or from a pseudo-unitary
-    /// (Krein) factor outside U(3).
+    /// the POSITIVE regime, AND an open triangle-anchor `gate`; an invalid
+    /// request reports `valid = false` with the reason — SU(3) is never
+    /// emitted at generic rank, from a GL transport, from a pseudo-unitary
+    /// (Krein) factor outside U(3), or from an unanchored band.
+    ///
+    /// The gate is what the exactness contract demands: rank and transport
+    /// acceptance alone never license a colour kernel.  A closed gate —
+    /// including the default-constructed one — yields
+    /// `valid = false` with the gate's own refusal reason.
     /// @throws std::invalid_argument when `baseBranch` ∉ {0, 1, 2} or
     ///   `links` is empty.
     [[nodiscard]] FundamentalLiftRead fundamentalLift(
-        const std::vector<FiberTransportRead> &links,
+        const std::vector<FiberTransportRead> &links, const AnchorGate &gate,
         int baseBranch = 0) const;
 
     // ── determinant winding ─────────────────────────────────────────────

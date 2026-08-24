@@ -1554,6 +1554,20 @@ convex weighting that produced the score.)doc")
           "residual = max(frame_gram_residual, max(0, calibration_margin)) "
           "against the evaluate gram tolerance.");
 
+  py::class_<AnchorGate>(m, "AnchorGate",
+      "The triangle-anchor gate the exactness contract requires before any "
+      "colour-specific kernel runs. DEFAULT-CONSTRUCTED IS CLOSED, so a "
+      "caller that supplies nothing is refused rather than admitted; the "
+      "only way to open one is ColorAnchor.gateFor, which applies the same "
+      "acceptance predicate the quark verdict uses.")
+      .def(py::init<>())
+      .def_readonly("accepted", &AnchorGate::accepted)
+      .def_readonly("score", &AnchorGate::score)
+      .def_readonly("phase_coherence", &AnchorGate::phaseCoherence)
+      .def_readonly("weighting_id", &AnchorGate::weightingId)
+      .def_readonly("refusal_reason", &AnchorGate::refusalReason,
+          "Why the gate is closed ('' when accepted).");
+
   py::class_<ColorFiber::SectorWeights>(m, "SectorWeights",
       "Occupation-sector weights ||P_N psi||^2 of an 8-dimensional Fock "
       "vector over the three edge modes: vacuum (N=0), quark / fundamental "
@@ -1768,6 +1782,23 @@ the emergence objective; contains no transport code.)doc")
            "Replace the declared convex weighting -- allowed ONLY before "
            "the first evaluate(); afterwards post-hoc weight selection is "
            "rejected (raises).")
+      .def_static("accepts", &ColorAnchor::accepts, py::arg("profile"),
+                  py::arg("min_score") = ColorAnchor::kDefaultMinScore,
+                  py::arg("min_phase_coherence") =
+                      ColorAnchor::kDefaultMinPhaseCoherence,
+                  "THE triangle-anchor acceptance predicate -- one "
+                  "definition, shared by the quark verdict and by the colour "
+                  "kernels the exactness contract gates on it. A profile "
+                  "passes when a weighting was actually declared (an empty "
+                  "weighting_id is MISSING evidence, not a zero score), its "
+                  "calibration certificate holds, and both the atlas score "
+                  "and the determinant-phase coherence meet their floors.")
+      .def_static("gateFor", &ColorAnchor::gateFor, py::arg("profile"),
+                  py::arg("min_score") = ColorAnchor::kDefaultMinScore,
+                  py::arg("min_phase_coherence") =
+                      ColorAnchor::kDefaultMinPhaseCoherence,
+                  "The AnchorGate for a profile: accepts() plus the "
+                  "provenance a refusal needs to name what failed.")
       .def("evaluate",
            py::overload_cast<const Eigen::MatrixXcd&, const Eigen::VectorXd&,
                              double>(&ColorAnchor::evaluate),
@@ -2464,18 +2495,23 @@ leakage certificate, never sampled independently.)doc")
            "changed star.")
       .def_static("projectiveRepresentative",
                   &FiberConnection::projectiveRepresentative,
-                  py::arg("unitary"),
+                  py::arg("unitary"), py::arg("gate"),
                   "A canonical PU(3) class representative: V / (det "
                   "V)^{1/3} with the PRINCIPAL cube root (the class {U, "
-                  "omega U, omega^2 U} is the faithful datum).")
+                  "omega U, omega^2 U} is the faithful datum). GATED on the "
+                  "triangle-anchor certificate: a closed AnchorGate raises, "
+                  "because rank three plus an accepted transport is not a "
+                  "licence to emit a colour datum.")
       .def_static("adjointRepresentation",
                   &FiberConnection::adjointRepresentation, py::arg("unitary"),
                   "The faithful PU(3) image of a 3x3 unitary on the "
                   "traceless octet (ColorFiber conventions; center-blind).")
       .def("fundamentalLift", &FiberConnection::fundamentalLift,
-           py::arg("links"), py::arg("base_branch") = 0,
+           py::arg("links"), py::arg("gate"), py::arg("base_branch") = 0,
            "Continue a cube-root branch along the links from the declared "
-           "base branch and RECORD the accumulated Z3 center sector.")
+           "base branch and RECORD the accumulated Z3 center sector. GATED "
+           "on the triangle-anchor certificate: a closed AnchorGate reports "
+           "valid=False carrying the gate's own refusal reason.")
       .def("closedFamilyWinding", &FiberConnection::closedFamilyWinding,
            py::arg("family"),
            "Integer determinant winding of a CLOSED transport family "

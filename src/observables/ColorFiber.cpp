@@ -778,6 +778,40 @@ Eigen::MatrixXcd ColorAnchor::orthonormalizeFrame(
     return frame * invSqrt;
 }
 
+bool ColorAnchor::accepts(const AnchorProfile& profile, double minScore,
+                          double minPhaseCoherence) {
+    // An empty weightingId means no weighting was ever declared, so no anchor
+    // was measured: MISSING evidence, which is an absent score rather than a
+    // zero one. The calibration certificate must hold on its own terms before
+    // either floor is consulted.
+    return !profile.weightingId.empty() && profile.certificate.holds() &&
+           profile.score >= minScore &&
+           profile.phaseCoherence >= minPhaseCoherence;
+}
+
+AnchorGate ColorAnchor::gateFor(const AnchorProfile& profile, double minScore,
+                                double minPhaseCoherence) {
+    AnchorGate gate;
+    gate.score = profile.score;
+    gate.phaseCoherence = profile.phaseCoherence;
+    gate.weightingId = profile.weightingId;
+    gate.accepted = accepts(profile, minScore, minPhaseCoherence);
+    if (gate.accepted) {
+        gate.refusalReason.clear();
+        return gate;
+    }
+    if (profile.weightingId.empty())
+        gate.refusalReason = "triangle-anchor certificate absent";
+    else if (!profile.certificate.holds())
+        gate.refusalReason = "triangle-anchor certificate does not hold";
+    else if (!(profile.score >= minScore))
+        gate.refusalReason = "triangle-anchor atlas score below the floor";
+    else
+        gate.refusalReason =
+            "triangle-anchor determinant-phase coherence below the floor";
+    return gate;
+}
+
 AnchorProfile ColorAnchor::evaluate(const Eigen::MatrixXcd& frame,
                                     const Eigen::VectorXd& edgeWeights,
                                     double gramTolerance) {
