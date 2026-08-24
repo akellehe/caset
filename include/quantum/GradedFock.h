@@ -50,7 +50,7 @@
 // ExteriorAlgebra::modePermutationMatrix), under which every physical
 // amplitude is invariant.
 //
-// ─── Edge-mode semantics (design spec §6.1) ──────────────────────────────
+// ─── Edge-mode semantics ─────────────────────────────────────────────────
 //
 // Each edge indexes ONE two-level mode factor span{|0⟩,|1⟩} inside the
 // global exterior Fock space Λ•h — identified by a modeId, never by stored
@@ -92,7 +92,7 @@ namespace tessera::quantum {
 ///
 /// An exterior basis state of Λ•C^M as an occupation bitset over M modes,
 /// chunked into 64-bit machine words so the representation is correct for
-/// arbitrary mode counts (design spec §14.1): one word up to the machine-word
+/// arbitrary mode counts: one word up to the machine-word
 /// threshold, `⌈M/64⌉` words above it, with the SAME prefix-popcount sign
 /// rule in both regimes.
 ///
@@ -533,7 +533,7 @@ class FockDirectSum {
     std::size_t modesB_{0};
 };
 
-/// One edge-mode record of an EdgeModeRegistry (design spec §6.1 semantics,
+/// One edge-mode record of an EdgeModeRegistry (edge-mode semantics,
 /// minus geometry — the Edge's complex length stays on the Edge and is not
 /// duplicated here). Stores the oriented incidence data of the mode's edge
 /// and the mode's identity; NEVER a per-edge state vector.

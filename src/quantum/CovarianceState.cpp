@@ -272,7 +272,7 @@ std::vector<MeanFieldStepRead> CovarianceState::meanFieldEvolve(
             "CovarianceState: the mean-field loop needs a generator callback");
     // The certificate path is chosen once, on entry: a pure Slater state
     // certifies purity; a mixed quasi-free state certifies the
-    // covariance-spectrum constraint instead (design spec §13).
+    // covariance-spectrum constraint instead.
     const bool purePath = purityDefect() <= purityTolerance;
     std::vector<MeanFieldStepRead> reads;
     reads.reserve(steps);

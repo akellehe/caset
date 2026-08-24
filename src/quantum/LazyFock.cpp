@@ -1042,7 +1042,7 @@ LazyFockState LazyFockEngine::boundaryProductFixture(
     if (label.empty())
         throw std::invalid_argument(
             "LazyFockEngine::boundaryProductFixture: a stored product "
-            "preparation MUST carry a non-empty label (design spec 6.1)");
+            "preparation MUST carry a non-empty label");
     auto canonical =
         canonicalModes(modes, "LazyFockEngine::boundaryProductFixture");
     if (canonical.empty() || emptyAmplitudes.size() != canonical.size() ||

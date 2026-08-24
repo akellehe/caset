@@ -2188,7 +2188,7 @@ enters the emergence objective, and nothing here classifies particles.)doc")
     // ── The quasi-free covariance layer (#780) ─────────────────────────────
 
     py::class_<WickCertificateRead>(m, "WickCertificateRead",
-        R"doc(One Wick-evaluated polynomial certificate (design spec 6.7): the
+        R"doc(One Wick-evaluated polynomial certificate: the
 value, the measured residual (covariance Hermiticity defect, maximized with
 the imaginary rounding leakage for real-by-construction observables), the
 normal-ordered observable / contraction-plan identifier, the covariance
@@ -2218,8 +2218,7 @@ the measured generator/covariance Hermiticity defects, the purity defect
 
     py::class_<CovarianceState>(m, "CovarianceState",
         R"doc(The number-conserving quasi-free state stored EXACTLY as its
-covariance matrix Gamma_ij = <a_j^dagger a_i> (#780; design spec 5.9, 6.7,
-13 "Algorithm F").
+covariance matrix Gamma_ij = <a_j^dagger a_i> (#780).
 
 Every polynomial observable is a finite exact Wick sum over Gamma —
 occupations, parities, Gram/Pauli determinants, the color wedge |S_ABC|^2,
