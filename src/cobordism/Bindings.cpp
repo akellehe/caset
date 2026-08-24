@@ -1022,6 +1022,10 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "default.")
       .def_property_readonly("objective_name", &MultiCobordism::objectiveName,
            "The injected objective's stable identifier, as stamped on records.")
+      .def("region_handle", &MultiCobordism::regionHandle, py::arg("name"),
+           "Mint a RegionHandle for a DECLARED region. The only way to obtain "
+           "a non-empty handle; an undeclared name raises BY NAME rather than "
+           "producing a scope that silently matches nothing.")
       .def_property_readonly("objective_is_target_conditioned",
            &MultiCobordism::objectiveIsTargetConditioned,
            "Whether the injected objective's value depends on prescribed "
@@ -1254,17 +1258,55 @@ Right -- re-read after each drive call:
       .def_readwrite("carried_state_energy",
                      &MultiCobordism::ObjectiveTerms::carriedStateEnergy);
 
-  py::class_<ObjectiveScoringDomain>(m, "ObjectiveScoringDomain",
-      "What an objective DECLARES about the edges it scores. The engine "
-      "honours the declaration rather than inferring a domain from the "
-      "objective's role.")
+  py::class_<ObjectiveScope>(m, "ObjectiveScope",
+      "What an objective DECLARES that it references: a named pinned region, "
+      "or -- by declaring nothing -- the whole cobordism. Independent of "
+      "whether that region's coordinates are frozen; a pinned edge does not "
+      "vary but is still scored.")
       .def(py::init<>())
+      .def_readwrite("region", &ObjectiveScope::region,
+                     "The region referenced, as a handle obtainable only from "
+                     "MultiCobordism.region_handle. Default means the whole "
+                     "cobordism.")
       .def_readwrite("includes_straddling_edges",
-                     &ObjectiveScoringDomain::includesStraddlingEdges,
-                     "Whether edges with one endpoint inside the objective's "
-                     "region and the other outside it enter its score. True is "
-                     "the whole-complex reading, under which nothing straddles "
-                     "and the declaration has no effect.");
+                     &ObjectiveScope::includesStraddlingEdges,
+                     "Whether edges with a single endpoint in the region enter "
+                     "the score. Meaningless for a whole-cobordism scope.")
+      .def("is_whole_cobordism", &ObjectiveScope::isWholeCobordism,
+           "Whether nothing was declared, i.e. the scope is everything.");
+
+  py::class_<RegionHandle>(m, "RegionHandle",
+      "A reference to a DECLARED pinned region. A caller cannot fabricate one: "
+      "the only non-empty handle comes from MultiCobordism.region_handle, "
+      "which throws BY NAME on an undeclared region rather than silently "
+      "matching nothing.")
+      .def(py::init<>())
+      .def("is_whole_cobordism", &RegionHandle::isWholeCobordism)
+      .def("name", &RegionHandle::name)
+      .def("__eq__", &RegionHandle::operator==, py::is_operator());
+
+  py::class_<ObjectiveName>(m, "ObjectiveName",
+      "The identifiers objectives are known by, as named constants rather "
+      "than literals repeated at each site.")
+      .def_readonly_static("JOINT_STATIONARITY",
+                           &ObjectiveName::kJointStationarity)
+      .def_readonly_static("LEGACY", &ObjectiveName::kLegacy)
+      .def_readonly_static("MEDIATED_CORRESPONDENCE",
+                           &ObjectiveName::kMediatedCorrespondence);
+
+  py::class_<ObjectiveTermName>(m, "ObjectiveTermName",
+      "The declared term slots, named so the list and the constants cannot "
+      "drift apart.")
+      .def_readonly_static("REGGE_STATIONARITY",
+                           &ObjectiveTermName::kReggeStationarity)
+      .def_readonly_static("HODGE_STATIONARITY",
+                           &ObjectiveTermName::kHodgeStationarity)
+      .def_readonly_static("REGISTER_RESIDUAL",
+                           &ObjectiveTermName::kRegisterResidual)
+      .def_readonly_static("ACTION_MAGNITUDE",
+                           &ObjectiveTermName::kActionMagnitude)
+      .def_readonly_static("CARRIED_STATE_ENERGY",
+                           &ObjectiveTermName::kCarriedStateEnergy);
 
   py::class_<ObjectiveContext>(m, "ObjectiveContext",
       "The COMPLETE set of inputs an objective may read -- the no-feedback "
@@ -1290,7 +1332,7 @@ Right -- re-read after each drive call:
       .def("is_target_conditioned", &CobordismObjective::isTargetConditioned)
       .def("needs_register_residual",
            &CobordismObjective::needsRegisterResidual)
-      .def("scoring_domain", &CobordismObjective::scoringDomain)
+      .def("scope", &CobordismObjective::scope)
       .def_static("total", &CobordismObjective::total, py::arg("terms"),
                   "The scalar: the plain sum of the declared terms. STATIC by "
                   "design -- no `this`, so it cannot reach any state at all.")

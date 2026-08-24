@@ -52,8 +52,13 @@ double CobordismObjective::total(const ObjectiveTerms &terms) {
 }
 
 std::vector<std::string> CobordismObjective::declaredTermNames() {
-  return {"regge_stationarity", "hodge_stationarity", "register_residual",
-          "action_magnitude", "carried_state_energy"};
+  // Assembled from the named constants, so the list and the names a caller
+  // compares against cannot drift apart.
+  return {ObjectiveTermName::kReggeStationarity,
+          ObjectiveTermName::kHodgeStationarity,
+          ObjectiveTermName::kRegisterResidual,
+          ObjectiveTermName::kActionMagnitude,
+          ObjectiveTermName::kCarriedStateEnergy};
 }
 
 namespace {
@@ -130,7 +135,7 @@ void addCarriedStateAscent(const ObjectiveDirectionContext &context,
 // ---------------------------------------------------------------- joint
 
 std::string JointStationarityObjective::name() const {
-  return "joint_stationarity";
+  return ObjectiveName::kJointStationarity;
 }
 
 std::vector<std::string> JointStationarityObjective::termNames() const {
@@ -220,7 +225,9 @@ ObjectiveDirection JointStationarityObjective::direction(
 
 // ---------------------------------------------------------------- legacy
 
-std::string LegacyObjective::name() const { return "legacy"; }
+std::string LegacyObjective::name() const {
+  return ObjectiveName::kLegacy;
+}
 
 std::vector<std::string> LegacyObjective::termNames() const {
   return CobordismObjective::declaredTermNames();
@@ -266,7 +273,7 @@ ObjectiveDirection LegacyObjective::direction(
 // -------------------------------------------------- mediated correspondence
 
 std::string MediatedCorrespondenceObjective::name() const {
-  return "mediated_correspondence";
+  return ObjectiveName::kMediatedCorrespondence;
 }
 
 std::vector<std::string> MediatedCorrespondenceObjective::termNames() const {

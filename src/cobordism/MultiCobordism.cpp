@@ -674,7 +674,32 @@ void MultiCobordism::setObjective(
   if (!objective)
     throw std::invalid_argument(
         "MultiCobordism: the injected objective must not be null");
+  // A scope can only carry a handle minted by `regionHandle`, which refuses an
+  // undeclared name, so a mis-spelling cannot reach this point. Re-check
+  // anyway: regions can be cleared after a handle was minted, and an objective
+  // pointing at a region that no longer exists must fail loudly rather than
+  // score nothing.
+  const auto scope = objective->scope();
+  if (!scope.isWholeCobordism()) {
+    bool declared = false;
+    for (const auto &region : pinnedRegions_)
+      if (region.name == scope.region.name()) {
+        declared = true;
+        break;
+      }
+    if (!declared)
+      throw std::invalid_argument(
+          "MultiCobordism: the injected objective is scoped to pinned region "
+          "'" + scope.region.name() + "', which is not declared");
+  }
   objectiveSpec_ = std::move(objective);
+}
+
+RegionHandle MultiCobordism::regionHandle(const std::string &name) const {
+  for (const auto &region : pinnedRegions_)
+    if (region.name == name) return RegionHandle(name);
+  throw std::invalid_argument(
+      "MultiCobordism: no pinned region named '" + name + "' is declared");
 }
 
 std::string MultiCobordism::objectiveName() const {

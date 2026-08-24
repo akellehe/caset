@@ -572,6 +572,13 @@ class MultiCobordism {
   /// Drop every declared region, leaving the whole complex free to relax.
   void clearPinnedRegions();
 
+  /// Mint a `RegionHandle` for a DECLARED region. This is the only way to
+  /// obtain a non-empty handle, so an objective cannot reference a region that
+  /// was never declared: a mis-spelling throws here, BY NAME, instead of
+  /// compiling into a scope that silently matches nothing.
+  /// @throws std::invalid_argument if no region of that name is declared.
+  [[nodiscard]] RegionHandle regionHandle(const std::string &name) const;
+
   /// The union of every region's vertices — the flat view, for callers that need
   /// membership rather than provenance.
   [[nodiscard]] std::set<std::uint64_t> pinnedVertices() const;

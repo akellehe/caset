@@ -32,6 +32,12 @@ def _complex_sphere4():
     return st
 
 
+def _first_vertices(st, count=3):
+    """A small vertex set to declare a region over."""
+    return {vertex.getId()
+            for vertex in st.getVertexList().toVector()[:count]}
+
+
 def _node(st, degree=3, gamma=0.0):
     return cob.MultiCobordism(st, [], [], degrees=[degree], gamma=gamma,
                               seed=7)
@@ -211,24 +217,82 @@ class FirewallTest(unittest.TestCase):
         self.assertEqual(cob.CobordismObjective.total(terms), 2.5)
 
 
-class ScoringDomainTest(unittest.TestCase):
-    """An objective declares its own scoring domain; the engine honours it."""
+class ScopeTest(unittest.TestCase):
+    """An objective declares what it references; declaring nothing is
+    declaring everything, and the engine honours the declaration."""
 
-    def test_the_whole_complex_reading_is_the_default(self):
-        # With one objective over the whole cobordism nothing straddles, so the
-        # declaration is moot and the path is the one that ran before.
+    def test_declaring_nothing_means_the_whole_cobordism(self):
         for objective in (cob.JointStationarityObjective(),
                           cob.LegacyObjective(),
                           cob.MediatedCorrespondenceObjective()):
             with self.subTest(objective=objective.name()):
-                self.assertTrue(
-                    objective.scoring_domain().includes_straddling_edges)
+                scope = objective.scope()
+                self.assertTrue(scope.is_whole_cobordism())
+                self.assertTrue(scope.region.is_whole_cobordism())
+                self.assertEqual(scope.region.name(), "")
 
-    def test_the_declaration_is_readable_and_settable(self):
-        domain = cob.ObjectiveScoringDomain()
-        self.assertTrue(domain.includes_straddling_edges)
-        domain.includes_straddling_edges = False
-        self.assertFalse(domain.includes_straddling_edges)
+    def test_a_whole_cobordism_scope_has_no_straddling_question(self):
+        # Nothing straddles when the scope is everything, so the flag is moot
+        # and the single-objective path is the one that ran before.
+        self.assertTrue(
+            cob.JointStationarityObjective().scope().includes_straddling_edges)
+
+    def test_the_scope_defaults_to_the_whole_cobordism(self):
+        scope = cob.ObjectiveScope()
+        self.assertTrue(scope.is_whole_cobordism())
+        self.assertTrue(scope.region.is_whole_cobordism())
+        self.assertEqual(scope.region.name(), "")
+
+    def test_a_handle_can_only_be_minted_from_a_declared_region(self):
+        st = _complex_sphere4()
+        node = _node(st)
+        # Nothing declared yet: the lookup fails BY NAME rather than returning
+        # a handle that would silently match nothing.
+        with self.assertRaises(ValueError) as caught:
+            node.region_handle("shell")
+        self.assertIn("shell", str(caught.exception))
+
+        node.declare_pinned_region("shell", _first_vertices(st))
+        handle = node.region_handle("shell")
+        self.assertFalse(handle.is_whole_cobordism())
+        self.assertEqual(handle.name(), "shell")
+
+        # A near miss is still refused, which is the whole point of the type.
+        with self.assertRaises(ValueError):
+            node.region_handle("shel")
+
+    def test_scope_does_not_depend_on_whether_the_region_is_frozen(self):
+        # Pinning names a region AND constrains relaxation; neither justifies
+        # the other. A scope is a reference, not a statement about motion.
+        st = _complex_sphere4()
+        node = _node(st)
+        node.declare_pinned_region("shell", _first_vertices(st))
+        scope = cob.ObjectiveScope()
+        scope.region = node.region_handle("shell")
+        self.assertFalse(scope.is_whole_cobordism())
+        # The handle reads the same regardless of whether those coordinates
+        # move; nothing about freezing is encoded in the reference.
+        self.assertEqual(scope.region.name(), "shell")
+
+
+class NamedConstantsTest(unittest.TestCase):
+    """Identifiers are named constants, not literals repeated at each site."""
+
+    def test_objective_names_come_from_the_constants(self):
+        self.assertEqual(cob.JointStationarityObjective().name(),
+                         cob.ObjectiveName.JOINT_STATIONARITY)
+        self.assertEqual(cob.LegacyObjective().name(), cob.ObjectiveName.LEGACY)
+        self.assertEqual(cob.MediatedCorrespondenceObjective().name(),
+                         cob.ObjectiveName.MEDIATED_CORRESPONDENCE)
+
+    def test_the_term_list_is_assembled_from_the_constants(self):
+        self.assertEqual(
+            cob.CobordismObjective.declared_term_names(),
+            [cob.ObjectiveTermName.REGGE_STATIONARITY,
+             cob.ObjectiveTermName.HODGE_STATIONARITY,
+             cob.ObjectiveTermName.REGISTER_RESIDUAL,
+             cob.ObjectiveTermName.ACTION_MAGNITUDE,
+             cob.ObjectiveTermName.CARRIED_STATE_ENERGY])
 
 
 if __name__ == "__main__":

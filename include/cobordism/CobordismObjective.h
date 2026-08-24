@@ -152,32 +152,110 @@ struct ObjectiveDirectionContext {
   std::vector<std::complex<double>> carriedStateEnergyGradient;
 };
 
-/// # ObjectiveScoringDomain
+/// # RegionHandle
 ///
-/// What an objective DECLARES about the edges it scores. The engine reads the
-/// declaration and honours it; it does not infer a domain from an objective's
-/// role or decide one by convention.
+/// A reference to a DECLARED pinned region. The whole point of the type is
+/// that a caller cannot fabricate one: the only non-empty handle comes from
+/// `MultiCobordism::regionHandle`, which looks the name up among the declared
+/// regions and throws by name if it is not there.
 ///
-/// A struct rather than a bare flag because the scoring domain is a property
-/// that will acquire more facts, and a caller should be able to read them
-/// together as one declaration.
-struct ObjectiveScoringDomain {
-  /// Whether edges with ONE endpoint inside the objective's region and the
-  /// other outside it — the straddling edges — enter this objective's score.
+/// That is what makes a mis-spelling impossible rather than merely
+/// discouraged. A bare `std::string region` would let `"boundary"` and
+/// `"boundry"` both compile and one of them silently score nothing; a handle
+/// cannot be spelled at all, only obtained.
+class RegionHandle {
+ public:
+  /// The whole cobordism — the default, and what declaring nothing produces.
+  RegionHandle() = default;
+
+  /// Whether this handle references the whole cobordism rather than a region.
+  [[nodiscard]] bool isWholeCobordism() const noexcept { return name_.empty(); }
+  /// The declared region's name, for reporting. Empty for the whole cobordism.
+  [[nodiscard]] const std::string &name() const noexcept { return name_; }
+
+  [[nodiscard]] bool operator==(const RegionHandle &other) const noexcept {
+    return name_ == other.name_;
+  }
+
+ private:
+  /// Only the engine mints a handle, and only for a region it has verified is
+  /// declared.
+  friend class MultiCobordism;
+  explicit RegionHandle(std::string name) : name_(std::move(name)) {}
+  std::string name_;
+};
+
+/// # ObjectiveScope
+///
+/// What an objective DECLARES that it references: a pinned region, or — by
+/// declaring nothing — the whole cobordism. The engine honours the
+/// declaration; it does not infer a scope from an objective's role or decide
+/// one by convention.
+///
+/// The default is the whole cobordism, which is the single-objective run that
+/// exists today and must stay bit-identical to it.
+///
+/// Scope is deliberately independent of whether the referenced region's
+/// coordinates are frozen. Pinning does two unrelated jobs — it NAMES a region
+/// so an objective can reference it, and it CONSTRAINS relaxation by zeroing a
+/// pinned edge's descent component before the line search — and neither
+/// justifies the other. A pinned edge does not vary, yet it is still scored,
+/// and the bulk objective scores the pinned interior along with everything
+/// else. An objective scoped to a region must not have to know or care whether
+/// that region's coordinates move.
+struct ObjectiveScope {
+  /// The region referenced. Default-constructed means the whole cobordism.
+  /// Obtainable only from `MultiCobordism::regionHandle`, so it cannot name a
+  /// region that was never declared.
+  RegionHandle region;
+
+  /// Whether edges with a single endpoint in `region` — the straddling edges —
+  /// enter this objective's score. Part of the same scope declaration rather
+  /// than a separate mechanism, and meaningless for a whole-cobordism scope,
+  /// which has no border to straddle.
   ///
-  /// The default is `true`, which is the whole-complex reading: an objective
-  /// scored over the entire cobordism has no edge that straddles anything, so
-  /// the declaration is moot and the path is exactly the one that ran before
-  /// objectives became injectable. An objective written to score a REGION of a
-  /// larger complex will normally declare `false`, so that the edges tying its
-  /// region to the bulk are scored by the bulk's objective and not twice; a
-  /// caller that wants them counted may say so.
-  ///
-  /// Note that this partitions neither the complex nor the objective. The
-  /// functional is computed over the entire cobordism, bulk and boundary
-  /// together; this declaration only decides which side scores the edges that
-  /// cross a region's border when more than one objective is present.
+  /// A region-scoped objective will normally declare `false`, so the edges
+  /// tying its region to the bulk are scored by the bulk's objective and not
+  /// twice; a caller that wants them counted may say otherwise. The border is
+  /// the one the node already defines — `MultiCobordism::edgeIsPinned` holds
+  /// exactly when a SINGLE region contains both endpoints — so a straddling
+  /// edge is one with a single endpoint in the region. That predicate is the
+  /// definition; nothing here restates it.
   bool includesStraddlingEdges = true;
+
+  /// Whether this scope is the whole cobordism, i.e. nothing was declared.
+  [[nodiscard]] bool isWholeCobordism() const {
+    return region.isWholeCobordism();
+  }
+};
+
+/// # ObjectiveName
+///
+/// The identifiers objectives are known by, as named constants rather than
+/// string literals repeated at each site. Every identifier is written once
+/// where the objective declares it and compared against these where a caller
+/// selects or asserts one; a typo in a literal would not fail to compile, it
+/// would silently fail to match.
+class ObjectiveName {
+ public:
+  static constexpr const char *kJointStationarity = "joint_stationarity";
+  static constexpr const char *kLegacy = "legacy";
+  static constexpr const char *kMediatedCorrespondence =
+      "mediated_correspondence";
+};
+
+/// # ObjectiveTermName
+///
+/// The declared term slots, likewise named. `CobordismObjective::
+/// declaredTermNames` is assembled from these, so the list and the constants
+/// cannot drift apart.
+class ObjectiveTermName {
+ public:
+  static constexpr const char *kReggeStationarity = "regge_stationarity";
+  static constexpr const char *kHodgeStationarity = "hodge_stationarity";
+  static constexpr const char *kRegisterResidual = "register_residual";
+  static constexpr const char *kActionMagnitude = "action_magnitude";
+  static constexpr const char *kCarriedStateEnergy = "carried_state_energy";
 };
 
 /// # CobordismObjective
@@ -215,13 +293,10 @@ class CobordismObjective {
   /// consults this rather than testing for an objective by name.
   [[nodiscard]] virtual bool isTargetConditioned() const = 0;
 
-  /// The edges this objective declares itself to score. The engine honours the
-  /// declaration rather than inferring one from the objective's role. The
-  /// default is the whole-complex reading, under which nothing straddles and
-  /// the declaration has no effect.
-  [[nodiscard]] virtual ObjectiveScoringDomain scoringDomain() const {
-    return {};
-  }
+  /// What this objective references: a named pinned region, or — by declaring
+  /// nothing — the whole cobordism. The engine honours the declaration rather
+  /// than inferring one from the objective's role.
+  [[nodiscard]] virtual ObjectiveScope scope() const { return {}; }
 
   /// Whether this objective reads \f$r_U\f$. The engine computes that residual
   /// only when an objective asks for it, so a purely geometric objective never
