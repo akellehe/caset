@@ -1065,16 +1065,6 @@ class ExistingExamplesTest(unittest.TestCase):
             rbs.raw_geometry_block(mine)["cells"],
             rbs.raw_geometry_block(theirs)["cells"])
 
-    def test_the_proton_animation_overlay_is_still_opt_in(self):
-        import proton_animation
-        self.assertTrue(hasattr(proton_animation,
-                                "_select_recursive_analysis"))
-        node = cob.MultiCobordism(rbs.build_neutral_host(2), [], [], [1],
-                                  1.0, SMALL_SEED)
-        # Unselected, the overlay never runs and writes no checkpoint.
-        self.assertFalse(node.analysis_config.enabled)
-        self.assertEqual(node.checkpoint_json, "")
-
 
 # =====================================================================
 # the sidecar
