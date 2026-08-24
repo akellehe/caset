@@ -104,6 +104,10 @@ MultiCobordism::MultiCobordism(
   // #776: the deterministic provenance stamp of every checkpoint this node
   // writes. Assigned in the body for the same declaration-order reason.
   seed_ = seed;
+  // Install the built-in matching the default mode, so `objectiveSpec_` is
+  // never null and a caller that never injects one descends exactly the
+  // objective it descended before this became injectable.
+  objectiveSpec_ = std::make_shared<LegacyObjective>();
   // Pre-grow the seed by `precone` gated cone-ins before any optimization, so the
   // stage-1 search starts from a larger complex grown emergently from the host (no
   // input/output block is seeded yet, so nothing is pinned — the gate is the only
@@ -652,6 +656,69 @@ void MultiCobordism::setObjectiveMode(ObjectiveMode mode) {
             "MultiCobordism: joint Hodge-entropy stationarity is declared over "
             "degrees >= 1; got degree " + std::to_string(degree));
   objectiveMode_ = mode;
+  switch (mode) {
+    case ObjectiveMode::JointStationarity:
+      objectiveSpec_ = std::make_shared<JointStationarityObjective>();
+      break;
+    case ObjectiveMode::MediatedCorrespondence:
+      objectiveSpec_ = std::make_shared<MediatedCorrespondenceObjective>();
+      break;
+    case ObjectiveMode::Legacy:
+      objectiveSpec_ = std::make_shared<LegacyObjective>();
+      break;
+  }
+}
+
+void MultiCobordism::setObjective(
+    std::shared_ptr<CobordismObjective> objective) {
+  if (!objective)
+    throw std::invalid_argument(
+        "MultiCobordism: the injected objective must not be null");
+  objectiveSpec_ = std::move(objective);
+}
+
+std::string MultiCobordism::objectiveName() const {
+  return objectiveSpec_->name();
+}
+
+bool MultiCobordism::objectiveIsTargetConditioned() const {
+  return objectiveSpec_->isTargetConditioned();
+}
+
+ObjectiveContext MultiCobordism::objectiveContextFor(
+    const std::shared_ptr<Spacetime> &spacetime) const {
+  // THE FIREWALL. Everything an objective can see is assembled here and
+  // nowhere else, and every field of it is PLAIN DATA: the complex, the region
+  // and its declared targets, the configured weights, and two precomputed
+  // geometric scalars. Deliberately no `std::function`, because a bound
+  // callable would capture `this` and hand the objective a route back into the
+  // node — which is exactly the reachability the former `static objectiveOf`
+  // denied by having no `this` at all. An objective therefore cannot consult a
+  // component, fiber, transport, amplitude, colour, particle, charge, flavour,
+  // exchange, spin certificate or verdict: it is handed nothing that leads
+  // there.
+  ObjectiveContext context;
+  context.spacetime = spacetime;
+  // The node's whole complex. A region-scoped objective — one per pinned
+  // region, say — is scored by handing it a narrower set here.
+  context.region = {};
+  for (const auto &block : inputBlocks_) context.regionTargets.push_back(block.target);
+  for (const auto &block : outputBlocks_) context.regionTargets.push_back(block.target);
+  context.registerDegrees = registerDegrees_;
+  context.reggeWeight = reggeWeight_;
+  context.hodgeEntropyWeight = hodgeEntropyWeight_;
+  context.gamma = gamma_;
+  context.carriedStateEnergyWeight = carriedStateEnergyWeight_;
+  context.einsteinHilbert = einsteinHilbert_;
+  context.hodgeEntropyPhaseMode = hodgeEntropyPhaseMode_;
+  // Computed only where the objective declares it reads them, so a purely
+  // geometric objective never pays for a target-conditioned quantity. Left NaN
+  // rather than zero where not computed: unmeasured is not "measured zero".
+  if (spacetime && objectiveSpec_ && objectiveSpec_->needsRegisterResidual())
+    context.registerResidual = rU(spacetime);
+  if (spacetime && carriedStateEnergyWeight_ != 0.0)
+    context.carriedStateEnergy = carriedStateEnergy(spacetime);
+  return context;
 }
 
 void MultiCobordism::setHodgeEntropyWeight(double weight) {
@@ -672,60 +739,22 @@ std::vector<std::string> MultiCobordism::objectiveTermNames() {
   // The declaration order of `ObjectiveTerms`. Enumerated as data so the
   // no-feedback firewall is CHECKABLE rather than asserted in a comment: a
   // test reads this list and confirms no particle, fiber, transport, or
-  // amplitude quantity is on it.
-  return {"regge_stationarity", "hodge_stationarity", "register_residual",
-          "action_magnitude", "carried_state_energy"};
+  // amplitude quantity is on it. Every objective records into these same
+  // slots, so a record stays comparable across objectives.
+  return CobordismObjective::declaredTermNames();
 }
 
 double MultiCobordism::objectiveOf(const ObjectiveTerms &terms) {
   // STATIC: no `this`, so the scalar the optimizer descends provably depends
-  // on nothing but the five declared terms.
-  return terms.reggeStationarity + terms.hodgeStationarity +
-         terms.registerResidual + terms.actionMagnitude +
-         terms.carriedStateEnergy;
+  // on nothing but the declared terms.
+  return CobordismObjective::total(terms);
 }
 
 MultiCobordism::ObjectiveTerms MultiCobordism::objectiveTermsFor(
     const std::shared_ptr<Spacetime> &spacetime) const {
-  ObjectiveTerms terms;
-  if (!spacetime) {
-    terms.reggeStationarity = std::numeric_limits<double>::infinity();
-    return terms;
-  }
-  // The one permitted state channel: identically zero
-  // outside the `certificates_blind_mean_field` sub-mode, so every other run
-  // — including every strict-emergence run — sums exactly the terms it summed
-  // before this ticket.
-  terms.carriedStateEnergy =
-      carriedStateEnergyWeight_ * carriedStateEnergy(spacetime);
-
-  if (objectiveMode_ == ObjectiveMode::MediatedCorrespondence) {
-    terms.actionMagnitude =
-        einsteinHilbert_ && reggeWeight_ != 0.0
-            ? reggeWeight_ * std::abs(ReggeSolver(spacetime,
-                                                  MatterConfiguration())
-                                          .dualReggeAction())
-            : 0.0;
-    terms.registerResidual = rU(spacetime);
-    return terms;
-  }
-
-  terms.reggeStationarity = einsteinHilbert_ && reggeWeight_ != 0.0
-                                ? reggeWeight_ * reggeActionGradient(spacetime)
-                                : 0.0;
-  if (objectiveMode_ == ObjectiveMode::Legacy) {
-    terms.registerResidual = gamma_ * rU(spacetime);
-    return terms;
-  }
-
-  double entropyStationarity = 0.0;
-  if (hodgeEntropyWeight_ != 0.0)
-    for (int degree : registerDegrees_)
-      entropyStationarity +=
-          HodgeLaplacian(spacetime).spectralEntropyGradientNorm(
-              degree, hodgeEntropyPhaseMode_);
-  terms.hodgeStationarity = hodgeEntropyWeight_ * entropyStationarity;
-  return terms;
+  // The engine no longer knows which functional it is scoring: it assembles
+  // the firewalled context and the injected objective decomposes itself.
+  return objectiveSpec_->terms(objectiveContextFor(spacetime));
 }
 
 MultiCobordism::ObjectiveTerms MultiCobordism::objectiveTerms() const {
@@ -1511,110 +1540,31 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
   double trialStepScale = stepScale;
   bool objectiveImproved = false;
   try {
-    if ((objectiveMode_ == ObjectiveMode::Legacy ||
-         objectiveMode_ == ObjectiveMode::JointStationarity) &&
-        einsteinHilbert_ && reggeWeight_ != 0.0) {
-      ReggeSolver reggeSolver(spacetime_, MatterConfiguration());
-      const auto gradientComponents = reggeSolver.actionGradientExact();
-      const auto hessianRows = reggeSolver.actionHessianExact();
-      Eigen::VectorXcd gradientVector(edgeCount);
-      Eigen::MatrixXcd hessianMatrix(edgeCount, edgeCount);
-      double reggeGradientNormSquared = 0.0;
-      for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
-        gradientVector(edgeIndex) = gradientComponents[edgeIndex];
-        reggeGradientNormSquared += std::norm(gradientComponents[edgeIndex]);
-      }
-      for (std::size_t rowIndex = 0; rowIndex < edgeCount; ++rowIndex)
-        for (std::size_t columnIndex = 0; columnIndex < edgeCount; ++columnIndex)
-          hessianMatrix(rowIndex, columnIndex) =
-              hessianRows[rowIndex][columnIndex];
-      descentDirection += reggeWeight_ * 2.0 *
-                          (hessianMatrix.conjugate() * gradientVector);
-      if (objectiveMode_ == ObjectiveMode::JointStationarity)
-        currentObjective += reggeWeight_ * reggeGradientNormSquared;
-    }
-
-    if (objectiveMode_ == ObjectiveMode::JointStationarity) {
-      if (hodgeEntropyWeight_ != 0.0) {
-        // For each entropy S_k, h is its exact complex-z gradient. The real
-        // Hessian-vector product needed by grad ||h||^2 is the directional
-        // derivative of h along conj(h), and it is CLOSED FORM
-        // (`spectralEntropyGradientDirectionalDerivative`): the simplex volume
-        // Hessian, the second derivative of L_k contracted against the
-        // direction, and the Daleckii-Krein derivative of dS/dA on the same
-        // fixed-rank stratum the value uses. No step size and no finite
-        // difference enter the descent direction. The resulting ascent
-        // displacement is 2 conj(dh).
-        for (int degree : registerDegrees_) {
-          const HodgeLaplacian hodge(spacetime_);
-          const auto baseComponents =
-              hodge.spectralEntropyGradient(degree, hodgeEntropyPhaseMode_);
-          Eigen::VectorXcd entropyGradient(edgeCount);
-          double entropyGradientNormSquared = 0.0;
-          std::vector<complexd> entropyAscent(edgeCount);
-          for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
-            entropyGradient(edgeIndex) = baseComponents[edgeIndex];
-            entropyGradientNormSquared += std::norm(baseComponents[edgeIndex]);
-            entropyAscent[edgeIndex] = std::conj(baseComponents[edgeIndex]);
-          }
-          currentObjective += hodgeEntropyWeight_ * entropyGradientNormSquared;
-          if (entropyGradientNormSquared == 0.0)
-            continue;  // the exact HVP of the zero direction is zero
-          const auto directionalComponents =
-              hodge.spectralEntropyGradientDirectionalDerivative(
-                  degree, entropyAscent, hodgeEntropyPhaseMode_);
-          Eigen::VectorXcd directionalDerivative(edgeCount);
-          for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
-            directionalDerivative(edgeIndex) =
-                directionalComponents[edgeIndex];
-          descentDirection +=
-              hodgeEntropyWeight_ * 2.0 * directionalDerivative.conjugate();
-        }
-      }
-    } else if (objectiveMode_ == ObjectiveMode::MediatedCorrespondence) {
-      if (einsteinHilbert_ && reggeWeight_ != 0.0) {
-        ReggeSolver reggeSolver(spacetime_, MatterConfiguration());
-        const complexd action = reggeSolver.dualReggeAction();
-        if (std::abs(action) > 0.0) {
-          const auto actionGradient = reggeSolver.actionGradientExact();
-          for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
-            descentDirection(edgeIndex) +=
-                reggeWeight_ * (action / std::abs(action)) *
-                std::conj(actionGradient[edgeIndex]);
-        }
-      }
-      descentDirection +=
-          scalarAscentDirection([&]() { return rU(spacetime_); });
-    } else if (gamma_ != 0.0 && (!einsteinHilbert_ || reggeWeight_ == 0.0)) {
-      // In residual-only legacy mode there is no Regge ray to search, so use
-      // the complete r_U finite-difference gradient. When both historical
-      // terms are enabled, Legacy intentionally preserves its former analytic
-      // Regge direction (the exact legacy scalar still gates the line search):
-      // evaluating the composite block/target r_U at 4|E| coordinates made the
-      // compatibility mode orders of magnitude slower. JointStationarity and
-      // MediatedCorrespondence above each differentiate their complete scalar.
-      descentDirection += gamma_ *
-          scalarAscentDirection([&]() { return rU(spacetime_); });
-    }
-
-    // #776: the ONE permitted state channel. `β_E E_carried(Γ, g)` is a plain
-    // real scalar of the covariance and the classical geometry, so it enters
-    // the search direction through its EXACT analytic ∂E/∂z (no finite
-    // differences) and the exact acceptance test below. Identically zero
-    // outside the `certificates_blind_mean_field` sub-mode, where
-    // `carriedStateEnergyGradient` returns an all-zero vector and neither the
-    // direction nor the baseline moves.
-    if (carriedStateEnergyWeight_ != 0.0) {
-      const auto energyGradient = carriedStateEnergyGradient(spacetime_);
-      if (energyGradient.size() == edgeCount) {
-        for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
-          descentDirection(edgeIndex) +=
-              carriedStateEnergyWeight_ * energyGradient[edgeIndex];
-        if (objectiveMode_ == ObjectiveMode::JointStationarity)
-          currentObjective +=
-              carriedStateEnergyWeight_ * carriedStateEnergy(spacetime_);
-      }
-    }
+    // The engine no longer knows which functional it is scoring. It assembles
+    // the firewalled context; the injected objective supplies its own analytic
+    // direction and, where it has assembled its scalar along the way, the exact
+    // baseline the line search gates on. Any NUMERICALLY differentiated
+    // register-residual term is applied here by weight rather than inside the
+    // objective: differencing a scalar over edge coordinates is engine
+    // machinery, and handing an objective a callable that did it would mean
+    // handing it a closure over this node.
+    ObjectiveDirectionContext directionContext;
+    directionContext.scalar = objectiveContextFor(spacetime_);
+    directionContext.edgeCount = edgeCount;
+    if (carriedStateEnergyWeight_ != 0.0)
+      directionContext.carriedStateEnergyGradient =
+          carriedStateEnergyGradient(spacetime_);
+    const auto objectiveDirection = objectiveSpec_->direction(directionContext);
+    descentDirection += objectiveDirection.ascent;
+    if (objectiveDirection.baselineComputed)
+      currentObjective = objectiveDirection.baseline;
+    const double numericalResidualWeight =
+        objectiveSpec_->numericalRegisterResidualWeight(
+            directionContext.scalar);
+    if (numericalResidualWeight != 0.0)
+      descentDirection += numericalResidualWeight *
+                          scalarAscentDirection(
+                              [&]() { return rU(spacetime_); });
 
     restoreEdgeLengths();
     // Pinning enters HERE and only here: a pinned edge keeps its resident squared
