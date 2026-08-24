@@ -122,8 +122,14 @@ def _ordering(st):
 
 
 def _np_connection_laplacian(st):
-    """Independent D - A reference for the U(1) CONNECTION operator, built from
-    the same edges with the same stable (sorted-id) vertex order it uses."""
+    """Independent D - A reference for the C* CONNECTION operator, built from
+    the same edges with the same stable (sorted-id) vertex order it uses.
+
+    The stored orientation carries the link U = exp(i*phase) and the reverse
+    carries its INVERSE U**-1, never its conjugate; the geometry keeps the
+    conjugate it always had. For a real phase the two conventions agree entry
+    for entry, which is why every pre-existing real-phase expectation in this
+    module is unchanged."""
     ids, idx = _ordering(st)
     n = len(ids)
     A = np.zeros((n, n), dtype=complex)
@@ -135,9 +141,9 @@ def _np_connection_laplacian(st):
             continue
         i, j = idx[s], idx[t]
         w = (e.getLength() * e.getLength()).real
-        z = w * np.exp(1j * e.getPhase())
-        A[i, j] += z
-        A[j, i] += np.conj(z)
+        phase = e.getPhase()
+        A[i, j] += w * np.exp(1j * phase)
+        A[j, i] += np.conj(w) * np.exp(-1j * phase)
         D[i] += abs(w)
         D[j] += abs(w)
     L = np.diag(D).astype(complex) - A
@@ -152,17 +158,18 @@ def _edge(st, a, b):
 
 
 def _cycle_flux(st, cycle):
-    """Directed holonomy Σ phase around a closed vertex cycle, honoring each
-    edge's stored source->target orientation."""
+    """Directed U(1) holonomy Σ phase around a closed vertex cycle, honoring
+    each edge's stored source->target orientation. The COMPACT part only:
+    winding is a U(1) quantity, and Im(phase) is the non-compact scale."""
     total = 0.0
     n = len(cycle)
     for k in range(n):
         a, b = cycle[k], cycle[(k + 1) % n]
         e = _edge(st, a, b)
         if e.getSource().getId() == a and e.getTarget().getId() == b:
-            total += e.getPhase()
+            total += e.getPhase().real
         else:
-            total -= e.getPhase()
+            total -= e.getPhase().real
     return total
 
 
@@ -917,6 +924,187 @@ def _two_timelike_components(alpha=0.6):
     _edge(st, 1, 2).setLength(cmath.sqrt(complex(-(alpha ** 2))))
     _edge(st, 4, 5).setLength(cmath.sqrt(complex(-(alpha ** 2))))
     return st
+
+
+def _gauge(st, chi):
+    """Apply the gauge transformation g = exp(i*chi) in place.
+
+    U_xy -> g_x**-1 U_xy g_y, i.e. phase -> phase + chi[target] - chi[source]
+    on each edge's own stored orientation. `chi` may be complex: the structure
+    group is C*, not U(1)."""
+    for e in st.getEdgeList().toVector():
+        s, t = e.getSource().getId(), e.getTarget().getId()
+        e.setPhase(e.getPhase() + chi[t] - chi[s])
+
+
+class TestComplexConnectionPhase(unittest.TestCase):
+    """The connection phase is COMPLEX and its reverse orientation carries the
+    INVERSE link, not the conjugate (#804).
+
+    The structure group is C* = U(1) x R+: exp(i*phase) factors into a compact
+    winding exp(i*Re) and a non-compact scale exp(-Im). The whole point of the
+    inverse convention is that gauge covariance survives the non-compact part,
+    where conj(g) != g**-1."""
+
+    @staticmethod
+    def _connection(st):
+        ids, _ = _ordering(st)
+        return _matrix(cob.HodgeLaplacian(st).connectionLaplacian(), len(ids))
+
+    def test_phase_round_trips_as_a_complex_number(self):
+        st = _triangle()
+        e = st.getEdgeList().toVector()[0]
+        self.assertEqual(e.getPhase(), 0j)          # default, not 0.0
+        e.setPhase(0.75)                            # a real value converts
+        self.assertEqual(e.getPhase(), complex(0.75, 0.0))
+        e.setPhase(complex(0.25, -1.5))
+        self.assertEqual(e.getPhase(), complex(0.25, -1.5))
+
+    def test_real_phase_reproduces_the_hermitian_magnetic_operator(self):
+        # The compact case on real weights: the previous convention and this
+        # one agree entry for entry, and the operator stays Hermitian.
+        st = _triangle()
+        _set_uniform(st, 1.0, 0.0)
+        for k, e in enumerate(st.getEdgeList().toVector()):
+            e.setPhase(0.31 * (k + 1))
+        L = self._connection(st)
+        np.testing.assert_allclose(L, L.conj().T, atol=0.0, rtol=0.0)
+        _, _, _, _, _, oracle = _np_connection_laplacian(st)
+        np.testing.assert_allclose(L, oracle, atol=1e-14)
+
+    def test_complex_phase_is_not_hermitian(self):
+        # A complex phase twists by a similarity rather than a unitary, so the
+        # operator leaves the Hermitian class by design.
+        st = _triangle()
+        _set_uniform(st, 1.0, 0.0)
+        for e in st.getEdgeList().toVector():
+            e.setPhase(complex(0.3, 0.9))
+        L = self._connection(st)
+        self.assertGreater(np.abs(L - L.conj().T).max(), 1e-3)
+
+    def test_gauge_transformation_acts_by_an_exact_similarity(self):
+        # THE claim the inverse convention exists for. A complex gauge function
+        # must act by diag(g)**-1 L diag(g) entrywise, not merely up to a phase.
+        st = _testbed()
+        rng = np.random.default_rng(804)
+        for e in st.getEdgeList().toVector():
+            e.setLength(complex(rng.normal(), rng.normal()))   # complex weight
+            e.setPhase(complex(rng.normal(), rng.normal()))
+        ids, _ = _ordering(st)
+        before = self._connection(st)
+        chi = {v: complex(rng.normal(), rng.normal()) for v in ids}
+        _gauge(st, chi)
+        after = self._connection(st)
+        g = np.array([np.exp(1j * chi[v]) for v in ids])
+        predicted = np.diag(1.0 / g) @ before @ np.diag(g)
+        self.assertLess(
+            np.abs(predicted - after).max() / np.abs(after).max(), 1e-14)
+
+    def test_complex_gauge_leaves_the_spectrum_invariant(self):
+        # The observable consequence of the similarity above.
+        st = _testbed()
+        rng = np.random.default_rng(29)
+        for e in st.getEdgeList().toVector():
+            e.setLength(complex(rng.normal(), rng.normal()))
+            e.setPhase(complex(rng.normal(), rng.normal()))
+        ids, _ = _ordering(st)
+        before = np.sort_complex(np.linalg.eigvals(self._connection(st)))
+        _gauge(st, {v: complex(rng.normal(), rng.normal()) for v in ids})
+        after = np.sort_complex(np.linalg.eigvals(self._connection(st)))
+        np.testing.assert_allclose(after, before, atol=1e-12)
+
+    def test_the_conjugate_convention_would_break_complex_gauge_covariance(self):
+        # Why the inverse is not a matter of taste. Assemble both conventions
+        # over the SAME complex geometry and gauge-transform: the conjugate one
+        # moves the spectrum by an O(1) amount.
+        st = _testbed()
+        rng = np.random.default_rng(77)
+        for e in st.getEdgeList().toVector():
+            e.setLength(complex(rng.normal(), rng.normal()))
+            e.setPhase(complex(rng.normal(), rng.normal()))
+        ids, idx = _ordering(st)
+        chi = {v: complex(rng.normal(), rng.normal()) for v in ids}
+        stored = [(e.getSource().getId(), e.getTarget().getId(),
+                   e.getLength() * e.getLength(), e.getPhase())
+                  for e in st.getEdgeList().toVector()]
+
+        def assemble(gauged, inverse_link):
+            n = len(ids)
+            A = np.zeros((n, n), dtype=complex)
+            D = np.zeros(n)
+            for s, t, w, phase in stored:
+                if gauged:
+                    phase = phase + chi[t] - chi[s]
+                i, j = idx[s], idx[t]
+                A[i, j] += w * np.exp(1j * phase)
+                A[j, i] += (np.conj(w) * np.exp(-1j * phase) if inverse_link
+                            else np.conj(w * np.exp(1j * phase)))
+                D[i] += abs(w)
+                D[j] += abs(w)
+            return np.diag(D).astype(complex) - A
+
+        def drift(inverse_link):
+            a = np.sort_complex(np.linalg.eigvals(assemble(False, inverse_link)))
+            b = np.sort_complex(np.linalg.eigvals(assemble(True, inverse_link)))
+            return np.abs(a - b).max()
+
+        # The shipped convention matches the C++ operator ...
+        np.testing.assert_allclose(
+            assemble(False, True), self._connection(st), atol=1e-12)
+        self.assertLess(drift(inverse_link=True), 1e-12)
+        self.assertGreater(drift(inverse_link=False), 1e-2)
+
+    def test_a_pure_gauge_connection_is_isospectral_with_the_untwisted_one(self):
+        # A flat (pure-gauge) connection carries no flux, so it is a similarity
+        # of the zero-phase operator even when the gauge function is complex.
+        st = _testbed()
+        _set_uniform(st, 1.0, 0.0)
+        flat = np.sort_complex(np.linalg.eigvals(self._connection(st)))
+        rng = np.random.default_rng(3)
+        ids, _ = _ordering(st)
+        _gauge(st, {v: complex(rng.normal(), rng.normal()) for v in ids})
+        pure = np.sort_complex(np.linalg.eigvals(self._connection(st)))
+        np.testing.assert_allclose(pure, flat, atol=1e-12)
+
+    def test_a_real_flux_still_lifts_the_zero_mode(self):
+        # The documented behaviour of the connection operator, preserved: a
+        # genuine (non-pure-gauge) U(1) flux moves the zero mode off zero,
+        # which ker L_0 = b_0 can never see.
+        st = _triangle()
+        _set_uniform(st, 1.0, 0.0)
+        flat = np.abs(np.linalg.eigvals(self._connection(st))).min()
+        self.assertLess(flat, 1e-12)
+        _edge(st, 0, 1).setPhase(1.1)
+        self.assertAlmostEqual(_cycle_flux(st, [0, 1, 2]) % (2 * math.pi),
+                               1.1, places=12)
+        self.assertGreater(
+            np.abs(np.linalg.eigvals(self._connection(st))).min(), 1e-3)
+
+    def test_the_geometric_laplacian_is_blind_to_the_phase_at_every_degree(self):
+        # laplacian(k) is built from the lengths alone. Writing the phase into
+        # a metric weight would make the metric gauge-variant and destroy the
+        # derived form, so the operator must not move at ANY degree.
+        st = _torus()
+        rng = np.random.default_rng(13)
+        before = {k: np.array(cob.HodgeLaplacian(st).laplacian(k), dtype=complex)
+                  for k in (0, 1, 2)}
+        for e in st.getEdgeList().toVector():
+            e.setPhase(complex(rng.normal(), rng.normal()))
+        for k in (0, 1, 2):
+            after = np.array(cob.HodgeLaplacian(st).laplacian(k), dtype=complex)
+            np.testing.assert_allclose(after, before[k], atol=0.0, rtol=0.0)
+
+    def test_the_degree_matrix_is_phase_independent(self):
+        # The AB operator's diagonal carries the MAGNITUDE, so no part of the
+        # phase -- compact or not -- may reach it.
+        st = _testbed()
+        _set_uniform(st, 1.0, 0.0)
+        before = np.array(cob.HodgeLaplacian(st).degree())
+        for e in st.getEdgeList().toVector():
+            e.setPhase(complex(0.9, -0.4))
+        np.testing.assert_allclose(
+            np.array(cob.HodgeLaplacian(st).degree()), before,
+            atol=0.0, rtol=0.0)
 
 
 if __name__ == "__main__":

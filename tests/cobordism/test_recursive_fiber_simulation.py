@@ -98,6 +98,28 @@ def _lengths(node):
     return out
 
 
+def _phases(node):
+    """Every edge connection phase on the CANONICAL min->max direction.
+
+    Unlike the length, the phase is orientation-dependent: the reverse
+    orientation carries the inverse link, so an edge stored target->source
+    contributes the negated phase."""
+    out = {}
+    for e in node.st.getEdgeList().toVector():
+        a, b = e.getSource().getId(), e.getTarget().getId()
+        out[(min(a, b), max(a, b))] = e.getPhase() if a < b else -e.getPhase()
+    return out
+
+
+def _twist(node, seed=804):
+    """Give every edge a distinct COMPLEX connection phase, so a serializer
+    that drops the field, or keeps only its compact part, is caught."""
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    for e in node.st.getEdgeList().toVector():
+        e.setPhase(complex(rng.normal(), rng.normal()))
+
+
 def _drive(node, candidates=6):
     """The engine's DETERMINISTIC drive unit: one committed combinatorial move
     followed by a full geometric relaxation.
@@ -985,6 +1007,20 @@ class CheckpointSchemaTest(unittest.TestCase):
         for a, b in pairs:
             self.assertLess(a, b)
 
+    def test_the_raw_complex_records_the_connection_phase(self):
+        """An edge carries TWO fields, so a document that records only the
+        length describes a different complex than the one that wrote it."""
+        node = _node()
+        node.set_analysis_config(_overlay_config())
+        _twist(node)
+        node.run_recursive_analysis()
+        raw = json.loads(node.checkpoint_json)["raw_complex"]
+        recorded = {(e["a"], e["b"]): complex(e["phase"][0], e["phase"][1])
+                    for e in raw["edges"]}
+        self.assertEqual(recorded, _phases(node))
+        # and it is genuinely complex, not a real angle widened to complex
+        self.assertGreater(max(abs(p.imag) for p in recorded.values()), 1e-6)
+
     def test_the_objective_block_records_every_declared_term(self):
         objective = self.doc["objective"]
         for name in MC.objective_term_names():
@@ -1095,6 +1131,43 @@ class ReplayTest(unittest.TestCase):
         self.assertEqual(MC.checkpoint_version_of(older), 3)
         with self.assertRaises(ValueError):
             MC.replay_checkpoint(older)
+
+    def test_schema_four_is_rejected_rather_than_replayed_with_zero_phases(self):
+        """Schema 4 recorded no phase at all. Its silence is not evidence the
+        phase was zero, so it is refused: a replay that quietly zeroes a
+        written field is worse than one that refuses."""
+        node = self._driven_node()
+        current = '"schema_version": %d' % MC.checkpoint_schema_version()
+        older = node.checkpoint_json.replace(current, '"schema_version": 4')
+        self.assertEqual(MC.checkpoint_version_of(older), 4)
+        with self.assertRaises(ValueError):
+            MC.replay_checkpoint(older)
+
+    def test_replay_restores_every_connection_phase_exactly(self):
+        """The defect this ticket exists for: replay used to rebuild through
+        fromCells with phase 0 and silently drop a live field."""
+        node = _node()
+        node.set_analysis_config(_overlay_config())
+        _twist(node, seed=17)
+        node.run_recursive_analysis()
+        written = _phases(node)
+        self.assertGreater(max(abs(p.imag) for p in written.values()), 1e-6)
+
+        replayed = json.loads(MC.replay_checkpoint(node.checkpoint_json))
+        restored = {(e["a"], e["b"]): complex(e["phase"][0], e["phase"][1])
+                    for e in replayed["raw_complex"]["edges"]}
+        self.assertEqual(restored, written)   # exactly, not approximately
+
+    def test_replay_of_a_twisted_complex_reproduces_the_checkpoint(self):
+        """Round-tripping a complex whose phases are all nonzero must be as
+        byte-exact as the untwisted case."""
+        node = _node()
+        node.set_analysis_config(_overlay_config())
+        _twist(node, seed=23)
+        node.run_recursive_analysis()
+        incremental = json.loads(node.checkpoint_json)
+        replayed = json.loads(MC.replay_checkpoint(node.checkpoint_json))
+        self.assertEqual(incremental["raw_complex"], replayed["raw_complex"])
 
     def test_a_missing_schema_version_is_rejected(self):
         with self.assertRaises(ValueError):

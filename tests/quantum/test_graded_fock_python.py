@@ -861,6 +861,96 @@ class TestEdgeModeRegistry(unittest.TestCase):
         np.testing.assert_array_equal(flipped, expected)
 
 
+# ─── the per-edge carrier the ontology names ───────────────────────────────
+
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without the quantum subsystem")
+class TestRegistryFromSpacetime(unittest.TestCase):
+    """`EdgeModeRegistry.fromSpacetime` builds the ontology's carrier: one
+    two-level occupation mode per EDGE, h_K = span{|e> : e in K1} (#804).
+    Before it existed, every carrier in the tree was built over a band's
+    degree-k cells, so at degree two the one-particle modes were triangles."""
+
+    @staticmethod
+    def _spacetime(cells):
+        # `import tessera` then attribute access: the submodule is not
+        # importable directly.
+        import tessera
+        return tessera.spacetime.Spacetime.fromCells(2, cells)
+
+    def test_one_mode_per_edge(self):
+        st = self._spacetime([[0, 1, 2], [1, 2, 3]])
+        edges = st.getEdgeList().toVector()
+        reg = EdgeModeRegistry.fromSpacetime(st)
+        self.assertEqual(reg.modeCount(), len(edges))
+        registered = {
+            frozenset({reg.record(m).vertexA, reg.record(m).vertexB})
+            for m in range(reg.modeCount())
+        }
+        self.assertEqual(
+            registered,
+            {frozenset({e.getSource().getId(), e.getTarget().getId()})
+             for e in edges})
+
+    def test_stored_direction_is_the_edge_orientation(self):
+        # Registered on the edge's own source -> target direction, so the sign
+        # against the canonical min -> max direction stays derivable.
+        st = self._spacetime([[0, 1, 2]])
+        reg = EdgeModeRegistry.fromSpacetime(st)
+        for m in range(reg.modeCount()):
+            rec = reg.record(m)
+            self.assertEqual(rec.orientationSign, +1)
+            expected = +1 if rec.vertexA < rec.vertexB else -1
+            self.assertEqual(reg.canonicalOrientationSign(m), expected)
+
+    def test_canonical_order_is_the_endpoint_sort_under_one_lineage(self):
+        st = self._spacetime([[0, 1, 2], [1, 2, 3]])
+        reg = EdgeModeRegistry.fromSpacetime(st)
+        pairs = [
+            (min(reg.record(m).vertexA, reg.record(m).vertexB),
+             max(reg.record(m).vertexA, reg.record(m).vertexB))
+            for m in reg.canonicalModeOrder()
+        ]
+        self.assertEqual(pairs, sorted(pairs))
+
+    def test_the_lineage_key_is_honoured(self):
+        st = self._spacetime([[0, 1, 2]])
+        reg = EdgeModeRegistry.fromSpacetime(st, "component/7")
+        for m in range(reg.modeCount()):
+            self.assertEqual(reg.record(m).lineageKey, "component/7")
+
+    def test_the_registry_ignores_the_geometry_entirely(self):
+        # It stores incidence and lineage only -- never a length, never a
+        # connection phase. Rewriting both must not move a single record.
+        st = self._spacetime([[0, 1, 2], [1, 2, 3]])
+        before = EdgeModeRegistry.fromSpacetime(st)
+        snapshot = [(before.record(m).vertexA, before.record(m).vertexB,
+                     before.record(m).orientationSign,
+                     before.record(m).lineageKey)
+                    for m in before.canonicalModeOrder()]
+        for k, e in enumerate(st.getEdgeList().toVector()):
+            e.setLength(complex(0.5 + k, -0.25 * k))
+            e.setPhase(complex(0.3 * k, 1.1 - k))
+        after = EdgeModeRegistry.fromSpacetime(st)
+        self.assertEqual(
+            [(after.record(m).vertexA, after.record(m).vertexB,
+              after.record(m).orientationSign, after.record(m).lineageKey)
+             for m in after.canonicalModeOrder()],
+            snapshot)
+
+    def test_the_carrier_dimension_is_two_to_the_edge_count(self):
+        # The whole point: F(h_K) over the per-edge modes.
+        st = self._spacetime([[0, 1, 2]])
+        reg = EdgeModeRegistry.fromSpacetime(st)
+        self.assertEqual(reg.modeCount(), 3)
+        self.assertEqual(2 ** reg.modeCount(),
+                         sum(comb(reg.modeCount(), n)
+                             for n in range(reg.modeCount() + 1)))
+
+    def test_an_empty_complex_gives_an_empty_registry(self):
+        st = self._spacetime([])
+        self.assertEqual(EdgeModeRegistry.fromSpacetime(st).modeCount(), 0)
+
+
 # ─── relabeling invariance: the full parity pipeline ───────────────────────
 
 @unittest.skipUnless(HAVE_QUANTUM, "tessera built without the quantum subsystem")
