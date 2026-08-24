@@ -1094,7 +1094,7 @@ void SpectralFiberTracker::solveDenseGeneral(const RestrictedOperator &op,
 }
 
 // ---------------------------------------------------------------------------
-// band grouping, measurement, certification (Algorithm B steps 3-6)
+// band grouping, measurement, certification
 // ---------------------------------------------------------------------------
 
 void SpectralFiberTracker::buildFibers(const RestrictedOperator &op,

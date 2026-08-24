@@ -114,7 +114,7 @@ public:
       ProgressCallback progress = nullptr);
 
   /// Label-free discovery of persistent modular components on the CURRENT
-  /// spacetime one-skeleton (ticket #765, design spec section 8): builds
+  /// spacetime one-skeleton (ticket #765): builds
   /// the nonnegative similarity graph under ``map`` and delegates to
   /// :func:`PersistentModularity::scanResolutions`.  Read-only — never
   /// mutates the spacetime, never proposes or applies moves, and its

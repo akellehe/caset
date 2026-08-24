@@ -5,10 +5,9 @@
 #define TESSERA_OBSERVABLES_FIBERCONNECTION_H
 
 // Derived U(r) fiber transport and center-aware rank-three holonomies
-// (issue #770, Wave 2 of the recursive spectral-fiber program — design spec
-// §12 "Algorithm E", §6.6 "Derived transport", §5.5 "Transport leakage",
-// §5.11 "Relative determinant winding", and the whitepaper section "Color
-// transport and Wilson loops without a new gauge field").
+// (issue #770, Wave 2 of the recursive spectral-fiber program — the
+// whitepaper section "Color transport and Wilson loops from spectral
+// frames").
 //
 // ─── What lives here ─────────────────────────────────────────────────────
 //
@@ -206,7 +205,7 @@ struct FiberConnectionConfig {
 
 /// # FiberTransportRead
 ///
-/// One derived fiber transport A ← B (design spec §6.6): the raw overlap
+/// One derived fiber transport A ← B: the raw overlap
 /// map, every pre-normalization diagnostic, the normalized factor when its
 /// gates passed, the determinant-line datum, and the #764 certificate.
 /// Quantities that were not measured are quiet NaN, never zero.
@@ -296,8 +295,7 @@ struct FiberTransportRead {
   /// One-line human-readable summary (direction, rank, leakage, gates).
   [[nodiscard]] std::string describe() const;
 
-  /// Checkpoint serialization (design spec section 20, the `transports`
-  /// array): the JSON-able :class:`Record` of the read — at rank three the
+  /// Checkpoint serialization (the `transports` array): the JSON-able :class:`Record` of the read — at rank three the
   /// full U(3) factor, det V (U(1)), and thereby the PU(3) class (the
   /// class is `[V]` = V modulo center, determined by the serialized V) all
   /// travel; complex leaves split `{name}_re`/`{name}_im` per #580.
@@ -312,7 +310,7 @@ struct FiberTransportRead {
 ///
 /// The product of accepted transports around a loop (or along an open
 /// composite): the full holonomy, its normalized trace, determinant line,
-/// and center-blind adjoint reads (design spec §12 step 8).
+/// and center-blind adjoint reads.
 struct WilsonHolonomyRead {
   /// Common rank r of every link.
   int rank = 0;
@@ -370,7 +368,7 @@ struct WilsonHolonomyRead {
 ///
 /// The explicitly lifted SU(3) fundamental holonomy: a cube-root branch
 /// continued from a declared base branch, with the accumulated Z₃ center
-/// sector recorded (design spec §12 step 7).  Requested at rank three
+/// sector recorded.  Requested at rank three
 /// only — SU(3) is never hard-coded at generic rank.
 struct FundamentalLiftRead {
   /// Rank of the links (3 when valid).
@@ -447,8 +445,8 @@ struct WindingClosureSpec {
 /// # DeterminantWindingRead
 ///
 /// The integer determinant winding of a closed full-rank transport family,
-/// or the relative winding of an open segment under a recorded closure
-/// (design spec §5.11 / §12 step 9).  `winding` is EMPTY when invalidated
+/// or the relative winding of an open segment under a recorded closure.
+/// `winding` is EMPTY when invalidated
 /// (a closed gap / lost rank / aliasing step) or when no closure was
 /// declared — never a silently wrong integer.
 struct DeterminantWindingRead {
@@ -491,8 +489,8 @@ struct DeterminantWindingRead {
 
 /// # FiberConnection
 ///
-/// Derived spectral-frame transport and Wilson observables (ticket #770;
-/// design spec §12, Algorithm E).  See the file banner for the exact
+/// Derived spectral-frame transport and Wilson observables (ticket #770).
+/// See the file banner for the exact
 /// identities and their domains.  Pure read layer: consumes accepted #769
 /// `SpectralFiber`s and existing chain/response operators, mutates
 /// nothing, and none of its outputs enters any emergence objective.
@@ -541,7 +539,7 @@ class FiberConnection {
     /// Derive the transport A ← B from an explicit transfer block
     /// (rows = A's cells, columns = B's cells): compute the overlap in the
     /// paired regime, report EVERY diagnostic, gate, and only then reduce
-    /// (Algorithm E steps 2–7).  A rejected read still carries the raw
+    /// in that order.  A rejected read still carries the raw
     /// map, singular values, leakage, gaps, signatures, and conditioning.
     /// @throws std::invalid_argument on a transfer/frame shape mismatch.
     [[nodiscard]] FiberTransportRead transport(
