@@ -3394,7 +3394,18 @@ variance reads, and the refinement-window mass-radius samples.)doc")
                      "#765 lifetime of the BOUND component (report-only).")
       .def_readwrite("lifetimeTransports",
                      &BaryonCandidateEvidence::lifetimeTransports,
-                     "#770 composite transports (report-only).");
+                     "#770 composite transports (report-only).")
+      .def_readwrite("crossingMass", &BaryonCandidateEvidence::crossingMass,
+                     "The whitepaper's world-tube crossing mass for this "
+                     "candidate.  None = the crossing-readouts gate passes "
+                     "VACUOUSLY (applicable-gated like spin-lift); supplied, "
+                     "it is ENFORCED together with crossingBaryon.")
+      .def_readwrite("crossingBaryon",
+                     &BaryonCandidateEvidence::crossingBaryon,
+                     "The coherent one-third baryon sum for the same "
+                     "candidate and level.  Must travel WITH crossingMass: a "
+                     "half bundle fails the gate by name rather than grading "
+                     "half a certificate.");
 
   py::class_<BaryonRead>(m, "BaryonRead",
       R"doc(The #775 three-quark baryon read and complete proton
@@ -3485,12 +3496,27 @@ ALWAYS None.)doc")
       .def_readonly("profileStable", &BaryonRead::profileStable)
       .def_readonly("physicalMass", &BaryonRead::physicalMass,
                     "ALWAYS None (see ScaleProfileRead.physicalMass).")
+      .def_readonly("crossingMassApplicable",
+                    &BaryonRead::crossingMassApplicable,
+                    "False when the caller supplied no world-tube crossing "
+                    "evidence; the crossing-readouts gate then passed "
+                    "VACUOUSLY, exactly like spin-lift.")
+      .def_readonly("crossingMassValue", &BaryonRead::crossingMassValue,
+                    "The whitepaper's crossing mass m_x as a difference "
+                    "against M0.  UNCALIBRATED by default: ratio-only, never "
+                    "a physical mass.  NaN without crossing evidence.")
+      .def_readonly("crossingBaryonNumber", &BaryonRead::crossingBaryonNumber,
+                    "The coherent one-third crossing sum; None when no "
+                    "crossing evidence was supplied (unknown, never zero).")
+      .def_readonly("crossingSignDefects", &BaryonRead::crossingSignDefects,
+                    "Tubes whose crossing sign disagreed with their "
+                    "determinant-line winding -- a defect signal.")
       .def_readonly("lifetimeOverlap", &BaryonRead::lifetimeOverlap)
       .def_readonly("transportCount", &BaryonRead::transportCount)
       .def_readonly("transportLeakageMax",
                     &BaryonRead::transportLeakageMax)
       .def_readonly("confidence", &BaryonRead::confidence,
-                    "Passed-fraction of the fourteen certificates; 1.0 "
+                    "Passed-fraction of the fifteen certificates; 1.0 "
                     "exactly for a certified proton.")
       .def_readonly("thresholds", &BaryonRead::thresholds)
       .def_readonly("certificate", &BaryonRead::certificate)
@@ -3839,9 +3865,19 @@ evidence.)doc")
                   py::arg("cfg") = CrossingReadoutsConfig{},
                   "The complex Lorentzian distance tau from M0 with its "
                   "temporal-function certificate.")
-      .def_static("bandEdgeDensity", &CrossingReadouts::bandEdgeDensity,
+      .def_static("bandEdgeDensity",
+                  [](const SpectralFiber &band) {
+                    py::dict out;
+                    for (const auto &entry :
+                         CrossingReadouts::bandEdgeDensity(band)) {
+                      out[py::make_tuple(entry.first[0], entry.first[1])] =
+                          entry.second;
+                    }
+                    return out;
+                  },
                   py::arg("band"),
-                  "The band density mu on the 1-skeleton: the projector "
+                  "The band density mu on the 1-skeleton, keyed by the "
+                  "endpoint pair in ascending vertex order: the projector "
                   "diagonal of P = Phi Psi^dagger W carried to edges "
                   "(gauge-invariant by left/right cancellation).")
       .def_static("crossing", &CrossingReadouts::crossing, py::arg("tube"),

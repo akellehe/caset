@@ -234,12 +234,29 @@
 //     mechanism (its own scope decision and ticket) — never a refutation of
 //     the geometry, and nothing here silently adds such a mechanism.
 //
-// ─── #775: the form-factor situation (stated plainly) ────────────────────
+// ─── the form-factor situation (stated plainly) ──────────────────────────
 //
-// The ticket and the whitepaper ask for "stable spectral-mass/form-factor
-// reads".  THERE IS NO FORM-FACTOR IMPLEMENTATION IN THIS REPOSITORY, and
-// none is invented here.  What the refinement certificate actually consumes
-// is the EXISTING #575/#566/#593 mass-radius battery (`InteriorHinges`,
+// The whitepaper asks for "a finite radius and stable crossing-mass and
+// form-factor readouts, in the world-tube-crossing sense".  Two DIFFERENT
+// things answer that, and they are not interchangeable.
+//
+// `CrossingReadouts` implements the whitepaper's readout section directly:
+// the crossing mass m_x = kappa_m sum |pi_perp|, the coherent one-third
+// baryon sum, and the spectral charge-power profile, each a DIFFERENCE
+// against M0.  They reach the baryon verdict through
+// `BaryonCandidateEvidence::crossingMass` / `crossingBaryon` and the
+// `crossing-readouts` gate, which is APPLICABLE-GATED exactly like
+// `spin-lift`: absent evidence passes vacuously, supplied evidence is
+// ENFORCED.  Even there the ELECTROMAGNETIC form factor G_E stays
+// UNAVAILABLE — it needs a certified conserved U(1) current and certified
+// momentum-transfer states, neither of which exists in this tree, so
+// `ElectromagneticFormFactorRead` NAMES those missing certificates and the
+// charge radius is refused rather than inferred.  The spectral
+// charge-power profile is an incoherent structure factor and is NEVER
+// substituted for it.
+//
+// What the REFINEMENT certificate below consumes is a different and older
+// thing: the EXISTING #575/#566/#593 mass-radius battery (`InteriorHinges`,
 // read through `RegisterContext::interiorHinges`, exactly what
 // `EmergentRadius` / `EmergentMass` read):
 //
@@ -251,19 +268,22 @@
 //   • `radialWeightProfile` — the per-BFS-shell share of the |Re ε · ★h|
 //     curvature weight: a normalized RADIAL CURVATURE-WEIGHT DENSITY.
 //
-// `radialWeightProfile` is NOT a form factor.  No momentum-transfer Fourier
-// transform of a charge density is computed anywhere in this tree, no
-// charge radius is extracted from a slope at q² → 0, and the profiled
-// density is CURVATURE weight, not electromagnetic charge.  The certificate
-// it grades is named `profile-stability`, never "form-factor": the ticket's
-// form-factor requirement is met ONLY in the weaker sense of "a
-// refinement-stable dimensionless radial profile", and that gap is recorded
-// here rather than papered over.
+// `radialWeightProfile` is NOT a form factor.  No charge radius is
+// extracted from a slope at q² → 0 here, and the profiled density is
+// CURVATURE weight, not electromagnetic charge.  The certificate it grades
+// is named `profile-stability`, never "form-factor": it certifies only "a
+// refinement-stable dimensionless radial profile".  The whitepaper's
+// momentum-transfer observable lives in `CrossingReadouts` above, on a
+// charge density built from world-tube crossings, and even that one is the
+// incoherent spectral power rather than G_E.
 //
 // Any DIMENSIONFUL mass stays UNKNOWN: `ScaleProfileRead::physicalMass` and
 // `BaryonRead::physicalMass` are ALWAYS empty, because converting a
 // deficit-angle reading into a physical mass needs a physical scale this
-// program has not independently established.
+// program has not independently established.  The crossing mass is likewise
+// UNCALIBRATED by default (`CrossingReadoutsConfig::kappaMass` ships at 1.0
+// with `massCalibrated` false), so `BaryonRead::crossingMassValue` is a
+// ratio-only quantity and never a physical mass either.
 //
 // ─── Thresholds ──────────────────────────────────────────────────────────
 //
@@ -300,6 +320,7 @@
 
 #include "cobordism/Certificate.h"
 #include "observables/ColorFiber.h"
+#include "observables/CrossingReadouts.h"
 #include "observables/ExchangeHolonomy.h"
 #include "observables/FiberConnection.h"
 #include "observables/PersistentModularity.h"
@@ -1424,6 +1445,21 @@ struct BaryonCandidateEvidence {
   /// The composite's lifetime transports (#770; report-only — the max
   /// leakage travels on the read).
   std::vector<FiberTransportRead> lifetimeTransports{};
+  /// The whitepaper's world-tube crossing mass for this candidate (the
+  /// readout section: `m_x = kappa_m sum |pi_perp|`, a difference against
+  /// M0).  EMPTY when the caller supplied none, and then the
+  /// `crossing-readouts` gate passes VACUOUSLY — exactly the
+  /// applicable-gated discipline `spin-lift` uses, so a candidate assembled
+  /// without crossing evidence is graded as it was before the readouts
+  /// existed rather than being failed for a certificate nobody claimed.
+  /// Supplied, it is ENFORCED: the crossing mass must be finite and the
+  /// coherent one-third sum must read B = +1 with no determinant-line sign
+  /// defect.
+  std::optional<CrossingMassRead> crossingMass{};
+  /// The coherent one-third baryon sum for the same candidate and level.
+  /// Travels with `crossingMass`; supplying one without the other fails the
+  /// gate by name rather than grading half a certificate.
+  std::optional<BaryonCrossingRead> crossingBaryon{};
 };
 
 /// # BaryonRead
@@ -1547,13 +1583,25 @@ struct BaryonRead {
   bool profileStable = false;
   /// The DIMENSIONFUL mass — ALWAYS empty (see the file banner).
   std::optional<double> physicalMass{};
+  /// The whitepaper's world-tube crossing readouts, when the caller supplied
+  /// them.  `crossingMassApplicable` is false when none were supplied, and
+  /// the `crossing-readouts` gate then passed VACUOUSLY; the value is NaN
+  /// and the baryon number EMPTY in that case — unknown, never zero.  The
+  /// crossing mass is UNCALIBRATED unless the producing configuration
+  /// declared otherwise, so it is never a dimensionful physical mass.
+  bool crossingMassApplicable = false;
+  double crossingMassValue = std::numeric_limits<double>::quiet_NaN();
+  std::optional<double> crossingBaryonNumber{};
+  /// Tubes whose crossing sign disagreed with their determinant-line
+  /// winding — a defect signal, carried verbatim onto the verdict.
+  std::vector<std::string> crossingSignDefects{};
   /// Number of shared persistence slices of the three constituents.
   double lifetimeOverlap = std::numeric_limits<double>::quiet_NaN();
   /// Number of composite lifetime transports supplied.
   std::size_t transportCount = 0;
   /// Worst composite transport leakage (NaN when none supplied).
   double transportLeakageMax = std::numeric_limits<double>::quiet_NaN();
-  /// Passed-fraction of the fourteen certificates listed above; 1.0
+  /// Passed-fraction of the fifteen certificates listed above; 1.0
   /// exactly for a certified proton.
   double confidence = 0.0;
   /// The thresholds that produced this read (echoed configuration).

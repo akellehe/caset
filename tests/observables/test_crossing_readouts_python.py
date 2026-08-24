@@ -91,48 +91,71 @@ def _ladder():
     return st
 
 
+def _cone():
+    """A cone cobordism: M0 is the single vertex 0, the upper layer is the
+    spacelike triangle 1-2-3, and the three TIMELIKE rungs 0-1, 0-2, 0-3 all
+    meet at 0.
+
+    Every crossing edge therefore shares the vertex 0, so the slice graph is
+    the complete graph K3 whose Laplacian is 3I - J: spectrum {0, 3, 3} with
+    a genuinely DEGENERATE lambda = 3 eigenspace and the closed-form
+    eigenprojector I - J/3.  The ladder's rungs, by contrast, pairwise share
+    no vertex and give a disconnected slice.
+    """
+    st = _from_simplices(
+        4, [(0, 1), (0, 2), (0, 3), (1, 2), (2, 3), (1, 3)])
+    for a, b in CONE_RUNGS:
+        _edge(st, a, b).setLength(1j)
+    return st
+
+
 M0 = [0, 1, 2]
 RUNGS = ((0, 3), (1, 4), (2, 5))
+CONE_M0 = [0]
+CONE_RUNGS = ((0, 1), (0, 2), (0, 3))
 
 
 # --------------------------------------------------------------------------- #
 # a real, certified, positive band -- reused as the certificate of every tube
 # --------------------------------------------------------------------------- #
-def _certified_rank_one_record():
-    """The record of a REAL rank-one accepted band with positive signature,
-    produced by the real tracker on the Euclidean 3-cycle (spec {0, 3, 3},
-    so the lambda = 0 band is rank one and isolated).
+def _certified_rank_one_record(degree):
+    """The record of a REAL rank-one accepted band with positive signature at
+    `degree`, produced by the real tracker on the Euclidean 3-cycle (spec
+    {0, 3, 3} at both k = 0 and k = 1, so the lambda = 0 band is rank one and
+    isolated).
 
     The tests below re-point this record's CELLS at the ladder's timelike
     rungs through the sanctioned `fromRecord` replay path.  The CERTIFICATE
-    is never fabricated: it stays exactly the one the tracker issued.
+    is never fabricated: it stays exactly the one the tracker issued, which
+    is what makes `accepted` and the positive signature real rather than
+    asserted.
     """
     st = _from_simplices(3, [(0, 1), (1, 2), (0, 2)])
     tracker = obs.SpectralFiberTracker(st, obs.SpectralFiberConfig())
-    read = tracker.enumerateBands([0, 1, 2], 0)
+    read = tracker.enumerateBands([0, 1, 2], degree)
     for fiber in read.fibers:
         cert = fiber.certificate()
         if (fiber.rank() == 1 and cert.accepted
                 and cert.positiveSignature == 1 and cert.negativeSignature == 0):
             return fiber.toRecord()
-    raise AssertionError("no certified rank-one positive band on the 3-cycle")
+    raise AssertionError(
+        f"no certified rank-one positive band at degree {degree}")
 
 
-_BASE_RECORD = None
+_BASE_RECORDS = {}
 
 
-def _band_on(cells, amplitudes):
+def _band_on(cells, amplitudes, degree=1):
     """A rank-one band supported on `cells` with the given complex frame
     amplitudes, carrying the real certificate of `_certified_rank_one_record`.
 
     With unit weights the projector is `P = Phi Psi^dagger`, so the density
     on row i is |a_i|^2; `Psi^dagger W Phi = I` requires sum |a_i|^2 = 1.
     """
-    global _BASE_RECORD
-    if _BASE_RECORD is None:
-        _BASE_RECORD = _certified_rank_one_record()
+    if degree not in _BASE_RECORDS:
+        _BASE_RECORDS[degree] = _certified_rank_one_record(degree)
     record = {k: (list(v) if isinstance(v, list) else v)
-              for k, v in _BASE_RECORD.items()}
+              for k, v in _BASE_RECORDS[degree].items()}
     rows = len(cells)
     record["cells"] = [list(cell) for cell in cells]
     record["rows"] = rows
@@ -149,10 +172,10 @@ def _band_on(cells, amplitudes):
 
 
 def _tube(tube_id, cells, amplitudes, orientation=1, quark=True,
-          winding=None):
+          winding=None, degree=1):
     tube = obs.WorldTubeInput()
     tube.tubeId = tube_id
-    tube.band = _band_on(cells, amplitudes)
+    tube.band = _band_on(cells, amplitudes, degree)
     tube.orientation = orientation
     tube.certifiedQuarkTube = quark
     if winding is not None:
@@ -269,9 +292,18 @@ class TestBandDensity(unittest.TestCase):
             self.assertAlmostEqual(x, y, delta=MACHINE)
 
     def test_degree_zero_band_has_no_edge_density(self):
-        band = _band_on([[0]], [1.0 + 0j])
+        """A degree-zero band lives on vertices and carries no edge density,
+        so it has no crossing set at all."""
+        band = _band_on([[0]], [1.0 + 0j], degree=0)
         self.assertEqual(band.degree(), 0)
         self.assertEqual(dict(obs.CrossingReadouts.bandEdgeDensity(band)), {})
+
+    def test_degree_zero_band_refuses_by_name(self):
+        temporal = obs.CrossingReadouts.temporalFunction(_ladder(), M0)
+        tube = _tube("v", [[0]], [1.0 + 0j], degree=0)
+        read = obs.CrossingReadouts.crossing(tube, temporal, 0.5)
+        self.assertFalse(read.admissible)
+        self.assertIn("degree-zero-band", list(read.failedCertificates))
 
 
 # --------------------------------------------------------------------------- #
@@ -450,70 +482,74 @@ class TestMassAndBaryon(unittest.TestCase):
 # --------------------------------------------------------------------------- #
 class TestChargePowerProfile(unittest.TestCase):
     def setUp(self):
-        self.temporal = obs.CrossingReadouts.temporalFunction(_ladder(), M0)
+        self.temporal = obs.CrossingReadouts.temporalFunction(
+            _cone(), CONE_M0)
+
+    def _cone_tube(self, tube_id, rung, **kwargs):
+        return _tube(tube_id, [list(rung)], [1.0 + 0j], **kwargs)
 
     def test_profile_matches_an_independent_rotated_eigenbasis(self):
         """S(lambda) is built from EIGENSPACE PROJECTORS, so it must agree
         with <rho, P_lambda rho> computed from a DIFFERENT (randomly rotated)
-        orthonormal basis of the same eigenspace.
+        orthonormal basis of the same eigenspace -- the basis-invariance the
+        projector formulation buys, which a single-eigenvector coefficient
+        would not have.
 
-        The three rungs pairwise share no vertex, so the slice Laplacian is
-        the 3-node empty graph: a single eigenvalue 0 of multiplicity three.
-        Its projector is the identity, and the closed-form power is
-        ||rho||^2 -- reproduced below through a random rotation of that
-        degenerate eigenspace.
+        The cone's three rungs all meet at vertex 0, so the slice graph is
+        K3 with Laplacian 3I - J: spectrum {0, 3, 3}, and the lambda = 3
+        eigenspace is genuinely two-dimensional.
         """
-        tubes = [_rung_tube(f"t{i}", RUNGS[i]) for i in range(3)]
+        tubes = [self._cone_tube(f"t{i}", CONE_RUNGS[i]) for i in range(3)]
         read = obs.CrossingReadouts.chargePowerProfile(
             tubes, self.temporal, 0.5)
         self.assertEqual(read.sliceNodes, 3)
-
-        rho = np.ones(3)                       # three forward unit crossings
-        rng = np.random.default_rng(20260824)
-        q, _ = np.linalg.qr(rng.normal(size=(3, 3)))   # a rotated eigenbasis
-        projector = q @ q.T                            # = I, basis-independent
-        expected = float(rho @ projector @ rho)
-
-        self.assertEqual(len(read.eigenvalues), 1)
+        self.assertEqual(len(read.eigenvalues), 2)
         self.assertAlmostEqual(read.eigenvalues[0], 0.0, delta=1e-9)
-        self.assertAlmostEqual(read.power[0], expected, delta=1e-9)
+        self.assertAlmostEqual(read.eigenvalues[1], 3.0, delta=1e-9)
 
-    def test_degenerate_eigenspace_power_is_basis_independent(self):
-        """The same invariance on a slice whose Laplacian has a genuinely
-        degenerate NONZERO eigenspace: a 3-cycle of crossing edges (spec
-        {0, 3, 3}), whose lambda = 3 eigenprojector is the closed form
-        I - J/3."""
-        # A slice whose crossing edges pairwise share vertices: three tubes
-        # crossing on rungs that meet at the shared upper triangle.
-        tubes = [
-            _tube("a", [[0, 3]], [1.0 + 0j]),
-            _tube("b", [[1, 4]], [1.0 + 0j]),
-            _tube("c", [[2, 5]], [1.0 + 0j]),
-        ]
-        read = obs.CrossingReadouts.chargePowerProfile(
-            tubes, self.temporal, 0.5)
-        rho = np.ones(read.sliceNodes)
-        total = sum(read.power)
-        self.assertAlmostEqual(total, float(rho @ rho), delta=1e-9)
+        rho = np.ones(3)                        # three forward unit crossings
+        laplacian = 3.0 * np.eye(3) - np.ones((3, 3))
+        values, vectors = np.linalg.eigh(laplacian)
+
+        # An INDEPENDENT orthonormal basis of the degenerate lambda = 3
+        # eigenspace: rotate the two eigenvectors by a random 2x2 rotation.
+        degenerate = vectors[:, np.abs(values - 3.0) < 1e-9]
+        self.assertEqual(degenerate.shape[1], 2)
+        theta = 0.837
+        rotation = np.array([[math.cos(theta), -math.sin(theta)],
+                             [math.sin(theta), math.cos(theta)]])
+        rotated = degenerate @ rotation
+        projector = rotated @ rotated.T
+        # The closed form: P_3 = I - J/3.
+        closed_form = np.eye(3) - np.ones((3, 3)) / 3.0
+        self.assertLess(np.max(np.abs(projector - closed_form)), 1e-9)
+
+        self.assertAlmostEqual(read.power[1], float(rho @ projector @ rho),
+                               delta=1e-9)
+        monopole = vectors[:, np.abs(values) < 1e-9]
+        self.assertAlmostEqual(
+            read.power[0],
+            float(rho @ (monopole @ monopole.T) @ rho), delta=1e-9)
 
     def test_neutral_system_refuses_normalization_and_reports_power(self):
-        """The normalizing monopole vanishes for a conjugate pair: the
-        NORMALIZED profile refuses by name while the unnormalized power stays
-        reported."""
+        """The normalizing monopole vanishes for a conjugate pair on one
+        CONNECTED slice: the NORMALIZED profile refuses by name while the
+        unnormalized power stays reported."""
         tubes = [
-            _rung_tube("q", RUNGS[0]),
-            _rung_tube("qbar", RUNGS[1], orientation=-1),
+            self._cone_tube("q", CONE_RUNGS[0]),
+            self._cone_tube("qbar", CONE_RUNGS[1], orientation=-1),
         ]
         read = obs.CrossingReadouts.chargePowerProfile(
             tubes, self.temporal, 0.5)
+        self.assertEqual(read.sliceNodes, 2)
         self.assertFalse(read.normalized)
         self.assertIn("neutral-system", list(read.failedCertificates))
         self.assertEqual(list(read.normalizedPower), [])
-        self.assertTrue(len(read.power) >= 1)
         self.assertGreater(sum(read.power), 0.0)
+        self.assertAlmostEqual(read.monopole, 0.0, delta=1e-9)
 
     def test_charged_system_normalizes_to_one_at_zero(self):
-        tubes = [_rung_tube(f"t{i}", RUNGS[i]) for i in range(3)]
+        tubes = [self._cone_tube(f"t{i}", CONE_RUNGS[i]) for i in range(3)]
         read = obs.CrossingReadouts.chargePowerProfile(
             tubes, self.temporal, 0.5)
         self.assertTrue(read.normalized, list(read.failedCertificates))
@@ -521,10 +557,14 @@ class TestChargePowerProfile(unittest.TestCase):
                          key=lambda i: abs(read.eigenvalues[i]))
         self.assertAlmostEqual(read.normalizedPower[zero_index], 1.0,
                                delta=1e-9)
+        # Total charge 3 spread over K3: the monopole is (sum rho)^2 / 3 = 3
+        # and the degenerate lambda = 3 power vanishes on the constant.
+        self.assertAlmostEqual(read.monopole, 3.0, delta=1e-9)
+        self.assertAlmostEqual(read.power[1], 0.0, delta=1e-9)
 
     def test_empty_slice_refuses_by_name(self):
         read = obs.CrossingReadouts.chargePowerProfile(
-            [_rung_tube("q", RUNGS[0])], self.temporal, 7.5)
+            [self._cone_tube("q", CONE_RUNGS[0])], self.temporal, 7.5)
         self.assertFalse(read.normalized)
         self.assertIn("empty-slice", list(read.failedCertificates))
         self.assertEqual(read.sliceNodes, 0)
@@ -538,8 +578,9 @@ class TestFormFactor(unittest.TestCase):
         """G_E needs a certified conserved current, certified momentum-
         transfer states, and a refinement extrapolation.  None exist here, so
         the radius is UNAVAILABLE with every missing certificate named."""
-        temporal = obs.CrossingReadouts.temporalFunction(_ladder(), M0)
-        tubes = [_rung_tube(f"t{i}", RUNGS[i]) for i in range(3)]
+        temporal = obs.CrossingReadouts.temporalFunction(_cone(), CONE_M0)
+        tubes = [_tube(f"t{i}", [list(CONE_RUNGS[i])], [1.0 + 0j])
+                 for i in range(3)]
         profile = obs.CrossingReadouts.chargePowerProfile(
             tubes, temporal, 0.5)
         read = obs.CrossingReadouts.formFactor(profile)
@@ -553,8 +594,9 @@ class TestFormFactor(unittest.TestCase):
     def test_spectral_power_is_never_substituted_for_g_e(self):
         """Even on a fully normalized profile the form factor refuses: the
         incoherent structure factor is not the coherent matrix element."""
-        temporal = obs.CrossingReadouts.temporalFunction(_ladder(), M0)
-        tubes = [_rung_tube(f"t{i}", RUNGS[i]) for i in range(3)]
+        temporal = obs.CrossingReadouts.temporalFunction(_cone(), CONE_M0)
+        tubes = [_tube(f"t{i}", [list(CONE_RUNGS[i])], [1.0 + 0j])
+                 for i in range(3)]
         profile = obs.CrossingReadouts.chargePowerProfile(
             tubes, temporal, 0.5)
         self.assertTrue(profile.normalized)
