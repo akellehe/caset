@@ -69,15 +69,6 @@ std::set<std::vector<std::uint64_t>> boundaryFacetSet(const Spacetime &spacetime
   return facets;
 }
 
-// Whether any `pinned` vertex is no longer live in `spacetime` (a stranded pinned vertex).
-bool strandsPinned(const Spacetime &spacetime, const std::set<std::uint64_t> &pinned) {
-  std::set<std::uint64_t> live;
-  for (const auto *vertex : spacetime.getVertexList()->toVector())
-    live.insert(vertex->getId());
-  for (auto vertexId : pinned)
-    if (!live.count(vertexId)) return true;
-  return false;
-}
 }  // namespace
 
 MultiCobordism::MultiCobordism(
@@ -749,11 +740,32 @@ double MultiCobordism::objectiveFor(
 
 double MultiCobordism::objective() const { return objectiveFor(spacetime_); }
 
-std::set<std::uint64_t> MultiCobordism::pinnedBoundaryVertices() const {
-  // NOTHING is pinned. Target-conditioned modes hold boundary states through
-  // r_U rather than frozen vertices; JointStationarity treats the same target
-  // data as readout metadata. Boundary structures remain free to change.
-  return {};
+void MultiCobordism::declarePinnedRegion(PinnedRegion region) {
+  for (auto &existing : pinnedRegions_)
+    if (existing.name == region.name) {
+      existing = std::move(region);
+      return;
+    }
+  pinnedRegions_.push_back(std::move(region));
+}
+
+void MultiCobordism::clearPinnedRegions() { pinnedRegions_.clear(); }
+
+std::set<std::uint64_t> MultiCobordism::pinnedVertices() const {
+  std::set<std::uint64_t> united;
+  for (const auto &region : pinnedRegions_)
+    united.insert(region.vertices.begin(), region.vertices.end());
+  return united;
+}
+
+bool MultiCobordism::edgeIsPinned(std::uint64_t a, std::uint64_t b) const {
+  // Both endpoints within ONE region. One pinned endpoint leaves the edge free to
+  // relax, and two regions that each hold one endpoint do not pin the edge that
+  // spans between them — that edge is bulk.
+  for (const auto &region : pinnedRegions_)
+    if (region.vertices.count(a) != 0 && region.vertices.count(b) != 0)
+      return true;
+  return false;
 }
 
 MultiCobordism::Snapshot MultiCobordism::snapshotOf(
@@ -906,12 +918,9 @@ bool MultiCobordism::applyMoveSpecification(
                          .first;
   }
   if (!moveWasApplied) return false;
-  std::set<std::uint64_t> liveVertexIds;
-  for (const auto &topSimplex : spacetime->getTopSimplices())
-    for (auto vertexId : topSimplex->topTuple()) liveVertexIds.insert(vertexId);
-  for (auto vertexId : pinnedBoundaryVertices())
-    if (!liveVertexIds.count(vertexId))
-      return false;  // a pinned boundary vertex was removed
+  // Manifold validity is the whole gate. A move that removes a pinned vertex is
+  // accepted when what it leaves is a valid manifold in its own right: pinning
+  // constrains the geometry, it does not veto a topology change.
   return EigenstateSynthesis(spacetime, dualComplexGateDegree_)
       .dualComplexValid()
       .first;
@@ -1608,10 +1617,21 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
     }
 
     restoreEdgeLengths();
+    // Pinning enters HERE and only here: a pinned edge keeps its resident squared
+    // length while the rest of the complex relaxes around it. Zeroing the descent
+    // component is the whole mechanism — no clamp, no projection after the fact,
+    // no special case in the line search, which then simply has no reason to move
+    // the coordinate. With no region declared this loop does nothing.
+    if (!pinnedRegions_.empty())
+      for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
+        const auto key = edges[edgeIndex]->getKey();
+        if (edgeIsPinned(key.first, key.second))
+          descentDirection(edgeIndex) = complexd{0.0, 0.0};
+      }
     // No coordinate can move, so every backtracking trial would evaluate the
     // unchanged global objective and fail the strict-improvement gate. This is
-    // common at exact stationary points and when every selected term is
-    // disabled.
+    // common at exact stationary points, when every selected term is disabled,
+    // and when every edge that could move is pinned.
     if (descentDirection.squaredNorm() == 0.0) {
       lastStage2Stationary_ = true;
       return false;
@@ -1678,7 +1698,6 @@ int MultiCobordism::directedConeOut(HolePlacementStrategy strategy, int maxOpen)
   constexpr int kProbeOpeners = 3;    // stop once a few openers are in hand
   const int registerDegree = registerDegrees_.front();
   auto spacetime = spacetime_;
-  const auto pinned = pinnedBoundaryVertices();
   int opened = 0;
   for (int iteration = 0; iteration < maxOpen; ++iteration) {
     const auto holesBefore = emergentHoles(*spacetime, registerDegree);
@@ -1720,9 +1739,11 @@ int MultiCobordism::directedConeOut(HolePlacementStrategy strategy, int maxOpen)
     SurgicalCone cone(spacetime.get());
     for (const auto &cell : cells) {
       if (candidatesScanned++ >= kMaxCandidates) break;
+      // `coneOut` is itself gated on the full manifold check, so a candidate that
+      // survives it leaves a valid manifold-with-boundary — including when it
+      // removed a pinned vertex, which is a legitimate topology change.
       if (!cone.coneOut(cell).first) continue;  // gate rejected; nothing applied
       const bool opensHole =
-          !strandsPinned(*spacetime, pinned) &&
           emergentHoles(*spacetime, registerDegree).size() > holeCountBefore;
       if (opensHole) {
         const double candidateResidual = rU(spacetime);  // rU absorbs r_state (both steps)
@@ -1737,10 +1758,6 @@ int MultiCobordism::directedConeOut(HolePlacementStrategy strategy, int maxOpen)
     }
     if (bestCell.empty()) break;  // no opener lowers rU
     if (!cone.coneOut(bestCell).first) break;
-    if (strandsPinned(*spacetime, pinned)) {  // defensive: never strand a pinned vertex
-      cone.rollback();
-      break;
-    }
     ++opened;
   }
   return opened;

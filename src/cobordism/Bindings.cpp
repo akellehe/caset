@@ -1173,7 +1173,35 @@ Right -- re-read after each drive call:
            "that most lowers this node's rU (which absorbs r_state). Returns #holes opened.")
       .def("directed_cone_in", &MultiCobordism::directedConeIn, py::arg("max_close") = 6,
            "Directed gated cone-in: select the register by capping the hole whose removal "
-           "most lowers rU. Returns #holes capped.");
+           "most lowers rU. Returns #holes capped.")
+
+      // === pinning: a plain geometric constraint ===
+      .def("declare_pinned_region",
+           [](MultiCobordism &self, const std::string &name,
+              const std::set<std::uint64_t> &vertices) {
+             self.declarePinnedRegion({name, vertices});
+           },
+           py::arg("name"), py::arg("vertices"),
+           "Declare a pinned region: a named vertex set held fixed while the rest of the "
+           "complex relaxes around it. Re-declaring an existing name replaces it. The "
+           "region carries no target and no objective -- it says WHICH cells are held, "
+           "never what they are held to.")
+      .def("pinned_regions",
+           [](const MultiCobordism &self) {
+             std::vector<std::pair<std::string, std::set<std::uint64_t>>> regions;
+             regions.reserve(self.pinnedRegions().size());
+             for (const auto &region : self.pinnedRegions())
+               regions.emplace_back(region.name, region.vertices);
+             return regions;
+           },
+           "Every declared pinned region as (name, vertices), in declaration order.")
+      .def("clear_pinned_regions", &MultiCobordism::clearPinnedRegions,
+           "Drop every declared region, leaving the whole complex free to relax.")
+      .def("pinned_vertices", &MultiCobordism::pinnedVertices,
+           "The union of every region's vertices.")
+      .def("edge_is_pinned", &MultiCobordism::edgeIsPinned, py::arg("a"), py::arg("b"),
+           "Whether the edge between a and b is held fixed: true iff some ONE region "
+           "contains both endpoints. An edge spanning two distinct regions is bulk.");
 
   // === #776: modes, the enumerable objective, refinement, and the overlay ===
   py::enum_<MultiCobordism::SimulationMode>(multiCobordismClass, "SimulationMode",
