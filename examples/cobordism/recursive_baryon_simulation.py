@@ -140,7 +140,7 @@ QU = T.quantum
 #: independently.
 RUN_SCHEMA_VERSION = 1
 
-#: The COMPLETE verdict vocabulary (design spec §21.4 item 6). Not one entry
+#: The COMPLETE verdict vocabulary. Not one entry
 #: is a target-dependent success string, and no other string may be emitted.
 VERDICTS = (
     "no baryon",
@@ -258,12 +258,13 @@ DECLARED_EXCHANGE_CELLS = 8
 DECLARED_EXCHANGE_STEPS = 8
 DECLARED_BERRY_PHASE = 0.7
 
-#: Campaign sizes and seeds. At least three sizes (design spec §21.4 item 9).
+#: Campaign sizes and seeds. At least three sizes, so a scaling trend is
+#: distinguishable from a single-point coincidence.
 DECLARED_CAMPAIGN_SIZES = (6, 12, 20)
 DECLARED_CAMPAIGN_SEEDS = (7, 11)
 
 #: A matrix with more than this many entries goes to the versioned binary
-#: sidecar (design spec §20) instead of inline JSON.
+#: sidecar instead of inline JSON.
 DECLARED_JSON_MATRIX_LIMIT = 64
 
 #: The relative tolerance a replayed continuous aggregate may differ by. #776
@@ -486,7 +487,7 @@ def _peak_rss_bytes():
 
 
 # =====================================================================
-# the versioned binary sidecar (design spec §20)
+# the versioned binary sidecar
 # =====================================================================
 
 class MatrixSidecar:
@@ -992,7 +993,7 @@ def fock_block(readout, checkpoint, config):
     """The global Fock state / DAG.
 
     Built ONLY for the oracle and explicitly non-Gaussian boundary sectors,
-    which is the design spec's rule: the quasi-free production representation
+    which is the rule: the quasi-free production representation
     is the covariance above. When the oracle is selected and the operator's
     band projectors are oblique, ``LazyFockEngine`` refuses and its own
     message is recorded as the absence's named reason (#776 finding 7).
@@ -1798,7 +1799,7 @@ def exactness_fixtures():
                      "reference":
                          "(L_BB - lam I) - L_BI (L_II - lam I)^{-1} L_IB"})
     # ...and the same fixture demonstrating that the STATIC Schur complement
-    # does NOT preserve the pencil's nonzero eigenvalue (design spec §21.1.3):
+    # does NOT preserve the pencil's nonzero eigenvalue:
     # a nonzero separation is the POINT, so this row records a difference and
     # is exact when the separation is resolved.
     separation = float(np.abs(np.linalg.eigvals(effective)
@@ -2005,7 +2006,7 @@ def exactness_fixtures():
                     DECLARED_EXACT_TOLERANCE, "exact",
                     {"reference": "<J^2> = 3/4 with Var = 15/16 — the right "
                                   "expectation is NOT a sharp spin "
-                                  "(design spec 5.12)"})
+                                  "certificate"})
     return out
 
 
@@ -2786,7 +2787,7 @@ def _spacetime_from_raw(raw):
 def run_campaign(sizes, seeds, base_config, out_dir=None, progress=False):
     """A headless size campaign and its aggregate scaling report.
 
-    At least three sizes (design spec §21.4 item 9). Every member is run and
+    At least three sizes. Every member is run and
     RECORDED, including one that fails: a silently dropped seed would make
     the aggregate a selection.
     """
@@ -3571,7 +3572,7 @@ def print_run_summary(document, stream=sys.stdout):
           f"({document['runtime']['drive_seconds']:.2f} s drive, "
           f"{document['runtime']['analysis_seconds']:.2f} s analysis, "
           f"{document['runtime']['readout_seconds']:.2f} s readout)\n")
-    write("\nA rigorous negative is valid completion (design spec 21.4).\n")
+    write("\nA rigorous negative is valid completion.\n")
 
 
 def print_replay_summary(report, stream=sys.stdout):
@@ -3679,7 +3680,7 @@ what is exact, certified numerical, or heuristic
                       spacetime coordinate system.
 
 An unforced proton is a scientific success condition, not a software
-completion condition (design spec 21.4). `run` exits 0 whether or not one
+completion condition. `run` exits 0 whether or not one
 emerges; `replay` exits non-zero only when a stored verdict or content hash
 fails to reproduce.
 """
