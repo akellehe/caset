@@ -273,6 +273,96 @@ class TestTemporalFunction(unittest.TestCase):
 # --------------------------------------------------------------------------- #
 # the band density and its gauge invariance
 # --------------------------------------------------------------------------- #
+class TestConnectionIndependence(unittest.TestCase):
+    """The whitepaper is explicit that `dtau` is built from the squared
+    lengths z ALONE and never contains the connection.  Now that the edge
+    phase is a live complex C* link field (Re = compact U(1) angle, Im =
+    non-compact R+ scale), that claim is testable rather than aspirational:
+    an arbitrary complex phase on EVERY edge must leave every crossing
+    readout BITWISE unchanged.
+
+    Any movement here would mean a connection-carrying path had been picked
+    up, which is a real bug rather than a tolerance question -- so these
+    assertions are exact equality, not almost-equal.
+    """
+
+    @staticmethod
+    def _phased(spacetime):
+        """An arbitrary, edge-dependent COMPLEX phase on every edge: a
+        nontrivial compact angle and a nontrivial non-compact scale."""
+        for index, edge in enumerate(spacetime.getEdgeList().toVector()):
+            edge.setPhase(complex(0.37 * (index + 1), -0.21 * (index + 2)))
+        return spacetime
+
+    def _tubes(self, orientations=(1, 1, 1), windings=None):
+        windings = windings or [None] * len(orientations)
+        return [
+            _rung_tube(f"t{i}", RUNGS[i], orientation=o, winding=w)
+            for i, (o, w) in enumerate(zip(orientations, windings))
+        ]
+
+    def test_temporal_function_is_bitwise_phase_independent(self):
+        plain = obs.CrossingReadouts.temporalFunction(_ladder(), M0)
+        phased = obs.CrossingReadouts.temporalFunction(
+            self._phased(_ladder()), M0)
+        self.assertEqual(plain.certified, phased.certified)
+        self.assertEqual(list(plain.vertices), list(phased.vertices))
+        for a, b in zip(plain.tau, phased.tau):
+            self.assertEqual(a.real, b.real)
+            self.assertEqual(a.imag, b.imag)
+        self.assertEqual(plain.minCausalIncrement, phased.minCausalIncrement)
+
+    def test_pi_perp_is_bitwise_phase_independent(self):
+        plain_t = obs.CrossingReadouts.temporalFunction(_ladder(), M0)
+        phased_t = obs.CrossingReadouts.temporalFunction(
+            self._phased(_ladder()), M0)
+        tube = _rung_tube("q", RUNGS[0])
+        a = obs.CrossingReadouts.crossing(tube, plain_t, 0.5)
+        b = obs.CrossingReadouts.crossing(tube, phased_t, 0.5)
+        self.assertTrue(a.admissible and b.admissible)
+        self.assertEqual(a.perpendicular.real, b.perpendicular.real)
+        self.assertEqual(a.perpendicular.imag, b.perpendicular.imag)
+        self.assertEqual(a.sign, b.sign)
+        self.assertEqual(list(a.density), list(b.density))
+
+    def test_mass_baryon_and_profile_are_bitwise_phase_independent(self):
+        plain_t = obs.CrossingReadouts.temporalFunction(_ladder(), M0)
+        phased_t = obs.CrossingReadouts.temporalFunction(
+            self._phased(_ladder()), M0)
+        tubes = self._tubes()
+        for temporal_a, temporal_b in ((plain_t, phased_t),):
+            mass_a = obs.CrossingReadouts.crossingMass(
+                tubes, temporal_a, 0.5, 0.0)
+            mass_b = obs.CrossingReadouts.crossingMass(
+                tubes, temporal_b, 0.5, 0.0)
+            self.assertEqual(mass_a.crossingMass, mass_b.crossingMass)
+            self.assertEqual(mass_a.levelSum, mass_b.levelSum)
+
+            baryon_a = obs.CrossingReadouts.baryonNumber(
+                tubes, temporal_a, 0.5, 0.0)
+            baryon_b = obs.CrossingReadouts.baryonNumber(
+                tubes, temporal_b, 0.5, 0.0)
+            self.assertEqual(baryon_a.baryonNumber, baryon_b.baryonNumber)
+
+            profile_a = obs.CrossingReadouts.chargePowerProfile(
+                tubes, temporal_a, 0.5)
+            profile_b = obs.CrossingReadouts.chargePowerProfile(
+                tubes, temporal_b, 0.5)
+            self.assertEqual(list(profile_a.eigenvalues),
+                             list(profile_b.eigenvalues))
+            self.assertEqual(list(profile_a.power), list(profile_b.power))
+            self.assertEqual(profile_a.monopole, profile_b.monopole)
+
+    def test_the_phase_really_is_live_on_the_fixture(self):
+        """Guard against a vacuous invariance test: the phases must actually
+        be set to nonzero complex values on the fixture being compared."""
+        spacetime = self._phased(_ladder())
+        phases = [e.getPhase() for e in spacetime.getEdgeList().toVector()]
+        self.assertTrue(all(abs(p) > 0.0 for p in phases))
+        self.assertTrue(any(abs(p.imag) > 0.0 for p in phases))
+        self.assertTrue(any(abs(p.real) > 0.0 for p in phases))
+
+
 class TestBandDensity(unittest.TestCase):
     def test_density_matches_the_projector_diagonal(self):
         band = _band_on([[0, 3], [1, 4]],
