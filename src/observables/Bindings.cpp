@@ -274,9 +274,106 @@ Structurally identical (automorphic) components share a hash.)doc")
                     std::to_string(a.level()) + ")";
            });
 
+  py::enum_<DiscoveryStrategy>(m, "DiscoveryStrategy",
+      "Which search proposes the communities.  Both score the SAME exact "
+      "Q_gamma closed form, so their slices are directly comparable; they "
+      "differ only in how a partition is searched for.  An enum rather than "
+      "a name string, so a mis-spelling is an error instead of a value that "
+      "silently selects a default.")
+      .value("MultilevelAggregation", DiscoveryStrategy::MultilevelAggregation,
+             "Multilevel aggregation from a fixed restart seed sequence, "
+             "keeping the best exact score and reporting the restart spread.")
+      .value("LeadingEigenvector", DiscoveryStrategy::LeadingEigenvector,
+             "Newman's leading-eigenvector bisection of B_gamma = A - gamma "
+             "k k^T / 2m, recursed until no group has a positive leading "
+             "eigenvalue.  The community COUNT is fixed by the spectrum "
+             "rather than by a parameter, and the search carries no seed.");
+
+  py::class_<SplitReason>(m, "SplitReason",
+      "The named outcomes of one attempted leading-eigenvector bisection.  "
+      "Reference these constants rather than retyping the strings: a "
+      "mis-spelled literal produces a reason no consumer matches.")
+      .def_property_readonly_static("SPLIT_ACCEPTED",
+          [](py::object) { return SplitReason::kSplitAccepted; })
+      .def_property_readonly_static("NO_POSITIVE_EIGENVALUE",
+          [](py::object) { return SplitReason::kNoPositiveEigenvalue; })
+      .def_property_readonly_static("DEGENERATE_LEADING_PAIR",
+          [](py::object) { return SplitReason::kDegenerateLeadingPair; })
+      .def_property_readonly_static("GROUP_TOO_SMALL",
+          [](py::object) { return SplitReason::kGroupTooSmall; })
+      .def_property_readonly_static("EMPTY_SIDE",
+          [](py::object) { return SplitReason::kEmptySide; })
+      .def_property_readonly_static("SPLIT_LOWERS_MODULARITY",
+          [](py::object) { return SplitReason::kSplitLowersModularity; })
+      .def_property_readonly_static("POWER_ITERATION_NOT_CONVERGED",
+          [](py::object) { return SplitReason::kPowerIterationNotConverged; });
+
+  py::class_<SplitRead>(m, "SplitRead",
+      "One attempted bisection: the spectrum that decided it, and what was "
+      "decided.  Unmeasured quantities are NaN, never zero.")
+      .def_readonly("groupSize", &SplitRead::groupSize)
+      .def_readonly("leadingEigenvalue", &SplitRead::leadingEigenvalue,
+                    "Most positive eigenvalue of B_gamma on the group, over "
+                    "the complement of the all-ones vector.  NaN if not "
+                    "computed.")
+      .def_readonly("secondEigenvalue", &SplitRead::secondEigenvalue,
+                    "Second most positive eigenvalue, by deflation.  NaN if "
+                    "not computed.")
+      .def_readonly("eigenvalueGap", &SplitRead::eigenvalueGap,
+                    "leadingEigenvalue - secondEigenvalue: how well "
+                    "determined the bisection is.  NaN if either is "
+                    "unmeasured.")
+      .def_readonly("deltaQ", &SplitRead::deltaQ,
+                    "Exact change in total Q_gamma this split would produce, "
+                    "from the class's own closed form.  NaN if no split was "
+                    "evaluated.")
+      .def_readonly("accepted", &SplitRead::accepted,
+                    "Whether the group was actually bisected.")
+      .def_readonly("resolved", &SplitRead::resolved,
+                    "Whether the spectrum determined the outcome.  False "
+                    "means the split was REFUSED as not well determined, "
+                    "which is distinct from a determined 'do not split'.")
+      .def_readonly("reason", &SplitRead::reason,
+                    "One of the SplitReason constants.")
+      .def_readonly("sizeA", &SplitRead::sizeA)
+      .def_readonly("sizeB", &SplitRead::sizeB);
+
   py::class_<PersistentModularityConfig>(m, "PersistentModularityConfig",
       "Configuration for the label-free multiscale component discovery.")
       .def(py::init<>())
+      .def_readwrite("strategy", &PersistentModularityConfig::strategy,
+                     "Which search proposes the communities.  Default keeps "
+                     "the incumbent multilevel aggregation.")
+      .def_readwrite("leadingEigenvalueTolerance",
+                     &PersistentModularityConfig::leadingEigenvalueTolerance,
+                     "LeadingEigenvector: a group is indivisible when its "
+                     "leading eigenvalue does not exceed this.")
+      .def_readwrite("minEigenvalueGap",
+                     &PersistentModularityConfig::minEigenvalueGap,
+                     "LeadingEigenvector: minimum leading-to-second gap for "
+                     "a bisection to count as well determined.  Below it the "
+                     "split is refused with a named reason.")
+      .def_readwrite("denseEigenSolveMaxGroup",
+                     &PersistentModularityConfig::denseEigenSolveMaxGroup,
+                     "LeadingEigenvector: groups of at most this many cells "
+                     "get an EXACT dense symmetric eigendecomposition; larger "
+                     "groups fall back to shifted power iteration.  The dense "
+                     "path exists because iteration is slowest exactly where "
+                     "the pair is near-degenerate, which is the case the gap "
+                     "certificate has to adjudicate.")
+      .def_readwrite("maxPowerIterations",
+                     &PersistentModularityConfig::maxPowerIterations,
+                     "LeadingEigenvector: hard cap on power-iteration steps "
+                     "per eigenpair above denseEigenSolveMaxGroup.  "
+                     "Non-convergence is reported.")
+      .def_readwrite("powerIterationTolerance",
+                     &PersistentModularityConfig::powerIterationTolerance,
+                     "LeadingEigenvector: relative convergence tolerance of "
+                     "the Rayleigh quotient.")
+      .def_readwrite("kernighanLinRefinement",
+                     &PersistentModularityConfig::kernighanLinRefinement,
+                     "LeadingEigenvector: run a Kernighan-Lin local "
+                     "refinement after each sign bisection.")
       .def_readwrite("resolutions", &PersistentModularityConfig::resolutions,
                      "Resolution parameters gamma, in scan order.")
       .def_readwrite("baseSeed", &PersistentModularityConfig::baseSeed,
@@ -334,7 +431,14 @@ with ``q`` to double round-off.)doc")
       .def_readonly("restarts", &ResolutionSlice::restarts)
       .def_readonly("restartSpread", &ResolutionSlice::restartSpread,
                     "max - min of the restart scores (honest heuristic "
-                    "uncertainty).");
+                    "uncertainty).  NaN under LeadingEigenvector, which has "
+                    "no restarts — unmeasured is never encoded as zero.")
+      .def_readonly("strategy", &ResolutionSlice::strategy,
+                    "Which search produced this slice.")
+      .def_readonly("splits", &ResolutionSlice::splits,
+                    "LeadingEigenvector: one SplitRead per attempted "
+                    "bisection, in the order attempted — the strategy's "
+                    "spectral certificate.  Empty for MultilevelAggregation.");
 
   py::class_<ComponentMatch>(m, "ComponentMatch",
       R"doc(Matched component pair across adjacent resolutions or cobordism
