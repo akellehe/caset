@@ -1640,6 +1640,28 @@ def spectral_dimension_block(spacetime, config):
 # =====================================================================
 
 
+def _declared_anchor_gate():
+    """An OPEN gate for the pure-algebra controls below.
+
+    Those controls exercise an algebraic identity of the cube-root branch on a
+    matrix of their own construction, not a colour reading of an emergent
+    band, so they declare their own anchor rather than borrowing one. Two
+    faces SHARING the boundary edge rows {0, 1} are required: an isolated face
+    has no overlap partner and reports unknown determinant-phase coherence,
+    which the acceptance predicate refuses.
+    """
+    weights = np.array([1.0, 1.0, 1.0, 1.0])
+    band = np.zeros((4, 3), dtype=complex)
+    band[0, 0] = 1.0
+    band[1, 1] = 1.0
+    band[2, 2] = np.sqrt(0.8)
+    band[3, 2] = np.sqrt(0.2)
+    anchor = T.ColorAnchor([T.OrientedTriangle([0, 1, 2], [1, 1, 1]),
+                            T.OrientedTriangle([0, 1, 3], [1, 1, 1])])
+    anchor.declareWeights([0.75, 0.25])
+    return T.ColorAnchor.gateFor(anchor.evaluate(band, weights))
+
+
 def _colour_gate(anchor_profile=None):
     """The triangle-anchor gate the exactness contract requires before any
     colour-specific kernel runs.
@@ -1875,7 +1897,11 @@ def exactness_fixtures():
         np.diag([cmath.exp(2j * math.pi * k / samples), 1.0, 1.0]
                 ).astype(complex)) for k in range(samples)]
     omega = cmath.exp(2j * math.pi / 3.0)
-    gate = _colour_gate(profile)
+    # The section-5 literal-triangle profile is a SINGLE face, so its
+    # determinant-phase coherence is unknown and the acceptance predicate
+    # refuses it. This centre fixture is an algebraic branch identity, so it
+    # declares its own two-face anchor instead of borrowing that one.
+    gate = _declared_anchor_gate()
     lifts = [connection.fundamentalLift(family, gate, branch)
              for branch in (0, 1, 2)]
     sectors = {int(lift.centerSector) for lift in lifts}

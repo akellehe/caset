@@ -993,14 +993,20 @@ def _declared_anchor_gate():
 
     Those controls exercise an algebraic identity of the cube-root branch on a
     matrix of their own construction, not a colour reading of an emergent
-    band, so they declare their own literal triangle anchor rather than
-    borrowing one.
+    band, so they declare their own anchor rather than borrowing one. Two
+    faces SHARING the boundary edge rows {0, 1} are required: an isolated face
+    has no overlap partner and reports unknown determinant-phase coherence,
+    which the acceptance predicate refuses.
     """
-    weights = np.array([2.0, 0.5, 1.25])
-    rng = np.random.default_rng(61)
-    frame = rng.normal(size=(3, 3)) + 1j * rng.normal(size=(3, 3))
-    band = T.ColorAnchor.orthonormalizeFrame(frame, weights)
-    anchor = T.ColorAnchor([T.OrientedTriangle([0, 1, 2], [1, 1, 1])])
+    weights = np.array([1.0, 1.0, 1.0, 1.0])
+    band = np.zeros((4, 3), dtype=complex)
+    band[0, 0] = 1.0
+    band[1, 1] = 1.0
+    band[2, 2] = np.sqrt(0.8)
+    band[3, 2] = np.sqrt(0.2)
+    anchor = T.ColorAnchor([T.OrientedTriangle([0, 1, 2], [1, 1, 1]),
+                            T.OrientedTriangle([0, 1, 3], [1, 1, 1])])
+    anchor.declareWeights([0.75, 0.25])
     return T.ColorAnchor.gateFor(anchor.evaluate(band, weights))
 
 

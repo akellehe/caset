@@ -52,21 +52,35 @@ NAN = float("nan")
 OMEGA = complex(-0.5, 0.5 * math.sqrt(3.0))  # the algebraic cube root
 
 
+def _anchored_profile():
+    """An anchor profile that PASSES the acceptance predicate.
+
+    Two distinct oriented faces sharing the boundary edge rows {0, 1}, so the
+    determinant-phase coherence is measured rather than unknown: an atlas of
+    one isolated face has no overlap partner and reports NaN coherence, which
+    the predicate correctly refuses. The band concentrates 80/20 between the
+    two faces under a declared convex weighting, giving a score comfortably
+    above the floor and one common determinant-line trivialization.
+    """
+    weights = np.array([1.0, 1.0, 1.0, 1.0])
+    band = np.zeros((4, 3), dtype=complex)
+    band[0, 0] = 1.0
+    band[1, 1] = 1.0
+    band[2, 2] = np.sqrt(0.8)
+    band[3, 2] = np.sqrt(0.2)
+    anchor = obs.ColorAnchor([obs.OrientedTriangle([0, 1, 2], [1, 1, 1]),
+                              obs.OrientedTriangle([0, 1, 3], [1, 1, 1])])
+    anchor.declareWeights([0.75, 0.25])
+    return anchor.evaluate(band, weights)
+
+
 def _open_anchor_gate():
     """An ACCEPTED triangle-anchor gate.
 
     The exactness contract gates the colour-specific kernels on this
-    certificate, so every lift/projective fixture below has to carry one. A
-    single literal oriented triangle against a |W|-orthonormal band scores
-    exactly one with a single determinant phase — the cleanest accepted
-    profile the anchor kernel produces.
+    certificate, so every lift/projective fixture below has to carry one.
     """
-    rng = np.random.default_rng(61)
-    weights = np.array([2.0, 0.5, 1.25])
-    frame = rng.normal(size=(3, 3)) + 1j * rng.normal(size=(3, 3))
-    band = obs.ColorAnchor.orthonormalizeFrame(frame, weights)
-    anchor = obs.ColorAnchor([obs.OrientedTriangle([0, 1, 2], [1, 1, 1])])
-    return obs.ColorAnchor.gateFor(anchor.evaluate(band, weights))
+    return obs.ColorAnchor.gateFor(_anchored_profile())
 
 
 GATE = _open_anchor_gate()
@@ -1599,14 +1613,22 @@ class TestAnchorGatedColourKernels(unittest.TestCase):
 class TestAnchorAcceptancePredicate(unittest.TestCase):
     """One predicate, shared by the quark verdict and the colour kernels."""
 
-    def _profile(self, seed=61, triangles=None):
-        rng = np.random.default_rng(seed)
+    def _profile(self):
+        return _anchored_profile()
+
+    def test_an_isolated_face_reports_unknown_coherence_and_is_refused(self):
+        # One face has no overlap partner, so its determinant-phase coherence
+        # is UNKNOWN. Unknown is not "coherent enough": the predicate must
+        # refuse it rather than let a NaN slip through a >= comparison.
         weights = np.array([2.0, 0.5, 1.25])
+        rng = np.random.default_rng(61)
         frame = rng.normal(size=(3, 3)) + 1j * rng.normal(size=(3, 3))
         band = obs.ColorAnchor.orthonormalizeFrame(frame, weights)
-        anchor = obs.ColorAnchor(
-            triangles or [obs.OrientedTriangle([0, 1, 2], [1, 1, 1])])
-        return anchor.evaluate(band, weights)
+        anchor = obs.ColorAnchor([obs.OrientedTriangle([0, 1, 2], [1, 1, 1])])
+        profile = anchor.evaluate(band, weights)
+        self.assertTrue(math.isnan(profile.phase_coherence))
+        self.assertFalse(obs.ColorAnchor.accepts(profile))
+        self.assertFalse(obs.ColorAnchor.gateFor(profile).accepted)
 
     def test_a_measured_anchor_passes(self):
         profile = self._profile()
