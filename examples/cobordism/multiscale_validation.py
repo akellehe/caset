@@ -385,7 +385,7 @@ def declared_spin_matrices(mode_count, offset=0):
        never be evidence of a proton.
     2. When a mode is left UNPAIRED it is a spin-0 mode, and the very same
        rank-1 state becomes a j = 1/2 + j = 0 superposition with a genuinely
-       nonzero `Var(J^2)` — the design spec §5.12 negative fixture, produced
+       nonzero `Var(J^2)` — the sharp-spin negative fixture, produced
        here by the pairing convention rather than by the physics. The
        difference between the two arms is reported as
        `var_j2_pairing_spread`, and it is the honest uncertainty on every
@@ -1794,7 +1794,7 @@ def analytic_invariants():
     record("generic_slater_variance_is_fifteen_sixteenths",
            abs(variance - 15.0 / 16.0), 1e-12,
            {"note": "the right expectation with nonzero variance is NOT a "
-                    "certified sharp spin (design spec 5.12)"})
+                    "certified sharp spin"})
 
     # The exact composable near-isometry budget.
     record("near_isometry_budget",

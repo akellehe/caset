@@ -28,7 +28,7 @@ namespace tessera::cobordism {
 namespace tessera::observables {
 
 /// Configuration of the spectral-band detector and tracker (ticket #769,
-/// design spec section 9 — Algorithm B).  All thresholds are analysis
+/// whitepaper "Recursive spectral fibers").  All thresholds are analysis
 /// parameters: they select which bands are *certified*, never which
 /// eigenvalues exist, and none of them is a Betti-number oracle (the zero
 /// band is found by the same relative gap rule as every other band).
@@ -56,7 +56,7 @@ struct SpectralFiberConfig {
   /// idempotency), all measured relative to the operator's Frobenius norm.
   double residualTolerance = 1e-9;
   /// Certification cap on the weighted Gram / signature defect
-  /// epsilon_G = ||Phi^dagger W Phi - J|| (design spec section 5.4).
+  /// epsilon_G = ||Phi^dagger W Phi - J||.
   double gramDefectTolerance = 1e-8;
   /// Certification cap on the band projector norm ||P||_2 (Kato's
   /// condition number of the spectral projector — 1 for an orthogonal
@@ -104,8 +104,8 @@ struct SpectralFiberConfig {
 
 /// # SpectralBandCertificate
 ///
-/// The certification record of one whole spectral band (design spec
-/// section 6.3): what was measured about the band, in which metric regime,
+/// The certification record of one whole spectral band: what was measured
+/// about the band, in which metric regime,
 /// and whether the band is certified.  Quantities that were not measured
 /// are quiet NaN (`cobordism::Certificate::kUnmeasured`), never zero.
 ///
@@ -159,7 +159,7 @@ struct SpectralBandCertificate {
   /// Idempotency defect ||P^2 - P||_F / max(1, ||P||_F).
   double projectorResidual = std::numeric_limits<double>::quiet_NaN();
   /// epsilon_eig = ||L Phi - Phi Lambda||_F / ||L||_F on the eigen-paired
-  /// right frame (design spec section 5.4).
+  /// right frame.
   double eigenResidual = std::numeric_limits<double>::quiet_NaN();
   /// Left-frame residual ||L^dagger Y - Y Lambda^dagger||_F / ||L||_F with
   /// Y = W^dagger Psi the Euclidean left frame.  Equal to `eigenResidual`
@@ -245,7 +245,7 @@ struct FiberOverlapRead {
 ///
 /// One whole isolated spectral band of a component-restricted Hodge
 /// operator: the right/left frames, the band projector, the eigenvalues,
-/// and the :class:`SpectralBandCertificate` (design spec section 6.3).
+/// and the :class:`SpectralBandCertificate`.
 ///
 /// The band is REPRESENTED BY ITS PROJECTOR `P = Phi Psi^dagger W`
 /// (`Psi^dagger W Phi = I`): individual eigenvectors are a gauge choice
@@ -317,7 +317,7 @@ class SpectralFiber {
     [[nodiscard]] Record toRecord() const;
     /// Rehydrate a fiber from `toRecord()` output.  Rejects an unknown
     /// `schema_version` (std::invalid_argument), matching the checkpoint
-    /// reader contract of design spec section 20.
+    /// checkpoint reader contract.
     [[nodiscard]] static SpectralFiber fromRecord(const Record &record);
 
   private:
@@ -393,7 +393,7 @@ struct ComponentBandRead {
 /// # SpectralFiberTracker
 ///
 /// Extraction and tracking of whole isolated localized Hodge bands on
-/// persistent components (ticket #769; design spec section 9, Algorithm B).
+/// persistent components (ticket #769).
 ///
 /// **Identity implemented.**  For a component support `S` (vertex ids) the
 /// tracker assembles the weighted Hodge operator of the FULL INDUCED
@@ -424,8 +424,7 @@ struct ComponentBandRead {
 /// vertex outside `S` does not contribute (the component is read as a
 /// complex in its own right).
 ///
-/// **Regimes** (design spec section 5.2; the regime is VERIFIED, never
-/// assumed):
+/// **Regimes** (the regime is VERIFIED, never assumed):
 ///  - positive: all participating weights real positive (and the degree-0
 ///    operator Hermitian by measurement) — the symmetric representation
 ///    `B_k^T B_k + B_{k+1} B_{k+1}^T` is solved self-adjointly: the exact
@@ -524,7 +523,7 @@ class SpectralFiberTracker {
     [[nodiscard]] RestrictedOperator assembleRestricted(
         const std::vector<std::uint64_t> &support, int degree) const;
 
-    // The three solve paths (Algorithm B step 2).
+    // The three solve paths.
     void solveDenseSelfAdjoint(const RestrictedOperator &op,
                                ComponentBandRead &read) const;
     void solveSparseSelfAdjoint(const RestrictedOperator &op,

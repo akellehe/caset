@@ -1177,7 +1177,7 @@ Right -- re-read after each drive call:
 
   // === #776: modes, the enumerable objective, refinement, and the overlay ===
   py::enum_<MultiCobordism::SimulationMode>(multiCobordismClass, "SimulationMode",
-      "The three top-level simulation modes (design spec section 4).")
+      "The three top-level simulation modes.")
       .value("EMERGENCE", MultiCobordism::SimulationMode::Emergence,
              "Only the base geometric objective (plus the one permitted "
              "state-energy term) drives optimization; every particle and gauge "
@@ -1188,7 +1188,7 @@ Right -- re-read after each drive call:
              "Recompute every derived hierarchy and certificate from a "
              "checkpoint and verify that nothing cached changed the result.");
   py::enum_<MultiCobordism::EmergenceSubmode>(multiCobordismClass, "EmergenceSubmode",
-      "The two labeled, Gaussian-closed emergence sub-modes (design spec 4.1).")
+      "The two labeled, Gaussian-closed emergence sub-modes.")
       .value("STRICT", MultiCobordism::EmergenceSubmode::Strict,
              "The carried state does not act back on the geometry at all.")
       .value("CERTIFICATES_BLIND_MEAN_FIELD",
@@ -1216,7 +1216,7 @@ Right -- re-read after each drive call:
   py::class_<MultiCobordism::RefinementIndicators>(multiCobordismClass,
       "RefinementIndicators",
       "The particle-independent geometric/numerical indicators emergence-mode "
-      "refinement is allowed to consult (design spec section 17).")
+      "refinement is allowed to consult.")
       .def(py::init<>())
       .def_readwrite("regge_stationarity_residual",
                      &MultiCobordism::RefinementIndicators::reggeStationarityResidual)
@@ -1344,12 +1344,12 @@ Right -- re-read after each drive call:
       .def("run_recursive_analysis", &MultiCobordism::runRecursiveAnalysis,
            py::call_guard<py::gil_scoped_release>(),
            "Run ONE post-hoc analysis pass over the CURRENT accepted geometry "
-           "(design spec section 17 order). Read-only on the geometry.")
+           "in firewall order. Read-only on the geometry.")
       .def_property_readonly("checkpoint_json", &MultiCobordism::checkpointJson,
                              "The versioned checkpoint document of the last "
-                             "pass (design spec section 20, schema 4). "
-                             "Schema 4 splits the section 16.2 search records "
-                             "and the section 16.4 three-cluster verdicts "
+                             "pass (schema 4). Schema 4 splits the "
+                             "bound-supercomponent search records and the "
+                             "three-cluster verdicts "
                              "into two blocks; unknown values are null, "
                              "never zero.")
       .def_static("checkpoint_schema_version",
@@ -1660,7 +1660,7 @@ the tolerance; HeuristicDiscovery never holds.)doc")
       .def_readonly("certificate", &CertifiedVector::certificate);
 
   py::class_<TouchedStar>(m, "TouchedStar",
-      R"doc(Publication record of one accepted move (design spec section 19): touched
+      R"doc(Publication record of one accepted move: touched
 simplices, changed edges, created/deleted cells, all named by vertex
 identifiers. AnalyticCache.publish drops entries whose component vertex set
 meets this star; disjoint siblings survive.)doc")

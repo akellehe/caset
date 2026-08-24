@@ -1,6 +1,6 @@
 // The quasi-free covariance layer (issue #780, Wave 2 of the recursive
-// spectral-fiber program — design spec §5.9, §6.7, §13 "Algorithm F", and the
-// whitepaper section "Quasi-free dynamics and the covariance layer").
+// spectral-fiber program — the whitepaper section "Quasi-free dynamics and
+// the covariance layer").
 //
 // ─── What lives here ─────────────────────────────────────────────────────
 //
@@ -17,8 +17,8 @@
 //                            purity/Gaussianity certificate per iteration;
 //                            #764 AnalyticCache-backed Wick reads; and
 //                            checkpoint serialization of Γ.
-//   • WickCertificateRead  — one Wick-evaluated certificate (design spec
-//                            §6.7): value, measured residual, polynomialId,
+//   • WickCertificateRead  — one Wick-evaluated certificate: value,
+//                            measured residual, polynomialId,
 //                            covarianceHash, #764 Certificate.
 //   • MeanFieldStepRead    — the per-iteration purity/Gaussianity
 //                            certificate record of the mean-field loop.
@@ -71,7 +71,7 @@
 // emergence objective — the mean-field loop takes h from the CALLER; the
 // geometry coupling h = h(Γ, g) is wired by the #776 integration ticket.
 //
-// ─── Emergence sub-modes served (design spec §4.1) ───────────────────────
+// ─── Emergence sub-modes served ──────────────────────────────────────────
 //
 //   • strict: the carried state does not act back on the geometry — plain
 //     evolve()/applyTransport() with a Γ-independent generator.
@@ -101,7 +101,7 @@ class AnalyticCache;
 
 namespace tessera::quantum {
 
-/// One Wick-evaluated polynomial certificate (design spec §6.7): the value,
+/// One Wick-evaluated polynomial certificate: the value,
 /// the measured residual, the normal-ordered observable / contraction-plan
 /// identifier, the covariance fingerprint the value was read from, and the
 /// #764 certification record grading the claim.
@@ -133,7 +133,7 @@ struct WickCertificateRead {
 
 /// The per-iteration certificate record of the mean-field self-consistency
 /// loop: the measured defects after the step and the purity/Gaussianity
-/// certificate (design spec §13 requirement 3, §4.1).
+/// certificate.
 struct MeanFieldStepRead {
     /// Iteration index (0-based) and the accumulated evolution time.
     std::size_t step{0};
@@ -160,7 +160,7 @@ struct MeanFieldStepRead {
 ///
 /// The number-conserving quasi-free state represented EXACTLY by its
 /// covariance matrix \f$ \Gamma_{ij} = \langle a_j^\dagger a_i\rangle \f$
-/// (design spec §6.7): the production state path of the quasi-free sector.
+/// the production state path of the quasi-free sector.
 /// Pure Slater states satisfy \f$ \Gamma^2 = \Gamma \f$ — reported as the
 /// measured `purityDefect()`, never assumed. Every polynomial observable is
 /// evaluated by Wick contraction as a finite exact sum (see the header
@@ -273,7 +273,7 @@ class CovarianceState {
     [[nodiscard]] double hermiticityDefect() const;
 
     /// Purity defect ε_purity = ‖Γ² − Γ‖_F — exactly zero for a pure Slater
-    /// state (design spec §5.9). An O(1) value is a mixed (or invalid)
+    /// state. An O(1) value is a mixed (or invalid)
     /// covariance REPORTING itself, never an error.
     [[nodiscard]] double purityDefect() const;
 
@@ -294,7 +294,7 @@ class CovarianceState {
     /// cached-read consistency key. A pure function of Γ: replay-stable.
     [[nodiscard]] std::string covarianceHash() const;
 
-    // ── propagation (both entry points; design spec §13 requirement 2) ──
+    // ── propagation (both entry points) ─────────────────────────────────
 
     /// Advance Γ by `dt` under the Hermitian one-particle generator h:
     /// Γ ← e^{−ih·dt} Γ e^{+ih·dt}, the EXACT solution of iΓ̇ = [h, Γ]
@@ -321,7 +321,7 @@ class CovarianceState {
     /// @throws std::invalid_argument on a shape mismatch.
     void applyTransport(const Eigen::MatrixXcd& transport);
 
-    // ── mean-field self-consistency (design spec §13 requirement 3) ─────
+    // ── mean-field self-consistency ─────────────────────────────────────
 
     /// The certificates-blind mean-field loop: for each of `steps`
     /// iterations, obtain h = `hamiltonian`(Γ) from the CALLER (classical
@@ -408,8 +408,8 @@ class CovarianceState {
 
     /// Var(J²) = ⟨(J²)²⟩ − ⟨J²⟩² with ⟨(J²)²⟩ = Σ_{αβ}
     /// ⟨dΓ(J_α)dΓ(J_α)dΓ(J_β)dΓ(J_β)⟩ (octic Wick sums). Exactly zero on a
-    /// J² eigenstate (design spec §5.12: a candidate with the right
-    /// expectation and nonzero variance is not a certified sharp spin).
+    /// J² eigenstate — a candidate with the right expectation and nonzero
+    /// variance is not a certified sharp spin.
     /// @throws std::invalid_argument on a shape mismatch.
     [[nodiscard]] WickCertificateRead wickSpinSquaredVariance(
         const Eigen::MatrixXcd& jx, const Eigen::MatrixXcd& jy,
@@ -432,7 +432,7 @@ class CovarianceState {
         const std::string& polynomialId,
         const std::function<WickCertificateRead()>& compute) const;
 
-    // ── checkpoint serialization (design spec §20 conventions) ───────────
+    // ── checkpoint serialization ────────────────────────────────────────
 
     /// The JSON-able checkpoint Record of Γ (schema-versioned; complex
     /// leaves split `{name}_re` / `{name}_im` per the #580 convention; the
@@ -442,7 +442,7 @@ class CovarianceState {
 
     /// Rehydrate from `toRecord()` output. Rejects an unknown
     /// `schema_version` (std::invalid_argument), matching the checkpoint
-    /// reader contract of design spec §20.
+    /// checkpoint reader contract.
     [[nodiscard]] static CovarianceState fromRecord(
         const observables::Record& record);
 

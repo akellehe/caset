@@ -234,7 +234,7 @@ struct InvalidationRead {
 };
 
 /// Label-free discovery of connected modular components that persist across
-/// resolution and cobordism time (design spec section 8, ticket #765).
+/// resolution and cobordism time (ticket #765).
 ///
 /// **Domain and exact identities.**  The input is a finite nonnegative
 /// weighted undirected similarity graph (the complex's one-skeleton under a
@@ -289,7 +289,7 @@ struct InvalidationRead {
 class PersistentModularity {
 public:
   /// The documented monotone map from complex edge magnitude to similarity
-  /// weight (design spec section 8.1).  Nothing else is silently mixed into
+  /// weight.  Nothing else is silently mixed into
   /// the metric.
   enum class WeightMap {
     /// w = 1 per edge: the combinatorial one-skeleton, exactly the graph the

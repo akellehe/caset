@@ -401,7 +401,7 @@ SLICES of a single frame.)doc")
 
   py::class_<PersistentModularity> pm(m, "PersistentModularity",
       R"doc(Label-free discovery of modular components that persist across
-resolution and cobordism time (ticket #765, design spec section 8).
+resolution and cobordism time (ticket #765).
 
 Exact identities on the nonnegative weighted undirected similarity graph:
 generalized modularity Q_gamma(P) = (1/2m) sum_ij (A_ij - gamma k_i k_j/2m)
@@ -527,8 +527,8 @@ no recomputation.)doc");
   // SpectralFiber (#769): localized spectral bands and their certificates
   // ========================================
   py::class_<SpectralFiberConfig>(m, "SpectralFiberConfig",
-      "Configuration of the spectral-band detector/tracker (ticket #769, "
-      "design spec section 9).  Thresholds select which bands are "
+      "Configuration of the spectral-band detector/tracker (ticket #769). "
+      "Thresholds select which bands are "
       "CERTIFIED, never which eigenvalues exist; no threshold is a "
       "Betti-number oracle and no rank is ever requested.")
       .def(py::init<>())
@@ -583,9 +583,9 @@ no recomputation.)doc");
                      "deviation on the certificate.");
 
   py::class_<SpectralBandCertificate>(m, "SpectralBandCertificate",
-      R"doc(Certification record of one whole spectral band (design spec
-section 6.3): degree, rank, lower/upper gap, localization (projector-
-diagonal inverse participation ratio), projector/eigen/left residuals,
+      R"doc(Certification record of one whole spectral band: degree, rank,
+lower/upper gap, localization (projector-diagonal inverse participation
+ratio), projector/eigen/left residuals,
 weighted Gram/signature defect ||Phi^dagger W Phi - J||, band condition
 number ||P||_2, Krein inertia (p, q), frequency window, self-adjointness
 flag, and the graded #764 Certificate (BandWindow domain; an uncertified
@@ -649,7 +649,7 @@ quantities are NaN, never zero.)doc")
 
   py::class_<SpectralFiber>(m, "SpectralFiber",
       R"doc(One whole isolated spectral band of a component-restricted Hodge
-operator (design spec section 6.3): right/left frames, band projector
+operator: right/left frames, band projector
 P = Phi Psi^dagger W with Psi^dagger W Phi = I, eigenvalues, and the
 SpectralBandCertificate.  The band is represented by its PROJECTOR —
 individual eigenvectors are a gauge choice and never determine an identity
@@ -746,7 +746,7 @@ or a downstream observable.)doc")
 
   py::class_<SpectralFiberTracker>(m, "SpectralFiberTracker",
       R"doc(Extraction and tracking of whole isolated localized Hodge bands
-on persistent components (ticket #769; design spec section 9, Algorithm B).
+on persistent components (ticket #769).
 
 Identity: for a component support S the tracker assembles the weighted
 Hodge operator of the full induced subcomplex on S (the same boundary maps,
@@ -1587,8 +1587,8 @@ convex weighting that produced the score.)doc")
       .def_readonly("singlet", &ColorFiber::OctetRead::singlet);
 
   py::class_<ColorFiber>(m, "ColorFiber",
-      R"doc(The exact three-edge SU(3) color kernel (#767, design spec
-section 11 "Algorithm D"): the constant color-sector algebra of three
+      R"doc(The exact three-edge SU(3) color kernel (#767): the constant
+color-sector algebra of three
 oriented edge modes, Lambda* C^3 = 1 (+) 3 (+) 3bar (+) 1, layered over the
 #766 exterior-algebra primitives (sector projectors and CAR matrices are
 delegated to tessera.quantum.ExteriorAlgebra, never reimplemented).
@@ -1991,7 +1991,7 @@ CAR/Fock algebra needs no spin structure and no Kasteleyn orientation.)doc")
   py::class_<ExchangeHolonomy>(m, "ExchangeHolonomy",
       R"doc(Berry-cancelled exchange statistics, the constructed total-space
 spin holonomy cycle, and the conditional SO(d) -> Spin(d) lift (ticket
-#772; design spec section 15 — Algorithm H).
+#772).
 
 Identities: (1) certified cyclic overlap transport R_t =
 polar(Phi_{t+1}^dagger W_t Phi_t), U_gamma = R_{T-1}...R_0, composing #769
@@ -2173,8 +2173,8 @@ polar normalization never conceals a bad assignment.)doc")
                      "closures.");
 
   py::class_<FiberTransportRead>(m, "FiberTransportRead",
-      R"doc(One derived fiber transport A <- B (design spec section 6.6):
-the raw overlap M_AB = Phi_A^dagger W_A T_AB Phi_B (Psi_A^dagger on the
+      R"doc(One derived fiber transport A <- B: the raw overlap
+M_AB = Phi_A^dagger W_A T_AB Phi_B (Psi_A^dagger on the
 biorthogonal path), EVERY pre-normalization diagnostic (rank, singular
 values, leakage, endpoint gaps/signatures, frame conditioning), the
 normalized U(r)/pseudo-unitary factor when its gates passed, the
@@ -2236,7 +2236,7 @@ lift path.)doc")
            [](const FiberTransportRead &self) {
              return recordToPython(self.toRecord());
            },
-           "Checkpoint serialization (design spec section 20 `transports`): "
+           "Checkpoint serialization (`transports`): "
            "at rank three the full U(3) factor, det V, and thereby the "
            "PU(3) class travel.")
       .def_static("fromRecord",
@@ -2248,8 +2248,8 @@ lift path.)doc")
                   "Rehydrate; rejects an unknown schema_version.");
 
   py::class_<WilsonHolonomyRead>(m, "WilsonHolonomyRead",
-      R"doc(The product of accepted transports around a loop (design spec
-section 12 step 8): full U(r) holonomy (or the certified GL(r,C) product),
+      R"doc(The product of accepted transports around a loop: full U(r)
+holonomy (or the certified GL(r,C) product),
 normalized trace Tr H / r, determinant line det H, and the center-blind
 adjoint reads.  Under independent local frame changes a CLOSED holonomy is
 conjugated at its base component, so the normalized trace is invariant.)doc")
@@ -2284,8 +2284,8 @@ conjugated at its base component, so the normalized trace is invariant.)doc")
       .def_readonly("certificate", &WilsonHolonomyRead::certificate);
 
   py::class_<FundamentalLiftRead>(m, "FundamentalLiftRead",
-      R"doc(The explicitly lifted SU(3) fundamental holonomy (design spec
-section 12 step 7): a cube-root branch continued from a declared base
+      R"doc(The explicitly lifted SU(3) fundamental holonomy: a cube-root
+branch continued from a declared base
 branch s0, lift = H exp(-i Theta/3) omega^{-s0} with Theta the accumulated
 per-link principal determinant phase, and the accumulated Z3 center sector
 RECORDED (branch-independent; the lift shifts by omega^{-s0} across
@@ -2320,7 +2320,7 @@ Rank three only -- SU(3) is never hard-coded at generic rank.)doc")
 
   py::class_<WindingClosureSpec> windingClosure(m, "WindingClosureSpec",
       R"doc(The declared closure of an open-segment determinant winding
-(design spec section 5.11): HOW the open composite is closed is part of
+HOW the open composite is closed is part of
 the certificate.  Mode.NONE leaves the winding unknown -- a raw endpoint
 phase difference is never promoted to an integer.)doc");
   py::enum_<WindingClosureSpec::Mode>(windingClosure, "Mode")
@@ -2346,7 +2346,7 @@ phase difference is never promoted to an integer.)doc");
   py::class_<DeterminantWindingRead>(m, "DeterminantWindingRead",
       R"doc(The integer determinant winding of a closed full-rank transport
 family, or the RELATIVE winding of an open segment under a recorded
-closure (design spec sections 5.11 / 12 step 9).  `winding` is None when
+closure.  `winding` is None when
 invalidated (closed gap / lost rank / aliasing step) or when no closure
 was declared -- never a silently wrong integer.)doc")
       .def_readonly("winding", &DeterminantWindingRead::winding)
@@ -2378,8 +2378,8 @@ was declared -- never a silently wrong integer.)doc")
                   "Rehydrate; rejects an unknown schema_version.");
 
   py::class_<FiberConnection>(m, "FiberConnection",
-      R"doc(Derived spectral-frame transport and Wilson observables (#770;
-design spec section 12, Algorithm E).  Wraps EXISTING induced-transfer
+      R"doc(Derived spectral-frame transport and Wilson observables (#770).
+Wraps EXISTING induced-transfer
 machinery -- the whole-complex Hodge d'Alembertian's intercomponent block
 and RecursiveQuotient response-network blocks -- forms the overlap
 M_AB = Phi_A^dagger W_A T_AB Phi_B (Psi_A^dagger on the biorthogonal
@@ -2427,7 +2427,7 @@ leakage certificate, never sampled independently.)doc")
            py::arg("from_fiber"), py::arg("transfer"),
            "Derive the transport A <- B from an explicit transfer block "
            "(rows = A's cells, cols = B's cells): overlap, full "
-           "diagnostics, gates, then reduction (Algorithm E steps 2-7).")
+           "diagnostics, gates, then reduction, in that order.")
       .def("transportReverse", &FiberConnection::transportReverse,
            py::arg("to_fiber"), py::arg("from_fiber"), py::arg("transfer"),
            "The reverse-direction transport B <- A through the W-adjoint "
@@ -2625,7 +2625,7 @@ reported, and the whole configuration is echoed on every read
       .def_readwrite("spinVarianceTolerance",
                      &ParticleClustersConfig::spinVarianceTolerance,
                      "#775: |Var(J^2)| cap of the SHARP-spin certificate "
-                     "(design spec 5.12).")
+                     "value.")
       .def_readwrite("minSupportContainment",
                      &ParticleClustersConfig::minSupportContainment,
                      "#775: minimum fraction of a constituent's level-0 "
@@ -2673,7 +2673,7 @@ carries the non-normal (no self-adjointness claimed) regime tag.)doc")
 
   py::class_<FlavorDoubletRead>(m, "FlavorDoubletRead",
       R"doc(The emergent, unlabeled, transported two-state spectral
-subclass that could carry isospin (design spec section 16.1).  The search
+subclass that could carry isospin.  The search
 runs WITHOUT a requested dimension: stableSubclassRanks reports every
 stable rank found, and "two-state" is an outcome.  The stored first-frame
 doublet fiber is the RECORDED member trivialization -- a compilation
@@ -2776,8 +2776,8 @@ fails by name, never presumed to pass.)doc")
                      "gaussFluxOnSurfaces result; None = charge unknown.");
 
   py::class_<QuarkRead>(m, "QuarkRead",
-      R"doc(The quark/antiquark particle read (design spec section 6.8 --
-spec field names preserved), plus the evidence summary the classification
+      R"doc(The quark/antiquark particle read, plus the evidence summary the
+classification
 consumed, the recorded thresholds, and the #764 certificate.  Unknown or
 uncertified values are None/NaN/0-sign, never zero-filled, and every gap
 is NAMED in failedCertificates.  B = nu/3 exists exactly when the winding
@@ -2851,8 +2851,8 @@ certificate does; quark-ness additionally needs |nu| = 1.)doc")
       .def("__repr__", &QuarkRead::describe)
       .def("toRecord",
            [](const QuarkRead &self) { return recordToPython(self.toRecord()); },
-           "Checkpoint serialization (design spec section 20 "
-           "particles.quarks): spec fields, evidence summary, failed "
+           "Checkpoint serialization (particles.quarks): fields, "
+           "evidence summary, failed "
            "certificates, and the threshold echo; unknown values are "
            "null, never zero.")
       .def_static("fromRecord",
@@ -2944,7 +2944,7 @@ the read unchanged.  Unknown values are NaN / 0-sign, never zero.)doc")
 
   py::class_<GluonCandidateEvidence>(m, "GluonCandidateEvidence",
       R"doc(The assembled evidence bundle of one #774 gluon candidate
-(design spec section 14.3): the quasi-free octet bilinear read of the
+the quasi-free octet bilinear read of the
 carried state, the #780 carried-state Wick parity/occupation, the #770
 lifetime transports and determinant winding, and the #765 persistence
 lifetime.  Missing evidence fails its certificate BY NAME.)doc")
@@ -3028,8 +3028,7 @@ every gap is NAMED in failedCertificates ("parity-even",
            [](const GluonRead &self) {
              return recordToPython(self.toRecord());
            },
-           "Checkpoint serialization (design spec section 20 "
-           "particles.gluons).")
+           "Checkpoint serialization (particles.gluons).")
       .def_static("fromRecord",
                   [](const py::handle &record) {
                     return GluonRead::fromRecord(pythonToRecord(record));
@@ -3173,7 +3172,7 @@ recorded distinction channels.  failedCertificates vocabulary:
 
   py::class_<BoundCandidateEvidence>(m, "BoundCandidateEvidence",
       R"doc(One constituent's datum for the #775 bound-supercomponent
-search (design spec 16.2): the #773 quark verdict, the #765 level-0
+search: the #773 quark verdict, the #765 level-0
 support, the #765 persistence window (first, last) -- None = no lifetime
 evidence, the overlap certificate then fails by name -- and the #770
 mutual transports to the other constituents.)doc")
@@ -3409,7 +3408,7 @@ variance reads, and the refinement-window mass-radius samples.)doc")
 
   py::class_<BaryonRead>(m, "BaryonRead",
       R"doc(The #775 three-quark baryon read and complete proton
-certificate (design spec 6.8, 16.2-16.4).  classification is one of
+certificate.  classification is one of
 "no-baryon", "baryon-candidate", "certified-proton", or
 "quasi-free-sharp-spin-obstruction" (the hyphenated spelling of the
 spec's quasi_free_sharp_spin_obstruction).
@@ -3537,8 +3536,8 @@ ALWAYS None.)doc")
 
   py::class_<ParticleClusters>(m, "ParticleClusters",
       R"doc(The #773 quark/antiquark classifier over persistent modular
-spectral components (design spec section 16.1; whitepaper "Quarks as
-modular clusters").  Composes the merged Wave 1/2 certificates -- #765
+spectral components (whitepaper "Quarks as modular clusters").  Composes
+the merged Wave 1/2 certificates -- #765
 persistence, #769 bands/tracking, #767 anchors, #770 transports and
 determinant windings with recorded closures, #780 Wick parity/occupation,
 and the EXISTING Gauss-flux read -- into QuarkReads; its own claim is the
@@ -3637,7 +3636,7 @@ evidence.)doc")
            "parameter).")
       .def("classifyGluon", &ParticleClusters::classifyGluon,
            py::arg("evidence"),
-           "Classify one gluon candidate (design spec section 14.3): "
+           "Classify one gluon candidate: "
            "certified even parity, a nonzero certified octet excitation "
            "with machine-level octet purity, accepted rank-three "
            "transports, a CERTIFIED zero total determinant winding (zero "
@@ -3658,7 +3657,7 @@ evidence.)doc")
       .def("boundSupercomponentSearch",
            &ParticleClusters::boundSupercomponentSearch,
            py::arg("nextLevelComponents"), py::arg("candidates"),
-           "The #775 bound-supercomponent search (design spec 16.2): one "
+           "The #775 bound-supercomponent search: one "
            "read per next-level component containing at least one "
            "certified quark candidate; found requires a strictly higher "
            "modular level, EXACTLY three contained certified quark "
@@ -3679,7 +3678,7 @@ evidence.)doc")
       .def("classifyBaryon", &ParticleClusters::classifyBaryon,
            py::arg("evidence"),
            "Classify one three-cluster candidate and evaluate the "
-           "complete proton certificate (design spec 16.2-16.4).  Returns "
+           "complete proton certificate.  Returns "
            "'no-baryon', 'baryon-candidate', 'certified-proton', or "
            "'quasi-free-sharp-spin-obstruction' with every failed or "
            "unknown certificate NAMED.")

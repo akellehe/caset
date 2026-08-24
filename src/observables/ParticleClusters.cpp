@@ -1691,7 +1691,7 @@ GluonRead ParticleClusters::classifyGluon(
   passed += gate(windingCertified && *winding.winding == 0, "winding-zero",
                  failed);
 
-  // 6. persistence (design spec §14.3: a gluon candidate is PERSISTENT).
+  // 6. persistence (a gluon candidate is PERSISTENT).
   //     Gated on the COBORDISM-FRAME lifetime (#808), exactly as the quark
   //     classifier is; the modularity resolution-slice count is reported.
   read.persistenceLifetime = evidence.persistenceLifetime;
@@ -2299,8 +2299,8 @@ ParticleClusters::boundSupercomponentSearch(
                                                     component.support.end());
 
     // Membership: a CERTIFIED quark candidate whose level-0 support meets
-    // this component (design spec §16.2 — "components containing three
-    // persistent quark candidates").  An uncertified candidate is not a
+    // this component ("components containing three persistent quark
+    // candidates").  An uncertified candidate is not a
     // quark candidate and is never counted.
     std::vector<std::size_t> members;
     for (std::size_t i = 0; i < candidates.size(); ++i) {
@@ -2678,7 +2678,7 @@ BaryonRead ParticleClusters::classifyBaryon(
       gate(bindingOk, "bound-supercomponent", failed);
   passed += structuralBinding;
 
-  // ── the proton certificate (design spec §16.4) ───────────────────────
+  // ── the proton certificate ──────────────────────────────────────────
 
   // 3. the color SINGLET.  The three color columns are normalized once and
   //    the three-mode wedge S_ABC = det[c_A c_B c_C] is built EXACTLY ONCE

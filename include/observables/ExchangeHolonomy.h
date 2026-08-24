@@ -19,8 +19,8 @@
 
 namespace tessera::observables {
 
-/// Analysis parameters of the exchange/rotation holonomy reads (ticket #772,
-/// design spec section 15 — Algorithm H).  Every threshold selects which
+/// Analysis parameters of the exchange/rotation holonomy reads (ticket
+/// #772).  Every threshold selects which
 /// reads are CERTIFIED, never which value is reported: a failed threshold
 /// yields an UNCERTIFIED read (the #769 gap-closure semantics), never a
 /// different sign.
@@ -28,7 +28,7 @@ struct ExchangeHolonomyConfig {
   /// A certified transport step needs every singular value of its overlap
   /// matrix at least this large (a leaking transfer — the tracked subspace
   /// turning away from its successor — invalidates the read BEFORE polar
-  /// normalization, design spec verification item 21.1.14).
+  /// normalization).
   double leakFloor = 1e-6;
   /// A certified transport step needs overlap conditioning
   /// sigma_max/sigma_min at most this large.
@@ -89,7 +89,7 @@ struct TransportStepRead {
 /// # LoopHolonomyRead
 ///
 /// The certified overlap transport of one tracked frame around one CLOSED
-/// configuration-space loop (design spec section 15):
+/// configuration-space loop:
 ///
 ///   R_t = polar(Phi_{t+1 mod T}^dagger W_t Phi_t),
 ///   U_gamma = R_{T-1} ... R_1 R_0 .
@@ -142,8 +142,8 @@ struct LoopHolonomyRead {
 ///
 ///   chi_hat_F = det U_loop / det U_reference
 ///
-/// (design spec section 15; whitepaper "Fermion statistics from simplicial
-/// orientation").  The report keeps the three phase channels SEPARATE:
+/// (whitepaper "Fermion statistics from simplicial orientation").  The
+/// report keeps the three phase channels SEPARATE:
 /// `rawLoopDeterminant` (exchange or rotation motion + Berry),
 /// `referenceDeterminant` (the Berry reference motion alone), and
 /// `character` (the cancelled ratio — the dynamical certificate).
@@ -284,8 +284,8 @@ struct SpinLiftRead {
 ///
 /// Berry-cancelled exchange statistics, the constructed total-space spin
 /// holonomy cycle, and the conditional SO(d) -> Spin(d) lift (ticket #772,
-/// Wave 2 of #763; design spec section 15 — Algorithm H; whitepaper section
-/// "Fermion statistics from simplicial orientation").
+/// Wave 2 of #763; whitepaper section "Fermion statistics from simplicial
+/// orientation").
 ///
 /// **Identities implemented.**
 ///
@@ -368,7 +368,7 @@ class ExchangeHolonomy {
 
     /// The unitary polar factor of a (square) matrix M = U Sigma V^dagger
     /// -> U V^dagger.  Exposed because the polar step is the normative
-    /// transport primitive of Algorithm H.
+    /// transport primitive of the holonomy reads.
     [[nodiscard]] static Eigen::MatrixXcd polarUnitary(
         const Eigen::MatrixXcd &overlap);
 

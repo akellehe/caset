@@ -5,10 +5,8 @@
 #define TESSERA_OBSERVABLES_PARTICLECLUSTERS_H
 
 // Particle classification from persistent modular spectral components
-// (issue #773, Wave 3 of the recursive spectral-fiber program — design spec
-// §16 "Algorithm I — quark and baryon discovery" (the §16.1 quark classifier),
-// §6.8 "Particle reads", and the whitepaper section "Quarks as modular
-// clusters").
+// (issue #773, Wave 3 of the recursive spectral-fiber program — the
+// whitepaper section "Quarks as modular clusters").
 //
 // ─── What lives here ─────────────────────────────────────────────────────
 //
@@ -73,7 +71,7 @@
 //                              anti-triplet fixture).
 //   • BoundCandidateEvidence / BoundSupercomponentRead
 //                            — the #775 bound-supercomponent search
-//                              (design spec §16.2): enumerate the NEXT
+//                              search: enumerate the NEXT
 //                              modular level for components containing
 //                              exactly three certified quark candidates
 //                              whose #765 persistence windows overlap and
@@ -438,7 +436,7 @@ struct ParticleClustersConfig {
   double colorFluxTolerance = 1e-9;
   /// |⟨J²⟩ − 3/4| cap of the total-space spin expectation.
   double spinExpectationTolerance = 1e-9;
-  /// |Var(J²)| cap of the SHARP-spin certificate (design spec §5.12): the
+  /// |Var(J²)| cap of the SHARP-spin certificate: the
   /// quantity that separates a proton certificate from an accidental
   /// expectation value.
   double spinVarianceTolerance = 1e-9;
@@ -498,7 +496,7 @@ struct GaussFluxRead {
 /// # FlavorDoubletRead
 ///
 /// The emergent, unlabeled, transported two-state spectral subclass that
-/// could carry isospin (#773 scope; design spec §16.1).  The search runs
+/// could carry isospin (#773 scope).  The search runs
 /// WITHOUT a requested dimension: every stable transported subclass of the
 /// candidate's band enumeration is followed, and "two-state" is an
 /// OUTCOME (`stableSubclassRanks` reports every stable rank found).  The
@@ -634,8 +632,7 @@ struct QuarkCandidateEvidence {
 
 /// # QuarkRead
 ///
-/// The quark/antiquark particle read (design spec §6.8 — the spec field
-/// names are preserved verbatim), extended with the evidence summary the
+/// The quark/antiquark particle read, extended with the evidence summary the
 /// classification consumed, the recorded thresholds, and the #764
 /// certificate.  Unknown or uncertified values are NULL (empty optional;
 /// NaN for unmeasured doubles; 0 for the sign-valued ints), never zero-
@@ -755,8 +752,8 @@ struct QuarkRead {
   /// failed certificates).
   [[nodiscard]] std::string describe() const;
 
-  /// Checkpoint serialization (design spec §20 `particles.quarks`): every
-  /// spec field, the evidence summary, the failed-certificate names, and
+  /// Checkpoint serialization (`particles.quarks`): every
+  /// field, the evidence summary, the failed-certificate names, and
   /// the threshold echo travel together; unknown values serialize as
   /// null, never zero.
   [[nodiscard]] Record toRecord() const;
@@ -878,8 +875,8 @@ struct OctetBilinearRead {
 
 /// # GluonCandidateEvidence
 ///
-/// The assembled evidence bundle of ONE gluon candidate (#774; design spec
-/// §14.3): every field is a read produced by a merged upstream kernel —
+/// The assembled evidence bundle of ONE gluon candidate (#774): every
+/// field is a read produced by a merged upstream kernel —
 /// the #780 carried-state Wick parity/occupation, this class's own
 /// quasi-free octet bilinear read, the #770 lifetime transports and
 /// determinant winding, and the #765 persistence diagnostics.  Missing
@@ -986,7 +983,7 @@ struct GluonRead {
 
   /// One-line human-readable summary.
   [[nodiscard]] std::string describe() const;
-  /// Checkpoint serialization (design spec §20 `particles.gluons`).
+  /// Checkpoint serialization (`particles.gluons`).
   [[nodiscard]] Record toRecord() const;
   /// Rehydrate; rejects an unknown `schema_version`.
   [[nodiscard]] static GluonRead fromRecord(const Record &record);
@@ -1149,8 +1146,8 @@ struct DiquarkRead {
 
 /// # BoundCandidateEvidence
 ///
-/// One constituent's datum for the #775 bound-supercomponent search
-/// (design spec §16.2).  Every field is an upstream read consumed
+/// One constituent's datum for the #775 bound-supercomponent search.
+/// Every field is an upstream read consumed
 /// verbatim: the #773 quark verdict, the #765 level-0 support and
 /// persistence window, and the #770 transports to the other constituents.
 struct BoundCandidateEvidence {
@@ -1402,16 +1399,15 @@ struct BaryonCandidateEvidence {
   HolonomyCharacterRead rotation{};
   /// The #772 Berry-cancelled PARTICLE-EXCHANGE character
   /// (`ExchangeHolonomy::exchangeCharacter`), when the caller ran the
-  /// exchange experiment.  REPORT-ONLY: neither the ticket's proton-
-  /// certificate list nor design spec §16.4 has an exchange row, so it
-  /// gates nothing — it only fills `BaryonRead::exchangeCharacter` and the
+  /// exchange experiment.  REPORT-ONLY: the proton certificate has no
+  /// exchange row, so it gates nothing — it only fills
+  /// `BaryonRead::exchangeCharacter` and the
   /// doubly cancelled spin-statistics ratio.  A read tagged with the wrong
   /// channel is refused (the #772 channels are never interchangeable).
   std::optional<HolonomyCharacterRead> exchange{};
   /// Whether the caller is making a CONTINUUM spin claim.  When true the
   /// SO(d) → Spin(d) lift is REQUIRED (a missing/obstructed lift fails by
-  /// name); when false the lift is not applicable and is never demanded
-  /// (design spec §16.4).
+  /// name); when false the lift is not applicable and is never demanded.
   bool continuumSpinClaim = false;
   /// The #772 `ExchangeHolonomy::spinLift` decision, when one was made.
   std::optional<SpinLiftRead> spinLift{};
@@ -1464,9 +1460,8 @@ struct BaryonCandidateEvidence {
 
 /// # BaryonRead
 ///
-/// The #775 three-quark baryon read and complete proton certificate
-/// (design spec §6.8 — the spec field names are preserved verbatim —
-/// and §16.2-§16.4), extended with the evidence summary the verdict
+/// The #775 three-quark baryon read and complete proton certificate,
+/// extended with the evidence summary the verdict
 /// consumed, the recorded thresholds, and the #764 certificate.
 ///
 /// `classification` is one of "no-baryon", "baryon-candidate",
@@ -1615,8 +1610,8 @@ struct BaryonRead {
 
   /// One-line human-readable summary.
   [[nodiscard]] std::string describe() const;
-  /// Checkpoint serialization (design spec §20 `particles.baryons`): every
-  /// spec field, the evidence summary, the failed-certificate names, and
+  /// Checkpoint serialization (`particles.baryons`): every
+  /// field, the evidence summary, the failed-certificate names, and
   /// the threshold echo travel together; unknown values serialize as
   /// null, never zero.
   [[nodiscard]] Record toRecord() const;
@@ -1628,9 +1623,9 @@ struct BaryonRead {
 /// # ParticleClusters
 ///
 /// The #773 quark/antiquark classifier over persistent modular spectral
-/// components (design spec §16.1; whitepaper "Quarks as modular
-/// clusters").  See the file banner for the identities implemented, their
-/// domains, and the certificate vocabulary.
+/// components (whitepaper "Quarks as modular clusters").  See the file
+/// banner for the identities implemented, their domains, and the
+/// certificate vocabulary.
 ///
 /// **Composition, not recomputation.**  Every certificate consumed here is
 /// produced by a merged upstream kernel: #765 persistence diagnostics,
@@ -1666,7 +1661,7 @@ class ParticleClusters {
       return cfg_;
     }
 
-    // ── the quark classifier (design spec §16.1) ────────────────────────
+    // ── the quark classifier ────────────────────────────────────────────
 
     /// Classify one candidate from its assembled evidence: evaluate the
     /// ten core certificates, derive quark vs antiquark from the
@@ -1767,7 +1762,7 @@ class ParticleClusters {
 
     // ── #775 three-cluster sector: baryons and the proton certificate ───
 
-    /// The bound-supercomponent search (design spec §16.2): for each
+    /// The bound-supercomponent search: for each
     /// NEXT-modular-level component, report which certified quark
     /// candidates it contains, their shared #765 lifetime window, and the
     /// containment / mutual-transport certificates.  One read is emitted
@@ -1802,7 +1797,7 @@ class ParticleClusters {
         const std::vector<ScaleProfileSample> &samples) const;
 
     /// Classify one three-cluster candidate and evaluate the complete
-    /// proton certificate (design spec §16.2-§16.4): the two structural
+    /// proton certificate: the two structural
     /// gates, the color volume / Gram determinant with the wedge built
     /// ONCE, the independent net-color-flux diagnostic, the summed
     /// certified winding and graded parity, the reused #773 flavor/charge
@@ -1851,7 +1846,7 @@ class ParticleClusters {
     // ── the emergent flavor doublet (no requested dimension) ────────────
 
     /// Search the candidate's band enumeration ACROSS FRAMES for a stable
-    /// transported two-state subclass (design spec §16.1): follow every
+    /// transported two-state subclass: follow every
     /// #769 band through consecutive frames via
     /// `SpectralFiberTracker::matchFibers` (certified continuations only,
     /// unambiguous — two chains merging onto one band invalidate each

@@ -5,8 +5,8 @@
 #define TESSERA_OBSERVABLES_COLORFIBER_H
 
 // The exact three-edge SU(3) color kernel (issue #767, Wave 1 of the
-// recursive spectral-fiber program — design spec §11 "Algorithm D", and the
-// whitepaper sections "A triangle carries the exact color algebra" and
+// recursive spectral-fiber program — the whitepaper sections
+// "A triangle carries the exact color algebra" and
 // "Quarks as modular clusters").
 //
 // ─── What lives here ─────────────────────────────────────────────────────
@@ -480,8 +480,7 @@ class ColorFiber {
 /// # ColorAnchor
 ///
 /// The calibrated weighted oriented-triangle anchoring kernel for an
-/// abstract rank-three band (whitepaper "Quarks as modular clusters";
-/// design spec §11).
+/// abstract rank-three band (whitepaper "Quarks as modular clusters").
 ///
 /// For each declared oriented triangle τ with restriction
 /// R_τ : C₁ → C³ (the three ordered boundary edges with incidence signs)

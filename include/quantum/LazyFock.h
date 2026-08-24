@@ -1,12 +1,11 @@
 // Lazy graded Fock oracle and boundary carrier (issue #771, Wave 2 of the
-// recursive spectral-fiber program — design spec §14 "Algorithm G", §14.2
-// "Lazy exact state", §5.7 inductive compatibility, §6.1 edge-mode
-// semantics).
+// recursive spectral-fiber program — the whitepaper section "Fock space as
+// an inductive limit of interactions").
 //
 // ─── Role ────────────────────────────────────────────────────────────────
 //
 // The one-particle edge space is h = span{|e⟩} (one two-level mode per
-// edge, identified by modeId — design spec §6.1) and the global carrier is
+// edge, identified by modeId) and the global carrier is
 // the fermionic Fock space F_-(h) = Λ•h. This engine represents vectors of
 // finite stages of that carrier as an expression DAG evaluated lazily, so
 // generally entangled states are carried WITHOUT eagerly allocating 2^M
@@ -16,7 +15,7 @@
 // and is LABELED as such (`LazyFockEngine::boundaryProductFixture`).
 //
 // The quasi-free sector's PRIMARY representation is the covariance layer
-// (design spec §13, ticket #780): quadratic generators evolve Γ_ij =
+// (ticket #780): quadratic generators evolve Γ_ij =
 // ⟨a_j†a_i⟩, never a Fock vector. THIS engine is the dense/oracle
 // reference for that layer and the carrier for explicitly non-Gaussian
 // boundary data — it is never the production representation of the
@@ -73,7 +72,7 @@
 //     (ε with an empty right word is +1) — amplitude preservation is by
 //     construction and still verified through the API. The inductive
 //     compatibility read reports ε_ι = ‖ι_M U_M − U_{M+1} ι_M‖ on the
-//     active carried subspace (design spec §5.7) as the top singular
+//     active carried subspace as the top singular
 //     value of the column-stacked defect.
 //
 // ─── Laziness contract ───────────────────────────────────────────────────
@@ -132,7 +131,7 @@
 
 namespace tessera::quantum {
 
-/// The node vocabulary of the lazy expression DAG (design spec §14.2).
+/// The node vocabulary of the lazy expression DAG.
 enum class LazyNodeKind {
     /// The vacuum Ω on the node's mode set (all modes empty).
     Vacuum,
@@ -301,8 +300,8 @@ class LazyFockNode {
 /// certification mode; in truncation mode an upper bound on
 /// ‖ψ_exact − ψ̃‖₂ that every scalar read reports), and the optional
 /// boundary-fixture label (set ONLY by
-/// LazyFockEngine::boundaryProductFixture — the design spec §6.1 rule
-/// that a stored product preparation must be labeled as such).
+/// LazyFockEngine::boundaryProductFixture — a stored product preparation
+/// must be labeled as such).
 class LazyFockState {
   public:
     LazyFockState() = default;
@@ -374,7 +373,7 @@ struct LazyScalarRead {
 };
 
 /// The quasi-free/Slater reference initialized from a spectral projector
-/// (design spec §14: Γ_ef = ⟨a_f†a_e⟩ = P_ef). StructureExact: exact
+/// (Γ_ef = ⟨a_f†a_e⟩ = P_ef). StructureExact: exact
 /// GIVEN the verified premise P² = P = P†, whose measured residual is on
 /// the certificate.
 struct LazySlaterReference {
@@ -404,7 +403,7 @@ struct LazyCovarianceRead {
     cobordism::Certificate certificate{};
 };
 
-/// The design spec §5.7 inductive compatibility read for the vacuum
+/// The inductive compatibility read for the vacuum
 /// embedding ι_M: ε_ι = ‖ι_M U_M − U_{M+1} ι_M‖ restricted to the active
 /// carried subspace (the span of the supplied orthonormal occupation
 /// basis states), computed as the top singular value of the
@@ -420,7 +419,7 @@ struct LazyCompatibilityRead {
 
 /// # LazyFockEngine
 ///
-/// The lazy graded Fock engine (design spec §14, ticket #771): builders,
+/// The lazy graded Fock engine (ticket #771): builders,
 /// lazy operator application with the crossing-only expansion rule,
 /// scalar/covariance/spectrum reads, the exact-subexpression memo, the
 /// exact-certification / stated-truncation switch, and DAG serialization
@@ -435,8 +434,8 @@ struct LazyCompatibilityRead {
 /// Density-operator boundary sectors are carried VECTORIZED on a doubled
 /// mode register (ket modes ⊕ bra modes) through the same six node kinds
 /// — |ρ⟩⟩ = Σ ρ_ij |i⟩_ket ⊗̂ |j⟩_bra, with traces and occupation reads as
-/// inner products against the vectorized identity. The design spec §14.2
-/// node list is exactly the six kinds above; no dedicated density node
+/// inner products against the vectorized identity. The node list is
+/// exactly the six kinds above; no dedicated density node
 /// exists, and the arbitrary-mode-count carrier makes the doubled
 /// register free.
 ///
@@ -590,7 +589,7 @@ class LazyFockEngine {
 
     /// The OPTIONAL LABELED product boundary fixture
     /// ∏_i (α_i + β_i a_i†) Ω — the one sanctioned way to store a product
-    /// preparation (design spec §6.1). `label` must be non-empty; the
+    /// preparation. `label` must be non-empty; the
     /// label travels on the state and through serialization. This is a
     /// boundary FIXTURE, never the global-state ontology.
     /// @throws std::invalid_argument on an empty label or shape errors.
@@ -723,7 +722,7 @@ class LazyFockEngine {
         const std::vector<Complex>& oneParticleSpectrum,
         int particles) const;
 
-    /// The design spec §5.7 read ε_ι = ‖ι_M U_M − U_{M+1} ι_M‖ on the
+    /// The inductive compatibility read ε_ι = ‖ι_M U_M − U_{M+1} ι_M‖ on the
     /// active carried subspace: U_M is a local map on the stage-M
     /// carrier (support ⊆ `stageModes`), U_{M+1} on the extended carrier
     /// (support ⊆ `extendedModes` ⊇ `stageModes`), and the active

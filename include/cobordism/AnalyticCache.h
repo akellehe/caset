@@ -20,7 +20,7 @@ using namespace ::tessera::spacetime;
 
 /// # TouchedStar
 ///
-/// The publication record of one accepted move (design spec section 19): the
+/// The publication record of one accepted move: the
 /// touched simplices, changed edges, and created/deleted cells, all named by
 /// their vertex identifiers. `AnalyticCache::publish` intersects this record
 /// with each cache entry's component vertex set — entries meeting the star
