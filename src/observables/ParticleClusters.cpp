@@ -37,9 +37,16 @@ namespace {
 // Schema 2 (#808): the quark/gluon reads carry the COBORDISM-FRAME
 // lifetime and the across-frame stability diagnostics beside the
 // modularity resolution-slice numbers, and the threshold echo carries
-// `min_stability_frames`.  Schema 1 stays readable with the new leaves
-// unknown (NaN / 0) — never zero-filled with a claim.
-constexpr std::int64_t kRecordSchemaVersion = 2;
+// `min_stability_frames`.
+//
+// Schema 3 (#807): `BaryonRead` carries the world-tube crossing channels
+// `crossing_mass_applicable`, `crossing_mass`, `crossing_baryon_number`
+// and `crossing_sign_defects`.
+//
+// Every older schema stays READABLE with the newer leaves unknown
+// (NaN / empty / false) — never zero-filled with a claim, and never a
+// missing-key throw.  One version number, one field list.
+constexpr std::int64_t kRecordSchemaVersion = 3;
 constexpr std::int64_t kOldestReadableRecordSchema = 1;
 constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 
@@ -2182,6 +2189,15 @@ Record BaryonRead::toRecord() const {
   m["profile_max_deviation"] = Record(profileMaxDeviation);
   m["profile_stable"] = Record(profileStable);
   m["physical_mass"] = optionalDouble(physicalMass);
+  m["crossing_mass_applicable"] = Record(crossingMassApplicable);
+  m["crossing_mass"] = Record(crossingMassValue);
+  m["crossing_baryon_number"] = optionalDouble(crossingBaryonNumber);
+  {
+    Record::List defects;
+    defects.reserve(crossingSignDefects.size());
+    for (const auto &name : crossingSignDefects) defects.emplace_back(name);
+    m["crossing_sign_defects"] = Record(std::move(defects));
+  }
   m["lifetime_overlap"] = Record(lifetimeOverlap);
   m["transport_count"] = Record(static_cast<std::int64_t>(transportCount));
   m["transport_leakage_max"] = Record(transportLeakageMax);
@@ -2246,6 +2262,22 @@ BaryonRead BaryonRead::fromRecord(const Record &record) {
   read.profileMaxDeviation = m.at("profile_max_deviation").asDouble();
   read.profileStable = m.at("profile_stable").asBool();
   read.physicalMass = optionalDoubleFrom(m.at("physical_mass"));
+  // Schema 3 leaves: a pre-3 record simply carries no crossing evidence,
+  // which reads back as NOT APPLICABLE with the value unknown — never a
+  // zero-filled claim and never a missing-key throw.
+  read.crossingMassApplicable = m.count("crossing_mass_applicable") &&
+                                m.at("crossing_mass_applicable").asBool();
+  read.crossingMassValue = optionalLeaf(m, "crossing_mass");
+  read.crossingBaryonNumber =
+      m.count("crossing_baryon_number")
+          ? optionalDoubleFrom(m.at("crossing_baryon_number"))
+          : std::optional<double>{};
+  read.crossingSignDefects.clear();
+  if (m.count("crossing_sign_defects")) {
+    for (const auto &entry : m.at("crossing_sign_defects").asList()) {
+      read.crossingSignDefects.push_back(entry.asString());
+    }
+  }
   read.lifetimeOverlap = m.at("lifetime_overlap").asDouble();
   read.transportCount =
       static_cast<std::size_t>(m.at("transport_count").asInt());
@@ -2612,7 +2644,7 @@ BaryonRead ParticleClusters::classifyBaryon(
 
   std::vector<std::string> failed;
   int passed = 0;
-  constexpr int kGates = 14;
+  constexpr int kGates = 15;
 
   // ── structural gates (a failure of either is "no baryon") ────────────
 
@@ -2773,6 +2805,41 @@ BaryonRead ParticleClusters::classifyBaryon(
   read.profileStable = scale.stable;
   passed += gate(scale.radiusFinite, "finite-radius", failed);
   passed += gate(scale.stable, "profile-stability", failed);
+
+  // 15. the whitepaper's WORLD-TUBE CROSSING readouts.  Applicable-gated in
+  //     the same way as `spin-lift`: a candidate assembled without crossing
+  //     evidence passes vacuously (it is graded as it was before the
+  //     readouts existed), while supplied evidence is ENFORCED — a finite
+  //     crossing mass, the coherent one-third sum reading B = +1, and NO
+  //     determinant-line sign defect on any certified tube.  A half bundle
+  //     (mass without baryon sum, or the reverse) fails by name rather than
+  //     grading half a certificate.
+  const bool crossingApplicable = evidence.crossingMass.has_value() ||
+                                  evidence.crossingBaryon.has_value();
+  bool crossingAccepted = false;
+  if (crossingApplicable && evidence.crossingMass.has_value() &&
+      evidence.crossingBaryon.has_value()) {
+    const CrossingMassRead &mass = *evidence.crossingMass;
+    const BaryonCrossingRead &baryon = *evidence.crossingBaryon;
+    crossingAccepted =
+        std::isfinite(mass.crossingMass) && mass.admissibleCrossings != 0 &&
+        baryon.signDefects.empty() && baryon.baryonNumber.has_value() &&
+        std::abs(*baryon.baryonNumber - 1.0) <= cfg_.isospinTolerance;
+  }
+  read.crossingMassApplicable = crossingApplicable;
+  read.crossingMassValue =
+      evidence.crossingMass.has_value() ? evidence.crossingMass->crossingMass
+                                        : kNaN;
+  read.crossingBaryonNumber =
+      evidence.crossingBaryon.has_value()
+          ? evidence.crossingBaryon->baryonNumber
+          : std::optional<double>{};
+  read.crossingSignDefects =
+      evidence.crossingBaryon.has_value()
+          ? evidence.crossingBaryon->signDefects
+          : std::vector<std::string>{};
+  passed += gate(!crossingApplicable || crossingAccepted, "crossing-readouts",
+                 failed);
 
   // ── the accepted covariance-only class (the obstruction premise) ─────
 

@@ -289,6 +289,7 @@ BARYON_GATE_ORDER = (
     "color-flux-zero", "baryon-flux-unit", "composite-parity-odd",
     "flavor-uud", "electric-flux-unit", "spin-expectation", "sharp-spin",
     "rotation-character", "spin-lift", "finite-radius", "profile-stability",
+    "crossing-readouts",
 )
 
 #: The exact / certified-numerical / heuristic classification, emitted in
@@ -1583,7 +1584,7 @@ def verdict_block(readout):
                                       if read.failedCertificates else None),
         "missing_evidence": missing,
         "confidence": _finite(read.confidence),
-        "confidence_is": ("the fraction of the fourteen gates that passed — "
+        "confidence_is": ("the fraction of the fifteen gates that passed — "
                           "a passed-gate fraction, NOT a probability"),
         "certificate_grade": str(read.certificate.grade),
         "certificate_holds": bool(read.certificate.holds()),
