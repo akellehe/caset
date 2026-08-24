@@ -37,9 +37,16 @@ namespace {
 // Schema 2 (#808): the quark/gluon reads carry the COBORDISM-FRAME
 // lifetime and the across-frame stability diagnostics beside the
 // modularity resolution-slice numbers, and the threshold echo carries
-// `min_stability_frames`.  Schema 1 stays readable with the new leaves
-// unknown (NaN / 0) — never zero-filled with a claim.
-constexpr std::int64_t kRecordSchemaVersion = 2;
+// `min_stability_frames`.
+//
+// Schema 3 (#807): `BaryonRead` carries the world-tube crossing channels
+// `crossing_mass_applicable`, `crossing_mass`, `crossing_baryon_number`
+// and `crossing_sign_defects`.
+//
+// Every older schema stays READABLE with the newer leaves unknown
+// (NaN / empty / false) — never zero-filled with a claim, and never a
+// missing-key throw.  One version number, one field list.
+constexpr std::int64_t kRecordSchemaVersion = 3;
 constexpr std::int64_t kOldestReadableRecordSchema = 1;
 constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 
@@ -2255,13 +2262,21 @@ BaryonRead BaryonRead::fromRecord(const Record &record) {
   read.profileMaxDeviation = m.at("profile_max_deviation").asDouble();
   read.profileStable = m.at("profile_stable").asBool();
   read.physicalMass = optionalDoubleFrom(m.at("physical_mass"));
-  read.crossingMassApplicable = m.at("crossing_mass_applicable").asBool();
-  read.crossingMassValue = m.at("crossing_mass").asDouble();
+  // Schema 3 leaves: a pre-3 record simply carries no crossing evidence,
+  // which reads back as NOT APPLICABLE with the value unknown — never a
+  // zero-filled claim and never a missing-key throw.
+  read.crossingMassApplicable = m.count("crossing_mass_applicable") &&
+                                m.at("crossing_mass_applicable").asBool();
+  read.crossingMassValue = optionalLeaf(m, "crossing_mass");
   read.crossingBaryonNumber =
-      optionalDoubleFrom(m.at("crossing_baryon_number"));
+      m.count("crossing_baryon_number")
+          ? optionalDoubleFrom(m.at("crossing_baryon_number"))
+          : std::optional<double>{};
   read.crossingSignDefects.clear();
-  for (const auto &entry : m.at("crossing_sign_defects").asList()) {
-    read.crossingSignDefects.push_back(entry.asString());
+  if (m.count("crossing_sign_defects")) {
+    for (const auto &entry : m.at("crossing_sign_defects").asList()) {
+      read.crossingSignDefects.push_back(entry.asString());
+    }
   }
   read.lifetimeOverlap = m.at("lifetime_overlap").asDouble();
   read.transportCount =

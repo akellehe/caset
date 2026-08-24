@@ -3419,7 +3419,8 @@ failure of either is "no-baryon"): "constituent-quarks",
 "bound-supercomponent"; then the proton gates: "color-singlet",
 "color-flux-zero", "baryon-flux-unit", "composite-parity-odd",
 "flavor-uud", "electric-flux-unit", "spin-expectation", "sharp-spin",
-"rotation-character", "spin-lift", "finite-radius", "profile-stability".
+"rotation-character", "spin-lift", "finite-radius", "profile-stability",
+"crossing-readouts".
 
 Unknown values are None/NaN/0-sign, never zero-filled; physicalMass is
 ALWAYS None.)doc")

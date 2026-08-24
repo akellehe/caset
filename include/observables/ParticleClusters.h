@@ -1481,7 +1481,7 @@ struct BaryonCandidateEvidence {
 /// "color-singlet", "color-flux-zero", "baryon-flux-unit",
 /// "composite-parity-odd", "flavor-uud", "electric-flux-unit",
 /// "spin-expectation", "sharp-spin", "rotation-character", "spin-lift",
-/// "finite-radius", "profile-stability".
+/// "finite-radius", "profile-stability", "crossing-readouts".
 ///
 /// Unknown or uncertified values are NULL (empty optional; NaN for
 /// unmeasured doubles; 0 for the sign-valued ints), never zero-filled, and
