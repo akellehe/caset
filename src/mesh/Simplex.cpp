@@ -1549,6 +1549,110 @@ Simplex::volumeGradient() const {
 }
 
 std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>>
+Simplex::volumeGradientDirectionalDerivative(
+    const std::map<std::pair<std::uint64_t, std::uint64_t>,
+                   std::complex<double>> &direction) const {
+    // Jacobi's formula differentiated a second time. G is LINEAR in l^2, so the
+    // d^2G/dl^2 dl^2 term vanishes identically and the entire second derivative
+    // is carried by the two first-order pieces assembled below.
+    std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>> out;
+    const int d = static_cast<int>(size()) - 1;
+    if (d < 1) return out;
+    const GeomCache &gc = gramCofCache();
+    const std::vector<std::complex<double>> &G = gc.gram;
+    if (static_cast<int>(G.size()) != d * d) return out;
+    const std::complex<double> detG = gc.gramDet;
+    if (std::abs(detG) < 1e-300) return out;
+    const std::vector<std::complex<double>> &cofG = gc.gramCof;
+    const std::complex<double> V = volume();
+    const auto &sv = vertices;
+    const std::size_t dim = static_cast<std::size_t>(d);
+    const std::complex<double> zero{0.0, 0.0};
+
+    // G^-1 via the adjugate, exactly as volumeGradient(): (G^-1)_ij = cof_ji/det.
+    std::vector<std::complex<double>> Ginv(dim * dim);
+    for (int i = 0; i < d; ++i)
+        for (int j = 0; j < d; ++j)
+            Ginv[static_cast<std::size_t>(i) * dim + j] =
+                cofG[static_cast<std::size_t>(j) * dim + i] / detG;
+
+    // The direction's entry for the edge between simplex-local vertices x, y:
+    // zero on the diagonal and for any edge the caller left out.
+    const auto directionAt = [&](int x, int y) -> std::complex<double> {
+        if (x == y) return zero;
+        const std::uint64_t a = sv[static_cast<std::size_t>(x)]->getId();
+        const std::uint64_t b = sv[static_cast<std::size_t>(y)]->getId();
+        const auto found = direction.find({std::min(a, b), std::max(a, b)});
+        return found == direction.end() ? zero : found->second;
+    };
+
+    // Gdot = sum_f v_f dG_f, read straight off G's affine form
+    // G_ij = (l^2_{0,i+1} + l^2_{0,j+1} - l^2_{i+1,j+1})/2.
+    std::vector<std::complex<double>> Gdot(dim * dim);
+    for (int i = 0; i < d; ++i)
+        for (int j = 0; j < d; ++j)
+            Gdot[static_cast<std::size_t>(i) * dim + j] =
+                0.5 * (directionAt(0, i + 1) + directionAt(0, j + 1) -
+                       directionAt(i + 1, j + 1));
+
+    std::complex<double> tau{0.0, 0.0};   // tr(G^-1 Gdot)
+    for (int i = 0; i < d; ++i)
+        for (int j = 0; j < d; ++j)
+            tau += Ginv[static_cast<std::size_t>(i) * dim + j] *
+                   Gdot[static_cast<std::size_t>(j) * dim + i];
+    const std::complex<double> Vdot = 0.5 * V * tau;
+
+    // M = G^-1 Gdot G^-1 once per simplex; every edge is then one sparse
+    // contraction tr(M dG_e) rather than a fresh triple product.
+    std::vector<std::complex<double>> GinvGdot(dim * dim, zero);
+    for (int i = 0; i < d; ++i)
+        for (int k = 0; k < d; ++k) {
+            const std::complex<double> left =
+                Ginv[static_cast<std::size_t>(i) * dim + k];
+            if (left == zero) continue;
+            for (int j = 0; j < d; ++j)
+                GinvGdot[static_cast<std::size_t>(i) * dim + j] +=
+                    left * Gdot[static_cast<std::size_t>(k) * dim + j];
+        }
+    std::vector<std::complex<double>> M(dim * dim, zero);
+    for (int i = 0; i < d; ++i)
+        for (int k = 0; k < d; ++k) {
+            const std::complex<double> left =
+                GinvGdot[static_cast<std::size_t>(i) * dim + k];
+            if (left == zero) continue;
+            for (int j = 0; j < d; ++j)
+                M[static_cast<std::size_t>(i) * dim + j] +=
+                    left * Ginv[static_cast<std::size_t>(k) * dim + j];
+        }
+
+    for (std::size_t p = 0; p < sv.size(); ++p)
+        for (std::size_t q = p + 1; q < sv.size(); ++q) {
+            const std::uint64_t a = sv[p]->getId(), b = sv[q]->getId();
+            const std::pair<std::uint64_t, std::uint64_t> ek{std::min(a, b),
+                                                             std::max(a, b)};
+            auto ind = [&](int i, int j) -> double {
+                if (i == j) return 0.0;
+                const std::uint64_t x = sv[static_cast<std::size_t>(i)]->getId();
+                const std::uint64_t y = sv[static_cast<std::size_t>(j)]->getId();
+                return (std::min(x, y) == ek.first && std::max(x, y) == ek.second)
+                           ? 1.0 : 0.0;
+            };
+            std::complex<double> traceGinv{0.0, 0.0};  // t_e = tr(G^-1 dG_e)
+            std::complex<double> traceM{0.0, 0.0};     // tr(M dG_e)
+            for (int i = 0; i < d; ++i)
+                for (int j = 0; j < d; ++j) {
+                    const std::complex<double> dGij =
+                        0.5 * (ind(0, i + 1) + ind(0, j + 1) - ind(i + 1, j + 1));
+                    if (dGij == zero) continue;
+                    traceGinv += Ginv[static_cast<std::size_t>(i) * dim + j] * dGij;
+                    traceM += M[static_cast<std::size_t>(i) * dim + j] * dGij;
+                }
+            out[ek] += 0.5 * Vdot * traceGinv - 0.5 * V * traceM;
+        }
+    return out;
+}
+
+std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>>
 Simplex::dualVolumeGradient() const {
     std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>> grad;
     if (vertices.empty()) return grad;

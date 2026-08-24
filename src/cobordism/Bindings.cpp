@@ -380,6 +380,19 @@ ChainComplex omits.)doc")
            py::arg("phase_mode") =
                HodgeLaplacian::EntropyPhaseMode::IncludeComplexPhase,
            "Entropy-stationarity residual sum_e |dS/dz_e|^2.")
+      .def("spectralEntropyGradientDirectionalDerivative",
+           &HodgeLaplacian::spectralEntropyGradientDirectionalDerivative,
+           py::arg("k"), py::arg("direction"),
+           py::arg("phase_mode") =
+               HodgeLaplacian::EntropyPhaseMode::IncludeComplexPhase,
+           "EXACT analytic Hessian-vector product: the directional derivative "
+           "of spectralEntropyGradient along `direction` (EdgeList order) for a "
+           "REAL parameter, which is what the descent direction of "
+           "||grad_z S||^2 needs. Closed form -- the simplex volume Hessian, "
+           "the second derivative of L_k, and the Daleckii-Krein derivative of "
+           "dS/dA on the fixed-rank stratum. S is invariant under complex "
+           "rescaling of z, so h is homogeneous of degree -1 and the exact "
+           "Euler check is: direction = z reproduces -h.")
       .def("isHermitian", &HodgeLaplacian::isHermitian, py::arg("tol") = 1e-12,
            "True iff ||L - L^dagger|| <= tol (Frobenius) for the U(1) CONNECTION "
            "Laplacian. True by construction; it says nothing about L_0, which is "

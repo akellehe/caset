@@ -445,6 +445,29 @@ class Simplex {
     [[nodiscard]] std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>>
     volumeGradient() const;
 
+    /// Exact **directional second derivative** of the signed `volume()`:
+    /// \f$ \sum_f v_f\,\partial^2 V/\partial\ell^2_e\partial\ell^2_f \f$, keyed by
+    /// \f$ e \f$ over this simplex's edges, for the direction \f$ v \f$ supplied
+    /// as the same edge-keyed map shape `volumeGradient()` returns (absent edges
+    /// contribute zero). Differentiating Jacobi's formula once more, and using
+    /// that \f$ G \f$ is **linear** in \f$ \ell^2 \f$ so \f$ \partial_f\partial_e G = 0 \f$:
+    /// \f[ \frac{\partial^2 V}{\partial\ell^2_e\partial\ell^2_f}
+    ///     = \frac{V}{4}\,t_e t_f
+    ///       - \frac{V}{2}\,\mathrm{tr}\bigl(G^{-1}\partial_f G\,G^{-1}\partial_e G\bigr),
+    ///     \qquad t_e=\mathrm{tr}(G^{-1}\partial_e G), \f]
+    /// contracted against \f$ v \f$ this is
+    /// \f$ \tfrac{1}{2}\dot V t_e-\tfrac{V}{2}\mathrm{tr}(M\,\partial_e G) \f$ with
+    /// \f$ \dot G=\sum_f v_f\partial_f G \f$, \f$ \dot V=\tfrac{V}{2}\mathrm{tr}(G^{-1}\dot G) \f$
+    /// and \f$ M=G^{-1}\dot G G^{-1} \f$ formed once per simplex. Exact to machine
+    /// precision — no finite differences — and the Hessian half of the analytic
+    /// \f$ \partial^2 L_k/\partial\ell^2\partial\ell^2 \f$ contraction the joint
+    /// Regge--Hodge descent direction needs. Uses the same
+    /// `gramMatrix`/`determinant`/`cofactorMatrix` cache as `volumeGradient()`.
+    [[nodiscard]] std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>>
+    volumeGradientDirectionalDerivative(
+        const std::map<std::pair<std::uint64_t, std::uint64_t>,
+                       std::complex<double>> &direction) const;
+
     /// Fail-loudly admissibility check for a purely-spacelike simplex.
     ///
     /// "Spacelike" means every edge has squared length > tol (the Edge

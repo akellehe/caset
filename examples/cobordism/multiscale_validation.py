@@ -975,6 +975,41 @@ def _amplitude_reads(doc, band_reads, config):
     return out
 
 
+def _colour_gate(anchor_profile=None):
+    """The triangle-anchor gate the exactness contract requires before any
+    colour-specific kernel runs.
+
+    A band with no measured anchor gets a CLOSED gate, so the projective
+    representative and the centre lift refuse instead of emitting an
+    unlicensed colour datum. That refusal is recorded, not swallowed.
+    """
+    if anchor_profile is None:
+        return T.AnchorGate()
+    return T.ColorAnchor.gateFor(anchor_profile)
+
+
+def _declared_anchor_gate():
+    """An OPEN gate for the pure-algebra controls below.
+
+    Those controls exercise an algebraic identity of the cube-root branch on a
+    matrix of their own construction, not a colour reading of an emergent
+    band, so they declare their own anchor rather than borrowing one. Two
+    faces SHARING the boundary edge rows {0, 1} are required: an isolated face
+    has no overlap partner and reports unknown determinant-phase coherence,
+    which the acceptance predicate refuses.
+    """
+    weights = np.array([1.0, 1.0, 1.0, 1.0])
+    band = np.zeros((4, 3), dtype=complex)
+    band[0, 0] = 1.0
+    band[1, 1] = 1.0
+    band[2, 2] = np.sqrt(0.8)
+    band[3, 2] = np.sqrt(0.2)
+    anchor = T.ColorAnchor([T.OrientedTriangle([0, 1, 2], [1, 1, 1]),
+                            T.OrientedTriangle([0, 1, 3], [1, 1, 1])])
+    anchor.declareWeights([0.75, 0.25])
+    return T.ColorAnchor.gateFor(anchor.evaluate(band, weights))
+
+
 def _gauge_reads(spacetime, band_reads, doc):
     """Transports, the four holonomy channels, and determinant winding."""
     connection = T.FiberConnection()
@@ -1037,8 +1072,13 @@ def _gauge_reads(spacetime, band_reads, doc):
     if len(accepted) >= 1:
         try:
             holonomy = connection.holonomy(accepted)
-            projective = T.FiberConnection.projectiveRepresentative(
-                holonomy.holonomy) if holonomy.unitary else None
+            # No anchor profile is measured in this gauge pass, so the gate is
+            # closed and the colour kernels below refuse by contract.
+            gate = _colour_gate()
+            projective = (
+                T.FiberConnection.projectiveRepresentative(
+                    holonomy.holonomy, gate)
+                if holonomy.unitary and gate.accepted else None)
             out["holonomy"] = {
                 "closed": bool(holonomy.closed),
                 "rank": int(holonomy.rank),
@@ -1072,7 +1112,8 @@ def _gauge_reads(spacetime, band_reads, doc):
         centers = {}
         for branch in (0, 1, 2):
             try:
-                lift = connection.fundamentalLift(accepted, branch)
+                lift = connection.fundamentalLift(accepted, _colour_gate(),
+                                                  branch)
                 centers[str(branch)] = {
                     "valid": bool(lift.valid),
                     "center_sector": int(lift.centerSector),
@@ -1588,11 +1629,12 @@ def _cube_root_branch_control(rng):
     unitary = unitary / np.linalg.det(unitary) ** (1.0 / 3.0)
     representatives = []
     adjoints = []
+    gate = _declared_anchor_gate()
     for factor in (1.0, cmath.exp(2j * math.pi / 3.0),
                    cmath.exp(4j * math.pi / 3.0)):
         branch = unitary * factor
         representatives.append(
-            np.array(T.FiberConnection.projectiveRepresentative(branch)))
+            np.array(T.FiberConnection.projectiveRepresentative(branch, gate)))
         adjoints.append(
             np.array(T.FiberConnection.adjointRepresentation(branch)))
     adjoint_spread = max(float(np.abs(adjoints[0] - other).max())

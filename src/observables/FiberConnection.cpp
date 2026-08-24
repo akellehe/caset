@@ -1029,7 +1029,13 @@ WilsonHolonomyRead FiberConnection::holonomyOnSpacetimeCached(
 // ---------------------------------------------------------------------------
 
 Eigen::MatrixXcd FiberConnection::projectiveRepresentative(
-    const Eigen::MatrixXcd &unitary) {
+    const Eigen::MatrixXcd &unitary, const AnchorGate &gate) {
+  // The exactness contract gates every colour-specific kernel on the
+  // triangle-anchor certificate: a rank-three band that was never anchored
+  // does not get an exact 3x3 colour determinant taken of it.
+  if (!gate.accepted)
+    throw std::invalid_argument(
+        "FiberConnection::projectiveRepresentative: " + gate.refusalReason);
   if (unitary.rows() != 3 || unitary.cols() != 3)
     throw std::invalid_argument(
         "FiberConnection::projectiveRepresentative: expected a 3x3 matrix");
@@ -1061,7 +1067,8 @@ Eigen::MatrixXcd FiberConnection::adjointRepresentation(
 }
 
 FundamentalLiftRead FiberConnection::fundamentalLift(
-    const std::vector<FiberTransportRead> &links, int baseBranch) const {
+    const std::vector<FiberTransportRead> &links, const AnchorGate &gate,
+    int baseBranch) const {
   if (links.empty())
     throw std::invalid_argument("FiberConnection::fundamentalLift: empty path");
   if (baseBranch < 0 || baseBranch > 2)
@@ -1080,6 +1087,10 @@ FundamentalLiftRead FiberConnection::fundamentalLift(
     return read;
   };
 
+  // The anchor gate is checked FIRST: rank three and an accepted transport
+  // are not, by themselves, a licence to emit SU(3).
+  if (!gate.accepted)
+    return invalid(gate.refusalReason);
   if (read.rank != 3)
     return invalid("fundamental SU(3) lift requested at rank " +
                    std::to_string(read.rank) +

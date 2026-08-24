@@ -177,6 +177,32 @@ struct AnchorProfile {
     ::tessera::cobordism::Certificate certificate{};
 };
 
+/// The triangle-anchor gate the exactness contract requires before any
+/// colour-specific kernel runs: "use exact 3×3 determinants and the fixed F₃
+/// frame only after a rank-three band passes its triangle-anchor
+/// certificate".
+///
+/// A DEFAULT-CONSTRUCTED gate is closed (`accepted = false`), so a caller that
+/// supplies nothing is refused rather than silently admitted.  The only way to
+/// open one is `ColorAnchor::gateFor`, which applies the single acceptance
+/// predicate `ColorAnchor::accepts` — the SAME conjunction the quark verdict
+/// uses, so the kernels and the interpretation can never drift apart.
+///
+/// The gate carries its own provenance so a refusal can name what failed and
+/// an acceptance records what admitted it.
+struct AnchorGate {
+    /// Whether the profile passed `ColorAnchor::accepts`.
+    bool accepted{false};
+    /// The atlas score that was graded (NaN when no profile was supplied).
+    double score{std::numeric_limits<double>::quiet_NaN()};
+    /// The determinant-phase coherence that was graded.
+    double phaseCoherence{std::numeric_limits<double>::quiet_NaN()};
+    /// The pre-declared weighting rule of the profile ("" when absent).
+    std::string weightingId{};
+    /// Why the gate is closed ("" when accepted).
+    std::string refusalReason{"triangle-anchor certificate absent"};
+};
+
 /// # ColorFiber
 ///
 /// The constant, exactly-generated color-sector algebra of THREE oriented
@@ -612,6 +638,29 @@ class ColorAnchor {
     /// the eigen-modulus |W|).
     [[nodiscard]] static Eigen::MatrixXcd orthonormalizeFrame(
         const Eigen::MatrixXcd& frame, const Eigen::MatrixXcd& weight);
+
+    /// Default atlas-score floor of the acceptance predicate, mirroring the
+    /// quark verdict's own configured floor.
+    static constexpr double kDefaultMinScore = 0.5;
+    /// Default determinant-phase coherence floor of the acceptance predicate.
+    static constexpr double kDefaultMinPhaseCoherence = 0.5;
+
+    /// **The** triangle-anchor acceptance predicate — ONE definition, shared
+    /// by the quark verdict and by the colour kernels that the exactness
+    /// contract gates on it, so the two can never drift apart.  A profile
+    /// passes when a weighting was actually declared (an empty
+    /// `weightingId` is MISSING evidence, not a zero score), its calibration
+    /// certificate holds, and both the atlas score and the determinant-phase
+    /// coherence meet their floors.
+    [[nodiscard]] static bool accepts(
+        const AnchorProfile& profile, double minScore = kDefaultMinScore,
+        double minPhaseCoherence = kDefaultMinPhaseCoherence);
+
+    /// The gate for a profile: `accepts` plus the provenance a refusal needs
+    /// to name what failed.  The only way to open an `AnchorGate`.
+    [[nodiscard]] static AnchorGate gateFor(
+        const AnchorProfile& profile, double minScore = kDefaultMinScore,
+        double minPhaseCoherence = kDefaultMinPhaseCoherence);
 
   private:
     static void validateTriangles(const std::vector<OrientedTriangle>& tris);
