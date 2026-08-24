@@ -325,8 +325,8 @@ Caveats to implement honestly:
 ## 6. Optional Stage D — integration with the `tessera` repository
 
 Only if the repository `github.com/akellehe/tessera` is available in the environment.
-Read `examples/cobordism/emergent_proton.py` and the documentation under `docs/` to
-discover the cobordism API. Then: (i) reproduce Stage A's synthesis with the
+Read `examples/cobordism/recursive_baryon_simulation.py` and the documentation under
+`docs/` to discover the cobordism API. Then: (i) reproduce Stage A's synthesis with the
 repository's own optimizer and connection-Laplacian machinery on a `Cylinder`
 topology, pinning only the near boundary; (ii) locality probe: perturb one
 near-boundary link phase by `0.1`, re-synthesize, and record the change in the bulk
