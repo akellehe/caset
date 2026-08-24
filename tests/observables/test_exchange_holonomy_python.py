@@ -20,7 +20,7 @@ Covers every ticket acceptance bullet:
 * duplicate complete one-particle modes wedge to exactly zero (#766,
   regression-tested here);
 * a closed-gap fixture returns UNCERTIFIED, never a sign;
-* the clean spin-1/2 2 pi ratio is exactly -1 on the documented total-space
+* the clean spin-1/2 2 pi ratio is exactly -1 on the constructed total-space
   spin holonomy cycle, the vector fixture exactly +1, and the doubly
   cancelled spin-statistics ratio chi(exchange) * chi(2 pi)^{-1} is +1;
 * spin / non-spin Cech fixtures accept / reject the SO(d) -> Spin(d) lift
@@ -655,7 +655,7 @@ class InvarianceTest(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
-# the documented total-space spin holonomy cycle (rotation channel)
+# the constructed total-space spin holonomy cycle (rotation channel)
 # --------------------------------------------------------------------------- #
 class RotationCycleTest(unittest.TestCase):
     STEPS = 12

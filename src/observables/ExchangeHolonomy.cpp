@@ -679,7 +679,7 @@ BlockPermutationRead ExchangeHolonomy::blockPermutation(
 }
 
 // ---------------------------------------------------------------------------
-// the documented total-space spin holonomy cycle
+// the constructed total-space spin holonomy cycle
 // ---------------------------------------------------------------------------
 
 int ExchangeHolonomy::spinorDimension(int d) {

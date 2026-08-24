@@ -64,7 +64,7 @@ struct ExchangeHolonomyConfig {
 enum class HolonomyChannel {
   /// A configuration-space loop that permutes identical clusters.
   ParticleExchange,
-  /// The documented total-space spin-holonomy cycle: one global rotation
+  /// The constructed total-space spin-holonomy cycle: one global rotation
   /// of the whole carried cluster frame (never a per-hole Bloch product).
   PhysicalRotation,
 };
@@ -282,7 +282,7 @@ struct SpinLiftRead {
 
 /// # ExchangeHolonomy
 ///
-/// Berry-cancelled exchange statistics, the documented total-space spin
+/// Berry-cancelled exchange statistics, the constructed total-space spin
 /// holonomy cycle, and the conditional SO(d) -> Spin(d) lift (ticket #772,
 /// Wave 2 of #763; design spec section 15 — Algorithm H; whitepaper section
 /// "Fermion statistics from simplicial orientation").
@@ -309,8 +309,9 @@ struct SpinLiftRead {
 ///     wedge sign, an integer, exact), and the residual in-block motion
 ///     after reference cancellation.  Algebraic and dynamical channels are
 ///     reported separately and never conflated.
-///  4. The documented total-space spin holonomy cycle as the CANONICAL
-///     physical rotation path (`joint_proton_spin_findings.md`): the
+///  4. The total-space spin holonomy cycle, constructed HERE as the
+///     canonical physical rotation path (no prior document supplies a
+///     cycle, a closed loop, or a reference normalization): the
 ///     Euclidean gamma layer, spin generators `Sigma_ab = [gamma_a,
 ///     gamma_b]/4`, the closed-form plane rotation
 ///     `exp(theta Sigma_ab) = cos(theta/2) I + sin(theta/2) gamma_a
@@ -323,7 +324,9 @@ struct SpinLiftRead {
 ///  5. The total-space spin read `J^2 = sum_a (sum_i S_a^(i))^2` on
 ///     `(C^2)^(tensor n)` — the exact measuring stick whose oracle values
 ///     are pinned: proton eigenstate `2|uud> - |udu> - |duu>` -> 3/4,
-///     Delta `|uuu>` -> 15/4, product `|uud>` -> 7/4.
+///     Delta `|uuu>` -> 15/4, product `|uud>` -> 7/4.  The operator and
+///     these oracle values are what `joint_proton_spin_findings.md`
+///     supplies; the rotation cycle of item 4 is not from that document.
 ///  6. The conditional Spin(d) lift: the principal rotation logarithm via
 ///     the real Schur plane decomposition, the closed-form plane-product
 ///     lift SO(d) -> Spin(d) (d = 3, 4), the Z2 character of a closed
@@ -451,7 +454,7 @@ class ExchangeHolonomy {
         const std::vector<std::vector<std::size_t>> &composites = {},
         const ExchangeHolonomyConfig &cfg = {});
 
-    // ---- the documented total-space spin holonomy cycle ------------------
+    // ---- the constructed total-space spin holonomy cycle ------------------
 
     /// The spinor representation dimension carried at spatial dimension d:
     /// 2 at d = 3 (Pauli), 4 at d = 4 (the documented Euclidean Dirac
@@ -486,7 +489,7 @@ class ExchangeHolonomy {
     [[nodiscard]] static Eigen::MatrixXcd transverseSpinorFrame(int a, int b,
                                                                 int d);
 
-    /// The documented total-space spin holonomy cycle as an explicit closed
+    /// The constructed total-space spin holonomy cycle as an explicit closed
     /// frame path: Phi_t = exp(theta_t Sigma_ab) Phi_0 with theta_t =
     /// 2 pi turns t / steps, t = 0..steps-1 (cyclically closed).  ONE
     /// global rotation of the whole carried frame `frame0`
