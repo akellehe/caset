@@ -29,6 +29,7 @@ std::vector<std::string> ObjectiveContext::inputNames() {
   // configured weight, or a precomputed geometric scalar.
   return {"spacetime",
           "region",
+          "scored_edges",
           "region_targets",
           "register_degrees",
           "regge_weight",
@@ -71,14 +72,41 @@ double carriedStateTerm(const ObjectiveContext &context) {
   return context.carriedStateEnergyWeight * context.carriedStateEnergy;
 }
 
-/// `β_R ‖∇_z S_Regge‖²`, computed from the geometry alone, or zero where the
-/// Einstein-Hilbert term is deselected or unweighted.
+/// A per-edge mask from the resolved scope. An EMPTY mask means every edge —
+/// the whole-cobordism scope — and every sum below then runs exactly the loop
+/// it ran before scopes existed, which is what keeps the single-objective run
+/// bit-identical. A present-but-empty scope yields an all-false mask, which
+/// scores nothing; that is deliberately NOT the same as the whole cobordism.
+std::vector<bool> scopeMask(const ObjectiveContext &context,
+                            std::size_t edgeCount) {
+  if (!context.scoredEdges.has_value()) return {};
+  std::vector<bool> mask(edgeCount, false);
+  for (std::size_t edgeIndex : *context.scoredEdges)
+    if (edgeIndex < edgeCount) mask[edgeIndex] = true;
+  return mask;
+}
+
+/// Whether an edge coordinate is in scope. An empty mask is the whole
+/// cobordism, so everything is.
+bool edgeInScope(const std::vector<bool> &mask, std::size_t edgeIndex) {
+  return mask.empty() || mask[edgeIndex];
+}
+
+/// `β_R ‖∇_z S_Regge‖²` over the edges in scope, computed from the geometry
+/// alone, or zero where the Einstein-Hilbert term is deselected or unweighted.
 double reggeTerm(const ObjectiveContext &context) {
   if (!context.einsteinHilbert || context.reggeWeight == 0.0) return 0.0;
   const auto gradient =
       ReggeSolver(context.spacetime, MatterConfiguration()).actionGradientExact();
   double normSquared = 0.0;
-  for (const auto &component : gradient) normSquared += std::norm(component);
+  if (!context.scoredEdges.has_value()) {
+    for (const auto &component : gradient) normSquared += std::norm(component);
+  } else {
+    const auto mask = scopeMask(context, gradient.size());
+    for (std::size_t edgeIndex = 0; edgeIndex < gradient.size(); ++edgeIndex)
+      if (edgeInScope(mask, edgeIndex))
+        normSquared += std::norm(gradient[edgeIndex]);
+  }
   return context.reggeWeight * normSquared;
 }
 
@@ -88,13 +116,22 @@ double registerResidualTerm(const ObjectiveContext &context, double weight) {
   return weight * context.registerResidual;
 }
 
-/// The exact analytic ascent displacement of `β_R ‖∇_z S_Regge‖²`, together
-/// with the squared gradient norm it was assembled from. The direction is
-/// `2 conj(H) g`; the norm is returned so a caller wanting the exact baseline
-/// does not recompute the same gradient.
+/// The exact analytic ascent displacement of `β_R ‖∇_z S_Regge‖²` over the
+/// edges in scope, together with the squared gradient norm it was assembled
+/// from. The direction is `2 conj(H) g`; the norm is returned so a caller
+/// wanting the exact baseline does not recompute the same gradient.
+///
+/// Scope enters by masking the GRADIENT VECTOR rather than the finished ascent,
+/// and that is the mathematically exact restriction rather than a convenience:
+/// the restricted functional is \f$\sum_{e\in R}|g_e|^2\f$, whose Wirtinger
+/// derivative is \f$2\,\overline{H}g_R\f$ with \f$g_R\f$ the gradient masked to
+/// the region. Masking the ascent afterwards would instead discard couplings
+/// the restricted functional genuinely has. An empty mask leaves every
+/// coordinate in, so the whole-cobordism path is untouched.
 Eigen::VectorXcd reggeStationarityAscent(
     const std::shared_ptr<Spacetime> &spacetime, std::size_t edgeCount,
-    double reggeWeight, double *gradientNormSquared) {
+    double reggeWeight, const std::vector<bool> &mask,
+    double *gradientNormSquared) {
   Eigen::VectorXcd ascent = Eigen::VectorXcd::Zero(edgeCount);
   if (gradientNormSquared) *gradientNormSquared = 0.0;
   ReggeSolver reggeSolver(spacetime, MatterConfiguration());
@@ -103,6 +140,10 @@ Eigen::VectorXcd reggeStationarityAscent(
   Eigen::VectorXcd gradientVector(edgeCount);
   double normSquared = 0.0;
   for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
+    if (!edgeInScope(mask, edgeIndex)) {
+      gradientVector(edgeIndex) = complexd{0.0, 0.0};
+      continue;
+    }
     gradientVector(edgeIndex) = gradientComponents[edgeIndex];
     normSquared += std::norm(gradientComponents[edgeIndex]);
   }
@@ -154,11 +195,24 @@ ObjectiveTerms JointStationarityObjective::terms(
 
   double entropyStationarity = 0.0;
   if (context.hodgeEntropyWeight != 0.0)
-    for (int degree : context.registerDegrees)
-      entropyStationarity +=
-          HodgeLaplacian(context.spacetime)
-              .spectralEntropyGradientNorm(degree,
-                                           context.hodgeEntropyPhaseMode);
+    for (int degree : context.registerDegrees) {
+      const HodgeLaplacian hodge(context.spacetime);
+      if (!context.scoredEdges.has_value()) {
+        // The whole cobordism: the primitive the single-objective run has
+        // always called, so this path is bit-identical.
+        entropyStationarity += hodge.spectralEntropyGradientNorm(
+            degree, context.hodgeEntropyPhaseMode);
+        continue;
+      }
+      // A scope restricts the same sum to its own coordinates.
+      const auto components =
+          hodge.spectralEntropyGradient(degree, context.hodgeEntropyPhaseMode);
+      const auto mask = scopeMask(context, components.size());
+      for (std::size_t edgeIndex = 0; edgeIndex < components.size();
+           ++edgeIndex)
+        if (edgeInScope(mask, edgeIndex))
+          entropyStationarity += std::norm(components[edgeIndex]);
+    }
   terms.hodgeStationarity = context.hodgeEntropyWeight * entropyStationarity;
   return terms;
 }
@@ -173,12 +227,13 @@ ObjectiveDirection JointStationarityObjective::direction(
   // stage-1 trace.
   result.baselineComputed = true;
   double baseline = 0.0;
+  const auto mask = scopeMask(scalar, context.edgeCount);
 
   if (scalar.einsteinHilbert && scalar.reggeWeight != 0.0) {
     double reggeGradientNormSquared = 0.0;
     result.ascent += reggeStationarityAscent(scalar.spacetime,
                                              context.edgeCount,
-                                             scalar.reggeWeight,
+                                             scalar.reggeWeight, mask,
                                              &reggeGradientNormSquared);
     baseline += scalar.reggeWeight * reggeGradientNormSquared;
   }
@@ -198,8 +253,16 @@ ObjectiveDirection JointStationarityObjective::direction(
           hodge.spectralEntropyGradient(degree, scalar.hodgeEntropyPhaseMode);
       double entropyGradientNormSquared = 0.0;
       std::vector<complexd> entropyAscent(context.edgeCount);
+      // Scope masks the GRADIENT the HVP is contracted along, which is the
+      // exact restriction of the sum for the same reason it is in the Regge
+      // term: the restricted functional is the sum over the region, so the
+      // direction it moves along is the region-masked gradient.
       for (std::size_t edgeIndex = 0; edgeIndex < context.edgeCount;
            ++edgeIndex) {
+        if (!edgeInScope(mask, edgeIndex)) {
+          entropyAscent[edgeIndex] = complexd{0.0, 0.0};
+          continue;
+        }
         entropyGradientNormSquared += std::norm(baseComponents[edgeIndex]);
         entropyAscent[edgeIndex] = std::conj(baseComponents[edgeIndex]);
       }
@@ -263,9 +326,9 @@ ObjectiveDirection LegacyObjective::direction(
   ObjectiveDirection result;
   result.ascent = Eigen::VectorXcd::Zero(context.edgeCount);
   if (scalar.einsteinHilbert && scalar.reggeWeight != 0.0)
-    result.ascent += reggeStationarityAscent(scalar.spacetime,
-                                             context.edgeCount,
-                                             scalar.reggeWeight, nullptr);
+    result.ascent += reggeStationarityAscent(
+        scalar.spacetime, context.edgeCount, scalar.reggeWeight,
+        scopeMask(scalar, context.edgeCount), nullptr);
   addCarriedStateAscent(context, &result.ascent, nullptr);
   return result;
 }

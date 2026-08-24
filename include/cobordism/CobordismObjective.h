@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -83,6 +84,23 @@ struct ObjectiveContext {
   /// one per pinned region, say — can coexist on one complex without any of
   /// them assuming it is the only one.
   std::set<std::uint64_t> region;
+
+  /// The edge coordinates this objective's sums run over, as indices into the
+  /// complex's edge list.
+  ///
+  /// ABSENT means every edge — the whole-cobordism scope, and the
+  /// single-objective run that stays bit-identical. A PRESENT but empty list
+  /// means score nothing, which is a real and different thing: a region whose
+  /// interior contains no edge, with the straddling edges declared out, scores
+  /// no coordinate at all. Collapsing the two would silently promote such a
+  /// region to scoring the entire complex.
+  ///
+  /// The ENGINE resolves this from the objective's declared `ObjectiveScope` —
+  /// which region, and whether the straddling edges count — so the declaration
+  /// is honoured rather than re-derived, and an objective never recomputes edge
+  /// membership from `region`. That is why the scope is a declaration the
+  /// engine reads and not a rule the engine applies by role.
+  std::optional<std::vector<std::size_t>> scoredEdges;
 
   /// The target states the region is scored against, for a target-conditioned
   /// objective. Empty for a purely geometric one.

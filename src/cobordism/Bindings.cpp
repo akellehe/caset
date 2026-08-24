@@ -1073,6 +1073,28 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "default.")
       .def_property_readonly("objective_name", &MultiCobordism::objectiveName,
            "The injected objective's stable identifier, as stamped on records.")
+      .def("set_pinned_objective", &MultiCobordism::setPinnedObjective,
+           py::arg("objective"),
+           "Inject an ADDITIONAL objective holding a pinned region, alongside "
+           "the bulk objective. Optional: with none supplied the pinned "
+           "region's objective IS the bulk objective and the run is identical "
+           "to a single-objective one. The region is not named here -- the "
+           "objective declares its own scope, whose RegionHandle can only come "
+           "from region_handle, so a mis-spelling cannot reach this call.")
+      .def_property_readonly("pinned_objective",
+           &MultiCobordism::pinnedObjective,
+           "The additional pinned-region objective, or None where none is "
+           "supplied.")
+      .def("clear_pinned_objective", &MultiCobordism::clearPinnedObjective,
+           "Drop the pinned-region objective, returning the node to a single "
+           "objective scoring the whole cobordism.")
+      .def_property_readonly("objective_contributions",
+           &MultiCobordism::objectiveContributions,
+           "Every objective's decomposition, in evaluation order: the bulk "
+           "objective first, then the pinned-region objective where one is "
+           "supplied. Summing the terms reproduces objective_terms exactly, so "
+           "a reader can tell whether descent came from the bulk or from the "
+           "pinned region.")
       .def("region_handle", &MultiCobordism::regionHandle, py::arg("name"),
            "Mint a RegionHandle for a DECLARED region. The only way to obtain "
            "a non-empty handle; an undeclared name raises BY NAME rather than "
@@ -1308,6 +1330,23 @@ Right -- re-read after each drive call:
                      &MultiCobordism::ObjectiveTerms::actionMagnitude)
       .def_readwrite("carried_state_energy",
                      &MultiCobordism::ObjectiveTerms::carriedStateEnergy);
+
+  py::class_<MultiCobordism::ObjectiveContribution>(multiCobordismClass,
+      "ObjectiveContribution",
+      "One objective's decomposition, labelled by the objective that produced "
+      "it and the region it was scored over. The record carries a contribution "
+      "per objective rather than one summed record, so a reader can tell "
+      "whether descent came from the bulk or from the pinned region.")
+      .def(py::init<>())
+      .def_readwrite("objective_name",
+                     &MultiCobordism::ObjectiveContribution::objectiveName,
+                     "The objective's stable identifier.")
+      .def_readwrite("region_name",
+                     &MultiCobordism::ObjectiveContribution::regionName,
+                     "The declared region, or empty for the whole cobordism.")
+      .def_readwrite("terms",
+                     &MultiCobordism::ObjectiveContribution::terms,
+                     "That objective's terms over its own scope.");
 
   py::class_<ObjectiveScope>(m, "ObjectiveScope",
       "What an objective DECLARES that it references: a named pinned region, "

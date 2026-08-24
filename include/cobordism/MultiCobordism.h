@@ -361,6 +361,54 @@ class MultiCobordism {
       const noexcept {
     return objectiveSpec_;
   }
+  /// Inject an ADDITIONAL objective that holds a pinned region, alongside the
+  /// bulk objective this node descends. Optional: with none supplied the pinned
+  /// region's objective IS the bulk objective — one instance, not a copy with
+  /// different defaults — and the run is bit-identical to a single-objective
+  /// one.
+  ///
+  /// The region is not named here. The objective declares its own scope through
+  /// `ObjectiveScope`, whose `RegionHandle` can only be obtained from
+  /// `regionHandle`, so attaching an objective to a region never requires a
+  /// caller to spell the same string twice and a mis-spelling cannot compile.
+  ///
+  /// Scoring is ADDITIVE and the bulk objective keeps scoring everything,
+  /// including the pinned interior: the bulk sees one coherent cobordism and
+  /// this is an additional hold on part of it. Boundary-interior edges
+  /// therefore contribute to both, by design.
+  /// @throws std::invalid_argument on a null objective.
+  void setPinnedObjective(std::shared_ptr<CobordismObjective> objective);
+  /// The additional pinned-region objective, or null where none is supplied.
+  [[nodiscard]] const std::shared_ptr<CobordismObjective> &pinnedObjective()
+      const noexcept {
+    return pinnedObjectiveSpec_;
+  }
+  /// Drop the pinned-region objective, returning the node to a single
+  /// objective scoring the whole cobordism.
+  void clearPinnedObjective() noexcept { pinnedObjectiveSpec_.reset(); }
+
+  /// One objective's decomposition, labelled by the objective that produced it
+  /// and the region it was scored over. The record carries a contribution per
+  /// objective rather than one summed record, so a reader can tell whether
+  /// descent came from the bulk or from the pinned region.
+  struct ObjectiveContribution {
+    /// The objective's stable identifier.
+    std::string objectiveName;
+    /// The declared region, or empty for the whole cobordism.
+    std::string regionName;
+    /// That objective's terms over its own scope.
+    ObjectiveTerms terms;
+  };
+
+  /// Every objective's contribution, in evaluation order: the bulk objective
+  /// first, then the pinned-region objective where one is supplied. Summing the
+  /// terms reproduces `objectiveTerms()` exactly.
+  [[nodiscard]] std::vector<ObjectiveContribution> objectiveContributionsFor(
+      const std::shared_ptr<Spacetime> &spacetime) const;
+  /// `objectiveContributionsFor` on this node's own complex.
+  [[nodiscard]] std::vector<ObjectiveContribution> objectiveContributions()
+      const;
+
   /// The injected objective's stable identifier, as stamped on records.
   [[nodiscard]] std::string objectiveName() const;
   /// Whether the injected objective's value depends on prescribed boundary
@@ -1130,11 +1178,44 @@ class MultiCobordism {
   /// never injects one gets exactly the objective it got before this became
   /// injectable.
   std::shared_ptr<CobordismObjective> objectiveSpec_;
+  /// The optional additional objective holding a pinned region. Null means the
+  /// pinned region's objective IS the bulk objective, which is the
+  /// single-objective run.
+  std::shared_ptr<CobordismObjective> pinnedObjectiveSpec_;
   /// Assemble the firewalled input an objective reads. Private because the
   /// bound evaluators close over this node; an objective receives the
   /// assembled context and can reach nothing beyond it.
+  ///
+  /// The objective is passed so its DECLARED scope can be resolved into the
+  /// context's region and edge list. The engine reads the declaration; it does
+  /// not infer a scope from the objective's role or decide one by convention.
+  [[nodiscard]] ObjectiveContext objectiveContextFor(
+      const std::shared_ptr<Spacetime> &spacetime,
+      const std::shared_ptr<CobordismObjective> &objective) const;
+  /// The bulk objective's context, which is the whole cobordism.
   [[nodiscard]] ObjectiveContext objectiveContextFor(
       const std::shared_ptr<Spacetime> &spacetime) const;
+  /// Throw unless this node can honour everything the objective declares: its
+  /// register-degree domain, and a scope naming a region this node has
+  /// declared. A handle cannot be mis-spelled, but a region can be cleared
+  /// after one was minted, and an objective pointing at a region that no longer
+  /// exists must fail loudly rather than silently score nothing. Shared by the
+  /// bulk and pinned injection points so neither can drift into accepting what
+  /// the other refuses.
+  void requireObjectiveAcceptable(
+      const std::shared_ptr<CobordismObjective> &objective) const;
+  /// The edge indices a region-scoped objective's sums run over.
+  ///
+  /// An edge is INTERIOR to the region when both endpoints lie in it and
+  /// STRADDLING when exactly one does. Interior edges are always in; straddling
+  /// edges are in only where the objective declared them so. The border is the
+  /// one the node already defines — `edgeIsPinned` holds exactly when a single
+  /// region contains both endpoints — rather than a second notion of adjacency
+  /// invented here.
+  [[nodiscard]] std::vector<std::size_t> scopedEdgeIndices(
+      const std::shared_ptr<Spacetime> &spacetime,
+      const std::set<std::uint64_t> &region,
+      bool includesStraddlingEdges) const;
   HodgeLaplacian::EntropyPhaseMode hodgeEntropyPhaseMode_{
       HodgeLaplacian::EntropyPhaseMode::IncludeComplexPhase};
   double hodgeEntropyWeight_{1.0};
