@@ -47,10 +47,15 @@ class CanonicalSurgeryApiTest(unittest.TestCase):
                 hasattr(cob.Proton, name),
                 f"Proton.{name} should be gone (canonical home is MultiCobordism)")
 
-    def test_pinned_boundary_vertices_is_engine_internal(self):
-        # Reverted to private once the directed probe moved into the engine — only the move
-        # gate and the probe consult it, both internal to MultiCobordism.
+    def test_the_target_conditioned_pinned_accessor_is_gone(self):
+        # `pinnedBoundaryVertices` derived a pinned set from the boundary blocks and
+        # their targets, and surgery was gated on it. Pinning is now a caller-declared
+        # region that constrains the geometry rather than gating any move (#835), so
+        # the old accessor has no successor here.
         self.assertFalse(hasattr(cob.MultiCobordism, "pinned_boundary_vertices"))
+        for name in ("declare_pinned_region", "pinned_regions", "edge_is_pinned"):
+            self.assertTrue(hasattr(cob.MultiCobordism, name),
+                            f"MultiCobordism.{name} missing")
 
 
 @pytest.mark.slow
