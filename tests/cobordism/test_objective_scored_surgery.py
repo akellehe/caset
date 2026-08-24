@@ -115,6 +115,33 @@ BUILTINS = (
 )
 
 
+class ConstantObjective(cob.CobordismObjective):
+    """Identically zero on every complex -- genuinely indifferent to topology.
+
+    Defined in Python, which #841 made possible. That matters here: an
+    objective assembled from zeroed weights would only be *numerically* flat
+    for the terms it happens to carry, whereas this one cannot depend on the
+    geometry at all because it never looks at it. No candidate can strictly
+    lower a constant, so a probe that honours its own acceptance rule must
+    refuse every surgery.
+    """
+
+    def name(self):
+        return "constant_zero"
+
+    def term_names(self):
+        return [cob.ObjectiveTermName.REGGE_STATIONARITY]
+
+    def terms(self, context):
+        return MC.ObjectiveTerms()
+
+    def direction(self, context):
+        return cob.ObjectiveDirection()
+
+    def is_target_conditioned(self):
+        return False
+
+
 class ACommittedProbeLoweredTheInjectedObjectiveTest(unittest.TestCase):
     """The discriminating direction: a commit means the objective went DOWN.
 
@@ -201,30 +228,23 @@ class TopologyIndifferentObjectiveCommitsNothingTest(unittest.TestCase):
 
     @staticmethod
     def _indifferent_node():
-        """A genuinely topology-indifferent objective, built from a built-in.
+        """A node scored by a constant, on the host where surgery DOES commit.
 
-        `JointStationarity` is `beta*||grad S_Regge||^2 + eta*||grad
-        S_Hodge||^2`. With both weights zero the scalar is identically zero on
-        every complex, so no candidate can strictly lower it -- exactly the
-        "objective that does not care about topology" the acceptance rule must
-        refuse. A hand-written constant objective would say the same thing;
-        Python cannot yet subclass `CobordismObjective`.
-
-        It runs on the REFINED host, the one where a discriminating objective
-        does commit, so the refusal is a property of the objective rather than
-        of a host too small to offer a candidate.
+        Running on the refined host is what makes the refusal meaningful: a
+        discriminating objective opens a hole there, so nothing being committed
+        is a property of the objective rather than of a host too small to offer
+        a candidate.
         """
         st = _refined_host()
         node = _node(st, gamma=0.0)
-        node.set_objective(cob.JointStationarityObjective())
-        node.set_regge_weight(0.0)
-        node.set_hodge_entropy_weight(0.0)
+        node.set_objective(ConstantObjective())
         return node, st
 
     def test_the_objective_really_is_flat(self):
         """Guard against vacuity: the scalar must be identically zero, not
         merely small, or 'nothing was committed' would prove nothing."""
         node, st = self._indifferent_node()
+        self.assertEqual(node.objective_name, "constant_zero")
         self.assertEqual(node.objective(), 0.0)
 
     def test_no_cone_out_is_committed_on_a_host_where_one_otherwise_would_be(self):
@@ -267,9 +287,7 @@ class BettiIsPermittedToEmergeTest(unittest.TestCase):
         only difference is the functional in force."""
         st = _refined_host()
         node = _node(st, gamma=0.0)
-        node.set_objective(cob.JointStationarityObjective())
-        node.set_regge_weight(0.0)
-        node.set_hodge_entropy_weight(0.0)
+        node.set_objective(ConstantObjective())
         self.assertEqual(node.directed_cone_out(), 0)
         self.assertEqual(len(MC.emergent_holes(st, DEGREE)), 0)
 
