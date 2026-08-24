@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
+#include <map>
 #include <stdexcept>
 
 namespace tessera::observables {
@@ -649,6 +650,7 @@ ColorAnchor::ColorAnchor(std::vector<OrientedTriangle> triangles)
     validateTriangles(triangles_);
     weights_.assign(triangles_.size(),
                     1.0 / static_cast<double>(triangles_.size()));
+    markOverlaps();
 }
 
 ColorAnchor::ColorAnchor(std::vector<OrientedTriangle> triangles,
@@ -658,6 +660,27 @@ ColorAnchor::ColorAnchor(std::vector<OrientedTriangle> triangles,
       weightingId_("declared") {
     validateTriangles(triangles_);
     validateConvex(weights_, triangles_.size());
+    markOverlaps();
+}
+
+void ColorAnchor::markOverlaps() {
+    // Which declared triangles genuinely OVERLAP: an edge row occurring in
+    // more than one triangle makes every triangle carrying it an
+    // overlapping one.  This is the shared-EDGE relation, the only sharing
+    // relation an OrientedTriangle atlas determines (a triangle declares
+    // edge rows and incidence signs, never vertex identities).
+    overlapping_.assign(triangles_.size(), 0);
+    overlapCount_ = 0;
+    std::map<Eigen::Index, std::vector<std::size_t>> byEdge;
+    for (std::size_t t = 0; t < triangles_.size(); ++t)
+        for (const Eigen::Index e : triangles_[t].edges)
+            byEdge[e].push_back(t);
+    for (const auto& entry : byEdge) {
+        if (entry.second.size() < 2) continue;
+        for (const std::size_t t : entry.second) overlapping_[t] = 1;
+    }
+    for (const char flag : overlapping_)
+        if (flag != 0) ++overlapCount_;
 }
 
 void ColorAnchor::declareWeights(std::vector<double> weights) {
@@ -876,6 +899,8 @@ AnchorProfile ColorAnchor::evaluateBlocks(
         nTri, std::numeric_limits<double>::quiet_NaN());
     profile.kreinSignatures.resize(nTri, {0, 0, 0});
 
+    profile.overlappingTriangles = overlapCount_;
+
     double sumT = 0.0;
     double sumT2 = 0.0;
     double maxLambda = 0.0;
@@ -910,10 +935,16 @@ AnchorProfile ColorAnchor::evaluateBlocks(
         if (det != std::complex<double>(0.0, 0.0)) {
             const double phase = std::arg(det);
             profile.detPhases[t] = phase;
-            const double u = weights_[t] * term;
-            resultant += u * std::complex<double>(std::cos(phase),
-                                                  std::sin(phase));
-            resultantWeight += u;
+            // The coherence is the agreement of the local determinant-line
+            // trivializations WHERE THEY OVERLAP: only triangles sharing a
+            // boundary edge with another declared triangle contribute.  An
+            // isolated face has no overlap partner and no say in it.
+            if (overlapping_[t] != 0) {
+                const double u = weights_[t] * term;
+                resultant += u * std::complex<double>(std::cos(phase),
+                                                      std::sin(phase));
+                resultantWeight += u;
+            }
         }
     }
 
@@ -923,8 +954,9 @@ AnchorProfile ColorAnchor::evaluateBlocks(
         profile.phaseCoherence = std::abs(resultant) / resultantWeight;
         profile.phaseDispersion = 1.0 - profile.phaseCoherence;
     } else {
-        // No nonzero determinant: there is no phase datum.  Unknown is
-        // reported as NaN, never as zero.
+        // No overlapping triangle carries a nonzero determinant: there is
+        // no overlap phase datum.  Unknown is reported as NaN, never as
+        // zero — a DISJOINT atlas lands here by construction.
         profile.phaseCoherence = std::numeric_limits<double>::quiet_NaN();
         profile.phaseDispersion = std::numeric_limits<double>::quiet_NaN();
     }

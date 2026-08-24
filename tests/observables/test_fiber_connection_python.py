@@ -69,7 +69,8 @@ def _split(name, values, record):
 
 def _fiber(cells, right, left=None, weights=None, *, degree=1, accepted=True,
            regime="positive-semidefinite", pos=None, neg=0, lower_gap=1.0,
-           upper_gap=1.0, cond=1.0, self_adjoint=True, gram_defect=0.0):
+           upper_gap=1.0, cond=1.0, frame_cond=1.0, self_adjoint=True,
+           gram_defect=0.0):
     """Rehydrate a SpectralFiber from its record (the #769 replay route)."""
     right = np.asarray(right, dtype=complex)
     n, r = right.shape
@@ -78,16 +79,23 @@ def _fiber(cells, right, left=None, weights=None, *, degree=1, accepted=True,
                else np.asarray(weights, dtype=complex))
     pos = r if pos is None else pos
     record = {
-        "schema_version": 1, "record_type": "spectral_fiber",
+        "schema_version": 2, "record_type": "spectral_fiber",
         "cells": [[int(v) for v in cell] for cell in cells],
         "rows": int(n), "rank": int(r),
         "certificate": {
             "degree": int(degree), "rank": int(r),
             "lower_gap": float(lower_gap), "upper_gap": float(upper_gap),
-            "localization": NAN, "projector_residual": 1e-16,
+            "nearest_discarded_separation": min(float(lower_gap),
+                                                float(upper_gap)),
+            "localization": NAN, "localization_support_fraction": NAN,
+            "localization_excess": NAN, "projector_residual": 1e-16,
             "eigen_residual": 1e-16, "left_residual": 1e-16,
             "gram_defect": float(gram_defect),
-            "condition_number": float(cond),
+            # #808: the projector norm and the FRAME condition number are
+            # separate quantities; this synthetic frame is orthonormal, so
+            # its Riesz conditioning is exactly 1.
+            "projector_norm": float(cond),
+            "frame_condition_number": float(frame_cond),
             "positive_signature": int(pos), "negative_signature": int(neg),
             "frequency_lower": 0.0, "frequency_upper": 2.0,
             "self_adjoint": bool(self_adjoint), "accepted": bool(accepted),
@@ -151,7 +159,13 @@ def _set_phase(st, a, b, phi):
 
 
 def _tracker_fiber(st, support, degree, band=0):
-    read = obs.SpectralFiberTracker(st).enumerateBands(support, degree)
+    # These end-to-end fixtures are symmetric complexes whose bands are
+    # perfectly delocalized (#808): the subject here is the TRANSPORT, so
+    # the analysis declares the permissive localization cap, which accepts
+    # any MEASURED localization.
+    cfg = obs.SpectralFiberConfig()
+    cfg.maxLocalizationExcess = 1.0
+    read = obs.SpectralFiberTracker(st, cfg).enumerateBands(support, degree)
     return read.fibers[band]
 
 

@@ -43,13 +43,14 @@ struct SpectralFiberConfig {
   /// `groupingTolerance * scale`, `scale` the spectral scale
   /// (max |eigenvalue|, or 1 for an identically zero operator).
   double groupingTolerance = 1e-8;
-  /// Isolation floor: a band is certified only when both its lower and
-  /// upper gaps are at least `minRelativeGap * scale`.  A closing gap
-  /// therefore returns an UNCERTIFIED band — never a discontinuous
-  /// identity change.
+  /// Isolation floor: a band is certified only when its separation from
+  /// the NEAREST DISCARDED eigenvalue in the complex plane
+  /// (`SpectralBandCertificate::nearestDiscardedSeparation`) is at least
+  /// `minRelativeGap * scale`.  A closing gap therefore returns an
+  /// UNCERTIFIED band — never a discontinuous identity change.
   double minRelativeGap = 1e-6;
-  /// A certified band's gaps must also dominate its own spread:
-  /// gap >= gapDominance * (in-band eigenvalue spread).
+  /// A certified band's separation must also dominate its own spread:
+  /// separation >= gapDominance * (in-band eigenvalue spread).
   double gapDominance = 4.0;
   /// Certification cap on the relative residuals (eigen, left, projector
   /// idempotency), all measured relative to the operator's Frobenius norm.
@@ -57,9 +58,23 @@ struct SpectralFiberConfig {
   /// Certification cap on the weighted Gram / signature defect
   /// epsilon_G = ||Phi^dagger W Phi - J|| (design spec section 5.4).
   double gramDefectTolerance = 1e-8;
-  /// Certification cap on the band condition number ||P||_2 (the spectral
-  /// norm of the band projector — 1 for an orthogonal projector).
-  double conditionNumberCap = 1e8;
+  /// Certification cap on the band projector norm ||P||_2 (Kato's
+  /// condition number of the spectral projector — 1 for an orthogonal
+  /// projector, larger the more oblique the band).  This is the
+  /// GAUGE-INVARIANT conditioning of the band; the FRAME condition number
+  /// (`SpectralBandCertificate::frameConditionNumber`) depends on the
+  /// in-band basis choice and is reported, not capped.
+  double projectorNormCap = 1e8;
+  /// Certification cap on the band's LOCALIZATION EXCESS
+  /// (`SpectralBandCertificate::localizationExcess`) — the whitepaper
+  /// acceptance conjunct "a localized spectral projector with stable
+  /// rank", enforced HERE, in fiber acceptance, where the specification
+  /// puts it.  The excess is 0 for a band as concentrated as its rank
+  /// permits and exactly 1 for a perfectly delocalized one, so the default
+  /// 0.5 certifies a band no more than halfway from maximally localized to
+  /// fully spread.  1.0 accepts any MEASURED localization (an unmeasured
+  /// NaN still fails) and reproduces the pre-#808 behaviour.
+  double maxLocalizationExcess = 0.5;
   /// Dimension at and above which the self-adjoint paths switch from the
   /// exact dense solve to the sparse block solve (mirrors
   /// `DenseReference::kDefaultCrossoverDimension`).
@@ -105,16 +120,42 @@ struct SpectralBandCertificate {
   int degree = 0;
   /// Band rank r = number of eigenvalues in the band (with multiplicity).
   std::size_t rank = 0;
-  /// Distance from the band to the nearest eigenvalue below / above it
-  /// (complex modulus).  +infinity when no eigenvalue exists on that side;
-  /// NaN when the side is UNKNOWN (the truncated sparse top).
+  /// Distance from the band to the SORT-ADJACENT eigenvalue below / above
+  /// it (complex modulus, over the (Re, Im)-sorted spectrum).  REPORTED
+  /// DIAGNOSTICS ONLY: with a genuinely complex spectrum the sorted
+  /// neighbour need not be the nearest eigenvalue in the plane, so the
+  /// isolation conjunct is enforced on `nearestDiscardedSeparation`
+  /// instead.  +infinity when no eigenvalue exists on that side; NaN when
+  /// the side is UNKNOWN (the truncated sparse top).
   double lowerGap = std::numeric_limits<double>::infinity();
   double upperGap = std::numeric_limits<double>::infinity();
+  /// The BAND GAP the whitepaper names — "a nonzero band gap separating it
+  /// from discarded modes": the distance IN THE COMPLEX PLANE from the
+  /// band to the nearest eigenvalue outside it,
+  /// min over discarded j, in-band i of |lambda_i - lambda_j|, which on a
+  /// truncated sparse read is additionally bounded by the shield value.
+  /// +infinity when nothing was discarded; NaN when an uncovered side
+  /// leaves it UNKNOWN.  This is the quantity acceptance gates on.
+  double nearestDiscardedSeparation = std::numeric_limits<double>::infinity();
   /// Inverse participation ratio of the band projector's diagonal density
   /// p_i = |P_ii| / sum_j |P_jj|: localization = sum_i p_i^2, in
-  /// [1/n, 1] — 1 fully localized on one cell, 1/n perfectly spread.
+  /// [1/n, 1/rank] — 1/rank fully localized on `rank` cells (1 for a
+  /// rank-one band on a single cell), 1/n perfectly spread.
   /// Gauge-invariant (reads only the projector) and relabeling-invariant.
   double localization = std::numeric_limits<double>::quiet_NaN();
+  /// The effective support fraction n_eff / n = 1 / (n * localization) in
+  /// [rank/n, 1]: exactly 1 for a perfectly delocalized band (uniform
+  /// projector diagonal), rank/n for a band concentrated on `rank` cells.
+  /// Gauge- and relabeling-invariant and comparable across dimensions, but
+  /// NOT across ranks — a rank-r band cannot read below r/n.  Reported.
+  double localizationSupportFraction = std::numeric_limits<double>::quiet_NaN();
+  /// The localization datum the acceptance conjunct GATES on: the
+  /// rank-normalized excess (n_eff - rank) / (n - rank) in [0, 1] — 0 when
+  /// the band is as concentrated as a rank-`rank` projector can be, 1
+  /// exactly when it is perfectly delocalized.  Defined as 0 when the band
+  /// spans the whole operator (n == rank): a full-space band leaves no
+  /// room to be localized in, so localization says nothing about it.
+  double localizationExcess = std::numeric_limits<double>::quiet_NaN();
   /// Idempotency defect ||P^2 - P||_F / max(1, ||P||_F).
   double projectorResidual = std::numeric_limits<double>::quiet_NaN();
   /// epsilon_eig = ||L Phi - Phi Lambda||_F / ||L||_F on the eigen-paired
@@ -128,10 +169,25 @@ struct SpectralBandCertificate {
   /// ||Phi^dagger W Phi - J||_F with J = diag(I_p, -I_q); on the
   /// biorthogonal path ||Psi^dagger W Phi - I||_F.
   double gramDefect = std::numeric_limits<double>::quiet_NaN();
-  /// Band condition number ||P||_2 — the spectral norm of the band
-  /// projector (Kato's condition number of the spectral projector; 1 for
-  /// an orthogonal projector, larger the more oblique the band).
-  double conditionNumber = std::numeric_limits<double>::quiet_NaN();
+  /// Band projector norm ||P||_2 — the spectral norm of the band projector
+  /// (Kato's condition number of the SPECTRAL PROJECTOR; 1 for an
+  /// orthogonal projector, larger the more oblique the band).  Depends
+  /// only on the band's ranges, so it is gauge-invariant; this is what
+  /// `SpectralFiberConfig::projectorNormCap` caps.
+  double projectorNorm = std::numeric_limits<double>::quiet_NaN();
+  /// The FRAME condition number the whitepaper asks for in the non-normal
+  /// regime ("use matched right and left frames ... and report both
+  /// residuals and the frame condition number"):
+  /// max(kappa(Phi), kappa(Psi)) with
+  /// kappa(X) = sqrt(lambda_max / lambda_min) of X^dagger |W| X — the
+  /// Riesz condition of each reported frame in the same |W| metric the
+  /// Gram certificate is measured in.  Exactly 1 on the self-adjoint path
+  /// (a W-orthonormal frame is perfectly conditioned) and larger the more
+  /// oblique the matched pair.  A DIFFERENT quantity from `projectorNorm`:
+  /// it is a property of the reported frames, so a different in-band basis
+  /// changes it, which is why acceptance caps the gauge-invariant
+  /// projector norm and reports this one.
+  double frameConditionNumber = std::numeric_limits<double>::quiet_NaN();
   /// Krein inertia of Phi^dagger W Phi: positive / negative eigenvalue
   /// counts (p, q).  Neutral directions are rank - p - q (nonzero only
   /// when the W-Gram is singular, e.g. complex-eigenvalue Krein bands).
@@ -150,9 +206,10 @@ struct SpectralBandCertificate {
   /// non-self-adjoint operator).
   bool selfAdjoint = false;
   /// Whether the band met every certification threshold of the producing
-  /// `SpectralFiberConfig` (isolation, residuals, Gram defect,
-  /// conditioning).  When false the band is still reported — an
-  /// uncertified read, not a discontinuous identity change.
+  /// `SpectralFiberConfig` (isolation on `nearestDiscardedSeparation`,
+  /// LOCALIZATION, residuals, Gram defect, projector conditioning).  When
+  /// false the band is still reported — an uncertified read, not a
+  /// discontinuous identity change.
   bool accepted = false;
   /// The graded claim (#764 vocabulary): domain `BandWindow`, regime as
   /// verified, grade `CertifiedNumerical` (or `AlgebraicallyExact` where
@@ -386,10 +443,14 @@ struct ComponentBandRead {
 /// **Band rule.**  Eigenvalues sorted by (Re, Im) are grouped into bands
 /// by the relative gap rule of `SpectralFiberConfig`; every band is
 /// reported with its projector and certificate; certification requires
-/// isolation, residuals, Gram defect, and conditioning — a closing gap
-/// yields an uncertified band, never a different identity.  The detector
-/// enumerates ranks; it NEVER requests rank three, and no eigenvalue
-/// threshold is used as a Betti-number oracle.
+/// ISOLATION FROM THE NEAREST DISCARDED EIGENVALUE IN THE COMPLEX PLANE
+/// (sorting supplies the grouping, never the isolation measurement),
+/// LOCALIZATION (the whitepaper conjunct, capped by
+/// `maxLocalizationExcess`), residuals, Gram defect, and
+/// projector conditioning — a closing gap yields an uncertified band,
+/// never a different identity.  The detector enumerates ranks; it NEVER
+/// requests rank three, and no eigenvalue threshold is used as a
+/// Betti-number oracle.
 ///
 /// **Read-only observable.**  Never calls a solver on the spacetime and
 /// never mutates it; nothing here enters any emergence objective.

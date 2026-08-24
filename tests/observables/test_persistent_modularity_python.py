@@ -741,5 +741,113 @@ class TestSpacetimeDiscovery(unittest.TestCase):
                          sorted(len(c.support) for c in b.components))
 
 
+# ---------------------------------------------------------------------------
+# #808: lifetime across COBORDISM FRAMES, distinct from resolution slices
+# ---------------------------------------------------------------------------
+
+
+class TestCobordismFrameTracks(unittest.TestCase):
+    """The whitepaper's fiber-acceptance conjunct is "lifetime across
+    multiple cobordism frames".  `matchComponents` always supported a time
+    track; `trackAcrossFrames` is the supplier that calls it with more than
+    one frame."""
+
+    def _frames(self, count=3, migrate_at=None):
+        """`count` cobordism frames over a common cell-id universe: two K6
+        cliques, with cell 5 migrating to the second clique from frame
+        `migrate_at` onward."""
+        out = []
+        for t in range(count):
+            if migrate_at is not None and t >= migrate_at:
+                src, tgt = [], []
+                _clique_edges(list(range(5)), src, tgt)
+                _clique_edges([5] + list(range(10, 16)), src, tgt)
+            else:
+                src, tgt = _two_disconnected_k6()
+            g = PM.fromWeightedEdges(src, tgt, [1.0] * len(src))
+            out.append(g.discover(1.0, _cfg()).components)
+        return out
+
+    def _graph(self):
+        src, tgt = _two_disconnected_k6()
+        return PM.fromWeightedEdges(src, tgt, [1.0] * len(src))
+
+    def test_an_unchanged_component_lives_for_every_frame(self):
+        g = self._graph()
+        tracks = g.trackAcrossFrames(self._frames(4))
+        self.assertEqual(len(tracks), 2)
+        for track in tracks:
+            self.assertEqual(track.frames, 4)
+            self.assertEqual(track.firstFrame, 0)
+            self.assertEqual(track.lastFrame, 3)
+            self.assertEqual(track.minAdjacentOverlap, 1.0)
+            self.assertEqual(len(track.members), 4)
+            self.assertEqual(len(track.memberIndices), 4)
+
+    def test_a_single_frame_gives_a_one_frame_lifetime(self):
+        # Not a structural artifact: one frame is one frame, and the read
+        # says so instead of borrowing a resolution-slice count.
+        g = self._graph()
+        tracks = g.trackAcrossFrames(self._frames(1))
+        self.assertEqual(len(tracks), 2)
+        for track in tracks:
+            self.assertEqual(track.frames, 1)
+            self.assertEqual(track.minAdjacentOverlap, 1.0)
+
+    def test_no_frames_yields_no_tracks(self):
+        self.assertEqual(self._graph().trackAcrossFrames([]), [])
+
+    def test_a_migrating_cell_lowers_the_adjacent_frame_overlap(self):
+        # Frames 0, 1 are identical; at frame 2 cell 5 migrates.  The exact
+        # Jaccard overlaps are 5/6 and 6/7 -- the same numbers
+        # matchComponents reports, since the chaining IS matchComponents.
+        g = self._graph()
+        tracks = g.trackAcrossFrames(self._frames(3, migrate_at=2))
+        worst = sorted(t.minAdjacentOverlap for t in tracks)
+        self.assertEqual(len(tracks), 2)
+        self.assertEqual(worst, [5.0 / 6.0, 6.0 / 7.0])
+        for track in tracks:
+            self.assertEqual(track.frames, 3)
+
+    def test_a_break_in_the_track_starts_a_new_lifetime(self):
+        # Frame 1 relabels the whole universe: nothing overlaps, so no
+        # component continues and every frame starts its own track.
+        src, tgt = _two_disconnected_k6()
+        far_src = [v + 10_000 for v in src]
+        far_tgt = [v + 10_000 for v in tgt]
+        g = self._graph()
+        g_far = PM.fromWeightedEdges(far_src, far_tgt, [1.0] * len(far_src))
+        frames = [g.discover(1.0, _cfg()).components,
+                  g_far.discover(1.0, _cfg()).components]
+        tracks = g.trackAcrossFrames(frames)
+        self.assertEqual(len(tracks), 4)
+        for track in tracks:
+            self.assertEqual(track.frames, 1)
+
+    def test_the_frame_axis_is_not_the_resolution_axis(self):
+        # The same chaining rule on the two axes gives two DIFFERENT
+        # numbers, which is why they are separate fields: a scan over three
+        # resolutions of ONE frame reports lifetime 3 on the resolution
+        # axis, while that single frame is one frame.
+        g = self._graph()
+        report = g.scanResolutions(_cfg(resolutions=(0.5, 1.0, 2.0)))
+        self.assertEqual(len(report.slices), 3)
+        resolution_lifetimes = sorted(t.lastSlice - t.firstSlice + 1
+                                      for t in report.tracks)
+        self.assertEqual(resolution_lifetimes, [3, 3])
+        frame_tracks = g.trackAcrossFrames([report.slices[1].components])
+        self.assertEqual(sorted(t.frames for t in frame_tracks), [1, 1])
+
+    def test_the_threshold_is_honoured(self):
+        # Below the overlap threshold the chain breaks, exactly as the
+        # resolution scan breaks: same rule, different axis.
+        g = self._graph()
+        frames = self._frames(2, migrate_at=1)
+        kept = g.trackAcrossFrames(frames, 0.8)
+        self.assertEqual(sorted(t.frames for t in kept), [2, 2])
+        broken = g.trackAcrossFrames(frames, 0.9)
+        self.assertEqual(sorted(t.frames for t in broken), [1, 1, 1, 1])
+
+
 if __name__ == "__main__":
     unittest.main()

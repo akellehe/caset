@@ -369,6 +369,20 @@ encoded as zero).)doc")
              return recordToPython(t.weightAwareStatus);
            });
 
+  py::class_<FrameTrack>(m, "FrameTrack",
+      R"doc(A component followed across COBORDISM FRAMES by maximum support
+overlap.  ``frames`` is the lifetime the whitepaper's fiber-acceptance
+conjunct names ("lifetime across multiple cobordism frames") -- a different
+quantity from :class:`PersistenceTrack`, which counts MODULARITY RESOLUTION
+SLICES of a single frame.)doc")
+      .def_readonly("members", &FrameTrack::members)
+      .def_readonly("memberIndices", &FrameTrack::memberIndices)
+      .def_readonly("firstFrame", &FrameTrack::firstFrame)
+      .def_readonly("lastFrame", &FrameTrack::lastFrame)
+      .def_readonly("minAdjacentOverlap", &FrameTrack::minAdjacentOverlap)
+      .def_property_readonly("frames", &FrameTrack::frames,
+                             "Consecutive cobordism frames covered.");
+
   py::class_<ScanReport>(m, "ScanReport",
       "The full resolution-scan report: slices, adjacent-slice matches, and "
       "persistence tracks.")
@@ -468,6 +482,21 @@ simplex-support overlap (Jaccard on level-0 cell ids over a common cell-id
 universe).  When a projector-overlap hook is installed its value is
 reported per match; matching decisions remain support-based until a later
 ticket supplies the projectors.)doc")
+      .def("trackAcrossFrames",
+           [](const PersistentModularity &self,
+              const std::vector<std::vector<ComponentRead>> &frames,
+              double overlapThreshold) {
+             py::gil_scoped_release release;
+             return self.trackAcrossFrames(frames, overlapThreshold);
+           },
+           py::arg("frames"), py::arg("overlapThreshold") = 0.5,
+           R"doc(Follow components across COBORDISM FRAMES: frames[t] is the
+component list read from frame t over a common cell-id universe.  Chains
+consecutive frames with matchComponents by best support overlap, exactly the
+rule scanResolutions chains resolution slices with.  This is the supplier of
+the whitepaper's "lifetime across multiple cobordism frames"; a component
+seen in one frame gets a one-frame track, which is a measured fact and not a
+structural artifact of reading a single resolution.)doc")
       .def("setProjectorOverlapHook",
            [](PersistentModularity &self, py::object hook) {
              if (hook.is_none()) {
@@ -521,9 +550,14 @@ no recomputation.)doc");
       .def_readwrite("gramDefectTolerance",
                      &SpectralFiberConfig::gramDefectTolerance,
                      "Cap on ||Phi^dagger W Phi - J||.")
-      .def_readwrite("conditionNumberCap",
-                     &SpectralFiberConfig::conditionNumberCap,
-                     "Cap on the band condition number ||P||_2.")
+      .def_readwrite("projectorNormCap",
+                     &SpectralFiberConfig::projectorNormCap,
+                     "Cap on the band projector norm ||P||_2.")
+      .def_readwrite("maxLocalizationExcess",
+                     &SpectralFiberConfig::maxLocalizationExcess,
+                     "Cap on the band's rank-normalized localization excess "
+                     "-- the localization acceptance conjunct.  1.0 accepts "
+                     "any measured localization.")
       .def_readwrite("denseCrossover", &SpectralFiberConfig::denseCrossover,
                      "Dimension at/above which the self-adjoint path goes "
                      "sparse.")
@@ -564,14 +598,32 @@ quantities are NaN, never zero.)doc")
       .def_readonly("rank", &SpectralBandCertificate::rank)
       .def_readonly("lowerGap", &SpectralBandCertificate::lowerGap)
       .def_readonly("upperGap", &SpectralBandCertificate::upperGap)
+      .def_readonly("nearestDiscardedSeparation",
+                    &SpectralBandCertificate::nearestDiscardedSeparation,
+                    "Distance in the complex plane to the nearest DISCARDED "
+                    "eigenvalue -- the isolation acceptance conjunct.")
       .def_readonly("localization", &SpectralBandCertificate::localization)
+      .def_readonly("localizationSupportFraction",
+                    &SpectralBandCertificate::localizationSupportFraction,
+                    "Effective support fraction n_eff/n in [rank/n, 1]; 1 "
+                    "exactly for a perfectly delocalized band.")
+      .def_readonly("localizationExcess",
+                    &SpectralBandCertificate::localizationExcess,
+                    "(n_eff - rank)/(n - rank) in [0, 1] -- the GATED "
+                    "localization datum; 0 = as concentrated as the rank "
+                    "permits, 1 = perfectly delocalized.")
       .def_readonly("projectorResidual",
                     &SpectralBandCertificate::projectorResidual)
       .def_readonly("eigenResidual", &SpectralBandCertificate::eigenResidual)
       .def_readonly("leftResidual", &SpectralBandCertificate::leftResidual)
       .def_readonly("gramDefect", &SpectralBandCertificate::gramDefect)
-      .def_readonly("conditionNumber",
-                    &SpectralBandCertificate::conditionNumber)
+      .def_readonly("projectorNorm", &SpectralBandCertificate::projectorNorm,
+                    "||P||_2, Kato's condition number of the spectral "
+                    "projector (gauge-invariant).")
+      .def_readonly("frameConditionNumber",
+                    &SpectralBandCertificate::frameConditionNumber,
+                    "The FRAME condition number: max Riesz conditioning of "
+                    "the reported matched frames in the |W| metric.")
       .def_readonly("positiveSignature",
                     &SpectralBandCertificate::positiveSignature)
       .def_readonly("negativeSignature",
@@ -1478,8 +1530,16 @@ convex weighting that produced the score.)doc")
       .def_readonly("max_term_index", &AnchorProfile::maxTermIndex)
       .def_readonly("participation_ratio", &AnchorProfile::participationRatio)
       .def_readonly("det_phases", &AnchorProfile::detPhases)
-      .def_readonly("phase_coherence", &AnchorProfile::phaseCoherence)
+      .def_readonly("phase_coherence", &AnchorProfile::phaseCoherence,
+                    "Determinant-phase coherence on OVERLAPPING triangles "
+                    "(NaN on a disjoint atlas: no overlap content).")
       .def_readonly("phase_dispersion", &AnchorProfile::phaseDispersion)
+      .def_readonly("overlapping_triangles",
+                    &AnchorProfile::overlappingTriangles,
+                    "Declared triangles that share a boundary edge with "
+                    "another declared triangle -- the coherence support.")
+      .def_readonly("overlap_relation", &AnchorProfile::overlapRelation,
+                    "The sharing relation used: 'shared-edge'.")
       .def_readonly("krein_signatures", &AnchorProfile::kreinSignatures)
       .def_readonly("positive_regime", &AnchorProfile::positiveRegime)
       .def_readonly("frame_gram_residual", &AnchorProfile::frameGramResidual)
@@ -1695,6 +1755,13 @@ the emergence objective; contains no transport code.)doc")
       .def("weights", &ColorAnchor::weights, "The declared convex weights.")
       .def("weightingId", &ColorAnchor::weightingId,
            "'uniform' or 'declared'.")
+      .def("overlapsAnother", &ColorAnchor::overlapsAnother, py::arg("index"),
+           "Whether declared triangle `index` shares a boundary EDGE with "
+           "another declared triangle -- the overlap relation the "
+           "determinant-phase coherence is recorded on.")
+      .def("overlappingTriangleCount", &ColorAnchor::overlappingTriangleCount,
+           "How many declared triangles overlap another (0 on a disjoint "
+           "atlas, where the coherence is UNKNOWN).")
       .def("sealed", &ColorAnchor::sealed,
            "True once any data have been evaluated (weighting sealed).")
       .def("declareWeights", &ColorAnchor::declareWeights, py::arg("weights"),
@@ -2110,13 +2177,13 @@ lift path.)doc")
                     &FiberTransportRead::fromPositiveSignature)
       .def_readonly("fromNegativeSignature",
                     &FiberTransportRead::fromNegativeSignature)
-      .def_readonly("toConditionNumber",
-                    &FiberTransportRead::toConditionNumber)
-      .def_readonly("fromConditionNumber",
-                    &FiberTransportRead::fromConditionNumber)
+      .def_readonly("toProjectorNorm", &FiberTransportRead::toProjectorNorm)
+      .def_readonly("fromProjectorNorm",
+                    &FiberTransportRead::fromProjectorNorm)
       .def_readonly("frameConditionNumber",
                     &FiberTransportRead::frameConditionNumber,
-                    "max of the endpoint condition numbers (spec 6.6).")
+                    "max of the endpoints' FRAME condition numbers "
+                    "(spec 6.6) -- distinct from the projector norms.")
       .def_readonly("regime", &FiberTransportRead::regime)
       .def_readonly("unitaryMap", &FiberTransportRead::unitaryMap,
                     "The emitted U(r)/pseudo-unitary factor; EMPTY when "
@@ -2449,10 +2516,12 @@ reported, and the whole configuration is echoed on every read
                      "Cap on the worst lifetime transport leakage (#770).")
       .def_readwrite("minPersistenceLifetime",
                      &ParticleClustersConfig::minPersistenceLifetime,
-                     "Minimum #765 persistence lifetime (covered frames).")
+                     "Minimum COBORDISM-FRAME lifetime (the whitepaper's "
+                     "'lifetime across multiple cobordism frames'); the "
+                     "modularity resolution-slice count never gates.")
       .def_readwrite("minPersistenceOverlap",
                      &ParticleClustersConfig::minPersistenceOverlap,
-                     "Minimum adjacent-slice track overlap.")
+                     "Minimum adjacent-FRAME track overlap.")
       .def_readwrite("minLocalization",
                      &ParticleClustersConfig::minLocalization,
                      "Band-localization floor (0 accepts any MEASURED "
@@ -2460,6 +2529,11 @@ reported, and the whole configuration is echoed on every read
       .def_readwrite("minRefinementOverlap",
                      &ParticleClustersConfig::minRefinementOverlap,
                      "Minimum band subspace overlap across a refinement.")
+      .def_readwrite("minStabilityFrames",
+                     &ParticleClustersConfig::minStabilityFrames,
+                     "Frames a 'stable' quark condition must hold at (the "
+                     "whitepaper's conditions two and three are "
+                     "across-frame statements).")
       .def_readwrite("doubletOverlapThreshold",
                      &ParticleClustersConfig::doubletOverlapThreshold,
                      "Subspace-overlap threshold of the doublet tracking.")
@@ -2608,8 +2682,16 @@ fails by name, never presumed to pass.)doc")
       .def_readwrite("colorBand", &QuarkCandidateEvidence::colorBand,
                      "The selected #769 band (rank is read, never "
                      "requested).")
+      .def_readwrite("colorBandFrames",
+                     &QuarkCandidateEvidence::colorBandFrames,
+                     "The band AT EACH cobordism frame -- whitepaper quark "
+                     "condition two ('STABLE rank three') is decided here.")
       .def_readwrite("anchor", &QuarkCandidateEvidence::anchor,
                      "#767 calibrated anchor profile of the band.")
+      .def_readwrite("anchorFrames", &QuarkCandidateEvidence::anchorFrames,
+                     "The anchor profile AT EACH cobordism frame -- "
+                     "whitepaper quark condition three (a STABLE profile "
+                     "and determinant-line coherence) is decided here.")
       .def_readwrite("lifetimeTransports",
                      &QuarkCandidateEvidence::lifetimeTransports,
                      "#770 world-tube transports (all must be accepted).")
@@ -2624,10 +2706,20 @@ fails by name, never presumed to pass.)doc")
                      "#780 CovarianceState.wickTotalNumber.")
       .def_readwrite("persistenceLifetime",
                      &QuarkCandidateEvidence::persistenceLifetime,
-                     "#765 track lifetime (NaN = missing).")
+                     "#765 modularity RESOLUTION-slice lifetime "
+                     "(REPORT-ONLY; NaN = missing).")
       .def_readwrite("persistenceMinOverlap",
                      &QuarkCandidateEvidence::persistenceMinOverlap,
-                     "#765 smallest adjacent-slice overlap.")
+                     "#765 smallest adjacent-SLICE overlap (REPORT-ONLY).")
+      .def_readwrite("frameLifetime",
+                     &QuarkCandidateEvidence::frameLifetime,
+                     "COBORDISM-FRAME lifetime "
+                     "(PersistentModularity.trackAcrossFrames) -- THE gated "
+                     "persistence quantity.")
+      .def_readwrite("frameMinOverlap",
+                     &QuarkCandidateEvidence::frameMinOverlap,
+                     "Smallest adjacent-FRAME support overlap -- the gated "
+                     "predecessor/successor overlap.")
       .def_readwrite("refinementOverlap",
                      &QuarkCandidateEvidence::refinementOverlap,
                      "Band subspace overlap across a refinement "
@@ -2692,10 +2784,23 @@ certificate does; quark-ness additionally needs |nu| = 1.)doc")
       .def_readonly("occupationTotal", &QuarkRead::occupationTotal)
       .def_readonly("transportCount", &QuarkRead::transportCount)
       .def_readonly("transportLeakageMax", &QuarkRead::transportLeakageMax)
-      .def_readonly("persistenceLifetime", &QuarkRead::persistenceLifetime)
+      .def_readonly("persistenceLifetime", &QuarkRead::persistenceLifetime,
+                    "Modularity RESOLUTION-slice lifetime (reported).")
       .def_readonly("persistenceMinOverlap",
                     &QuarkRead::persistenceMinOverlap)
+      .def_readonly("frameLifetime", &QuarkRead::frameLifetime,
+                    "COBORDISM-FRAME lifetime (the gated quantity).")
+      .def_readonly("frameMinOverlap", &QuarkRead::frameMinOverlap)
+      .def_readonly("stabilityFrames", &QuarkRead::stabilityFrames,
+                    "Frames the stability certificates were measured over.")
+      .def_readonly("anchorScoreSpread", &QuarkRead::anchorScoreSpread)
+      .def_readonly("anchorCoherenceSpread",
+                    &QuarkRead::anchorCoherenceSpread)
+      .def_readonly("bandContinuationOverlap",
+                    &QuarkRead::bandContinuationOverlap)
       .def_readonly("localization", &QuarkRead::localization)
+      .def_readonly("localizationSupportFraction",
+                    &QuarkRead::localizationSupportFraction)
       .def_readonly("refinementOverlap", &QuarkRead::refinementOverlap)
       .def_readonly("udIdentificationProposed",
                     &QuarkRead::udIdentificationProposed,
@@ -2830,7 +2935,10 @@ lifetime.  Missing evidence fails its certificate BY NAME.)doc")
                      "zero-baryon-flux evidence.")
       .def_readwrite("persistenceLifetime",
                      &GluonCandidateEvidence::persistenceLifetime,
-                     "#765 track lifetime (NaN = missing).");
+                     "Modularity RESOLUTION-slice lifetime (REPORT-ONLY).")
+      .def_readwrite("frameLifetime",
+                     &GluonCandidateEvidence::frameLifetime,
+                     "COBORDISM-FRAME lifetime -- the gated quantity.");
 
   py::class_<GluonRead>(m, "GluonRead",
       R"doc(The #774 gluon-candidate read: a persistent transported octet
@@ -2868,7 +2976,10 @@ every gap is NAMED in failedCertificates ("parity-even",
                     "zero by default.")
       .def_readonly("transportCount", &GluonRead::transportCount)
       .def_readonly("transportLeakageMax", &GluonRead::transportLeakageMax)
-      .def_readonly("persistenceLifetime", &GluonRead::persistenceLifetime)
+      .def_readonly("persistenceLifetime", &GluonRead::persistenceLifetime,
+                    "Modularity RESOLUTION-slice lifetime (reported).")
+      .def_readonly("frameLifetime", &GluonRead::frameLifetime,
+                    "COBORDISM-FRAME lifetime (the gated quantity).")
       .def_readonly("confidence", &GluonRead::confidence,
                     "Passed fraction of the six gluon certificates.")
       .def_readonly("failedCertificates", &GluonRead::failedCertificates)
@@ -3107,7 +3218,23 @@ transform of a charge density is computed anywhere in this tree.)doc")
                      &ScaleProfileSample::radialWeightProfile,
                      "Per-shell curvature-weight shares, shell ascending "
                      "(dimensionless); empty = no shell seeds, profile "
-                     "UNKNOWN.");
+                     "UNKNOWN.")
+      .def_readwrite("colorGramDeterminant",
+                     &ScaleProfileSample::colorGramDeterminant,
+                     "det(C^dag C) at this refinement.")
+      .def_readwrite("rotationCharacter",
+                     &ScaleProfileSample::rotationCharacter,
+                     "The #772 2pi rotation character at this refinement.")
+      .def_readwrite("baryonFlux", &ScaleProfileSample::baryonFlux,
+                     "B = nu/3 at this refinement.")
+      .def_readwrite("electricFlux", &ScaleProfileSample::electricFlux,
+                     "Summed certified Gauss flux at this refinement.")
+      .def_readwrite("compositeParity",
+                     &ScaleProfileSample::compositeParity,
+                     "-1 odd / +1 even / 0 unknown at this refinement "
+                     "(an INTEGER channel: stability is exact equality).")
+      .def_readwrite("anchorScore", &ScaleProfileSample::anchorScore,
+                     "Worst constituent anchor score at this refinement.");
 
   py::class_<ScaleProfileRead>(m, "ScaleProfileRead",
       R"doc(The #775 refinement-window certificate: a FINITE emergent
@@ -3135,6 +3262,24 @@ vocabulary: "refinement-window", "finite-radius",
                     "Max absolute per-shell deviation across the window; "
                     "NaN = unknown, never zero.")
       .def_readonly("profileShells", &ScaleProfileRead::profileShells)
+      .def_readonly("colorGramDeterminant",
+                    &ScaleProfileRead::colorGramDeterminant)
+      .def_readonly("colorGramSpread", &ScaleProfileRead::colorGramSpread)
+      .def_readonly("rotationCharacter",
+                    &ScaleProfileRead::rotationCharacter)
+      .def_readonly("rotationCharacterSpread",
+                    &ScaleProfileRead::rotationCharacterSpread)
+      .def_readonly("baryonFlux", &ScaleProfileRead::baryonFlux)
+      .def_readonly("baryonFluxSpread", &ScaleProfileRead::baryonFluxSpread)
+      .def_readonly("electricFlux", &ScaleProfileRead::electricFlux)
+      .def_readonly("electricFluxSpread",
+                    &ScaleProfileRead::electricFluxSpread)
+      .def_readonly("compositeParity", &ScaleProfileRead::compositeParity)
+      .def_readonly("compositeParityStable",
+                    &ScaleProfileRead::compositeParityStable)
+      .def_readonly("anchorScore", &ScaleProfileRead::anchorScore)
+      .def_readonly("anchorScoreSpread",
+                    &ScaleProfileRead::anchorScoreSpread)
       .def_readonly("physicalMass", &ScaleProfileRead::physicalMass,
                     "ALWAYS None: unknown until a physical scale is "
                     "independently established.")

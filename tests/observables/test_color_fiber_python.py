@@ -129,15 +129,30 @@ def ref_anchor_terms(frame, edge_weights, triangles):
     return np.array(terms), np.array(phases)
 
 
+def ref_overlapping(triangles):
+    """Which declared triangles SHARE A BOUNDARY EDGE with another declared
+    triangle -- the overlap relation the determinant-phase coherence is
+    recorded on (#808).  An OrientedTriangle names only its three edge rows,
+    so shared-edge is the only sharing relation the atlas determines."""
+    mask = np.zeros(len(triangles), dtype=bool)
+    for i, (edges_i, _s) in enumerate(triangles):
+        for j, (edges_j, _t) in enumerate(triangles):
+            if i != j and set(edges_i) & set(edges_j):
+                mask[i] = True
+                break
+    return mask
+
+
 def ref_profile(frame, edge_weights, triangles, weights):
-    """Standalone NumPy score / participation ratio / phase coherence."""
+    """Standalone NumPy score / participation ratio / phase coherence.  The
+    coherence runs only over triangles that genuinely overlap (#808)."""
     terms, phases = ref_anchor_terms(frame, edge_weights, triangles)
     w = np.asarray(weights, dtype=float)
     score = float(np.sum(w * terms))
     sum_t, sum_t2 = float(np.sum(terms)), float(np.sum(terms**2))
     pr = (sum_t * sum_t / sum_t2) if sum_t2 > 0 else 0.0
     u = w * terms
-    mask = terms > 0
+    mask = (terms > 0) & ref_overlapping(triangles)
     if np.sum(u[mask]) > 0:
         coherence = abs(np.sum(u[mask] * np.exp(1j * phases[mask]))) / float(
             np.sum(u[mask]))
@@ -1526,6 +1541,105 @@ class TestAdjointTransformation(unittest.TestCase):
             self.assertLessEqual(
                 np.max(np.abs(conn.adjointRepresentation(omega * g) - ad)),
                 1e-12)
+
+
+# ─── #808: the coherence is an OVERLAP datum ───────────────────────────────
+
+class TestAnchorOverlapCoherence(unittest.TestCase):
+    """The whitepaper and the header both say the determinant-phase
+    coherence is recorded on OVERLAPPING oriented triangles.  The resultant
+    is restricted to triangles that genuinely share a boundary edge with
+    another declared triangle -- the only sharing relation an
+    OrientedTriangle atlas determines."""
+
+    def _band(self, seed, n_edges, w):
+        rng = np.random.default_rng(seed)
+        return orthonormal_band(rng, n_edges, w)
+
+    def test_a_disjoint_atlas_reports_no_overlap_coherence(self):
+        # Two triangles on DISJOINT edge rows, both with a nonzero
+        # determinant: nothing overlaps, so there is no overlap datum and
+        # the coherence is UNKNOWN (NaN), never a value with no overlap
+        # content behind it.
+        w = np.array([1.3, 0.7, 1.1, 0.9, 1.7, 0.5])
+        phi = self._band(11, 6, w)
+        anchor = ColorAnchor([OrientedTriangle([0, 1, 2], [1, 1, 1]),
+                              OrientedTriangle([3, 4, 5], [1, 1, 1])])
+        p = anchor.evaluate(phi, w)
+        self.assertGreater(p.terms[0], 0.0)
+        self.assertGreater(p.terms[1], 0.0)
+        for phase in p.det_phases:
+            self.assertFalse(math.isnan(phase))
+        self.assertEqual(p.overlapping_triangles, 0)
+        self.assertEqual(p.overlap_relation, "shared-edge")
+        self.assertTrue(math.isnan(p.phase_coherence))
+        self.assertTrue(math.isnan(p.phase_dispersion))
+        self.assertEqual(anchor.overlappingTriangleCount(), 0)
+        self.assertFalse(anchor.overlapsAnother(0))
+        self.assertFalse(anchor.overlapsAnother(1))
+
+    def test_a_single_triangle_atlas_has_nothing_to_overlap(self):
+        w = np.array([1.3, 0.7, 1.1])
+        phi = self._band(12, 3, w)
+        p = ColorAnchor([OrientedTriangle([0, 1, 2], [1, 1, 1])]).evaluate(
+            phi, w)
+        self.assertAlmostEqual(p.score, 1.0, delta=1e-12)
+        self.assertEqual(p.overlapping_triangles, 0)
+        self.assertTrue(math.isnan(p.phase_coherence))
+
+    def test_an_edge_sharing_atlas_carries_the_coherence(self):
+        w = np.array([1.3, 0.7, 1.1, 0.9])
+        phi = self._band(13, 4, w)
+        tri_spec = [((0, 1, 2), (1, 1, 1)), ((0, 1, 3), (1, 1, 1))]
+        anchor = ColorAnchor([OrientedTriangle(list(e), list(s))
+                              for e, s in tri_spec])
+        p = anchor.evaluate(phi, w)
+        self.assertEqual(p.overlapping_triangles, 2)
+        self.assertTrue(anchor.overlapsAnother(0))
+        self.assertTrue(anchor.overlapsAnother(1))
+        _score, _terms, _pr, _phases, coherence = ref_profile(
+            phi, w, tri_spec, [0.5, 0.5])
+        self.assertFalse(math.isnan(p.phase_coherence))
+        self.assertLessEqual(abs(p.phase_coherence - coherence), 1e-10)
+
+    def test_an_isolated_face_does_not_vote_on_the_coherence(self):
+        # A mixed atlas: two edge-sharing triangles plus one on disjoint
+        # rows.  The isolated face still reports its own term and phase, but
+        # it has no overlap partner and therefore no say in the coherence.
+        w = np.array([1.3, 0.7, 1.1, 0.9, 1.7, 0.5, 1.2])
+        phi = self._band(14, 7, w)
+        shared = [((0, 1, 2), (1, 1, 1)), ((0, 1, 3), (1, 1, 1))]
+        mixed = shared + [((4, 5, 6), (1, 1, 1))]
+        conv = [0.4, 0.4, 0.2]
+        anchor = ColorAnchor([OrientedTriangle(list(e), list(s))
+                              for e, s in mixed], conv)
+        p = anchor.evaluate(phi, w)
+        self.assertEqual(p.overlapping_triangles, 2)
+        self.assertGreater(p.terms[2], 0.0)          # measured ...
+        self.assertFalse(math.isnan(p.det_phases[2]))  # ... and reported
+        # the coherence equals the two-triangle overlap resultant exactly
+        _s, _t, _pr, _ph, restricted = ref_profile(phi, w, shared, conv[:2])
+        self.assertLessEqual(abs(p.phase_coherence - restricted), 1e-10)
+        # ... and NOT the global resultant over all three declared faces
+        terms, phases = ref_anchor_terms(phi, w, mixed)
+        u = np.asarray(conv) * terms
+        global_resultant = abs(np.sum(u * np.exp(1j * phases))) / float(
+            np.sum(u))
+        self.assertGreater(abs(p.phase_coherence - global_resultant), 1e-6)
+
+    def test_the_overlap_set_is_declared_before_any_datum_is_examined(self):
+        # The relation is a property of the DECLARED atlas: it is available
+        # before evaluate() and does not change when the data arrive.
+        anchor = ColorAnchor([OrientedTriangle([0, 1, 2], [1, 1, 1]),
+                              OrientedTriangle([2, 3, 4], [1, 1, 1]),
+                              OrientedTriangle([5, 6, 7], [1, 1, 1])])
+        self.assertEqual(anchor.overlappingTriangleCount(), 2)
+        self.assertTrue(anchor.overlapsAnother(0))
+        self.assertTrue(anchor.overlapsAnother(1))
+        self.assertFalse(anchor.overlapsAnother(2))
+        w = np.full(8, 1.1)
+        p = anchor.evaluate(self._band(15, 8, w), w)
+        self.assertEqual(p.overlapping_triangles, 2)
 
 
 if __name__ == "__main__":

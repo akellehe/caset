@@ -59,9 +59,14 @@ Eigen::MatrixXcd signatureMatrix(int p, int q) {
   return j;
 }
 
-/// min(lowerGap, upperGap) with NaN propagation (an UNKNOWN side stays
-/// unknown — it is never reported as infinitely isolated).
+/// The band's isolation: its separation from the nearest DISCARDED
+/// eigenvalue in the complex plane (#808), NOT the sort-order neighbour
+/// distance.  A schema-1 certificate that predates that measurement falls
+/// back to min(lowerGap, upperGap) with NaN propagation (an UNKNOWN side
+/// stays unknown — it is never reported as infinitely isolated).
 double isolationGap(const SpectralBandCertificate &c) {
+  if (!std::isnan(c.nearestDiscardedSeparation))
+    return c.nearestDiscardedSeparation;
   if (std::isnan(c.lowerGap) || std::isnan(c.upperGap)) return kNaN;
   return std::min(c.lowerGap, c.upperGap);
 }
@@ -154,7 +159,12 @@ double fmaxAccumulate(double acc, double value) { return std::fmax(acc, value); 
 // file-local copy; consolidating these next to Certificate/Record is a noted
 // follow-up), so `transports` checkpoint entries stay uniform.
 
-constexpr int kRecordSchemaVersion = 1;
+// Schema 2 (#808) renames the endpoint `*_condition_number` leaves to
+// `*_projector_norm` (they always carried ||P||_2) and fills
+// `frame_condition_number` with the endpoints' own FRAME conditioning.
+// Schema 1 stays readable: its endpoint leaves are read under the old names.
+constexpr int kRecordSchemaVersion = 2;
+constexpr int kOldestReadableRecordSchema = 1;
 
 std::string regimeName(CertificateRegime regime) {
   switch (regime) {
@@ -273,7 +283,10 @@ Eigen::MatrixXcd matrixFromRecord(const Record::Map &m,
 void requireSchema(const Record::Map &m, const char *type) {
   const auto version = m.find("schema_version");
   if (version == m.end() ||
-      version->second.asInt() != static_cast<std::int64_t>(kRecordSchemaVersion))
+      version->second.asInt() <
+          static_cast<std::int64_t>(kOldestReadableRecordSchema) ||
+      version->second.asInt() >
+          static_cast<std::int64_t>(kRecordSchemaVersion))
     throw std::invalid_argument(
         "FiberConnection: unknown schema_version (reader rejects unknown "
         "checkpoint schemas)");
@@ -335,8 +348,8 @@ Record FiberTransportRead::toRecord() const {
   m["to_negative_signature"] = Record(toNegativeSignature);
   m["from_positive_signature"] = Record(fromPositiveSignature);
   m["from_negative_signature"] = Record(fromNegativeSignature);
-  m["to_condition_number"] = Record(toConditionNumber);
-  m["from_condition_number"] = Record(fromConditionNumber);
+  m["to_projector_norm"] = Record(toProjectorNorm);
+  m["from_projector_norm"] = Record(fromProjectorNorm);
   m["frame_condition_number"] = Record(frameConditionNumber);
   m["regime"] = Record(regimeName(regime));
   matrixToRecord(m, "unitary_map", unitaryMap);
@@ -374,8 +387,12 @@ FiberTransportRead FiberTransportRead::fromRecord(const Record &record) {
       static_cast<int>(m.at("from_positive_signature").asInt());
   read.fromNegativeSignature =
       static_cast<int>(m.at("from_negative_signature").asInt());
-  read.toConditionNumber = m.at("to_condition_number").asDouble();
-  read.fromConditionNumber = m.at("from_condition_number").asDouble();
+  read.toProjectorNorm = m.count("to_projector_norm")
+                             ? m.at("to_projector_norm").asDouble()
+                             : m.at("to_condition_number").asDouble();
+  read.fromProjectorNorm = m.count("from_projector_norm")
+                               ? m.at("from_projector_norm").asDouble()
+                               : m.at("from_condition_number").asDouble();
   read.frameConditionNumber = m.at("frame_condition_number").asDouble();
   read.regime = regimeFromName(m.at("regime").asString());
   read.unitaryMap = matrixFromRecord(m, "unitary_map");
@@ -679,10 +696,12 @@ FiberTransportRead FiberConnection::deriveTransport(
   read.toNegativeSignature = certTo.negativeSignature;
   read.fromPositiveSignature = certFrom.positiveSignature;
   read.fromNegativeSignature = certFrom.negativeSignature;
-  read.toConditionNumber = certTo.conditionNumber;
-  read.fromConditionNumber = certFrom.conditionNumber;
+  read.toProjectorNorm = certTo.projectorNorm;
+  read.fromProjectorNorm = certFrom.projectorNorm;
+  // The FRAME condition number is the endpoints' own frame conditioning
+  // (#808) — a different quantity from the projector norms above.
   read.frameConditionNumber =
-      std::fmax(certTo.conditionNumber, certFrom.conditionNumber);
+      std::fmax(certTo.frameConditionNumber, certFrom.frameConditionNumber);
   read.regime = pairedRegime(certTo.certificate.regime(),
                              certFrom.certificate.regime());
   const bool nonNormal = read.regime == CertificateRegime::NonNormal;
@@ -756,9 +775,9 @@ FiberTransportRead FiberConnection::deriveTransport(
       !(read.toGap >= cfg_.minEndpointGap &&
         read.fromGap >= cfg_.minEndpointGap))
     return reject("endpoint band gap below the configured floor");
-  if (!(certTo.conditionNumber <= cfg_.conditionNumberCap) ||
-      !(certFrom.conditionNumber <= cfg_.conditionNumberCap))
-    return reject("endpoint frame conditioning above the cap");
+  if (!(certTo.projectorNorm <= cfg_.conditionNumberCap) ||
+      !(certFrom.projectorNorm <= cfg_.conditionNumberCap))
+    return reject("endpoint projector conditioning above the cap");
   if (read.numericalRank < read.rank) return reject("rank-deficient overlap");
   if (!(read.overlapConditionNumber <= cfg_.conditionNumberCap))
     return reject("ill-conditioned overlap");

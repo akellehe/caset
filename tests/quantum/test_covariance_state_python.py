@@ -905,9 +905,20 @@ class TestInvariances(unittest.TestCase):
 class TestBandProjectorInitialization(unittest.TestCase):
     """Gamma = P consumes real SpectralFiberTracker projector output."""
 
+    @staticmethod
+    def _tracker(st):
+        # The two-triangle fixture is vertex-transitive, so every band is
+        # perfectly delocalized and fails the #808 localization conjunct.
+        # The subject here is the COVARIANCE built from a band projector, so
+        # the analysis declares the permissive cap, which accepts any
+        # MEASURED localization.
+        cfg = obs.SpectralFiberConfig()
+        cfg.maxLocalizationExcess = 1.0
+        return obs.SpectralFiberTracker(st, cfg)
+
     def test_accepted_band_projector_is_a_slater_covariance(self) -> None:
         st = spacetime_two_triangles()
-        tracker = obs.SpectralFiberTracker(st)
+        tracker = self._tracker(st)
         read = tracker.enumerateBands([0, 1, 2], 0)
         accepted = [f for f in read.fibers if f.accepted()]
         self.assertGreater(len(accepted), 0)
@@ -929,7 +940,7 @@ class TestBandProjectorInitialization(unittest.TestCase):
         # six vertices: rank 2 (one harmonic per component) — Gamma = P
         # carries <N> = 2 and parity +1.
         st = spacetime_two_triangles()
-        tracker = obs.SpectralFiberTracker(st)
+        tracker = self._tracker(st)
         read = tracker.enumerateBands([0, 1, 2, 10, 11, 12], 0)
         zero_band = read.fibers[0]
         self.assertEqual(zero_band.rank(), 2)

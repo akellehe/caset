@@ -279,8 +279,10 @@ DECLARED_EXACT_TOLERANCE = 1e-12
 #: Certificate gates, in the exact order `ParticleClusters` evaluates them.
 #: `failedCertificates[0]` is therefore the FIRST failing certificate.
 QUARK_GATE_ORDER = (
-    "persistence", "parity-odd", "occupation-one", "color-rank-three",
-    "anchor", "transport-leakage", "winding", "winding-unit",
+    "persistence", "localization", "parity-odd", "occupation-one",
+    "color-rank-three", "color-rank-stability", "anchor",
+    "anchor-stability", "transport-leakage", "winding", "winding-unit",
+    "refinement-stability",
 )
 BARYON_GATE_ORDER = (
     "constituent-quarks", "bound-supercomponent", "color-singlet",
@@ -687,13 +689,13 @@ class RecursiveReadout:
                                     if t["read"].accepted]
 
     def _persistence_of(self, component_id):
-        """Persistence at the ANALYSIS resolution — the overlay's own rule.
+        """The modularity RESOLUTION-slice lifetime of a component.
 
-        With a single resolution the lifetime is identically 1, so
-        `persistence` is the first failing certificate for STRUCTURAL
-        reasons (#777 §4). That is a property of the measurement and is
-        recorded as such: the SCAN pass, where persistence is reachable, is
-        checkpointed separately and reported beside this one.
+        REPORT-ONLY since #808: the `persistence` certificate is gated on
+        the COBORDISM-FRAME lifetime, so a resolution-slice count — which is
+        identically 1 at a single resolution — can no longer make the gate
+        structurally unpassable, and a modularity read can no longer veto an
+        otherwise certified fiber.
         """
         lifetime, overlap = None, None
         for track in self.report.tracks:
@@ -720,6 +722,13 @@ class RecursiveReadout:
             if lifetime is not None:
                 evidence.persistenceLifetime = lifetime
                 evidence.persistenceMinOverlap = overlap
+            # This overlay reads ONE cobordism frame, so the frame lifetime
+            # is one and its adjacent-frame overlap is vacuously one.  Both
+            # are MEASURED facts about this read: `persistence` fails
+            # because the candidate was seen in a single frame, which is a
+            # statement about the evidence, not about the measurement.
+            evidence.frameLifetime = 1.0
+            evidence.frameMinOverlap = 1.0
             self.quarks.append(self.classifier.classifyQuark(evidence))
             self.quark_band.append(index)
 
@@ -1208,7 +1217,13 @@ def fibers_block(readout, sidecar):
                 "gram_defect": _finite(certificate.gramDefect),
                 "eigen_residual": _finite(certificate.eigenResidual),
                 "projector_residual": _finite(certificate.projectorResidual),
-                "condition_number": _finite(certificate.conditionNumber),
+                "nearest_discarded_separation": _finite(
+                    certificate.nearestDiscardedSeparation),
+                "localization_excess": _finite(
+                    certificate.localizationExcess),
+                "projector_norm": _finite(certificate.projectorNorm),
+                "frame_condition_number": _finite(
+                    certificate.frameConditionNumber),
                 "self_adjoint": bool(certificate.selfAdjoint),
                 "krein_positive": int(certificate.positiveSignature),
                 "krein_negative": int(certificate.negativeSignature),
@@ -1492,6 +1507,7 @@ def particles_block(readout, checkpoint):
             "transport_count": int(read.transportCount),
             "transport_leakage_max": _finite(read.transportLeakageMax),
             "persistence_lifetime": _finite(read.persistenceLifetime),
+            "frame_lifetime": _finite(read.frameLifetime),
             "localization": _finite(read.localization),
             "failed_certificates": list(read.failedCertificates),
         })
@@ -1643,14 +1659,18 @@ def _synthetic_unit_fiber(base_id, rank):
 
     right = np.eye(rank, dtype=complex)
     record = {
-        "schema_version": 1, "record_type": "spectral_fiber",
+        "schema_version": 2, "record_type": "spectral_fiber",
         "cells": [[base_id + i] for i in range(rank)],
         "rows": rank, "rank": rank,
         "certificate": {
             "degree": 1, "rank": rank, "lower_gap": 1.0, "upper_gap": 1.0,
             "localization": 0.5, "projector_residual": 1e-16,
             "eigen_residual": 1e-16, "left_residual": 1e-16,
-            "gram_defect": 0.0, "condition_number": 1.0,
+            "gram_defect": 0.0, "projector_norm": 1.0,
+            "frame_condition_number": 1.0,
+            "nearest_discarded_separation": 1.0,
+            "localization_support_fraction": 0.5,
+            "localization_excess": 0.0,
             "positive_signature": rank, "negative_signature": 0,
             "frequency_lower": 0.0, "frequency_upper": 2.0,
             "self_adjoint": True, "accepted": True,
