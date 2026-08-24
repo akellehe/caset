@@ -92,7 +92,8 @@ class DriveTest(unittest.TestCase):
         layer = ea._hop_layers(host, ea.boundary_vertices(host))
         timelike = 0
         for edge in host.getEdgeList().toVector():
-            a, b = int(edge.getKey()[0]), int(edge.getKey()[1])
+            a = int(edge.getSource().getId())
+            b = int(edge.getTarget().getId())
             if edge.isTimelike():
                 timelike += 1
                 self.assertNotEqual(layer.get(a, 0), layer.get(b, 0))

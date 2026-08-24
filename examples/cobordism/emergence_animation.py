@@ -142,7 +142,8 @@ def _hop_layers(spacetime, sources):
     frontier = list(sources)
     adjacency = {}
     for edge in spacetime.getEdgeList().toVector():
-        a, b = int(edge.getKey()[0]), int(edge.getKey()[1])
+        a = int(edge.getSource().getId())
+        b = int(edge.getTarget().getId())
         adjacency.setdefault(a, set()).add(b)
         adjacency.setdefault(b, set()).add(a)
     depth = 0
@@ -192,7 +193,8 @@ def build_cobordism_host(n_refine=DECLARED_SIZE, seed=DECLARED_HOST_SEED):
             break
     layer = _hop_layers(st, boundary_vertices(st))
     for index, edge in enumerate(st.getEdgeList().toVector()):
-        a, b = int(edge.getKey()[0]), int(edge.getKey()[1])
+        a = int(edge.getSource().getId())
+        b = int(edge.getTarget().getId())
         magnitude = 1.0 + 0.01 * (index % 6)
         spans_layers = layer.get(a, 0) != layer.get(b, 0)
         # Timelike edges carry l^2 < 0, so the length is imaginary; the
@@ -739,10 +741,7 @@ def drive(config, progress=False):
     # objective is set, so the bulk objective scores the whole cobordism
     # including M0 and the run stays bit-identical to an unpinned one in
     # everything except which coordinates are free.
-    region = MC.PinnedRegion()
-    region.name = M0_REGION
-    region.vertices = set(boundary_vertices(host))
-    node.declare_pinned_region(region)
+    node.declare_pinned_region(M0_REGION, set(boundary_vertices(host)))
 
     frames = [EmergenceFrame(node, host, 0, config)]
     if progress:
