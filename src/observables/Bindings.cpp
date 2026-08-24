@@ -583,8 +583,9 @@ no recomputation.)doc");
                      "deviation on the certificate.");
 
   py::class_<SpectralBandCertificate>(m, "SpectralBandCertificate",
-      R"doc(Certification record of one whole spectral band: degree, rank, lower/upper gap, localization (projector-
-diagonal inverse participation ratio), projector/eigen/left residuals,
+      R"doc(Certification record of one whole spectral band: degree, rank,
+lower/upper gap, localization (projector-diagonal inverse participation
+ratio), projector/eigen/left residuals,
 weighted Gram/signature defect ||Phi^dagger W Phi - J||, band condition
 number ||P||_2, Krein inertia (p, q), frequency window, self-adjointness
 flag, and the graded #764 Certificate (BandWindow domain; an uncertified
@@ -2172,7 +2173,8 @@ polar normalization never conceals a bad assignment.)doc")
                      "closures.");
 
   py::class_<FiberTransportRead>(m, "FiberTransportRead",
-      R"doc(One derived fiber transport A <- B: the raw overlap M_AB = Phi_A^dagger W_A T_AB Phi_B (Psi_A^dagger on the
+      R"doc(One derived fiber transport A <- B: the raw overlap
+M_AB = Phi_A^dagger W_A T_AB Phi_B (Psi_A^dagger on the
 biorthogonal path), EVERY pre-normalization diagnostic (rank, singular
 values, leakage, endpoint gaps/signatures, frame conditioning), the
 normalized U(r)/pseudo-unitary factor when its gates passed, the
@@ -3534,7 +3536,8 @@ ALWAYS None.)doc")
 
   py::class_<ParticleClusters>(m, "ParticleClusters",
       R"doc(The #773 quark/antiquark classifier over persistent modular
-spectral components (whitepaper "Quarks as modular clusters").  Composes the merged Wave 1/2 certificates -- #765
+spectral components (whitepaper "Quarks as modular clusters").  Composes
+the merged Wave 1/2 certificates -- #765
 persistence, #769 bands/tracking, #767 anchors, #770 transports and
 determinant windings with recorded closures, #780 Wick parity/occupation,
 and the EXISTING Gauss-flux read -- into QuarkReads; its own claim is the
