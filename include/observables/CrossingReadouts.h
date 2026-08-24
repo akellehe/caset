@@ -160,11 +160,22 @@
 #include "observables/Record.h"
 #include "observables/SpectralFiber.h"
 
-namespace tessera::mesh {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+// === cross-subsystem fwd-decls ===
+namespace tessera::spacetime {
 class Spacetime;
 }
 
 namespace tessera::observables {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 /// # CrossingReadoutsConfig
 ///
@@ -240,6 +251,15 @@ struct WorldTubeInput {
   std::string tubeId{};
   /// The tracked band: matched left/right frames, weights, certificate.
   SpectralFiber band{};
+  /// The tube's traversal direction against the temporal function: +1 for a
+  /// future-directed tube, -1 for the REVERSED tube.  This is what makes a
+  /// crossing past-directed: `dtau(e) = orientation * (tau(future) -
+  /// tau(past))`, so reversing a tube flips `sgn pi_perp` and sends
+  /// `B = +1/3` to `B = -1/3`, exactly the orientation reversal the
+  /// whitepaper's quark section describes.  The geometry alone cannot supply
+  /// this sign: `Re tau` increases toward the future everywhere, so a
+  /// past-directed reading is a property of the TUBE, not of the surface.
+  int orientation = +1;
   /// The certified determinant-line winding `nu`; EMPTY when no closure was
   /// certified.  Present values are cross-checked against the crossing sign.
   std::optional<int> determinantWinding{};
@@ -415,7 +435,7 @@ class CrossingReadouts {
     /// certificate and is NAMED.
     /// @throws std::invalid_argument when `spacetime` is null.
     [[nodiscard]] static TemporalFunctionRead temporalFunction(
-        const std::shared_ptr<mesh::Spacetime> &spacetime,
+        const std::shared_ptr<Spacetime> &spacetime,
         const std::vector<std::uint64_t> &m0Vertices,
         const CrossingReadoutsConfig &cfg = {});
 

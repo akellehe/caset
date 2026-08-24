@@ -143,6 +143,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} ParticleClusters.h
 ```
+```{doxygenfile} CrossingReadouts.h
+```
 
 ### Emergent-proton readout battery (#593)
 

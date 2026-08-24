@@ -44,6 +44,7 @@
 #include "observables/ObservableGates.h"
 #include "observables/DualVolumeSigns.h"
 #include "observables/ColorFiber.h"
+#include "observables/CrossingReadouts.h"
 #include "observables/ExchangeHolonomy.h"
 #include "observables/FiberConnection.h"
 #include "observables/ParticleClusters.h"
@@ -3670,4 +3671,214 @@ evidence.)doc")
            "rotation character, the #780 spin reads, the swept "
            "covariance-only class and the refinement window are left "
            "ABSENT, so each gap is NAMED rather than presumed.");
+
+  // ========================================
+  // CrossingReadouts: the whitepaper's world-tube crossing readouts
+  // ========================================
+  py::class_<CrossingReadoutsConfig>(m, "CrossingReadoutsConfig",
+      "Analysis parameters of the world-tube crossing readouts, echoed "
+      "verbatim on every read.  kappaMass is the ONE declared mass "
+      "calibration; while massCalibrated is False the crossing mass is "
+      "reported in UNCALIBRATED units and only ratios are meaningful.")
+      .def(py::init<>())
+      .def_readwrite("kappaMass", &CrossingReadoutsConfig::kappaMass)
+      .def_readwrite("massCalibrated", &CrossingReadoutsConfig::massCalibrated)
+      .def_readwrite("signTolerance", &CrossingReadoutsConfig::signTolerance)
+      .def_readwrite("degeneracyTolerance",
+                     &CrossingReadoutsConfig::degeneracyTolerance)
+      .def_readwrite("monopoleTolerance",
+                     &CrossingReadoutsConfig::monopoleTolerance)
+      .def("toRecord", [](const CrossingReadoutsConfig &self) {
+        return recordToPython(self.toRecord());
+      });
+
+  py::class_<TemporalFunctionRead>(m, "TemporalFunctionRead",
+      "The complex Lorentzian distance tau from the incoming boundary M0, "
+      "with its temporal-function certificate.  tau is intrinsic: it reads "
+      "the 1-skeleton and the stored complex edge lengths, NEVER a vertex "
+      "coordinate.  `certified` is True only when Re tau strictly increases "
+      "along every future-directed causal edge; otherwise every failure is "
+      "NAMED in failedCertificates.")
+      .def(py::init<>())
+      .def_readonly("vertices", &TemporalFunctionRead::vertices)
+      .def_readonly("tau", &TemporalFunctionRead::tau)
+      .def_readonly("layer", &TemporalFunctionRead::layer)
+      .def_readonly("certified", &TemporalFunctionRead::certified)
+      .def_readonly("failedCertificates",
+                    &TemporalFunctionRead::failedCertificates)
+      .def_readonly("minCausalIncrement",
+                    &TemporalFunctionRead::minCausalIncrement)
+      .def_readonly("causalEdgeCount", &TemporalFunctionRead::causalEdgeCount)
+      .def_readonly("unreachableCount",
+                    &TemporalFunctionRead::unreachableCount)
+      .def("at", &TemporalFunctionRead::at, py::arg("vertex"),
+           "tau of one vertex, or NaN when unknown.")
+      .def("toRecord", [](const TemporalFunctionRead &self) {
+        return recordToPython(self.toRecord());
+      });
+
+  py::class_<WorldTubeInput>(m, "WorldTubeInput",
+      "One persistent band tracked across cobordism frames, as the crossing "
+      "readouts consume it.  `orientation` is the tube's traversal direction "
+      "(+1 future-directed, -1 the REVERSED tube): reversing it flips "
+      "sgn(pi_perp) and sends B = +1/3 to B = -1/3.  Only certified quark "
+      "tubes enter the baryon sum; every admissible crossing enters the "
+      "crossing mass.")
+      .def(py::init<>())
+      .def_readwrite("tubeId", &WorldTubeInput::tubeId)
+      .def_readwrite("band", &WorldTubeInput::band)
+      .def_readwrite("orientation", &WorldTubeInput::orientation)
+      .def_readwrite("determinantWinding", &WorldTubeInput::determinantWinding)
+      .def_readwrite("certifiedQuarkTube",
+                     &WorldTubeInput::certifiedQuarkTube);
+
+  py::class_<TubeCrossingRead>(m, "TubeCrossingRead",
+      "One tube's crossing of one level set.  `perpendicular` is the COMPLEX "
+      "pi_perp; `sign` is sgn(Re pi_perp) on an admissible crossing and 0 "
+      "when UNKNOWN (an inadmissible crossing has no sign at all, never a "
+      "silent zero).")
+      .def(py::init<>())
+      .def_readonly("tubeId", &TubeCrossingRead::tubeId)
+      .def_readonly("level", &TubeCrossingRead::level)
+      .def_readonly("crossingEdges", &TubeCrossingRead::crossingEdges)
+      .def_readonly("density", &TubeCrossingRead::density)
+      .def_readonly("perpendicular", &TubeCrossingRead::perpendicular)
+      .def_readonly("sign", &TubeCrossingRead::sign)
+      .def_readonly("admissible", &TubeCrossingRead::admissible)
+      .def_readonly("failedCertificates",
+                    &TubeCrossingRead::failedCertificates)
+      .def("toRecord", [](const TubeCrossingRead &self) {
+        return recordToPython(self.toRecord());
+      });
+
+  py::class_<CrossingMassRead>(m, "CrossingMassRead",
+      "The crossing-mass functional m_x on one level, as the DIFFERENCE "
+      "against the same sum at M0.  Never a dimensionful physical mass while "
+      "`calibrated` is False.")
+      .def(py::init<>())
+      .def_readonly("level", &CrossingMassRead::level)
+      .def_readonly("crossingMass", &CrossingMassRead::crossingMass)
+      .def_readonly("levelSum", &CrossingMassRead::levelSum)
+      .def_readonly("referenceSum", &CrossingMassRead::referenceSum)
+      .def_readonly("kappaMass", &CrossingMassRead::kappaMass)
+      .def_readonly("calibrated", &CrossingMassRead::calibrated)
+      .def_readonly("units", &CrossingMassRead::units)
+      .def_readonly("admissibleCrossings",
+                    &CrossingMassRead::admissibleCrossings)
+      .def_readonly("refusedCrossings", &CrossingMassRead::refusedCrossings)
+      .def("toRecord", [](const CrossingMassRead &self) {
+        return recordToPython(self.toRecord());
+      });
+
+  py::class_<BaryonCrossingRead>(m, "BaryonCrossingRead",
+      "The coherent one-third sum over certified quark tubes, with the "
+      "determinant-line cross-check.  A tube whose crossing sign DISAGREES "
+      "with its certified winding sign is named in signDefects: a defect "
+      "signal, reported and never silently resolved.")
+      .def(py::init<>())
+      .def_readonly("level", &BaryonCrossingRead::level)
+      .def_readonly("baryonNumber", &BaryonCrossingRead::baryonNumber)
+      .def_readonly("levelSum", &BaryonCrossingRead::levelSum)
+      .def_readonly("referenceSum", &BaryonCrossingRead::referenceSum)
+      .def_readonly("quarkTubes", &BaryonCrossingRead::quarkTubes)
+      .def_readonly("signDefects", &BaryonCrossingRead::signDefects)
+      .def_readonly("windingAgreements",
+                    &BaryonCrossingRead::windingAgreements)
+      .def("toRecord", [](const BaryonCrossingRead &self) {
+        return recordToPython(self.toRecord());
+      });
+
+  py::class_<ChargePowerProfileRead>(m, "ChargePowerProfileRead",
+      "The spectral charge-power profile S(lambda) built from the EIGENSPACE "
+      "PROJECTORS of the slice Laplacian (basis- and phase-invariant, "
+      "degeneracies handled).  An INCOHERENT power -- the analogue of a "
+      "structure factor -- and NEVER the electromagnetic form factor.  For a "
+      "neutral system the monopole vanishes, the normalized profile REFUSES "
+      "('neutral-system') and the unnormalized power stays reported.")
+      .def(py::init<>())
+      .def_readonly("level", &ChargePowerProfileRead::level)
+      .def_readonly("eigenvalues", &ChargePowerProfileRead::eigenvalues)
+      .def_readonly("power", &ChargePowerProfileRead::power)
+      .def_readonly("normalizedPower", &ChargePowerProfileRead::normalizedPower)
+      .def_readonly("monopole", &ChargePowerProfileRead::monopole)
+      .def_readonly("normalized", &ChargePowerProfileRead::normalized)
+      .def_readonly("failedCertificates",
+                    &ChargePowerProfileRead::failedCertificates)
+      .def_readonly("sliceNodes", &ChargePowerProfileRead::sliceNodes)
+      .def("toRecord", [](const ChargePowerProfileRead &self) {
+        return recordToPython(self.toRecord());
+      });
+
+  py::class_<ElectromagneticFormFactorRead>(m,
+      "ElectromagneticFormFactorRead",
+      "The CONDITIONAL electromagnetic form factor G_E and the charge "
+      "radius.  This tree certifies neither a conserved U(1) current nor "
+      "momentum-transfer states, so this is a refusal scaffold: `available` "
+      "is False and the radius is UNAVAILABLE with each missing certificate "
+      "NAMED.  The spectral charge-power profile is never substituted.")
+      .def(py::init<>())
+      .def_readonly("available", &ElectromagneticFormFactorRead::available)
+      .def_readonly("chargeRadiusSquared",
+                    &ElectromagneticFormFactorRead::chargeRadiusSquared)
+      .def_readonly("failedCertificates",
+                    &ElectromagneticFormFactorRead::failedCertificates)
+      .def_readonly("note", &ElectromagneticFormFactorRead::note)
+      .def("toRecord", [](const ElectromagneticFormFactorRead &self) {
+        return recordToPython(self.toRecord());
+      });
+
+  py::class_<CrossingReadouts>(m, "CrossingReadouts",
+      "The whitepaper's world-tube crossing readouts (section \"Mass, "
+      "charge, and form factor from world-tube crossings\").  Read-only: no "
+      "solver, no facet materialization, no complex rebuild, and nothing "
+      "here enters any emergence objective.")
+      .def(py::init<>())
+      .def_readonly_static("kSchemaVersion", &CrossingReadouts::kSchemaVersion)
+      .def_static("temporalFunction", &CrossingReadouts::temporalFunction,
+                  py::arg("spacetime"), py::arg("m0Vertices"),
+                  py::arg("cfg") = CrossingReadoutsConfig{},
+                  "The complex Lorentzian distance tau from M0 with its "
+                  "temporal-function certificate.")
+      .def_static("bandEdgeDensity", &CrossingReadouts::bandEdgeDensity,
+                  py::arg("band"),
+                  "The band density mu on the 1-skeleton: the projector "
+                  "diagonal of P = Phi Psi^dagger W carried to edges "
+                  "(gauge-invariant by left/right cancellation).")
+      .def_static("crossing", &CrossingReadouts::crossing, py::arg("tube"),
+                  py::arg("temporal"), py::arg("level"),
+                  py::arg("cfg") = CrossingReadoutsConfig{},
+                  "One tube's crossing of the level Re tau = level.")
+      .def_static("crossingMass", &CrossingReadouts::crossingMass,
+                  py::arg("tubes"), py::arg("temporal"), py::arg("level"),
+                  py::arg("m0Level"),
+                  py::arg("cfg") = CrossingReadoutsConfig{},
+                  "m_x on `level` as the difference against `m0Level`.")
+      .def_static("baryonNumber", &CrossingReadouts::baryonNumber,
+                  py::arg("tubes"), py::arg("temporal"), py::arg("level"),
+                  py::arg("m0Level"),
+                  py::arg("cfg") = CrossingReadoutsConfig{},
+                  "B = (1/3) sum sgn(pi_perp) over certified quark tubes, as "
+                  "the difference against `m0Level`.")
+      .def_static("chargePowerProfile",
+                  &CrossingReadouts::chargePowerProfile, py::arg("tubes"),
+                  py::arg("temporal"), py::arg("level"),
+                  py::arg("cfg") = CrossingReadoutsConfig{},
+                  "The spectral charge-power profile on `level`.")
+      .def_static("formFactor", &CrossingReadouts::formFactor,
+                  py::arg("profile"),
+                  py::arg("cfg") = CrossingReadoutsConfig{},
+                  "The conditional electromagnetic form factor: a refusal "
+                  "scaffold naming the certificates this tree lacks.")
+      .def_static("overlayRecord",
+                  [](const std::vector<WorldTubeInput> &tubes,
+                     const TemporalFunctionRead &temporal, double level,
+                     double m0Level, const CrossingReadoutsConfig &cfg) {
+                    return recordToPython(CrossingReadouts::overlayRecord(
+                        tubes, temporal, level, m0Level, cfg));
+                  },
+                  py::arg("tubes"), py::arg("temporal"), py::arg("level"),
+                  py::arg("m0Level"),
+                  py::arg("cfg") = CrossingReadoutsConfig{},
+                  "Every readout on one level as the versioned overlay "
+                  "block.");
 }
