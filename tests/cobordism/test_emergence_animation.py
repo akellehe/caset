@@ -38,6 +38,7 @@ sys.path.insert(0, os.path.join(
 import emergence_animation as ea  # noqa: E402
 
 cob = T.cobordism
+obs = T.observables
 MC = cob.MultiCobordism
 
 #: The smallest host the driver is meaningful on: a multi-component
@@ -158,11 +159,31 @@ class AbsenceTest(unittest.TestCase):
                     self.assertNotEqual(value.get("reason"), "")
                     self.assertNotIn("value", value)
 
-    def test_the_closed_host_refuses_the_crossing_readouts_by_name(self):
-        """A closed complex has no M0, so tau has no reference surface."""
+    def test_the_crossing_readouts_are_reached_at_all(self):
+        """The host is a cobordism, so tau has a reference surface.
+
+        On a CLOSED complex these readouts are unreachable at any size: tau
+        is the Lorentzian distance FROM M0 and there is no M0 to measure
+        from. The channel may still refuse -- a band that fails positivity
+        supplies no crossing -- but it must refuse for a reason of its own
+        rather than for want of a surface to slice.
+        """
         frame = _frames()[-1]
-        self.assertIsInstance(frame.crossings, ea.Absent)
-        self.assertIn("M0", frame.crossings.reason)
+        if isinstance(frame.crossings, ea.Absent):
+            self.assertNotIn("closed host", frame.crossings.reason)
+            self.assertNotIn("no incoming boundary", frame.crossings.reason)
+            return
+        self.assertIn("level", frame.crossings)
+        self.assertIn("crossings", frame.crossings)
+
+    def test_tau_certifies_on_the_host(self):
+        """`Re tau` is a certified temporal function of the built host."""
+        host = ea.build_cobordism_host(SMALL, ea.DECLARED_HOST_SEED)
+        temporal = obs.CrossingReadouts.temporalFunction(
+            host, ea.boundary_vertices(host))
+        self.assertTrue(temporal.certified,
+                        "; ".join(str(r) for r
+                                  in temporal.failedCertificates))
 
     def test_a_refused_transport_names_why(self):
         frame = _frames()[-1]
