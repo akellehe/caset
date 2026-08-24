@@ -22,8 +22,8 @@ using namespace ::tessera::spacetime;
 ///
 /// The **topology-changing** surgical cone of the Emergent Color Topology epic
 /// (#457, T3) — the genuine `b_k`-hole creator. Pachner moves and the stellar
-/// refinement cone (T1/T2) are topology-**preserving**: none of
-/// the emergent color holes come from them. A *surgical* cone does change the
+/// refinement cone (T1/T2) are topology-**preserving**: no change in `b_k`
+/// comes from them. A *surgical* cone does change the
 /// topology, and is dangerous, so **every** move is gated on the full manifold
 /// check — surgery is allowed *because* it is gated. Bypassing the gate is
 /// exactly what broke the #353 weld; this class never bypasses it.

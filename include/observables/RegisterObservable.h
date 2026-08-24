@@ -82,7 +82,7 @@ class RegisterObservable : public Observable {
     }
 
     // ---- the declarative skip surface ----
-    /// Register holes this observable needs (0 = none).
+    /// Emergent holes this observable's readout needs (0 = none).
     [[nodiscard]] virtual int minHoles() const { return 0; }
     /// The top-cell dimension this observable requires (-1 = any).
     [[nodiscard]] virtual int requiredDimensions() const { return -1; }
@@ -100,9 +100,9 @@ class RegisterObservable : public Observable {
     // ---- the base Observable contract ----
     /// Read a default register (`count=3`, `degree=3`, singlet target) off the
     /// live spacetime and return the headline scalar.
-    /// @throws std::invalid_argument if the spacetime cannot host a 3-hole
-    ///   register (use `compute(ctx)` with an explicit register for sub-3-hole
-    ///   specimens).
+    /// @throws std::invalid_argument if the spacetime does not supply three
+    ///   emergent holes (use `compute(ctx)` with an explicit register for
+    ///   specimens with fewer).
     double compute(const std::shared_ptr<Spacetime> &spacetime) override;
     double update(const std::shared_ptr<Spacetime> &spacetime) override;
 

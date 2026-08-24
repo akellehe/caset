@@ -1245,7 +1245,7 @@ struct ScaleProfileSample {
   /// The per-BFS-shell share of the |Re ε · ★h| curvature weight
   /// (`InteriorHinges::Localization::shellProfile[k].weightShare`), shell
   /// ascending — dimensionless.  Empty when the interior carried no
-  /// shell seeds (no register holes): then the profile is UNKNOWN and the
+  /// shell seeds (no emergent holes): then the profile is UNKNOWN and the
   /// stability certificate fails by name.
   std::vector<double> radialWeightProfile{};
 

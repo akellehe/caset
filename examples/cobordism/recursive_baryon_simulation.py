@@ -844,7 +844,7 @@ class RecursiveReadout:
               "UNSUPPLIED; #777 §9 measured that a declared one-particle "
               "spin convention would dominate them anyway")
 
-        # The mass-radius battery seeds its shells from register holes, and
+        # The mass-radius battery seeds its shells from emergent holes, and
         # the neutral host is built WITHOUT any — a property of the host's
         # construction, not of this run. No `ScaleProfileSample` is supplied
         # and `finite-radius`/`profile-stability` fail by name.

@@ -71,7 +71,7 @@ class PreconeMultiCobordismTest(unittest.TestCase):
     def test_precone_stays_a_valid_manifold_and_contractible(self):
         # Every accepted cone-in passes the dualComplexValid gate, so the grown complex
         # is still a manifold-with-boundary; cone-in caps (never opens) so the 4-ball
-        # stays contractible (Betti [1,0,0,0,0]) — no register hole is created.
+        # stays contractible (Betti [1,0,0,0,0]) — no hole is created.
         mc = self._mc(seed=2, precone=10)
         self.assertTrue(_is_manifold(mc.st))
         self.assertEqual(list(cob.MultiCobordism.betti(mc.st)), [1, 0, 0, 0, 0])

@@ -1259,7 +1259,7 @@ Right -- re-read after each drive call:
       .def("directed_cone_out", &MultiCobordism::directedConeOut,
            py::arg("strategy") = MultiCobordism::HolePlacementStrategy::AdjacentHolesLast,
            py::arg("max_open") = 6,
-           "Directed gated cone-out: deliberately open register holes, keeping the opener "
+           "Directed gated cone-out: deliberately remove top cells, keeping the opener "
            "that most lowers this node's rU (which absorbs r_state). Returns #holes opened.")
       .def("directed_cone_in", &MultiCobordism::directedConeIn, py::arg("max_close") = 6,
            "Directed gated cone-in: select the register by capping the hole whose removal "
@@ -1730,7 +1730,7 @@ A proton is THREE quarks in a colorless bound state, so it is built in TWO steps
   * Step B (formation, a separate 2->1 node): the diquark {1,w} + the third
     quark {w*w} -> the proton {1,w,w*w} (the 3-vector color singlet).
 build() builds the closed-S^4 hosts internally and restarts across distinct
-seeds until step B's proton block carries the singlet with >=3 color holes. The
+seeds until step B's proton block carries the singlet on >=3 emergent holes. The
 accessors lazily trigger build() on first use, so `Proton().block()` just works.
 Observable readers (charge/mass/radius/spin) read OFF block() in their own
 tickets.)doc");
@@ -1754,9 +1754,9 @@ tickets.)doc");
            py::arg("evolve_steps") = 60, py::arg("stage1_candidate_moves") = 8,
            py::arg("stage2_beta") = 1.0,
            py::arg("stage2_max_iters") = 10, py::arg("color_tolerance") = 0.5,
-           py::arg("min_quark_holes") = 3,
+           py::arg("min_emergent_holes") = 3,
            "Restart across seeds until the whole step-B cobordism carries the singlet "
-           "with >= min_quark_holes holes. Each step runs an init pass (grow the "
+           "on >= min_emergent_holes emergent holes. Each step runs an init pass (grow the "
            "boundary until it carries) then an evolution pass (boundary frozen).")
       .def("recombination_node", &Proton::recombinationNode, py::arg("seed"),
            "A fresh, seeded (not-yet-run) Step A node: two neutral q-qbar pairs -> a "
@@ -1776,7 +1776,7 @@ tickets.)doc");
       .def("build_direct", &Proton::buildDirect, py::arg("max_restarts") = 16,
            py::arg("init_steps") = 180, py::arg("evolve_steps") = 60,
            py::arg("stage1_candidate_moves") = 8, py::arg("stage2_beta") = 1.0,
-           py::arg("color_tolerance") = 0.5, py::arg("min_quark_holes") = 3,
+           py::arg("color_tolerance") = 0.5, py::arg("min_emergent_holes") = 3,
            py::call_guard<py::gil_scoped_release>(),
            "EXPERIMENTAL one-step build: drive direct_node (three q-qbar pairs in, the "
            "singlet out) with the combined run() drive -- stage-1 surgery and stage-2 "
@@ -1785,14 +1785,15 @@ tickets.)doc");
            "(diquark_residual stays 0 -- no step A). Shares build()'s once-only latch: "
            "call it BEFORE any accessor triggers the lazy two-step build().")
       .def("converged", &Proton::converged,
-           "True iff step B's proton block carries the singlet with enough holes.")
+           "True iff step B's proton block carries the singlet on enough emergent holes.")
       .def("seed", &Proton::seed, "Base seed of the converged (or best) attempt.")
       .def("spacetime", &Proton::spacetime,
            "Step B's full relaxed closed-S^4 complex.")
       .def("block", &Proton::block,
            "Step B's proton sub-complex, with the relaxed metric copied in.")
-      .def("quark_holes", &Proton::quarkHoles,
-           "The emergent color holes on the proton block (>=3 when converged).")
+      .def("emergent_holes", &Proton::emergentHoles,
+           "The emergent holes on the proton block over which the singlet periods are "
+           "read (>=3 when converged). A topological observable, not a quark count.")
       .def("color_residual", &Proton::colorResidual,
            "Step B's proton singlet r_state (~0 => carried).")
       .def("diquark_residual", &Proton::diquarkResidual,
@@ -1860,7 +1861,7 @@ a diagnostic for comparing against the canonical build's carried level.)doc")
            "The emergent object IS the whole step-B cobordism (parity with "
            "Proton.block).")
       .def("emergent_holes", &ProtonIngredients::emergentHoles,
-           "The emergent register holes on the whole — an observable, not a gate; "
+           "The emergent holes on the whole — an observable, not a gate; "
            "may be any count, including zero.")
       .def("singlet_residual", &ProtonIngredients::singletResidual,
            "DIAGNOSTIC only: the singlet r_state of Proton.singlet() against the "

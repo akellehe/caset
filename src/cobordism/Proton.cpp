@@ -169,7 +169,7 @@ std::shared_ptr<MultiCobordism> Proton::directNode(std::uint64_t seed) const {
 
 void Proton::buildDirect(int maxRestarts, int initSteps, int evolveSteps,
                          int stage1CandidateMoves, double stage2Beta,
-                         double colorTolerance, int minQuarkHoles) {
+                         double colorTolerance, int minEmergentHoles) {
   if (attempted_) return;
   attempted_ = true;
 
@@ -185,7 +185,7 @@ void Proton::buildDirect(int maxRestarts, int initSteps, int evolveSteps,
     // until they carry, then an evolution pass with ∂W frozen. No separate
     // relaxation pass: it is folded into every iteration.
     node->run(initSteps, stage1CandidateMoves, /*growBoundaries=*/true, stage2Beta);
-    if (shouldUseDirectedSurgery_)  // deliberately open the register holes
+    if (shouldUseDirectedSurgery_)  // directed surgery: remove cells / cap facets
       (void)node->directedConeOut();
     node->run(evolveSteps, stage1CandidateMoves, /*growBoundaries=*/false, stage2Beta);
     if (shouldUseDirectedSurgery_)  // select the best register (drop holes that hurt)
@@ -196,7 +196,7 @@ void Proton::buildDirect(int maxRestarts, int initSteps, int evolveSteps,
         whole, registerDegree_, protonSinglet);
     auto holes = MultiCobordism::emergentHoles(*whole, registerDegree_);
     const bool ok = colorR < colorTolerance &&
-                    static_cast<int>(holes.size()) >= minQuarkHoles;
+                    static_cast<int>(holes.size()) >= minEmergentHoles;
 
     // Keep the converged attempt, or the lowest-residual one so far otherwise.
     if (ok || colorR < bestColorResidual) {
@@ -205,7 +205,7 @@ void Proton::buildDirect(int maxRestarts, int initSteps, int evolveSteps,
       convergedSeed_ = seed;
       spacetime_ = whole;
       block_ = whole;  // the proton IS the whole cobordism (read off the whole)
-      quarkHoles_ = std::move(holes);
+      emergentHoles_ = std::move(holes);
       colorResidual_ = colorR;
       diquarkResidual_ = 0.0;  // no step A in the one-step build
     }
@@ -215,7 +215,7 @@ void Proton::buildDirect(int maxRestarts, int initSteps, int evolveSteps,
 
 void Proton::build(int maxRestarts, int initSteps, int evolveSteps,
                    int stage1CandidateMoves, double stage2Beta,
-                   int stage2MaxIters, double colorTolerance, int minQuarkHoles) {
+                   int stage2MaxIters, double colorTolerance, int minEmergentHoles) {
   if (attempted_) return;
   attempted_ = true;
 
@@ -228,7 +228,7 @@ void Proton::build(int maxRestarts, int initSteps, int evolveSteps,
   // same factories the animation drives.)
   const auto runNode = [&](MultiCobordism &node) {
     node.runStage1(initSteps, stage1CandidateMoves, /*growBoundaries=*/true);
-    if (shouldUseDirectedSurgery_)  // deliberately open the register holes
+    if (shouldUseDirectedSurgery_)  // directed surgery: remove cells / cap facets
       (void)node.directedConeOut();
     node.runStage1(evolveSteps, stage1CandidateMoves,
                    /*growBoundaries=*/false);
@@ -256,7 +256,7 @@ void Proton::build(int maxRestarts, int initSteps, int evolveSteps,
         whole, registerDegree_, protonSinglet);
     auto holes = MultiCobordism::emergentHoles(*whole, registerDegree_);
     const bool ok = colorR < colorTolerance &&
-                    static_cast<int>(holes.size()) >= minQuarkHoles;
+                    static_cast<int>(holes.size()) >= minEmergentHoles;
 
     // Keep the converged attempt, or the lowest-residual one so far otherwise.
     if (ok || colorR < bestColorResidual) {
@@ -265,7 +265,7 @@ void Proton::build(int maxRestarts, int initSteps, int evolveSteps,
       convergedSeed_ = seedA;
       spacetime_ = whole;
       block_ = whole;  // the proton IS the whole cobordism (read off the whole)
-      quarkHoles_ = std::move(holes);
+      emergentHoles_ = std::move(holes);
       colorResidual_ = colorR;
       diquarkResidual_ = diquarkR;
     }
@@ -297,9 +297,9 @@ std::shared_ptr<Spacetime> Proton::block() {
   return block_;
 }
 
-std::vector<std::vector<std::uint64_t>> Proton::quarkHoles() {
+std::vector<std::vector<std::uint64_t>> Proton::emergentHoles() {
   ensureBuilt();
-  return quarkHoles_;
+  return emergentHoles_;
 }
 
 double Proton::colorResidual() {

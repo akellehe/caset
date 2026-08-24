@@ -111,7 +111,7 @@ class ProtonIngredients {
   /// The emergent object IS the whole step-B cobordism (API parity with
   /// `Proton::block()`). Triggers `build()`.
   [[nodiscard]] std::shared_ptr<Spacetime> block();
-  /// The emergent `(k+2)`-vertex register holes on the whole — an observable, not a
+  /// The emergent `(k+2)`-vertex holes on the whole — a topological observable, not a
   /// gate; may be any count, including zero. Triggers `build()`.
   [[nodiscard]] std::vector<std::vector<std::uint64_t>> emergentHoles();
   /// **Diagnostic only**: the relabeling-invariant singlet `r_state` of

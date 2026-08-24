@@ -129,7 +129,7 @@ InteriorHinges::InteriorHinges(std::shared_ptr<const Spacetime> spacetime,
     }
   }
 
-  // The BFS shell seeds are the register holes' vertices.
+  // The BFS shell seeds are the selected holes' vertices.
   std::vector<std::uint64_t> holeVertices;
   for (const auto &hole : holes_) {
     for (std::uint64_t v : hole) holeVertices.push_back(v);

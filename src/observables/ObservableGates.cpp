@@ -50,7 +50,7 @@ double ObservableGates::relabelDelta(const RegisterObservable &observable,
     if (it == found.end()) {
       throw std::runtime_error(
           "ObservableGates: the relabeled complex's emergent holes are missing "
-          "the image of a register hole (the gate cannot compare like with "
+          "the image of a selected hole (the gate cannot compare like with "
           "like)");
     }
     holes2.push_back(it->second);

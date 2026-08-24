@@ -36,7 +36,7 @@ class InteriorHinges;  // the shared 4D hinge-selection core (InteriorHinges.h)
 /// # RegisterContext
 ///
 /// The one **validated read context** every emergent-proton observable measures
-/// (#593, part of #559): a converged spacetime, its emergent register holes, the
+/// (#593, part of #559): a converged spacetime, its emergent holes, the
 /// induced-orientation signs, and the shared per-complex caches — composed from the
 /// protected readout cores (`cobordism::EigenstateSynthesis`,
 /// `cobordism::MultiCobordism`, `cobordism::ChainComplex`), never refactoring them.
@@ -53,7 +53,7 @@ class InteriorHinges;  // the shared 4D hinge-selection core (InteriorHinges.h)
 ///     dump-rehydration and the RELABEL-gate rebuild — lives OUTSIDE this class,
 ///     in `LiveComplex` (the loader/transform), and only ever reads the recorded
 ///     geometry back, never the emergent dynamics.
-///   * **Hole selection validated at ONE entry point.** The register holes are the
+///   * **Hole selection validated at ONE entry point.** The selected holes are the
 ///     emergent `(degree+2)`-vertex removed top cells
 ///     (`cobordism::MultiCobordism::emergentHoles`), in emergent-hole order. A
 ///     **deficit throws** (`std::invalid_argument` naming the found holes); a
@@ -88,7 +88,7 @@ class RegisterContext {
   public:
     /// Read the context over the already-built `spacetime`, selecting and
     /// validating `count`
-    /// register holes at `degree` (see the class note: deficit throws, surplus
+    /// emergent holes at `degree` (see the class note: deficit throws, surplus
     /// is recorded in `selectionWarning()` naming the dropped holes). `target`
     /// is the register target state, one component per hole slot — the color
     /// singlet \f$ [1, \omega, \omega^2] \f$ by default; the GAUGE gate rotates
@@ -120,7 +120,7 @@ class RegisterContext {
     [[nodiscard]] const std::vector<std::complex<double>> &target() const noexcept {
       return target_;
     }
-    /// The selected register holes, in emergent-hole order (each a vertex-id
+    /// The selected holes, in emergent-hole order (each a vertex-id
     /// tuple of a removed top cell, intrinsic order preserved).
     [[nodiscard]] const std::vector<std::vector<std::uint64_t>> &holes()
         const noexcept {
