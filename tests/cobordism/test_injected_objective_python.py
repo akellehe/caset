@@ -184,9 +184,16 @@ class FirewallTest(unittest.TestCase):
         # The firewall is only checkable if the enumeration is the whole story,
         # so pin the list itself. A field added without updating this test is
         # a field nobody audited.
+        # `scored_edges` (#837) is the objective's declared scope resolved to
+        # edge INDICES. Audited on the same terms as every other field: it is
+        # geometry, it names coordinates rather than carrying values, and
+        # nothing reachable from an edge index is a component, fiber,
+        # transport, amplitude, colour, charge, flavour, exchange, spin
+        # certificate or verdict.
         self.assertEqual(
             cob.ObjectiveContext.input_names(),
-            ["spacetime", "region", "region_targets", "register_degrees",
+            ["spacetime", "region", "scored_edges", "region_targets",
+             "register_degrees",
              "regge_weight", "hodge_entropy_weight", "gamma",
              "carried_state_energy_weight", "einstein_hilbert",
              "hodge_entropy_phase_mode", "register_residual",

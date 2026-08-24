@@ -314,7 +314,17 @@ class CobordismObjective {
   /// What this objective references: a named pinned region, or — by declaring
   /// nothing — the whole cobordism. The engine honours the declaration rather
   /// than inferring one from the objective's role.
-  [[nodiscard]] virtual ObjectiveScope scope() const { return {}; }
+  ///
+  /// Scope is a property of the INSTANCE, not of the class, so an existing
+  /// objective can be pointed at a region without writing a new type: the same
+  /// functional is a perfectly good thing to hold a boundary to. An
+  /// implementation may still override this where its scope is intrinsic.
+  [[nodiscard]] virtual ObjectiveScope scope() const { return scope_; }
+
+  /// Declare what this objective references. Default-constructed means the
+  /// whole cobordism, which is what an objective that never calls this
+  /// declares.
+  void setScope(ObjectiveScope scope) { scope_ = std::move(scope); }
 
   /// Whether this objective reads \f$r_U\f$. The engine computes that residual
   /// only when an objective asks for it, so a purely geometric objective never
@@ -365,6 +375,12 @@ class CobordismObjective {
   /// records into the same enumerable slots, so a record stays comparable
   /// across objectives and a structural test can assert the list.
   [[nodiscard]] static std::vector<std::string> declaredTermNames();
+
+ private:
+  /// The declared scope. Default-constructed is the whole cobordism, so an
+  /// objective that never declares one behaves exactly as it did before scopes
+  /// existed.
+  ObjectiveScope scope_;
 };
 
 /// # JointStationarityObjective

@@ -1501,6 +1501,11 @@ Right -- re-read after each drive call:
            "purpose: handing an objective something that could difference the "
            "scalar would mean handing it a closure over the node.")
       .def("scope", &CobordismObjective::scope)
+      .def("set_scope", &CobordismObjective::setScope, py::arg("scope"),
+           "Declare what this objective references. Scope is a property of the "
+           "INSTANCE, so an existing objective can be pointed at a region "
+           "without writing a new type. Default-constructed means the whole "
+           "cobordism.")
       .def_static("total", &CobordismObjective::total, py::arg("terms"),
                   "The scalar: the plain sum of the declared terms. STATIC by "
                   "design -- no `this`, so it cannot reach any state at all.")
