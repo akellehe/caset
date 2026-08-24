@@ -396,6 +396,13 @@ Python-driven materialization corrupted dualVolume(). Reference fixes it
            "squared length (edge-keyed map, complex values), via Jacobi's formula "
            "on the Gram determinant: dV = (V/2) tr(G^-1 dG). The per-degree Hodge "
            "weight gradient -- keystone for arbitrary-k.")
+      .def("volumeGradientDirectionalDerivative",
+           &Simplex::volumeGradientDirectionalDerivative, py::arg("direction"),
+           "Exact directional SECOND derivative sum_f v_f d^2V/dl^2_e dl^2_f, "
+           "edge-keyed in e, for the direction v given in the same edge-keyed "
+           "shape volumeGradient() returns. G is LINEAR in l^2, so the "
+           "d^2G term vanishes identically and the Hessian is closed form. "
+           "Euler: contracting against l^2 itself returns (d/2 - 1) dV/dl^2_e.")
       .def("circumcenterBarycentric", &Simplex::circumcenterBarycentric,
            "Circumcenter in barycentric coordinates (sum 1), complex, intrinsic "
            "from the signature-aware edge lengths; entry i weights "
