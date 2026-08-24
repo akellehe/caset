@@ -1013,6 +1013,23 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def("set_objective_mode", &MultiCobordism::setObjectiveMode,
            py::arg("mode"))
       .def_property_readonly("objective_mode", &MultiCobordism::objectiveMode)
+      .def("set_objective", &MultiCobordism::setObjective,
+           py::arg("objective"),
+           "Inject the functional this node descends. The engine calls through "
+           "it and knows nothing about which objective it holds.")
+      .def_property_readonly("objective_spec", &MultiCobordism::objectiveSpec,
+           "The injected functional. Never null: construction installs a "
+           "default.")
+      .def_property_readonly("objective_name", &MultiCobordism::objectiveName,
+           "The injected objective's stable identifier, as stamped on records.")
+      .def("region_handle", &MultiCobordism::regionHandle, py::arg("name"),
+           "Mint a RegionHandle for a DECLARED region. The only way to obtain "
+           "a non-empty handle; an undeclared name raises BY NAME rather than "
+           "producing a scope that silently matches nothing.")
+      .def_property_readonly("objective_is_target_conditioned",
+           &MultiCobordism::objectiveIsTargetConditioned,
+           "Whether the injected objective's value depends on prescribed "
+           "boundary targets rather than on the geometry alone.")
       .def("set_hodge_entropy_phase_mode",
            &MultiCobordism::setHodgeEntropyPhaseMode, py::arg("mode"),
            "Choose full complex L or entrywise |L| for entropy only; this never "
@@ -1240,6 +1257,108 @@ Right -- re-read after each drive call:
                      &MultiCobordism::ObjectiveTerms::actionMagnitude)
       .def_readwrite("carried_state_energy",
                      &MultiCobordism::ObjectiveTerms::carriedStateEnergy);
+
+  py::class_<ObjectiveScope>(m, "ObjectiveScope",
+      "What an objective DECLARES that it references: a named pinned region, "
+      "or -- by declaring nothing -- the whole cobordism. Independent of "
+      "whether that region's coordinates are frozen; a pinned edge does not "
+      "vary but is still scored.")
+      .def(py::init<>())
+      .def_readwrite("region", &ObjectiveScope::region,
+                     "The region referenced, as a handle obtainable only from "
+                     "MultiCobordism.region_handle. Default means the whole "
+                     "cobordism.")
+      .def_readwrite("includes_straddling_edges",
+                     &ObjectiveScope::includesStraddlingEdges,
+                     "Whether edges with a single endpoint in the region enter "
+                     "the score. Meaningless for a whole-cobordism scope.")
+      .def("is_whole_cobordism", &ObjectiveScope::isWholeCobordism,
+           "Whether nothing was declared, i.e. the scope is everything.");
+
+  py::class_<RegionHandle>(m, "RegionHandle",
+      "A reference to a DECLARED pinned region. A caller cannot fabricate one: "
+      "the only non-empty handle comes from MultiCobordism.region_handle, "
+      "which throws BY NAME on an undeclared region rather than silently "
+      "matching nothing.")
+      .def(py::init<>())
+      .def("is_whole_cobordism", &RegionHandle::isWholeCobordism)
+      .def("name", &RegionHandle::name)
+      .def("__eq__", &RegionHandle::operator==, py::is_operator());
+
+  py::class_<ObjectiveName>(m, "ObjectiveName",
+      "The identifiers objectives are known by, as named constants rather "
+      "than literals repeated at each site.")
+      .def_readonly_static("JOINT_STATIONARITY",
+                           &ObjectiveName::kJointStationarity)
+      .def_readonly_static("LEGACY", &ObjectiveName::kLegacy)
+      .def_readonly_static("MEDIATED_CORRESPONDENCE",
+                           &ObjectiveName::kMediatedCorrespondence);
+
+  py::class_<ObjectiveTermName>(m, "ObjectiveTermName",
+      "The declared term slots, named so the list and the constants cannot "
+      "drift apart.")
+      .def_readonly_static("REGGE_STATIONARITY",
+                           &ObjectiveTermName::kReggeStationarity)
+      .def_readonly_static("HODGE_STATIONARITY",
+                           &ObjectiveTermName::kHodgeStationarity)
+      .def_readonly_static("REGISTER_RESIDUAL",
+                           &ObjectiveTermName::kRegisterResidual)
+      .def_readonly_static("ACTION_MAGNITUDE",
+                           &ObjectiveTermName::kActionMagnitude)
+      .def_readonly_static("CARRIED_STATE_ENERGY",
+                           &ObjectiveTermName::kCarriedStateEnergy);
+
+  py::class_<ObjectiveContext>(m, "ObjectiveContext",
+      "The COMPLETE set of inputs an objective may read -- the no-feedback "
+      "firewall restated as an input type. Plain data: geometry, a region, "
+      "that region's declared targets, configured weights, and precomputed "
+      "geometric scalars. No MultiCobordism reference and deliberately no "
+      "callable, since a bound callable would capture the node and smuggle "
+      "back the reachability the former static objective_of denied.")
+      .def(py::init<>())
+      .def_static("input_names", &ObjectiveContext::inputNames,
+                  "Every field of the context, in declaration order -- the "
+                  "firewall list a structural test asserts against.");
+
+  py::class_<CobordismObjective, std::shared_ptr<CobordismObjective>>(
+      m, "CobordismObjective",
+      "The functional MultiCobordism descends, as an injected specification "
+      "rather than a value of a closed enum. An objective is scored over a "
+      "REGION rather than implicitly over a whole node, so more than one may "
+      "coexist on one complex.")
+      .def("name", &CobordismObjective::name)
+      .def("term_names", &CobordismObjective::termNames)
+      .def("terms", &CobordismObjective::terms, py::arg("context"))
+      .def("is_target_conditioned", &CobordismObjective::isTargetConditioned)
+      .def("needs_register_residual",
+           &CobordismObjective::needsRegisterResidual)
+      .def("scope", &CobordismObjective::scope)
+      .def_static("total", &CobordismObjective::total, py::arg("terms"),
+                  "The scalar: the plain sum of the declared terms. STATIC by "
+                  "design -- no `this`, so it cannot reach any state at all.")
+      .def_static("declared_term_names",
+                  &CobordismObjective::declaredTermNames);
+
+  py::class_<JointStationarityObjective, CobordismObjective,
+             std::shared_ptr<JointStationarityObjective>>(
+      m, "JointStationarityObjective",
+      "beta_R ||grad_z S_Regge||^2 + eta_H sum_k ||grad_z S_Hodge,k||^2 -- the "
+      "objective the whitepaper describes, and the only built-in that is not "
+      "target-conditioned.")
+      .def(py::init<>());
+
+  py::class_<LegacyObjective, CobordismObjective,
+             std::shared_ptr<LegacyObjective>>(m, "LegacyObjective",
+      "beta_R ||grad_z S_Regge||^2 + gamma r_U -- the compatibility objective. "
+      "Target-conditioned through r_U.")
+      .def(py::init<>());
+
+  py::class_<MediatedCorrespondenceObjective, CobordismObjective,
+             std::shared_ptr<MediatedCorrespondenceObjective>>(
+      m, "MediatedCorrespondenceObjective",
+      "r_U + beta |S_Regge(W*)| -- the historical operator-cobordism "
+      "experiment. Target-conditioned through r_U.")
+      .def(py::init<>());
 
   py::class_<MultiCobordism::RefinementIndicators>(multiCobordismClass,
       "RefinementIndicators",

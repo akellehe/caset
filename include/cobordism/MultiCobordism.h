@@ -8,6 +8,7 @@
 
 #include <Eigen/Core>
 
+#include "cobordism/CobordismObjective.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "spacetime/pachner/AddMove.h"
 #include "spacetime/pachner/FlipMove.h"
@@ -360,10 +361,33 @@ class MultiCobordism {
   [[nodiscard]] double hodgeEntropy() const;
   /// Sum_k ||grad_z S_Hodge,k||^2, the entropy half of JointStationarity.
   [[nodiscard]] double hodgeEntropyStationarity() const;
+  /// Select one of the three built-in objectives. Sugar over `setObjective`:
+  /// it constructs the corresponding `CobordismObjective` and injects it, so a
+  /// caller that has always used the enum keeps working unchanged.
   void setObjectiveMode(ObjectiveMode mode);
   [[nodiscard]] ObjectiveMode objectiveMode() const noexcept {
     return objectiveMode_;
   }
+
+  /// Inject the functional this node descends. The engine calls through it and
+  /// knows nothing about which objective it holds; an objective reads only
+  /// `ObjectiveContext`, which is the no-feedback firewall restated as an
+  /// input type. Passing an objective that is not one of the three built-ins
+  /// leaves `objectiveMode()` reporting the last mode selected, which is why
+  /// records stamp `objectiveName()` rather than the enum.
+  /// @throws std::invalid_argument on a null objective.
+  void setObjective(std::shared_ptr<CobordismObjective> objective);
+  /// The injected functional. Never null: construction installs a default.
+  [[nodiscard]] const std::shared_ptr<CobordismObjective> &objectiveSpec()
+      const noexcept {
+    return objectiveSpec_;
+  }
+  /// The injected objective's stable identifier, as stamped on records.
+  [[nodiscard]] std::string objectiveName() const;
+  /// Whether the injected objective's value depends on prescribed boundary
+  /// targets rather than on the geometry alone. A search policy that must stay
+  /// unforced consults this rather than testing for an objective by name.
+  [[nodiscard]] bool objectiveIsTargetConditioned() const;
   void setHodgeEntropyPhaseMode(HodgeLaplacian::EntropyPhaseMode mode) noexcept {
     hodgeEntropyPhaseMode_ = mode;
   }
@@ -548,6 +572,13 @@ class MultiCobordism {
   /// Drop every declared region, leaving the whole complex free to relax.
   void clearPinnedRegions();
 
+  /// Mint a `RegionHandle` for a DECLARED region. This is the only way to
+  /// obtain a non-empty handle, so an objective cannot reference a region that
+  /// was never declared: a mis-spelling throws here, BY NAME, instead of
+  /// compiling into a scope that silently matches nothing.
+  /// @throws std::invalid_argument if no region of that name is declared.
+  [[nodiscard]] RegionHandle regionHandle(const std::string &name) const;
+
   /// The union of every region's vertices — the flat view, for callers that need
   /// membership rather than provenance.
   [[nodiscard]] std::set<std::uint64_t> pinnedVertices() const;
@@ -613,19 +644,10 @@ class MultiCobordism {
   /// `objectiveOf` is static over this record, so the objective provably reads
   /// nothing else (see the firewall note above). Every member is a geometric
   /// or target quantity; the last is the one permitted state channel.
-  struct ObjectiveTerms {
-    /// `β_R ‖∇_z S_Regge‖²` — 0 when the Einstein-Hilbert term is deselected.
-    double reggeStationarity = 0.0;
-    /// `η_H Σ_k ‖∇_z S_Hodge,k‖²` — `JointStationarity` only.
-    double hodgeStationarity = 0.0;
-    /// `γ r_U` — the target-conditioned `Legacy` register residual only.
-    double registerResidual = 0.0;
-    /// `r_U + β|S_Regge(W*)|`'s action magnitude — `MediatedCorrespondence`.
-    double actionMagnitude = 0.0;
-    /// `β_E E_carried(Γ, g)` — the ONE permitted state channel, exactly 0.0
-    /// outside `EmergenceSubmode::CertificatesBlindMeanField`.
-    double carriedStateEnergy = 0.0;
-  };
+  /// Declared at namespace scope alongside `CobordismObjective` so an
+  /// objective can be written without depending on this class; the alias keeps
+  /// every existing use of `MultiCobordism::ObjectiveTerms` unchanged.
+  using ObjectiveTerms = ::tessera::cobordism::ObjectiveTerms;
 
   /// The names of `ObjectiveTerms`' members, in declaration order — the
   /// firewall list a structural test asserts against.
@@ -1125,6 +1147,15 @@ class MultiCobordism {
   /// #724: false drops `‖∇S_Regge‖²` from every objective site (see the ctor).
   bool einsteinHilbert_{true};
   ObjectiveMode objectiveMode_{ObjectiveMode::Legacy};
+  /// The injected functional. Never null: the constructor installs the
+  /// built-in matching `objectiveMode_`, so a caller that never injects one
+  /// gets exactly the objective it got before this became injectable.
+  std::shared_ptr<CobordismObjective> objectiveSpec_;
+  /// Assemble the firewalled input an objective reads. Private because the
+  /// bound evaluators close over this node; an objective receives the
+  /// assembled context and can reach nothing beyond it.
+  [[nodiscard]] ObjectiveContext objectiveContextFor(
+      const std::shared_ptr<Spacetime> &spacetime) const;
   HodgeLaplacian::EntropyPhaseMode hodgeEntropyPhaseMode_{
       HodgeLaplacian::EntropyPhaseMode::IncludeComplexPhase};
   double hodgeEntropyWeight_{1.0};
