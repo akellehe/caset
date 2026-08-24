@@ -474,21 +474,89 @@ class MultiCobordism {
   /// Directed, gated cone-OUT: open register holes deliberately. Enumerates candidate top
   /// cells interior-first; `AdjacentHolesLast` then sends cells sharing vertices with the
   /// existing holes to the back (new holes separated), `AdjacentHolesFirst` to the front
-  /// (register clusters). Tries each with a gated `SurgicalCone::coneOut` (rolled back),
-  /// skipping any that would strand a `pinnedBoundaryVertices()` vertex, and keeps the
-  /// hole-opener that most lowers this node's `rU` (its realizability residual — which absorbs
-  /// the output `r_state`, so this drives the register toward carrying the target on BOTH the
-  /// 2→1 and 2→2 steps). Repeats up to `maxOpen`; stops when no opener lowers `rU`. Returns
-  /// #holes opened.
+  /// (register clusters). Tries each with a gated `SurgicalCone::coneOut` (rolled back) and
+  /// keeps the hole-opener that most lowers this node's `rU` (its realizability residual —
+  /// which absorbs the output `r_state`, so this drives the register toward carrying the
+  /// target on BOTH the 2→1 and 2→2 steps). Repeats up to `maxOpen`; stops when no opener
+  /// lowers `rU`. Returns #holes opened.
+  ///
+  /// The manifold check inside `SurgicalCone::coneOut` is the ONLY gate: a cone-out that
+  /// removes a pinned vertex is accepted when the result is a valid manifold in its own
+  /// right (see the pinning section below).
   [[nodiscard]] int directedConeOut(HolePlacementStrategy strategy = HolePlacementStrategy::AdjacentHolesLast,
                                     int maxOpen = 6);
 
   /// Directed, gated cone-IN: select the register. Enumerates the boundary facets of the
   /// current emergent holes (capping one closes that hole), tries each with a gated
-  /// `SurgicalCone::coneIn` (a fresh vertex, so nothing pinned is stranded), and keeps the
-  /// cap that most lowers `rU` — i.e. drops the hole that hurts the carry. Repeats up to
-  /// `maxClose`; stops when no cap lowers `rU`. Returns #holes capped.
+  /// `SurgicalCone::coneIn` (which builds on a fresh vertex, so it removes nothing), and
+  /// keeps the cap that most lowers `rU` — i.e. drops the hole that hurts the carry. Repeats
+  /// up to `maxClose`; stops when no cap lowers `rU`. Returns #holes capped.
   [[nodiscard]] int directedConeIn(int maxClose = 6);
+
+  // ==================================================================
+  // Pinning — a plain geometric constraint
+  // ==================================================================
+  //
+  // Pinning says "do not change the geometry of these" and says NOTHING about
+  // what information they carry. It is declared by the caller and never derived
+  // from boundary blocks or their targets, so a pinned set means the same thing
+  // whether or not any target is present.
+  //
+  // Pinning and manifold validity are NOT substitutes; they act on different
+  // axes:
+  //
+  //   * pinning CONSTRAINS the geometry. A pinned edge — one whose endpoints are
+  //     both pinned — is held at its resident squared length: stage 2 zeroes its
+  //     descent component, so relaxation moves the rest of the complex around it.
+  //     That is the "fixed boundary, relaxed bulk" structure of a cobordism,
+  //     expressed without reference to any target.
+  //
+  //   * `dualComplexValid` GATES the topology. Whether a move may be applied is
+  //     decided by whether the result is a valid manifold-with-boundary, and by
+  //     nothing else. A surgery that removes a pinned vertex is ACCEPTED when the
+  //     result is a valid manifold in its own right: refusing it would foreclose
+  //     a legitimate topology change for a bookkeeping reason rather than a
+  //     geometric one, and surgery is the only topology-changing mechanism the
+  //     engine has (Pachner moves are bistellar and preserve Betti numbers).
+  //
+  // A pinned region is a DECLARED THING WITH AN IDENTITY, not a set computed on
+  // demand. The separation it maintains is between WHICH cells are held and WHAT
+  // they are held to: this class answers only the first. Keeping the second out
+  // is what lets a boundary be declared without target-conditioning the bulk
+  // geometry, which is the division the cobordism relaxation rule describes —
+  // boundary fixed, bulk relaxed, the result read off the emergent bulk.
+
+  /// A caller-declared pinned region: a named set of vertices held fixed. The name
+  /// is its identity, so a region can be re-declared, referred to, and reported on.
+  ///
+  /// The region carries no target, no state and no objective. It is the "which".
+  struct PinnedRegion {
+    /// Identity. Re-declaring a region with an existing name replaces it.
+    std::string name;
+    /// The vertices held fixed. An edge relaxes unless BOTH endpoints are pinned.
+    std::set<std::uint64_t> vertices;
+  };
+
+  /// Declare a pinned region, replacing any existing region of the same name.
+  void declarePinnedRegion(PinnedRegion region);
+
+  /// Every declared pinned region, in declaration order.
+  [[nodiscard]] const std::vector<PinnedRegion> &pinnedRegions() const noexcept {
+    return pinnedRegions_;
+  }
+
+  /// Drop every declared region, leaving the whole complex free to relax.
+  void clearPinnedRegions();
+
+  /// The union of every region's vertices — the flat view, for callers that need
+  /// membership rather than provenance.
+  [[nodiscard]] std::set<std::uint64_t> pinnedVertices() const;
+
+  /// Whether the edge between `a` and `b` is held fixed: true iff some ONE region
+  /// contains both endpoints. Two regions that each contain one endpoint do not
+  /// pin the edge between them — that edge spans the gap between two independently
+  /// declared regions and is part of the bulk.
+  [[nodiscard]] bool edgeIsPinned(std::uint64_t a, std::uint64_t b) const;
 
   // ==================================================================
   // #776 — modes, the enumerable objective, and the analysis overlay
@@ -882,11 +950,6 @@ class MultiCobordism {
                          std::complex<double>>>;
   using MoveSpec = std::pair<std::string, std::vector<std::uint64_t>>;
 
-  /// Vertices explicitly pinned against removal. Currently empty: target-conditioned
-  /// modes hold boundary states through `r_U`, while JointStationarity treats the
-  /// same data as readout metadata. This remains the policy hook for future anchors.
-  [[nodiscard]] std::set<std::uint64_t> pinnedBoundaryVertices() const;
-
   // ---- the pieces of residualOfTargetStateAgainstHarmonic ----
   /// The target state as a dense complex vector — the `t` the harmonic is fitted to,
   /// and (as its squared norm) the full leak when no register has emerged.
@@ -961,9 +1024,10 @@ class MultiCobordism {
   /// move is only described here, not applied — see `applyMoveSpecification`.
   [[nodiscard]] MoveSpec drawRandomMoveSpecification(const Spacetime &spacetime);
   /// Apply a move specification from `drawRandomMoveSpecification` to `spacetime`
-  /// in place. Returns true iff the move was applied AND it left every pinned
-  /// boundary vertex intact AND the result passes the `dualComplexValid` gate at
-  /// `dualComplexGateDegree_`; otherwise the caller discards the candidate.
+  /// in place. Returns true iff the move was applied AND the result passes the
+  /// `dualComplexValid` gate at `dualComplexGateDegree_`; otherwise the caller
+  /// discards the candidate. Manifold validity is the whole gate — a move that
+  /// removes a pinned vertex is accepted when what it leaves is a valid manifold.
   [[nodiscard]] bool applyMoveSpecification(
       const std::shared_ptr<Spacetime> &spacetime,
       const MoveSpec &moveSpecification);
@@ -1047,6 +1111,11 @@ class MultiCobordism {
   /// register degree (the degree-free validity check needs only the coarsest one).
   int dualComplexGateDegree_;
   double gamma_;
+  /// The caller-declared pinned regions (see `declarePinnedRegion`). Empty by
+  /// default. Never derived from boundary blocks or their targets: each region is
+  /// a plain combinatorial declaration that constrains the geometry rather than
+  /// gating any move.
+  std::vector<PinnedRegion> pinnedRegions_;
   /// #690: propagated to every spacetime this node constructs
   /// (host before precone, and each candidate snapshot rebuild).
   bool balancedEdgeWiring_{false};
