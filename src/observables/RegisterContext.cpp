@@ -131,10 +131,10 @@ void RegisterContext::initialize(
   if (static_cast<int>(candidates.size()) < count) {
     std::ostringstream oss;
     if (explicitHoles) {
-      oss << "need >= " << count << " register holes, got "
+      oss << "need >= " << count << " emergent holes, got "
           << candidates.size();
     } else {
-      oss << "need >= " << count << " register holes at degree " << degree_
+      oss << "need >= " << count << " emergent holes at degree " << degree_
           << ", found " << candidates.size();
       if (!candidates.empty()) oss << ": " << formatHoleList(candidates);
       oss << " — this specimen cannot host the requested register";

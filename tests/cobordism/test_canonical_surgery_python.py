@@ -96,7 +96,7 @@ class DirectedProbeInvariantTest(unittest.TestCase):
 class DirectedSurgeryProtonBuildTest(unittest.TestCase):
     """Slow: a full two-step Proton build driven through the canonical directed-surgery
     path (`should_use_directed_surgery=True`) converges — the whole formation cobordism
-    carries the singlet with at least three emergent color holes.
+    carries the singlet on at least three emergent holes.
 
     Full convergence at this budget is not a CI invariant: the engine is not
     process-deterministic (#579), and the same class at the same budget both
@@ -113,7 +113,7 @@ class DirectedSurgeryProtonBuildTest(unittest.TestCase):
     def setUpClass(cls):
         cls.p = cob.Proton(seed=0, should_use_directed_surgery=True)
         cls.p.build(max_restarts=3, init_steps=180, evolve_steps=60,
-                    stage2_max_iters=10, color_tolerance=0.5, min_quark_holes=3)
+                    stage2_max_iters=10, color_tolerance=0.5, min_emergent_holes=3)
 
     def test_directed_build_grows_and_stays_finite(self):
         # What every draw must deliver regardless of #579: the canonical path
@@ -132,12 +132,12 @@ class DirectedSurgeryProtonBuildTest(unittest.TestCase):
         self.assertTrue(
             self.p.converged(),
             f"did not converge: colorR={self.p.color_residual()}, "
-            f"holes={len(self.p.quark_holes())}")
+            f"holes={len(self.p.emergent_holes())}")
 
-    def test_three_quark_holes(self):
+    def test_three_emergent_holes(self):
         if not self._FULL:
             self.skipTest("full convergence gate: TESSERA_SLOW_TESTS=1")
-        self.assertGreaterEqual(len(self.p.quark_holes()), 3)
+        self.assertGreaterEqual(len(self.p.emergent_holes()), 3)
 
     def test_singlet_carried(self):
         if not self._FULL:

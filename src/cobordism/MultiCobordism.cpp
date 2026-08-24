@@ -205,12 +205,12 @@ std::vector<std::vector<std::uint64_t>> MultiCobordism::holesCarryingTheTarget(
 Eigen::MatrixXcd MultiCobordism::holePeriodMatrix(
     const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
     int degreeBettiNumber,
-    const std::vector<std::vector<std::uint64_t>> &registerHoles,
+    const std::vector<std::vector<std::uint64_t>> &cycleHoles,
     std::size_t targetDimension) {
   EigenstateSynthesis eigenstateSynthesis(spacetime, registerDegree);
   const auto flattenedCyclePeriods =
-      eigenstateSynthesis.cyclePeriods(registerHoles);  // rank x m, row-major
-  const std::size_t holeCount = registerHoles.size();
+      eigenstateSynthesis.cyclePeriods(cycleHoles);  // rank x m, row-major
+  const std::size_t holeCount = cycleHoles.size();
   // The row count of the flattened periods is the NUMERIC harmonic-kernel
   // dimension the synthesizer actually computed (HodgeLaplacian::harmonicMatrix
   // at its rank threshold, metric-dependent) — NOT necessarily the INTEGER
@@ -308,11 +308,11 @@ double MultiCobordism::residualOfTargetStateAgainstHarmonicWithDistinctMatching(
   const int degreeBettiNumber = bettiNumbers[registerDegree];
   if (degreeBettiNumber == 0) return fullLeakResidual;
 
-  const auto registerHoles =
+  const auto cycleHoles =
       holesCarryingTheTarget(*spacetime, registerDegree, targetState.size());
-  if (registerHoles.empty()) return fullLeakResidual;
+  if (cycleHoles.empty()) return fullLeakResidual;
   const Eigen::MatrixXcd periodMatrixTransposed =
-      holePeriodMatrix(spacetime, registerDegree, degreeBettiNumber, registerHoles,
+      holePeriodMatrix(spacetime, registerDegree, degreeBettiNumber, cycleHoles,
                        targetState.size());
   // The matrix is bounded by the NUMERIC harmonic rank (see holePeriodMatrix,
   // #636): zero usable harmonics on a geometrically extreme candidate means the

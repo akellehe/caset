@@ -71,7 +71,7 @@ class ObservableGates {
 };
 
 /// A deliberately label-dependent probe: its record leaks the sum of the
-/// register holes' vertex ids, so the RELABEL gate MUST flag it (the harness
+/// selected holes' vertex ids, so the RELABEL gate MUST flag it (the harness
 /// self-test).
 class LabelLeakProbe : public RegisterObservable {
   public:

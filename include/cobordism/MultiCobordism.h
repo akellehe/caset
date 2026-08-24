@@ -522,10 +522,10 @@ class MultiCobordism {
                  double stage2Alpha0 = 0.05,
                  HolePlacementStrategy holePlacementStrategy = HolePlacementStrategy::AdjacentHolesLast);
 
-  /// Directed, gated cone-OUT: open register holes deliberately. Enumerates candidate top
+  /// Directed, gated cone-OUT: remove top cells deliberately. Enumerates candidate top
   /// cells interior-first; `AdjacentHolesLast` then sends cells sharing vertices with the
   /// existing holes to the back (new holes separated), `AdjacentHolesFirst` to the front
-  /// (register clusters). Tries each with a gated `SurgicalCone::coneOut` (rolled back) and
+  /// (holes cluster). Tries each with a gated `SurgicalCone::coneOut` (rolled back) and
   /// keeps the hole-opener that most lowers this node's `rU` (its realizability residual —
   /// which absorbs the output `r_state`, so this drives the register toward carrying the
   /// target on BOTH the 2→1 and 2→2 steps). Repeats up to `maxOpen`; stops when no opener
@@ -1001,21 +1001,21 @@ class MultiCobordism {
 
   // ---- the pieces of residualOfTargetStateAgainstHarmonic ----
   /// The target state as a dense complex vector — the `t` the harmonic is fitted to,
-  /// and (as its squared norm) the full leak when no register has emerged.
+  /// and (as its squared norm) the full leak when no holes have emerged to read over.
   [[nodiscard]] static Eigen::VectorXcd targetStateVector(
       const std::vector<std::complex<double>> &targetState);
   /// The emergent holes that can carry `targetDimension` components: `emergentHoles`
   /// at this degree, truncated to at most one hole per target component. Empty when
-  /// no register has emerged.
+  /// no holes have emerged.
   [[nodiscard]] static std::vector<std::vector<std::uint64_t>> holesCarryingTheTarget(
       const Spacetime &spacetime, int registerDegree, std::size_t targetDimension);
-  /// The period matrix \f$ P^{\top} \f$ of the degree's harmonics over `registerHoles`:
+  /// The period matrix \f$ P^{\top} \f$ of the degree's harmonics over `cycleHoles`:
   /// `(targetDimension, b_k)`, row = hole, column = harmonic, zero-filled past the
   /// holes that emerged (a component with no hole to sit in leaks in full).
   [[nodiscard]] static Eigen::MatrixXcd holePeriodMatrix(
       const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
       int degreeBettiNumber,
-      const std::vector<std::vector<std::uint64_t>> &registerHoles,
+      const std::vector<std::vector<std::uint64_t>> &cycleHoles,
       std::size_t targetDimension);
   /// The target's components reordered onto the holes by `relabeling`: component
   /// `relabeling[q]` sits in hole `q`. A relabeling is a bijection, so each hole

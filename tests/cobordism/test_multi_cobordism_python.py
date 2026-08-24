@@ -114,7 +114,7 @@ class MultiCobordismCxxTest(unittest.TestCase):
         p = Proton(seed=3)
         p.build(max_restarts=1, init_steps=8, evolve_steps=4,
                 stage1_candidate_moves=4, stage2_max_iters=6,
-                min_quark_holes=1)
+                min_emergent_holes=1)
         # both steps ran: Step A (diquark recombination) and Step B (proton formation)
         self.assertTrue(math.isfinite(p.diquark_residual()))
         self.assertTrue(math.isfinite(p.color_residual()))

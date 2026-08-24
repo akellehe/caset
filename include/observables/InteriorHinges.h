@@ -129,7 +129,7 @@ class InteriorHinges {
     static constexpr double IM_TOL = 1e-12;
 
     /// Select the interior closed-fan triangle hinges of the 4-complex and read
-    /// their curvature. `holes` are the register holes' vertex-id tuples — the
+    /// their curvature. `holes` are the emergent holes' vertex-id tuples — the
     /// BFS shell seeds (empty ⇒ every hinge reports shell None).
     /// @throws std::invalid_argument if the complex has no top cells or its top
     ///   cells are not all 5-vertex (genuinely 4D).

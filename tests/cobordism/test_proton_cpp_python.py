@@ -6,7 +6,7 @@ A proton is three quarks in a colorless bound state, so it is built in two steps
 Step A (recombination) makes a *colored* diquark `{1, ω}`; Step B (formation) makes
 the proton *color singlet* `{1, ω, ω²}`. These tests confirm the constants and that
 `Proton` actually assembles a converged proton — the whole formation cobordism
-carries the singlet with at least three emergent color holes, on the relaxed
+carries the singlet on at least three emergent holes, on the relaxed
 (non-unit) metric.
 """
 import cmath
@@ -67,11 +67,11 @@ class ProtonBuildTest(unittest.TestCase):
                     evolve_steps=cls.EVOLVE_STEPS,
                     stage1_candidate_moves=cls.STAGE1_CANDIDATE_MOVES,
                     stage2_max_iters=cls.STAGE2_ITERS,
-                    color_tolerance=cls.COLOR_TOL, min_quark_holes=3)
+                    color_tolerance=cls.COLOR_TOL, min_emergent_holes=3)
 
     # Full convergence at this budget is not a CI invariant under the
     # complexified engine (#644): the build genuinely progresses — measured at
-    # this exact budget: 0 -> 2 quark holes, colorR 3.0 -> 1.0, 79 edges with
+    # this exact budget: 0 -> 2 emergent holes, colorR 3.0 -> 1.0, 79 edges with
     # genuine timelike content, in ~17 minutes — but the third hole needs a
     # larger budget, and the engine is not process-deterministic (#579), so a
     # hard convergence gate is a coin flip CI cannot carry. The full gate runs
@@ -81,7 +81,7 @@ class ProtonBuildTest(unittest.TestCase):
 
     def test_build_grows_and_stays_finite(self):
         # The engine is not process-deterministic (#579): at this budget a
-        # build reaches 2/3 quark holes on a good draw and can net zero on a
+        # build reaches 2/3 emergent holes on a good draw and can net zero on a
         # bad one, so hole counts belong to the slow gate. What every draw must
         # deliver: the complex GREW past the bare 10-edge pentatope seed, the
         # objective is finite, and the singlet residual never exceeds its 3.0
@@ -95,7 +95,7 @@ class ProtonBuildTest(unittest.TestCase):
         if not self._FULL:
             self.skipTest("hole-count progress is draw-dependent (#579): "
                           "TESSERA_SLOW_TESTS=1")
-        self.assertGreaterEqual(len(self.p.quark_holes()), 1)
+        self.assertGreaterEqual(len(self.p.emergent_holes()), 1)
         self.assertLess(self.p.color_residual(), 3.0)
 
     def test_proton_converged(self):
@@ -106,7 +106,7 @@ class ProtonBuildTest(unittest.TestCase):
         self.assertTrue(
             self.p.converged(),
             f"proton did not converge: colorR={self.p.color_residual()}, "
-            f"holes={len(self.p.quark_holes())}")
+            f"holes={len(self.p.emergent_holes())}")
 
     def test_whole_cobordism_carries_the_singlet(self):
         # The proton is the harmonic of the WHOLE relaxed step-B cobordism: its singlet
@@ -116,10 +116,10 @@ class ProtonBuildTest(unittest.TestCase):
             self.skipTest("full convergence gate: TESSERA_SLOW_TESTS=1")
         self.assertLess(self.p.color_residual(), self.COLOR_TOL)
 
-    def test_has_at_least_three_quark_holes(self):
+    def test_has_at_least_three_emergent_holes(self):
         if not self._FULL:
             self.skipTest("full convergence gate: TESSERA_SLOW_TESTS=1")
-        self.assertGreaterEqual(len(self.p.quark_holes()), 3)
+        self.assertGreaterEqual(len(self.p.emergent_holes()), 3)
 
     def test_proton_carries_the_relaxed_metric(self):
         # block() IS the whole relaxed cobordism (not a unit-metric carve): at least one

@@ -3260,7 +3260,7 @@ class TestScaleProfileFromTheExistingBattery(unittest.TestCase):
                                places=12)
         self.assertAlmostEqual(sample.spectralMass, deficit, places=9)
         self.assertAlmostEqual(sample.localization, 1.0, places=9)
-        # no register holes seed the BFS: the radial profile is UNKNOWN
+        # no emergent holes seed the BFS: the radial profile is UNKNOWN
         self.assertEqual(sample.radialWeightProfile, [])
 
     def test_closed_s4_window_is_stable_but_has_no_radial_profile(self):
@@ -3286,7 +3286,7 @@ class TestScaleProfileFromTheExistingBattery(unittest.TestCase):
                           "anchor-score-stability"])
 
     def test_hole_seeded_star_carries_a_radial_profile(self):
-        # the dropped pentatope {0..4} is the register hole seeding the BFS
+        # the dropped pentatope {0..4} is the hole seeding the BFS
         # shells: one shell carrying the whole curvature weight.
         ctx = obs.RegisterContext(self._star_of_apex(), [[0, 1, 2, 3, 4]], 1,
                                   3, cob.Proton.singlet())

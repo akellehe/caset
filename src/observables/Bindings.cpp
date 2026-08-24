@@ -1207,7 +1207,7 @@ its own or re-runs the emergent dynamics (those live in Proton / ProtonIngredien
   py::class_<RegisterContext, std::shared_ptr<RegisterContext>>(
       m, "RegisterContext",
       R"doc(The one validated read context every emergent-proton observable
-measures: a LIVE, already-built complex, its emergent register holes, the
+measures: a LIVE, already-built complex, its emergent holes, the
 induced-orientation signs, and the shared per-complex caches. A pure reader — it
 never builds, solves, or materializes anything.)doc")
       .def(py::init([](std::shared_ptr<Spacetime> st, int count, int degree,

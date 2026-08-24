@@ -17,9 +17,9 @@ namespace tessera::observables {
 
 /// # PairLoopFlavor
 ///
-/// The #561/#576 pair-loop dual-basis flavor read on a 3-hole register, migrated
+/// The #561/#576 pair-loop dual-basis flavor read over three emergent holes, migrated
 /// as a C++ Observable (the `pair_loop_quarks.tex` §7 experiment). On a structure
-/// with three register holes carrying the color singlet `[1, ω, ω²]`:
+/// whose periods over three emergent holes carry the color singlet `[1, ω, ω²]`:
 ///
 ///   1. ONE correlated multi-hole read — the single joint carried representative
 ///      `ψ = EigenstateSynthesis.carriedRepresentative(holes, σ·target)`, never
@@ -70,10 +70,10 @@ class PairLoopFlavor : public RegisterObservable {
       std::optional<bool> oddIsDiquarkLoop;      ///< empty ⇒ not evaluable
     };
 
-    /// Read the 3-hole register with no recorded diquark pair (criterion (b)
+    /// Read over three emergent holes with no recorded diquark pair (criterion (b)
     /// stays not-evaluable).
     PairLoopFlavor() = default;
-    /// Read the 3-hole register with the recorded step-1 diquark hole-index pair
+    /// Read over three emergent holes with the step-1 hole-index pair of the diquark
     /// from the specimen's build history (makes criterion (b) decidable).
     explicit PairLoopFlavor(std::pair<int, int> diquarkPair)
         : diquarkPair_(diquarkPair) {}
