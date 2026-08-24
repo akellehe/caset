@@ -1529,43 +1529,35 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
       if (hodgeEntropyWeight_ != 0.0) {
         // For each entropy S_k, h is its exact complex-z gradient. The real
         // Hessian-vector product needed by grad ||h||^2 is the directional
-        // derivative of h along conj(h); a central difference costs two extra
-        // analytic-gradient evaluations without constructing a dense entropy
-        // Hessian. The resulting ascent displacement is 2 conj(dh).
+        // derivative of h along conj(h), and it is CLOSED FORM
+        // (`spectralEntropyGradientDirectionalDerivative`): the simplex volume
+        // Hessian, the second derivative of L_k contracted against the
+        // direction, and the Daleckii-Krein derivative of dS/dA on the same
+        // fixed-rank stratum the value uses. No step size and no finite
+        // difference enter the descent direction. The resulting ascent
+        // displacement is 2 conj(dh).
         for (int degree : registerDegrees_) {
+          const HodgeLaplacian hodge(spacetime_);
           const auto baseComponents =
-              HodgeLaplacian(spacetime_)
-                  .spectralEntropyGradient(degree, hodgeEntropyPhaseMode_);
+              hodge.spectralEntropyGradient(degree, hodgeEntropyPhaseMode_);
           Eigen::VectorXcd entropyGradient(edgeCount);
           double entropyGradientNormSquared = 0.0;
+          std::vector<complexd> entropyAscent(edgeCount);
           for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
             entropyGradient(edgeIndex) = baseComponents[edgeIndex];
             entropyGradientNormSquared += std::norm(baseComponents[edgeIndex]);
+            entropyAscent[edgeIndex] = std::conj(baseComponents[edgeIndex]);
           }
           currentObjective += hodgeEntropyWeight_ * entropyGradientNormSquared;
-          const Eigen::VectorXcd entropyAscent = entropyGradient.conjugate();
-          const double ascentNorm = entropyAscent.norm();
-          if (ascentNorm <= std::numeric_limits<double>::epsilon())
-            continue;
-          const double hvpStep =
-              std::cbrt(std::numeric_limits<double>::epsilon()) *
-              std::max(squaredLengths.norm(), 1.0) / ascentNorm;
-
-          setSquaredLengths(squaredLengths + hvpStep * entropyAscent);
-          const auto plusComponents =
-              HodgeLaplacian(spacetime_)
-                  .spectralEntropyGradient(degree, hodgeEntropyPhaseMode_);
-          setSquaredLengths(squaredLengths - hvpStep * entropyAscent);
-          const auto minusComponents =
-              HodgeLaplacian(spacetime_)
-                  .spectralEntropyGradient(degree, hodgeEntropyPhaseMode_);
-          restoreEdgeLengths();
-
+          if (entropyGradientNormSquared == 0.0)
+            continue;  // the exact HVP of the zero direction is zero
+          const auto directionalComponents =
+              hodge.spectralEntropyGradientDirectionalDerivative(
+                  degree, entropyAscent, hodgeEntropyPhaseMode_);
           Eigen::VectorXcd directionalDerivative(edgeCount);
           for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
             directionalDerivative(edgeIndex) =
-                (plusComponents[edgeIndex] - minusComponents[edgeIndex]) /
-                (2.0 * hvpStep);
+                directionalComponents[edgeIndex];
           descentDirection +=
               hodgeEntropyWeight_ * 2.0 * directionalDerivative.conjugate();
         }

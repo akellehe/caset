@@ -206,6 +206,118 @@ public:
     return result;
   }
 
+  // Everything the second directional derivative needs that does NOT depend on
+  // the differentiated edge: the weight-diagonal velocities Wdot_j, the
+  // edge-keyed second weight derivatives, and the four base blocks
+  // differentiated once. Built ONCE per direction, so a full Hessian-vector
+  // product costs the same sparse per-edge assembly the gradient does.
+  struct DirectionData {
+    Eigen::ArrayXcd lowerVelocity{};   // Wdot_{k-1}
+    Eigen::ArrayXcd degreeVelocity{};  // Wdot_k
+    Eigen::ArrayXcd upperVelocity{};   // Wdot_{k+1}
+    std::map<EdgeKey, std::vector<std::pair<int, cd>>> lowerSecond{};
+    std::map<EdgeKey, std::vector<std::pair<int, cd>>> degreeSecond{};
+    std::map<EdgeKey, std::vector<std::pair<int, cd>>> upperSecond{};
+    Eigen::MatrixXcd lowerBaseDot{};   // d_k^T Wdot_{k-1} d_k
+    Eigen::MatrixXcd upperBaseDot{};   // -d_{k+1} W^-1 Wdot_{k+1} W^-1 d_{k+1}^T
+    Eigen::MatrixXcd lowerLeftDot{};   // d/dt (W_k^-1 d_k^T)
+    Eigen::MatrixXcd upperRightDot{};  // d_{k+1}^T Wdot_k
+  };
+
+  // The direction is edge-keyed exactly like `Simplex::volumeGradient`, so it
+  // is handed straight to the simplices without a second indexing convention.
+  [[nodiscard]] DirectionData directionData(
+      const std::map<EdgeKey, cd> &direction) const {
+    DirectionData data;
+    data.lowerVelocity = weightVelocity(lowerWeights_, degree_ - 1, direction);
+    data.degreeVelocity = weightVelocity(degreeWeights_, degree_, direction);
+    data.upperVelocity = weightVelocity(upperWeights_, degree_ + 1, direction);
+    data.lowerSecond = weightSecond(lowerWeights_, degree_ - 1, direction);
+    data.degreeSecond = weightSecond(degreeWeights_, degree_, direction);
+    data.upperSecond = weightSecond(upperWeights_, degree_ + 1, direction);
+
+    data.lowerBaseDot = Eigen::MatrixXcd::Zero(degreeSize_, degreeSize_);
+    data.upperBaseDot = Eigen::MatrixXcd::Zero(degreeSize_, degreeSize_);
+    if (lowerSize_ > 0 && degreeSize_ > 0) {
+      data.lowerBaseDot.noalias() = lowerBoundary_.transpose() *
+                                    data.lowerVelocity.matrix().asDiagonal() *
+                                    lowerBoundary_;
+      data.lowerLeftDot = lowerLeft_;
+      for (int row = 0; row < degreeSize_; ++row)
+        data.lowerLeftDot.row(row) *=
+            -degreeWeights_.inverseWeights[row] * data.degreeVelocity[row];
+    }
+    if (upperSize_ > 0 && degreeSize_ > 0) {
+      const Eigen::ArrayXcd inverseUpper = upperWeights_.inverseWeights;
+      const Eigen::ArrayXcd scaled =
+          -inverseUpper * data.upperVelocity * inverseUpper;
+      data.upperBaseDot.noalias() = upperBoundary_ *
+                                    scaled.matrix().asDiagonal() *
+                                    upperBoundary_.transpose();
+      data.upperRightDot = upperBoundary_.transpose() *
+                           data.degreeVelocity.matrix().asDiagonal();
+    }
+    return data;
+  }
+
+  // Sum_f v_f d(dL/dz_e)/dz_f for one edge e: the exact second derivative,
+  // contracted against the direction. L is rational in the weights and the
+  // weights are smooth in l^2, so every term below is a product rule on the
+  // same four blocks `gradient()` assembles.
+  [[nodiscard]] Eigen::MatrixXcd gradientDirectionalDerivative(
+      std::uint64_t edgeA, std::uint64_t edgeB,
+      const DirectionData &data) const {
+    Eigen::MatrixXcd result = Eigen::MatrixXcd::Zero(degreeSize_, degreeSize_);
+    if (degree_ < 0 || degreeSize_ == 0)
+      return result;
+    const EdgeKey edge{std::min(edgeA, edgeB), std::max(edgeA, edgeB)};
+
+    if (const auto *entries = derivativesFor(degreeWeights_, edge)) {
+      const auto *second = secondFor(data.degreeSecond, edge);
+      for (const auto &[index, derivative] : *entries) {
+        const cd inverse = degreeWeights_.inverseWeights[index];
+        const cd velocity = data.degreeVelocity[index];
+        const cd secondDerivative = lookup(second, index);
+        // d/dt(-a^2 g) with a = 1/w, da/dt = -a^2 wdot.
+        const cd rowFactor = 2.0 * inverse * inverse * inverse * velocity *
+                                 derivative -
+                             inverse * inverse * secondDerivative;
+        result.row(index).noalias() += rowFactor * lowerBase_.row(index);
+        result.row(index).noalias() +=
+            (-inverse * inverse * derivative) * data.lowerBaseDot.row(index);
+        result.col(index).noalias() += secondDerivative * upperBase_.col(index);
+        result.col(index).noalias() +=
+            derivative * data.upperBaseDot.col(index);
+      }
+    }
+    if (const auto *entries = derivativesFor(lowerWeights_, edge)) {
+      const auto *second = secondFor(data.lowerSecond, edge);
+      for (const auto &[index, derivative] : *entries) {
+        result.noalias() += lookup(second, index) * lowerLeft_.col(index) *
+                            lowerBoundary_.row(index);
+        result.noalias() += derivative * data.lowerLeftDot.col(index) *
+                            lowerBoundary_.row(index);
+      }
+    }
+    if (const auto *entries = derivativesFor(upperWeights_, edge)) {
+      const auto *second = secondFor(data.upperSecond, edge);
+      for (const auto &[index, derivative] : *entries) {
+        const cd inverse = upperWeights_.inverseWeights[index];
+        const cd velocity = data.upperVelocity[index];
+        const cd secondDerivative = lookup(second, index);
+        const cd factor = 2.0 * inverse * inverse * inverse * velocity *
+                              derivative -
+                          inverse * inverse * secondDerivative;
+        result.noalias() +=
+            factor * upperBoundary_.col(index) * upperRight_.row(index);
+        result.noalias() += (-inverse * inverse * derivative) *
+                            upperBoundary_.col(index) *
+                            data.upperRightDot.row(index);
+      }
+    }
+    return result;
+  }
+
 private:
   using IndexedDerivative = std::pair<int, cd>;
 
@@ -214,6 +326,95 @@ private:
     Eigen::ArrayXcd inverseWeights{};
     std::map<EdgeKey, std::vector<IndexedDerivative>> derivativesByEdge{};
   };
+
+  [[nodiscard]] static const std::vector<IndexedDerivative> *secondFor(
+      const std::map<EdgeKey, std::vector<IndexedDerivative>> &table,
+      const EdgeKey &edge) {
+    const auto found = table.find(edge);
+    return found == table.end() ? nullptr : &found->second;
+  }
+
+  [[nodiscard]] static cd lookup(const std::vector<IndexedDerivative> *entries,
+                                 int index) {
+    if (entries == nullptr) return cd{0.0, 0.0};
+    for (const auto &[candidate, value] : *entries)
+      if (candidate == index) return value;
+    return cd{0.0, 0.0};
+  }
+
+  // Wdot_j = sum_f v_f dW_j/dz_f, over exactly the simplices `buildWeightData`
+  // admitted (a pinned fallback weight has no derivative and no velocity).
+  [[nodiscard]] Eigen::ArrayXcd weightVelocity(
+      const WeightData &weights, int degree,
+      const std::map<EdgeKey, cd> &direction) const {
+    Eigen::ArrayXcd velocity =
+        Eigen::ArrayXcd::Zero(weights.weights.size());
+    if (degree < 1 || degree >= static_cast<int>(faces_.size()))
+      return velocity;
+    for (const auto &[edge, entries] : weights.derivativesByEdge) {
+      const auto found = direction.find(edge);
+      if (found == direction.end()) continue;
+      for (const auto &[index, derivative] : entries)
+        velocity[index] += found->second * derivative;
+    }
+    return velocity;
+  }
+
+  // The edge-keyed second weight derivative contracted against the direction,
+  // built from the exact simplex volume Hessian. The admission rule mirrors
+  // `buildWeightData` exactly, so the first- and second-derivative tables
+  // always cover the same (edge, index) pairs.
+  [[nodiscard]] std::map<EdgeKey, std::vector<IndexedDerivative>> weightSecond(
+      const WeightData &weights, int degree,
+      const std::map<EdgeKey, cd> &direction) const {
+    std::map<EdgeKey, std::vector<IndexedDerivative>> table;
+    if (degree < 1 || degree >= static_cast<int>(faces_.size()))
+      return table;
+    const auto &degreeFaces = faces_[static_cast<std::size_t>(degree)];
+    const int count = static_cast<int>(weights.weights.size());
+    for (int index = 0;
+         index < count && index < static_cast<int>(degreeFaces.size());
+         ++index) {
+      const auto &simplex = degreeFaces[static_cast<std::size_t>(index)];
+      const cd volume = simplex->volume();
+      const cd weight =
+          convention_ == HodgeLaplacian::WeightConvention::SquaredContent
+              ? volume * volume
+              : volume;
+      if (std::abs(weight) <= 0.0)
+        continue;  // pinned to the constant fallback 1, as in buildWeightData
+      const auto gradient = simplex->volumeGradient();
+      const auto secondGradient =
+          simplex->volumeGradientDirectionalDerivative(direction);
+      cd volumeVelocity{0.0, 0.0};
+      for (const auto &[edge, volumeDerivative] : gradient) {
+        const auto found = direction.find(edge);
+        if (found != direction.end())
+          volumeVelocity += found->second * volumeDerivative;
+      }
+      for (const auto &[edge, volumeDerivative] : gradient) {
+        const auto found = secondGradient.find(edge);
+        const cd volumeSecond =
+            found == secondGradient.end() ? cd{0.0, 0.0} : found->second;
+        // w = V^2  ->  d(dw/dz_e) = 2 Vdot dV/dz_e + 2 V d(dV/dz_e)
+        // w = V    ->  d(dw/dz_e) = d(dV/dz_e)
+        const cd weightSecondDerivative =
+            convention_ == HodgeLaplacian::WeightConvention::SquaredContent
+                ? 2.0 * volumeVelocity * volumeDerivative +
+                      2.0 * volume * volumeSecond
+                : volumeSecond;
+        // Mirror buildWeightData's own admission test on the FIRST derivative:
+        // an edge it dropped has no gradient entry, so it gets no second one.
+        const cd weightDerivative =
+            convention_ == HodgeLaplacian::WeightConvention::SquaredContent
+                ? 2.0 * volume * volumeDerivative
+                : volumeDerivative;
+        if (std::abs(weightDerivative) > 0.0)
+          table[edge].emplace_back(index, weightSecondDerivative);
+      }
+    }
+    return table;
+  }
 
   [[nodiscard]] WeightData buildWeightData(int degree) const {
     WeightData data;
@@ -358,7 +559,81 @@ struct SpectralEntropyData {
   Eigen::MatrixXcd entropyDerivative{};
   double entropy{0.0};
   bool zeroOperator{true};
+  // Retained so the exact derivative of `entropyDerivative` can be formed
+  // without a second eigensolve: the SAME decomposition, support mask and
+  // trace the value and the first derivative were built from.
+  Eigen::MatrixXcd eigenvectors{};
+  Eigen::VectorXd eigenvalues{};
+  std::vector<char> supported{};
+  double trace{0.0};
 };
+
+// d(dS/dA)/dt on the fixed-rank stratum, given the positive operator's own
+// velocity. With C = -(1/T)[log(A/T) + S P] and P the (fixed) support
+// projector, differentiating gives
+//   Cdot = -(Tdot/T) C - (1/T) P DLog(A/T)[Rdot] P - (Sdot/T) P,
+// where DLog is the Frechet derivative of the matrix logarithm — the
+// Daleckii-Krein divided differences of log in the eigenbasis. Exact: no step
+// size, no finite difference.
+Eigen::MatrixXcd entropyDerivativeVelocity(const SpectralEntropyData &data,
+                                           const Eigen::MatrixXcd &velocity) {
+  const Eigen::Index n = data.eigenvalues.size();
+  if (n == 0 || data.zeroOperator || data.trace <= 0.0)
+    return Eigen::MatrixXcd::Zero(velocity.rows(), velocity.cols());
+  const double T = data.trace;
+  // Hermitian part only: the value path symmetrizes A the same way, so the
+  // anti-Hermitian roundoff must not leak into the derivative either.
+  const Eigen::MatrixXcd hermitianVelocity =
+      0.5 * (velocity + velocity.adjoint());
+  const Eigen::MatrixXcd inBasis =
+      data.eigenvectors.adjoint() * hermitianVelocity * data.eigenvectors;
+  const double traceVelocity = hermitianVelocity.trace().real();
+
+  // pdot_i = (lambdadot_i - p_i Tdot)/T and Sdot = -sum_i log(p_i) pdot_i
+  // (sum_i pdot_i = 0 exactly, so the +1 in d(-p log p) drops out).
+  Eigen::VectorXd probability = Eigen::VectorXd::Zero(n);
+  Eigen::VectorXd probabilityVelocity = Eigen::VectorXd::Zero(n);
+  double entropyVelocity = 0.0;
+  for (Eigen::Index i = 0; i < n; ++i) {
+    if (data.supported[static_cast<std::size_t>(i)] == 0) continue;
+    probability[i] = std::max(data.eigenvalues[i], 0.0) / T;
+    probabilityVelocity[i] =
+        (inBasis(i, i).real() - probability[i] * traceVelocity) / T;
+    entropyVelocity -= std::log(probability[i]) * probabilityVelocity[i];
+  }
+
+  // Rdot = (Adot - R Tdot)/T in the eigenbasis; R is diagonal there.
+  Eigen::MatrixXcd logVelocity = Eigen::MatrixXcd::Zero(n, n);
+  for (Eigen::Index i = 0; i < n; ++i) {
+    if (data.supported[static_cast<std::size_t>(i)] == 0) continue;
+    for (Eigen::Index j = 0; j < n; ++j) {
+      if (data.supported[static_cast<std::size_t>(j)] == 0) continue;
+      const std::complex<double> rDot =
+          (inBasis(i, j) -
+           (i == j ? std::complex<double>{probability[i] * traceVelocity, 0.0}
+                   : std::complex<double>{0.0, 0.0})) /
+          T;
+      // Divided difference of log; the coincident case is the derivative 1/p.
+      const double gap = probability[i] - probability[j];
+      const double dividedDifference =
+          std::abs(gap) <= std::numeric_limits<double>::epsilon() *
+                               std::max(probability[i], 1.0) * 64.0
+              ? 1.0 / probability[i]
+              : (std::log(probability[i]) - std::log(probability[j])) / gap;
+      logVelocity(i, j) = dividedDifference * rDot;
+    }
+  }
+
+  Eigen::MatrixXcd inBasisResult = -logVelocity / T;
+  for (Eigen::Index i = 0; i < n; ++i) {
+    if (data.supported[static_cast<std::size_t>(i)] == 0) continue;
+    inBasisResult(i, i) -= std::complex<double>{entropyVelocity / T, 0.0};
+  }
+  Eigen::MatrixXcd result =
+      data.eigenvectors * inBasisResult * data.eigenvectors.adjoint();
+  result.noalias() -= (traceVelocity / T) * data.entropyDerivative;
+  return result;
+}
 
 SpectralEntropyData
 spectralEntropyData(Eigen::MatrixXcd laplacian,
@@ -403,12 +678,17 @@ spectralEntropyData(Eigen::MatrixXcd laplacian,
       std::numeric_limits<double>::epsilon() *
       static_cast<double>(std::max<std::size_t>(n, 1)) *
       std::max(trace, 1.0) * 64.0;
+  data.eigenvalues = eigenvalues;
+  data.eigenvectors = solver.eigenvectors();
+  data.trace = trace;
+  data.supported.assign(n, 0);
   Eigen::VectorXd coefficients = Eigen::VectorXd::Zero(
       static_cast<Eigen::Index>(n));
   for (std::size_t index = 0; index < n; ++index) {
     const double eigenvalue =
         std::max(eigenvalues[static_cast<Eigen::Index>(index)], 0.0);
     if (eigenvalue <= supportTolerance) continue;
+    data.supported[index] = 1;
     const double probability = eigenvalue / trace;
     data.entropy -= probability * std::log(probability);
   }
@@ -720,6 +1000,153 @@ std::vector<std::complex<double>> HodgeLaplacian::spectralEntropyGradient(
     }
   }
   return gradient;
+}
+
+std::vector<std::complex<double>>
+HodgeLaplacian::spectralEntropyGradientDirectionalDerivative(
+    int k, const std::vector<std::complex<double>> &direction,
+    EntropyPhaseMode phaseMode) const {
+  requireNonNegativeDegree(k);
+  const auto edges = st_ && st_->getEdgeList()
+                         ? st_->getEdgeList()->toVector()
+                         : std::vector<EdgePtr>{};
+  if (direction.size() != edges.size())
+    throw std::runtime_error(
+        "HodgeLaplacian::spectralEntropyGradientDirectionalDerivative: "
+        "direction has " +
+        std::to_string(direction.size()) + " entries, expected " +
+        std::to_string(edges.size()));
+  std::vector<cd> velocityOfGradient(edges.size(), cd{0.0, 0.0});
+  if (!st_)
+    return velocityOfGradient;
+
+  // The direction, keyed the way the simplices key their own gradients.
+  std::map<std::pair<std::uint64_t, std::uint64_t>, cd> keyedDirection;
+  for (std::size_t edgeIndex = 0; edgeIndex < edges.size(); ++edgeIndex) {
+    const auto *edge = edges[edgeIndex];
+    if (edge == nullptr || edge->getSource() == nullptr ||
+        edge->getTarget() == nullptr)
+      continue;
+    const std::uint64_t a = edge->getSource()->getId();
+    const std::uint64_t b = edge->getTarget()->getId();
+    keyedDirection[{std::min(a, b), std::max(a, b)}] += direction[edgeIndex];
+  }
+
+  const LaplacianDerivativeWorkspace workspace(*st_, k, weightConvention_);
+  const SpectralEntropyData data =
+      spectralEntropyData(workspace.laplacian(), phaseMode);
+  if (data.laplacian.size() == 0 || data.zeroOperator)
+    return velocityOfGradient;
+  const Eigen::Index n = data.laplacian.rows();
+  const auto directionData = workspace.directionData(keyedDirection);
+
+  // Ldot = sum_f v_f dL/dz_f — one pass over the same sparse per-edge
+  // derivatives the gradient uses.
+  Eigen::MatrixXcd laplacianVelocity = Eigen::MatrixXcd::Zero(n, n);
+  for (std::size_t edgeIndex = 0; edgeIndex < edges.size(); ++edgeIndex) {
+    const auto *edge = edges[edgeIndex];
+    if (edge == nullptr || edge->getSource() == nullptr ||
+        edge->getTarget() == nullptr || direction[edgeIndex] == cd{0.0, 0.0})
+      continue;
+    laplacianVelocity.noalias() +=
+        direction[edgeIndex] * workspace.gradient(edge->getSource()->getId(),
+                                                  edge->getTarget()->getId());
+  }
+
+  Eigen::MatrixXcd fullPhaseLeft;
+  Eigen::MatrixXcd fullPhaseLeftVelocity;
+  Eigen::MatrixXd magnitudeDerivative;
+  Eigen::MatrixXd magnitudeDerivativeVelocity;
+  Eigen::MatrixXcd phaseFactor;
+  Eigen::MatrixXcd phaseFactorVelocity;
+  if (phaseMode == EntropyPhaseMode::IncludeComplexPhase) {
+    // A = L^dagger L, so Adot = Ldot^dagger L + L^dagger Ldot.
+    const Eigen::MatrixXcd positiveVelocity =
+        laplacianVelocity.adjoint() * data.laplacian +
+        data.laplacian.adjoint() * laplacianVelocity;
+    const Eigen::MatrixXcd entropyDerivativeVelocityMatrix =
+        entropyDerivativeVelocity(data, positiveVelocity);
+    fullPhaseLeft = data.entropyDerivative * data.laplacian.adjoint();
+    fullPhaseLeftVelocity =
+        entropyDerivativeVelocityMatrix * data.laplacian.adjoint() +
+        data.entropyDerivative * laplacianVelocity.adjoint();
+  } else {
+    // M = |L| entrywise. d|L_ij| = Re(conj(L_ij)/|L_ij| dL_ij), so the unit
+    // phase factor and the magnitude both carry a velocity here.
+    const Eigen::MatrixXcd &L = data.laplacian;
+    phaseFactor = Eigen::MatrixXcd::Zero(n, n);
+    phaseFactorVelocity = Eigen::MatrixXcd::Zero(n, n);
+    Eigen::MatrixXd magnitudeVelocity = Eigen::MatrixXd::Zero(n, n);
+    for (Eigen::Index row = 0; row < n; ++row)
+      for (Eigen::Index column = 0; column < n; ++column) {
+        const cd value = L(row, column);
+        const double magnitude = std::abs(value);
+        if (magnitude <= 0.0) continue;  // fixed support stratum
+        const cd unit = std::conj(value) / magnitude;
+        phaseFactor(row, column) = unit;
+        const double magnitudeDot =
+            (unit * laplacianVelocity(row, column)).real();
+        magnitudeVelocity(row, column) = magnitudeDot;
+        phaseFactorVelocity(row, column) =
+            (std::conj(laplacianVelocity(row, column)) - unit * magnitudeDot) /
+            magnitude;
+      }
+    const Eigen::MatrixXd magnitudeOperator = data.entropyOperator.real();
+    const Eigen::MatrixXd positiveVelocityReal =
+        magnitudeVelocity.transpose() * magnitudeOperator +
+        magnitudeOperator.transpose() * magnitudeVelocity;
+    const Eigen::MatrixXcd entropyDerivativeVelocityMatrix =
+        entropyDerivativeVelocity(data, positiveVelocityReal.cast<cd>());
+    magnitudeDerivative =
+        2.0 * magnitudeOperator * data.entropyDerivative.real();
+    magnitudeDerivativeVelocity =
+        2.0 * (magnitudeVelocity * data.entropyDerivative.real() +
+               magnitudeOperator * entropyDerivativeVelocityMatrix.real());
+  }
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(dynamic) if (!omp_in_parallel())
+#endif
+  for (std::int64_t edgeIndex = 0;
+       edgeIndex < static_cast<std::int64_t>(edges.size()); ++edgeIndex) {
+    const auto *edge = edges[static_cast<std::size_t>(edgeIndex)];
+    if (edge == nullptr || edge->getSource() == nullptr ||
+        edge->getTarget() == nullptr)
+      continue;
+    const std::uint64_t source = edge->getSource()->getId();
+    const std::uint64_t target = edge->getTarget()->getId();
+    const Eigen::MatrixXcd derivative = workspace.gradient(source, target);
+    const Eigen::MatrixXcd derivativeVelocity =
+        workspace.gradientDirectionalDerivative(source, target, directionData);
+
+    if (phaseMode == EntropyPhaseMode::IncludeComplexPhase) {
+      // d/dt [2 Tr(C L^dagger dL/dz_e)] by the product rule; every factor is
+      // exact and no step size appears.
+      velocityOfGradient[static_cast<std::size_t>(edgeIndex)] =
+          2.0 * ((fullPhaseLeftVelocity.array() *
+                  derivative.transpose().array())
+                     .sum() +
+                 (fullPhaseLeft.array() *
+                  derivativeVelocity.transpose().array())
+                     .sum());
+    } else {
+      cd component{0.0, 0.0};
+      for (Eigen::Index row = 0; row < n; ++row)
+        for (Eigen::Index column = 0; column < n; ++column) {
+          const cd unit = phaseFactor(row, column);
+          if (unit == cd{0.0, 0.0}) continue;
+          component += magnitudeDerivativeVelocity(row, column) * unit *
+                           derivative(row, column) +
+                       magnitudeDerivative(row, column) *
+                           phaseFactorVelocity(row, column) *
+                           derivative(row, column) +
+                       magnitudeDerivative(row, column) * unit *
+                           derivativeVelocity(row, column);
+        }
+      velocityOfGradient[static_cast<std::size_t>(edgeIndex)] = component;
+    }
+  }
+  return velocityOfGradient;
 }
 
 double HodgeLaplacian::spectralEntropyGradientNorm(

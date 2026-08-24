@@ -294,6 +294,35 @@ class HodgeLaplacian {
         int k, EntropyPhaseMode phaseMode =
                    EntropyPhaseMode::IncludeComplexPhase) const;
 
+    /// The **exact analytic Hessian-vector product** of the spectral entropy:
+    /// the directional derivative
+    /// \f$ \dot h_e=\frac{d}{dt}\Big|_{0}h_e(z+t\,v) \f$ of
+    /// `spectralEntropyGradient` along a direction \f$ v \f$ given in the same
+    /// `EdgeList` order, for a REAL parameter \f$ t \f$ (so both \f$ z \f$ and
+    /// \f$ \bar z \f$ move). This is what the descent direction of
+    /// \f$ \|\nabla_z S\|^2 \f$ requires, and it is closed-form — the exactness
+    /// contract admits no finite-difference direction.
+    ///
+    /// Three exact ingredients compose it: the simplex volume Hessian
+    /// (`Simplex::volumeGradientDirectionalDerivative`, exact because the Gram
+    /// matrix is linear in \f$ \ell^2 \f$), the resulting second derivative of
+    /// \f$ L_k \f$ contracted against \f$ v \f$, and the Daleckii--Krein
+    /// derivative of \f$ C=\partial S/\partial A \f$ on the fixed-rank stratum
+    /// the value and first derivative already select. Cost is one extra
+    /// eigenbasis contraction plus the same sparse per-edge assembly the
+    /// gradient performs, so it replaces two full analytic-gradient
+    /// evaluations rather than adding to them.
+    ///
+    /// Returns an all-zero vector for an empty or identically-zero operator,
+    /// matching `spectralEntropyGradient`. A `direction` whose length differs
+    /// from the edge count is rejected.
+    /// @throws std::runtime_error if `direction.size()` is not the edge count.
+    [[nodiscard]] std::vector<std::complex<double>>
+    spectralEntropyGradientDirectionalDerivative(
+        int k, const std::vector<std::complex<double>> &direction,
+        EntropyPhaseMode phaseMode =
+            EntropyPhaseMode::IncludeComplexPhase) const;
+
     /// Whether \f$ \| L^{U(1)} - (L^{U(1)})^\dagger \| \le \text{tol} \f$
     /// (Frobenius norm) for the **U(1) connection** Laplacian. True by
     /// construction. It says nothing about \f$ L_0 \f$, which is complex
