@@ -9,7 +9,7 @@ paper's certificates actually read off the accepted geometry.
 What is driven, and what is only read
 -------------------------------------
 The dynamics is `MultiCobordism` in `SimulationMode.EMERGENCE` /
-`EmergenceSubmode.STRICT` with `CobordismObjectiveMode.JointStationarity`.
+`EmergenceSubmode.STRICT` with `JointStationarityObjective`.
 Nothing this file computes enters that objective: the firewall is structural
 (a static `objectiveOf` over declared scalars), and every panel below is a
 read-only measurement over the accepted geometry through the library's own
@@ -667,7 +667,7 @@ def drive(config, progress=False):
     host = build_neutral_host(config["size"], config["host_seed"])
     node = MC(host, [], [], list(config["register_degrees"]), 1.0,
               config["seed"])
-    node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
+    node.set_objective(cob.JointStationarityObjective())
     node.set_simulation_mode(MC.SimulationMode.EMERGENCE,
                              MC.EmergenceSubmode.STRICT)
 

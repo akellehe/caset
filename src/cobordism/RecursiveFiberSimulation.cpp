@@ -1725,7 +1725,7 @@ std::string MultiCobordism::replayCheckpoint(const std::string &checkpoint) {
   if (resolutions.empty()) resolutions.push_back(1.0);
 
   MultiCobordism replayed(spacetime, {}, {}, {degrees.back()}, 1.0, seed);
-  replayed.setObjectiveMode(ObjectiveMode::JointStationarity);
+  replayed.setObjective(std::make_shared<JointStationarityObjective>());
   replayed.setSimulationMode(SimulationMode::Replay);
   AnalysisConfig config;
   config.enabled = true;

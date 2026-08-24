@@ -84,7 +84,7 @@ class DriveTest(unittest.TestCase):
         host = ea.build_neutral_host(SMALL, ea.DECLARED_HOST_SEED)
         node = MC(host, [], [], list(ea.DECLARED_REGISTER_DEGREES), 1.0,
                   ea.DECLARED_SEED)
-        node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
+        node.set_objective(cob.JointStationarityObjective())
         node.set_simulation_mode(MC.SimulationMode.EMERGENCE,
                                  MC.EmergenceSubmode.STRICT)
         self.assertEqual(node.simulation_mode, MC.SimulationMode.EMERGENCE)

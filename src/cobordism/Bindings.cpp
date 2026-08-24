@@ -962,19 +962,6 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
 
   // === MultiCobordism (#491): the C++ source-of-truth fully-emergent merge
   // optimizer — emergent topology at a user-defined degree k. ===
-  py::enum_<MultiCobordism::ObjectiveMode>(m, "CobordismObjectiveMode",
-      "Scalar functional scored by MultiCobordism topology and geometry updates.")
-      .value("Legacy", MultiCobordism::ObjectiveMode::Legacy,
-             "Compatibility objective ||grad S_Regge||^2 + gamma r_U; mixed-term "
-             "Stage 2 preserves its historical Regge search ray while exact F "
-             "gates acceptance.")
-      .value("JointStationarity",
-             MultiCobordism::ObjectiveMode::JointStationarity,
-             "beta ||grad S_Regge||^2 + eta ||grad S_Hodge||^2.")
-      .value("MediatedCorrespondence",
-             MultiCobordism::ObjectiveMode::MediatedCorrespondence,
-             "Historical r_U + beta |S_Regge(W*)| objective.")
-      .export_values();
 
   py::class_<MultiCobordism::BoundaryBlock>(m, "MultiCobordismBlock",
       "An emergent boundary block of a MultiCobordism (an input or output): the "
@@ -1073,9 +1060,6 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            &MultiCobordism::hodgeEntropyStationarity,
            "Sum_k ||grad_z S_Hodge,k||^2, the entropy half of the joint "
            "stationarity objective.")
-      .def("set_objective_mode", &MultiCobordism::setObjectiveMode,
-           py::arg("mode"))
-      .def_property_readonly("objective_mode", &MultiCobordism::objectiveMode)
       .def("set_objective", &MultiCobordism::setObjective,
            py::arg("objective"), py::keep_alive<1, 2>(),
            "Inject the functional this node descends. The engine calls through "

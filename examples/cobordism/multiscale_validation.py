@@ -551,7 +551,7 @@ def run_member(size, seed, config, commit, config_hash):
     started = time.time()
     host = build_host(size, config["host_seed"])
     node = MC(host, [], [], list(config["degrees"]), 1.0, seed)
-    node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
+    node.set_objective(cob.JointStationarityObjective())
     node.set_simulation_mode(MC.SimulationMode.EMERGENCE,
                              MC.EmergenceSubmode.STRICT)
     node.set_provenance(config_hash, commit)
@@ -1423,7 +1423,7 @@ def negative_controls(size, config):
     host = build_host(size, config["host_seed"])
     node = MC(host, [], [], list(config["degrees"]), 1.0,
               config["seeds"][0])
-    node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
+    node.set_objective(cob.JointStationarityObjective())
     list(node.run_stage1(max_steps=1,
                          n_candidate_moves=config["candidate_moves"]))
     list(node.run_stage2(max_iters=config["stage2_iters"]))
@@ -1450,8 +1450,7 @@ def negative_controls(size, config):
     shuffled_host = build_host(size, config["host_seed"])
     shuffled_node = MC(shuffled_host, [], [], list(config["degrees"]), 1.0,
                        config["seeds"][0])
-    shuffled_node.set_objective_mode(
-        cob.CobordismObjectiveMode.JointStationarity)
+    shuffled_node.set_objective(cob.JointStationarityObjective())
     list(shuffled_node.run_stage1(
         max_steps=1, n_candidate_moves=config["candidate_moves"]))
     list(shuffled_node.run_stage2(max_iters=config["stage2_iters"]))
@@ -2242,7 +2241,7 @@ def threshold_sensitivity(size, config):
     perturbations. An UNCERTAINTY measurement; nothing is selected by it."""
     host = build_host(size, config["host_seed"])
     node = MC(host, [], [], list(config["degrees"]), 1.0, config["seeds"][0])
-    node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
+    node.set_objective(cob.JointStationarityObjective())
     list(node.run_stage1(max_steps=1,
                          n_candidate_moves=config["candidate_moves"]))
     list(node.run_stage2(max_iters=config["stage2_iters"]))
@@ -2614,7 +2613,7 @@ def make_config(quick, sizes=None, seeds=None):
         "degeneracy_tolerance": DECLARED_DEGENERACY_TOLERANCE,
         "threshold_scan": list(DECLARED_THRESHOLD_SCAN),
         "control_seed": DECLARED_CONTROL_SEED,
-        "objective_mode": "JointStationarity",
+        "objective_name": cob.ObjectiveName.JOINT_STATIONARITY,
         "simulation_mode": "emergence",
         "emergence_submode": "strict",
         "checkpoint_schema_version": MC.checkpoint_schema_version(),

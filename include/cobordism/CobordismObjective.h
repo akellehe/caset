@@ -303,6 +303,27 @@ class CobordismObjective {
   /// pays for a target-conditioned quantity it does not use.
   [[nodiscard]] virtual bool needsRegisterResidual() const { return false; }
 
+  /// Whether a candidate move's objective change may be scored by a LOCALIZED
+  /// exact delta instead of by re-evaluating the whole functional.
+  ///
+  /// An objective built from global spectra or action magnitudes changes
+  /// everywhere when one cell changes, so its true scalar difference is the
+  /// only honest score and the engine pays for a full evaluation per candidate.
+  /// An objective assembled from per-cell contributions can instead be
+  /// differenced exactly over the cells a move touches. Declaring `false` is
+  /// always CORRECT and merely more expensive, which is why it is the default:
+  /// an objective opts in only where its decomposition genuinely supports the
+  /// cheaper route.
+  [[nodiscard]] virtual bool supportsLocalizedDelta() const { return false; }
+
+  /// The lowest register degree over which this objective is DECLARED. The
+  /// engine refuses to install it on a node carrying a lower degree, so a
+  /// declared domain restriction travels with the objective that declares it
+  /// rather than living in the engine as a special case.
+  ///
+  /// Zero — no restriction — is the default.
+  [[nodiscard]] virtual int minimumRegisterDegree() const { return 0; }
+
   /// The weight this objective puts on a NUMERICALLY differentiated
   /// register-residual direction, given its configuration; zero for an
   /// objective that supplies an analytic direction for every term it has.
@@ -343,6 +364,12 @@ class JointStationarityObjective final : public CobordismObjective {
   [[nodiscard]] ObjectiveDirection direction(
       const ObjectiveDirectionContext &context) const override;
   [[nodiscard]] bool isTargetConditioned() const override { return false; }
+  /// A DECLARED domain restriction, not a capability limit. Since the
+  /// degree-zero \f$L_0=d_1W_1^{-1}d_1^{\mathsf T}\f$ is holomorphic in
+  /// \f$z\f$ and its entropy gradient is exact, the gradient exists at degree
+  /// zero too; widening this objective's declared domain to reach it is a
+  /// separate decision about the objective, taken deliberately or not at all.
+  [[nodiscard]] int minimumRegisterDegree() const override { return 1; }
 };
 
 /// # LegacyObjective
@@ -359,6 +386,11 @@ class LegacyObjective final : public CobordismObjective {
       const ObjectiveDirectionContext &context) const override;
   [[nodiscard]] bool isTargetConditioned() const override { return true; }
   [[nodiscard]] bool needsRegisterResidual() const override { return true; }
+  /// The Regge half has an exact per-cell delta and the register half is an
+  /// exact \f$\gamma\,\Delta r_U\f$, so a candidate move is scored by
+  /// differencing over the cells it touches rather than by re-evaluating the
+  /// whole functional.
+  [[nodiscard]] bool supportsLocalizedDelta() const override { return true; }
   [[nodiscard]] double numericalRegisterResidualWeight(
       const ObjectiveContext &context) const override;
 };
