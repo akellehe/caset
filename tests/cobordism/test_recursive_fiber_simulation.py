@@ -67,7 +67,7 @@ def _node(seed=_NODE_SEED, refine=_REFINE, degrees=(1,)):
     """
     st = _closed_s4(refine, _HOST_SEED)
     node = MC(st, [], [], list(degrees), 1.0, seed)
-    node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
+    node.set_objective(cob.JointStationarityObjective())
     return node
 
 
@@ -1489,8 +1489,7 @@ class RelabelingInvarianceTest(unittest.TestCase):
             a, b = edge.getSource().getId(), edge.getTarget().getId()
             edge.setLength(lengths[(min(a, b), max(a, b))])
         rebuilt_node = MC(rebuilt, [], [], [1], 1.0, _NODE_SEED)
-        rebuilt_node.set_objective_mode(
-            cob.CobordismObjectiveMode.JointStationarity)
+        rebuilt_node.set_objective(cob.JointStationarityObjective())
         rebuilt_node.set_analysis_config(_overlay_config())
         rebuilt_node.run_recursive_analysis()
         return rebuilt_node

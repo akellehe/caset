@@ -896,7 +896,7 @@ class RefinementTest(unittest.TestCase):
         stay untouched."""
         node = cob.MultiCobordism(rbs.build_neutral_host(SMALL), [], [],
                                   [1], 1.0, SMALL_SEED)
-        node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
+        node.set_objective(cob.JointStationarityObjective())
         firing = cob.MultiCobordism.RefinementIndicators()
         firing.regge_stationarity_residual = float("inf")
         firing.hodge_stationarity_residual = float("inf")

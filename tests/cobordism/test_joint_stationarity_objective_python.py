@@ -35,7 +35,7 @@ class ObjectiveSelectionTest(unittest.TestCase):
     def test_joint_objective_is_two_stationarity_residuals(self):
         st = _complex_sphere4()
         node = _node(st)
-        node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
+        node.set_objective(cob.JointStationarityObjective())
         node.set_regge_weight(0.7)
         node.set_hodge_entropy_weight(1.9)
         expected = (0.7 * cob.MultiCobordism.regge_action_gradient(st)
@@ -50,8 +50,7 @@ class ObjectiveSelectionTest(unittest.TestCase):
             _complex_sphere4(), [], [[1.0, -1.0, 1j]], degrees=[3],
             gamma=9000.0, seed=7)
         for node in (first, second):
-            node.set_objective_mode(
-                cob.CobordismObjectiveMode.JointStationarity)
+            node.set_objective(cob.JointStationarityObjective())
             node.set_regge_weight(0.7)
             node.set_hodge_entropy_weight(1.9)
         self.assertNotAlmostEqual(first.r_u(first.st), second.r_u(second.st))
@@ -60,8 +59,7 @@ class ObjectiveSelectionTest(unittest.TestCase):
     def test_mediated_objective_matches_documented_experiment(self):
         st = _complex_sphere4()
         node = _node(st)
-        node.set_objective_mode(
-            cob.CobordismObjectiveMode.MediatedCorrespondence)
+        node.set_objective(cob.MediatedCorrespondenceObjective())
         node.set_regge_weight(0.23)
         expected = (node.r_u(st)
                     + 0.23 * abs(T.ReggeSolver(
@@ -71,12 +69,11 @@ class ObjectiveSelectionTest(unittest.TestCase):
     def test_joint_mode_rejects_degree_zero_gradient(self):
         node = _node(_complex_sphere4(), degree=0)
         with self.assertRaises(ValueError):
-            node.set_objective_mode(
-                cob.CobordismObjectiveMode.JointStationarity)
+            node.set_objective(cob.JointStationarityObjective())
 
     def test_zero_weights_disable_both_joint_terms(self):
         node = _node(_complex_sphere4())
-        node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
+        node.set_objective(cob.JointStationarityObjective())
         node.set_hodge_entropy_weight(0.0)
         node.set_regge_weight(0.0)
         original_lengths = [complex(edge.getLength())
@@ -95,7 +92,7 @@ class ObjectiveSelectionTest(unittest.TestCase):
 
     def test_entropy_only_stage_two_is_variational(self):
         node = _node(_complex_sphere4())
-        node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
+        node.set_objective(cob.JointStationarityObjective())
         node.set_hodge_entropy_weight(1.0)
         trace = node.run_stage2(beta=0.0, max_iters=1, alpha0=1e-3,
                                 tolerance=1e-14)
@@ -110,7 +107,7 @@ class ComplexSquaredCoordinateStepTest(unittest.TestCase):
     def test_regge_step_subtracts_from_z_with_a_real_step_scale(self):
         st = _complex_sphere4()
         node = _node(st, gamma=0.0)
-        node.set_objective_mode(cob.CobordismObjectiveMode.Legacy)
+        node.set_objective(cob.LegacyObjective())
         edges = st.getEdgeList().toVector()
         original_lengths = np.asarray([complex(e.getLength()) for e in edges])
         z0 = original_lengths ** 2
@@ -145,7 +142,7 @@ class ComplexSquaredCoordinateStepTest(unittest.TestCase):
     def test_entropy_stationarity_step_uses_its_complex_hessian_vector_product(self):
         st = _complex_sphere4()
         node = _node(st)
-        node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
+        node.set_objective(cob.JointStationarityObjective())
         node.set_hodge_entropy_weight(1.0)
         mode = cob.HodgeEntropyPhaseMode.IncludeComplexPhase
         node.set_hodge_entropy_phase_mode(mode)

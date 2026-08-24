@@ -46,28 +46,31 @@ def _node(st, degree=3, gamma=0.0):
 class InjectedObjectiveIsTheOneScoredTest(unittest.TestCase):
     """The engine scores whatever it is handed, and says which."""
 
-    def test_selecting_a_mode_injects_the_matching_objective(self):
+    def test_each_builtin_reports_its_own_name(self):
         node = _node(_complex_sphere4())
-        for mode, expected in (
-                (cob.CobordismObjectiveMode.JointStationarity,
-                 "joint_stationarity"),
-                (cob.CobordismObjectiveMode.Legacy, "legacy"),
-                (cob.CobordismObjectiveMode.MediatedCorrespondence,
+        for objective, expected in (
+                (cob.JointStationarityObjective(), "joint_stationarity"),
+                (cob.LegacyObjective(), "legacy"),
+                (cob.MediatedCorrespondenceObjective(),
                  "mediated_correspondence")):
-            with self.subTest(mode=expected):
-                node.set_objective_mode(mode)
+            with self.subTest(objective=expected):
+                node.set_objective(objective)
                 self.assertEqual(node.objective_name, expected)
 
-    def test_an_injected_objective_replaces_the_selected_one(self):
+    def test_an_injected_objective_replaces_the_previous_one(self):
         node = _node(_complex_sphere4())
-        node.set_objective_mode(cob.CobordismObjectiveMode.Legacy)
+        node.set_objective(cob.LegacyObjective())
         self.assertEqual(node.objective_name, "legacy")
         node.set_objective(cob.JointStationarityObjective())
         self.assertEqual(node.objective_name, "joint_stationarity")
-        # The scalar follows the injected object, not the enum, which still
-        # reports the last mode that was selected.
-        self.assertEqual(node.objective_mode,
-                         cob.CobordismObjectiveMode.Legacy)
+
+    def test_there_is_no_second_answer_to_what_is_optimized(self):
+        """The enum is retired, so nothing can report a functional that
+        disagrees with the injected one. `objective_name` is the only answer."""
+        node = _node(_complex_sphere4())
+        self.assertFalse(hasattr(node, "objective_mode"))
+        self.assertFalse(hasattr(node, "set_objective_mode"))
+        self.assertFalse(hasattr(cob, "CobordismObjectiveMode"))
 
     def test_a_null_objective_is_refused(self):
         node = _node(_complex_sphere4())
@@ -96,7 +99,7 @@ class ExactnessTest(unittest.TestCase):
     def test_joint_hodge_term_equals_the_primitive_it_is_built_from(self):
         st = _complex_sphere4()
         node = _node(st)
-        node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
+        node.set_objective(cob.JointStationarityObjective())
         terms = node.objective_terms()
         reference = (node.hodge_entropy_weight *
                      cob.HodgeLaplacian(st).spectralEntropyGradientNorm(
@@ -108,7 +111,7 @@ class ExactnessTest(unittest.TestCase):
     def test_joint_regge_term_equals_the_engine_gradient_norm(self):
         st = _complex_sphere4()
         node = _node(st)
-        node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
+        node.set_objective(cob.JointStationarityObjective())
         terms = node.objective_terms()
         reference = (node.regge_weight *
                      cob.MultiCobordism.regge_action_gradient(st))
@@ -117,11 +120,11 @@ class ExactnessTest(unittest.TestCase):
     def test_the_scalar_is_the_sum_of_the_declared_terms(self):
         st = _complex_sphere4()
         node = _node(st)
-        for mode in (cob.CobordismObjectiveMode.JointStationarity,
-                     cob.CobordismObjectiveMode.Legacy,
-                     cob.CobordismObjectiveMode.MediatedCorrespondence):
+        for mode in (cob.JointStationarityObjective(),
+                     cob.LegacyObjective(),
+                     cob.MediatedCorrespondenceObjective()):
             with self.subTest(mode=str(mode)):
-                node.set_objective_mode(mode)
+                node.set_objective(mode)
                 terms = node.objective_terms()
                 self.assertEqual(node.objective(),
                                  cob.CobordismObjective.total(terms))
@@ -132,7 +135,7 @@ class ExactnessTest(unittest.TestCase):
     def test_joint_stationarity_carries_no_register_residual(self):
         st = _complex_sphere4()
         node = _node(st)
-        node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
+        node.set_objective(cob.JointStationarityObjective())
         # Not merely zero-valued: the term is structurally absent because the
         # objective never asks the engine to compute it.
         self.assertEqual(node.objective_terms().register_residual, 0.0)
@@ -140,7 +143,7 @@ class ExactnessTest(unittest.TestCase):
     def test_stage_two_still_descends_under_the_injected_objective(self):
         st = _complex_sphere4()
         node = _node(st)
-        node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
+        node.set_objective(cob.JointStationarityObjective())
         before = node.objective()
         node.run_stage2(1.0, 12, 0.05)
         after = node.objective()

@@ -643,37 +643,21 @@ double MultiCobordism::hodgeEntropyStationarity() const {
   return residual;
 }
 
-void MultiCobordism::setObjectiveMode(ObjectiveMode mode) {
-  // A DECLARED domain restriction on the objective, not a capability limit.
-  // Since #805 the degree-zero L_0 = d_1 W_1^-1 d_1^T is holomorphic in z and
-  // spectralEntropyGradient(0) is exact, so the gradient exists there; widening
-  // the joint objective's domain to degree zero is a separate decision about
-  // the objective, taken deliberately or not at all.
-  if (mode == ObjectiveMode::JointStationarity)
-    for (int degree : registerDegrees_)
-      if (degree < 1)
-        throw std::invalid_argument(
-            "MultiCobordism: joint Hodge-entropy stationarity is declared over "
-            "degrees >= 1; got degree " + std::to_string(degree));
-  objectiveMode_ = mode;
-  switch (mode) {
-    case ObjectiveMode::JointStationarity:
-      objectiveSpec_ = std::make_shared<JointStationarityObjective>();
-      break;
-    case ObjectiveMode::MediatedCorrespondence:
-      objectiveSpec_ = std::make_shared<MediatedCorrespondenceObjective>();
-      break;
-    case ObjectiveMode::Legacy:
-      objectiveSpec_ = std::make_shared<LegacyObjective>();
-      break;
-  }
-}
-
 void MultiCobordism::setObjective(
     std::shared_ptr<CobordismObjective> objective) {
   if (!objective)
     throw std::invalid_argument(
         "MultiCobordism: the injected objective must not be null");
+  // The objective's own DECLARED domain, enforced here so the restriction
+  // travels with the objective that declares it rather than living in the
+  // engine as a special case. It is a declaration, not a capability limit.
+  const int minimumDegree = objective->minimumRegisterDegree();
+  for (int degree : registerDegrees_)
+    if (degree < minimumDegree)
+      throw std::invalid_argument(
+          "MultiCobordism: objective '" + objective->name() +
+          "' is declared over degrees >= " + std::to_string(minimumDegree) +
+          "; got degree " + std::to_string(degree));
   // A scope can only carry a handle minted by `regionHandle`, which refuses an
   // undeclared name, so a mis-spelling cannot reach this point. Re-check
   // anyway: regions can be cleared after a handle was minted, and an objective
@@ -984,11 +968,12 @@ double MultiCobordism::deltaF(
     const std::shared_ptr<Spacetime> &candidateSpacetime, double baseObjective,
     double baseResidualU,
     const std::set<std::vector<std::uint64_t>> &baseCellSet) const {
-  // The legacy objective has a localized exact Regge delta below. The new
-  // objectives depend on global spectra/action magnitudes, so score their true
-  // scalar difference. It is more expensive, but it prevents stage 1 from
-  // optimizing a surrogate different from the objective it reports.
-  if (objectiveMode_ != ObjectiveMode::Legacy)
+  // An objective that declares a localized exact delta is differenced over the
+  // cells the move touches, below. One that does not depends on global spectra
+  // or action magnitudes, so its true scalar difference is the only honest
+  // score. It is more expensive, but it prevents stage 1 from optimizing a
+  // surrogate different from the objective it reports.
+  if (!objectiveSpec_->supportsLocalizedDelta())
     return objectiveFor(candidateSpacetime) - baseObjective;
 
   std::set<std::vector<std::uint64_t>> candidateCellSet;
@@ -1079,7 +1064,7 @@ double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth,
                             double baseObjective) {
   const auto currentSnapshot = snapshot();
   const double baseResidualU =
-      objectiveMode_ == ObjectiveMode::Legacy ? rU(spacetime_) : 0.0;
+      objectiveSpec_->supportsLocalizedDelta() ? rU(spacetime_) : 0.0;
   std::set<std::vector<std::uint64_t>> baseCellSet;
   for (const auto &topSimplex : spacetime_->getTopSimplices())
     baseCellSet.insert(topSimplex->topTuple());
@@ -1337,7 +1322,7 @@ bool MultiCobordism::stage1Update(int nCandidateMoves, bool growBoundaries,
   // accumulated trace drift arbitrarily far from `objective()` (measured at tens of
   // thousands on preconed hosts), and since the SAME accumulated quantity gates
   // acceptance, moves were being committed against a number that was not F.
-  if (growBoundaries && objectiveMode_ != ObjectiveMode::JointStationarity) {
+  if (growBoundaries && objectiveSpec_->needsRegisterResidual()) {
     const double objectiveBeforeGrowth = objective();
     growBlockRegions();
     const double growthObjectiveDelta = objective() - objectiveBeforeGrowth;
@@ -1358,11 +1343,12 @@ bool MultiCobordism::stage1Update(int nCandidateMoves, bool growBoundaries,
   // handful of draws would badly under-sample it. The budget is only spent
   // when depth 1 already failed, i.e. exactly when it is worth it.
   constexpr int kDeepLookaheadCandidates = 128;
-  // Non-legacy candidates use an exact global objective. Score the unchanged
-  // base geometry once for the entire iterative-deepening pass instead of once
-  // per candidate endpoint (up to 524 redundant evaluations at depth five).
+  // Candidates without a localized delta use an exact global objective. Score
+  // the unchanged base geometry once for the entire iterative-deepening pass
+  // instead of once per candidate endpoint (up to 524 redundant evaluations at
+  // depth five).
   const double baseObjective =
-      objectiveMode_ == ObjectiveMode::Legacy ? 0.0 : objectiveFor(spacetime_);
+      objectiveSpec_->supportsLocalizedDelta() ? 0.0 : objectiveFor(spacetime_);
   for (int lookaheadDepth = 1; lookaheadDepth <= std::max(1, maxLookahead);
        ++lookaheadDepth) {
     const int batchSize =
@@ -1377,11 +1363,12 @@ bool MultiCobordism::stage1Update(int nCandidateMoves, bool growBoundaries,
       return true;
     }
   }
-  // JointStationarity is target-free: with no improving sequence, its
-  // combinatorial stage is done. Target-conditioned modes halt when the register
-  // is carried; otherwise they keep drawing because a random miss is not proof
-  // that no target-improving sequence exists. `maxSteps` bounds those retries.
-  if (objectiveMode_ == ObjectiveMode::JointStationarity) return false;
+  // A target-free objective is done when no improving sequence is found: there
+  // is nothing else it was trying to reach. A target-conditioned one halts when
+  // the register is carried; otherwise it keeps drawing, because a random miss
+  // is not proof that no target-improving sequence exists. `maxSteps` bounds
+  // those retries.
+  if (!objectiveSpec_->isTargetConditioned()) return false;
   return rU(spacetime_) >= kRegisterCarriedTolerance;
 }
 
@@ -1611,10 +1598,11 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
       lastStage2Stationary_ = true;
       return false;
     }
-    // Joint mode already computed both stationarity residuals while assembling
-    // their exact descent directions. Reuse them instead of evaluating the same
-    // Regge and Hodge gradients again at the unchanged base geometry.
-    if (objectiveMode_ != ObjectiveMode::JointStationarity)
+    // An objective whose direction assembly already produced its scalar handed
+    // it back as the direction's baseline, taken above. Only evaluate the
+    // functional again when it did not, rather than re-deriving the same
+    // gradients at the unchanged base geometry.
+    if (!objectiveDirection.baselineComputed)
       currentObjective = fullObjective();
     // Absolute improvement threshold: the same tolerance has the same meaning
     // at every objective scale.
@@ -1706,8 +1694,15 @@ int MultiCobordism::directedConeOut(HolePlacementStrategy strategy, int maxOpen)
               [&](const std::vector<std::uint64_t> &a,
                   const std::vector<std::uint64_t> &b) { return orderKey(a) < orderKey(b); });
 
-    const double baseResidual = rU(spacetime);
-    double bestResidual = baseResidual;
+    // Scored by the INJECTED objective, so topology changes when the functional
+    // in force wants it and not otherwise. Surgery is the only topology-changing
+    // mechanism the engine has — Pachner moves are bistellar and preserve the PL
+    // homeomorphism type, hence the Betti numbers, and geometric relaxation
+    // changes no topology at all — so this probe is where a higher b_k becomes
+    // reachable. It is never required: an objective indifferent to topology
+    // finds no candidate that lowers it and nothing is committed.
+    const double baseObjective = objectiveFor(spacetime);
+    double bestObjective = baseObjective;
     std::vector<std::uint64_t> bestCell;
     int candidatesScanned = 0;
     int openersScanned = 0;
@@ -1721,9 +1716,9 @@ int MultiCobordism::directedConeOut(HolePlacementStrategy strategy, int maxOpen)
       const bool opensHole =
           emergentHoles(*spacetime, registerDegree).size() > holeCountBefore;
       if (opensHole) {
-        const double candidateResidual = rU(spacetime);  // rU absorbs r_state (both steps)
-        if (candidateResidual < bestResidual) {
-          bestResidual = candidateResidual;
+        const double candidateObjective = objectiveFor(spacetime);
+        if (candidateObjective < bestObjective) {
+          bestObjective = candidateObjective;
           bestCell = cell;
         }
         ++openersScanned;
@@ -1731,7 +1726,7 @@ int MultiCobordism::directedConeOut(HolePlacementStrategy strategy, int maxOpen)
       cone.rollback();
       if (opensHole && openersScanned >= kProbeOpeners) break;
     }
-    if (bestCell.empty()) break;  // no opener lowers rU
+    if (bestCell.empty()) break;  // no opener lowers the objective
     if (!cone.coneOut(bestCell).first) break;
     ++opened;
   }
@@ -1764,8 +1759,10 @@ int MultiCobordism::directedConeIn(int maxClose) {
       }
     }
 
-    const double baseResidual = rU(spacetime);
-    double bestResidual = baseResidual;
+    // Scored by the INJECTED objective, exactly as the cone-out probe is: a
+    // hole closes when the functional in force is lowered by closing it.
+    const double baseObjective = objectiveFor(spacetime);
+    double bestObjective = baseObjective;
     std::vector<std::uint64_t> bestFacet;
     int candidatesScanned = 0;
     SurgicalCone cone(spacetime.get());
@@ -1773,15 +1770,15 @@ int MultiCobordism::directedConeIn(int maxClose) {
       if (candidatesScanned++ >= kMaxCandidates) break;
       if (!cone.coneIn(facet).first) continue;
       if (emergentHoles(*spacetime, registerDegree).size() < holeCountBefore) {
-        const double candidateResidual = rU(spacetime);
-        if (candidateResidual < bestResidual) {
-          bestResidual = candidateResidual;
+        const double candidateObjective = objectiveFor(spacetime);
+        if (candidateObjective < bestObjective) {
+          bestObjective = candidateObjective;
           bestFacet = facet;
         }
       }
       cone.rollback();
     }
-    if (bestFacet.empty()) break;  // no cap lowers rU
+    if (bestFacet.empty()) break;  // no cap lowers the objective
     if (!cone.coneIn(bestFacet).first) break;
     ++closed;
   }

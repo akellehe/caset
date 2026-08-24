@@ -56,20 +56,6 @@ using ::tessera::spacetime::Spacetime;
 ///     edge length \f$\ell_e\f$.
 class MultiCobordism {
  public:
-  /// Scalar functional used to score topology and geometry.
-  enum class ObjectiveMode {
-    /// Compatibility objective: ||grad S_Regge||^2 + gamma r_U. With both terms
-    /// enabled, Stage 2 preserves the historical analytic Regge search ray while
-    /// the exact composite scalar gates acceptance; r_U-only mode differentiates r_U.
-    Legacy,
-    /// Both the Regge action and Hodge entropy are stationary:
-    /// beta ||grad S_Regge||^2 + eta ||grad S_Hodge||^2.
-    JointStationarity,
-    /// Historical operator-cobordism experiment:
-    /// r_U + beta |S_Regge(W*)|.
-    MediatedCorrespondence
-  };
-
   /// An emergent boundary block of the cobordism — an input OR an output. A block is
   /// NOT itself a complex: it stores the vertex SET it occupies plus the target period
   /// vector its own `L_k` sub-complex must carry. The sub-complex is recovered on
@@ -352,7 +338,7 @@ class MultiCobordism {
   /// over every input and output target vector (each component is carried by
   /// one register/hole, so a `[1, omega, omega^2]` target needs three).
   [[nodiscard]] std::size_t expectedRegisterCount() const;
-  /// The scalar selected by `setObjectiveMode`, using the configured Regge and
+  /// The injected objective's scalar, using the configured Regge and
   /// Hodge-entropy weights.
   [[nodiscard]] double objective() const;
   /// Sum of the normalized positive-operator Hodge entropies over the configured
@@ -361,21 +347,14 @@ class MultiCobordism {
   [[nodiscard]] double hodgeEntropy() const;
   /// Sum_k ||grad_z S_Hodge,k||^2, the entropy half of JointStationarity.
   [[nodiscard]] double hodgeEntropyStationarity() const;
-  /// Select one of the three built-in objectives. Sugar over `setObjective`:
-  /// it constructs the corresponding `CobordismObjective` and injects it, so a
-  /// caller that has always used the enum keeps working unchanged.
-  void setObjectiveMode(ObjectiveMode mode);
-  [[nodiscard]] ObjectiveMode objectiveMode() const noexcept {
-    return objectiveMode_;
-  }
-
   /// Inject the functional this node descends. The engine calls through it and
   /// knows nothing about which objective it holds; an objective reads only
   /// `ObjectiveContext`, which is the no-feedback firewall restated as an
-  /// input type. Passing an objective that is not one of the three built-ins
-  /// leaves `objectiveMode()` reporting the last mode selected, which is why
-  /// records stamp `objectiveName()` rather than the enum.
-  /// @throws std::invalid_argument on a null objective.
+  /// input type. `objectiveName()` is the single answer to what is being
+  /// optimized — there is no second, enumerated answer that could disagree
+  /// with it.
+  /// @throws std::invalid_argument on a null objective, or on one whose
+  ///   `minimumRegisterDegree()` exceeds a configured register degree.
   void setObjective(std::shared_ptr<CobordismObjective> objective);
   /// The injected functional. Never null: construction installs a default.
   [[nodiscard]] const std::shared_ptr<CobordismObjective> &objectiveSpec()
@@ -1146,10 +1125,10 @@ class MultiCobordism {
   bool singularValueRatio_{false};
   /// #724: false drops `‖∇S_Regge‖²` from every objective site (see the ctor).
   bool einsteinHilbert_{true};
-  ObjectiveMode objectiveMode_{ObjectiveMode::Legacy};
-  /// The injected functional. Never null: the constructor installs the
-  /// built-in matching `objectiveMode_`, so a caller that never injects one
-  /// gets exactly the objective it got before this became injectable.
+  /// The injected functional, and the only record of what this node descends.
+  /// Never null: the constructor installs `LegacyObjective`, so a caller that
+  /// never injects one gets exactly the objective it got before this became
+  /// injectable.
   std::shared_ptr<CobordismObjective> objectiveSpec_;
   /// Assemble the firewalled input an objective reads. Private because the
   /// bound evaluators close over this node; an objective receives the

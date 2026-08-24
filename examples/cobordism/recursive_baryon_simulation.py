@@ -2118,7 +2118,7 @@ def run_simulation(config, commit=None, sidecar_path=None, progress=False):
     # analysis degrees below are a separate, post-hoc knob.
     node = MC(host, [], [], list(config["register_degrees"]), 1.0,
               config["seed"])
-    node.set_objective_mode(cob.CobordismObjectiveMode.JointStationarity)
+    node.set_objective(cob.JointStationarityObjective())
     node.set_simulation_mode(MC.SimulationMode.EMERGENCE, submode)
     node.set_provenance(config_hash, commit)
     node.set_analysis_config(_analysis_config(
@@ -2249,7 +2249,7 @@ def run_simulation(config, commit=None, sidecar_path=None, progress=False):
         "drive": {
             "mode": checkpoint["mode"],
             "emergence_submode": checkpoint["emergence_submode"],
-            "objective_mode": "JointStationarity",
+            "objective_name": cob.ObjectiveName.JOINT_STATIONARITY,
             "steps": steps,
             "objective_trace": [_finite(v) for v in trace],
             "refinement_events": sum(s["refinement"]["cells_committed"]
