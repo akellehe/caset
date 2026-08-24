@@ -1740,7 +1740,7 @@ the emergence objective; contains no transport code.)doc")
 
   // ==========================================================================
   // ExchangeHolonomy (#772): Berry-cancelled exchange statistics, the
-  // documented total-space spin holonomy cycle, and the conditional
+  // constructed total-space spin holonomy cycle, and the conditional
   // SO(d) -> Spin(d) lift.  Read-only; nothing enters any emergence
   // objective; no Kasteleyn orientation is required anywhere.
   // ==========================================================================
@@ -1890,7 +1890,7 @@ CAR/Fock algebra needs no spin structure and no Kasteleyn orientation.)doc")
       .def("__repr__", &SpinLiftRead::describe);
 
   py::class_<ExchangeHolonomy>(m, "ExchangeHolonomy",
-      R"doc(Berry-cancelled exchange statistics, the documented total-space
+      R"doc(Berry-cancelled exchange statistics, the constructed total-space
 spin holonomy cycle, and the conditional SO(d) -> Spin(d) lift (ticket
 #772; design spec section 15 — Algorithm H).
 
@@ -1900,7 +1900,7 @@ SpectralFiber frames; (2) the interferometric exchange character chi_hat =
 det U_exchange / det U_reference (the raw determinant contains Berry phase
 and is never the sign); (3) the structural block permutation with exact
 #766 parities and the reference-cancelled in-block residual; (4) the
-documented total-space spin holonomy cycle as the canonical physical
+constructed total-space spin holonomy cycle as the canonical physical
 rotation path with its co-moving reference (one global rotation of the
 whole carried frame — never per-hole Bloch products); (5) the exact
 total-space J^2 measuring stick (proton eigenstate -> 3/4, Delta -> 15/4);
@@ -1985,7 +1985,7 @@ reads, and nothing here may enter any emergence objective.)doc")
                   &ExchangeHolonomy::rotationLoopFrames, py::arg("frame0"),
                   py::arg("a"), py::arg("b"), py::arg("d"),
                   py::arg("turns"), py::arg("steps"),
-                  "The documented total-space spin holonomy cycle as an "
+                  "The constructed total-space spin holonomy cycle as an "
                   "explicit closed frame path (one global rotation of the "
                   "whole carried frame).")
       .def_static("referenceLoopFrames",
