@@ -341,6 +341,51 @@ class PythonObjectiveHoldsARegionTest(unittest.TestCase):
                            interior.terms.regge_stationarity)
 
 
+class CompositeBehaviourTest(unittest.TestCase):
+    """Two of the branches that moved onto the objective (#836) have to be
+    answered for the COMPOSITE rather than inherited from the bulk objective.
+    Both answers are choices, so both are pinned here."""
+
+    def test_target_conditioning_is_the_disjunction(self):
+        """A run whose region is held to a declared state is
+        target-conditioned however geometric the bulk objective is.
+
+        A search policy asks this to find out whether the run it drives is
+        unforced. Reporting the bulk alone would let it believe it was unforced
+        while a target steered part of the complex.
+        """
+        node = _node()
+        node.set_objective(cob.JointStationarityObjective())
+        self.assertFalse(node.objective_is_target_conditioned)
+        node.declare_pinned_region(_REGION, _half_region(node))
+        node.set_pinned_objective(
+            _scoped(cob.LegacyObjective(), node, _REGION, False))
+        self.assertTrue(node.objective_is_target_conditioned)
+        node.clear_pinned_objective()
+        self.assertFalse(node.objective_is_target_conditioned)
+
+    def test_the_reported_scalar_stays_the_composite_through_stage_one(self):
+        """Stage 1 must score the scalar it reports.
+
+        With two objectives over two scopes a localized delta differenced from
+        the bulk alone would optimize a surrogate that is not the objective —
+        exactly what the localized path exists to avoid — so a pinned objective
+        drops the node back to global re-evaluation, which is always correct and
+        merely more expensive.
+        """
+        node = _node()
+        node.set_objective(cob.JointStationarityObjective())
+        node.declare_pinned_region(_REGION, _half_region(node))
+        node.set_pinned_objective(
+            _scoped(cob.JointStationarityObjective(), node, _REGION, False))
+        node.run_stage1(max_steps=3, n_candidate_moves=4)
+        contributions = node.objective_contributions
+        self.assertEqual(len(contributions), 2)
+        self.assertEqual(
+            sum(c.terms.regge_stationarity for c in contributions),
+            node.objective_terms().regge_stationarity)
+
+
 class ScopeIsIndependentOfFreezingTest(unittest.TestCase):
     """Pinning's two roles do not depend on each other."""
 

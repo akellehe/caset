@@ -698,7 +698,27 @@ std::string MultiCobordism::objectiveName() const {
   return objectiveSpec_->name();
 }
 
+bool MultiCobordism::compositeSupportsLocalizedDelta() const {
+  // A localized delta differences the objective over the cells a move touches.
+  // That shortcut is only honest while the scalar being reported is the one
+  // being differenced, and with a pinned objective in force the reported scalar
+  // is the SUM of two functionals over two different scopes. Differencing the
+  // bulk alone would optimize a surrogate that is not the objective — the very
+  // thing the localized path exists to avoid — so any pinned objective drops
+  // the whole node back to global re-evaluation. Global is always correct,
+  // merely more expensive.
+  if (pinnedObjectiveSpec_) return false;
+  return objectiveSpec_->supportsLocalizedDelta();
+}
+
 bool MultiCobordism::objectiveIsTargetConditioned() const {
+  // The DISJUNCTION, not the bulk objective's answer. A search policy asks this
+  // to find out whether the run it is driving is unforced, and a run whose
+  // pinned region is held to a declared state is target-conditioned however
+  // geometric the bulk objective is. Reporting the bulk alone would let a
+  // policy believe it was unforced while a target steered part of the complex.
+  if (pinnedObjectiveSpec_ && pinnedObjectiveSpec_->isTargetConditioned())
+    return true;
   return objectiveSpec_->isTargetConditioned();
 }
 
@@ -1061,7 +1081,7 @@ double MultiCobordism::deltaF(
   // or action magnitudes, so its true scalar difference is the only honest
   // score. It is more expensive, but it prevents stage 1 from optimizing a
   // surrogate different from the objective it reports.
-  if (!objectiveSpec_->supportsLocalizedDelta())
+  if (!compositeSupportsLocalizedDelta())
     return objectiveFor(candidateSpacetime) - baseObjective;
 
   std::set<std::vector<std::uint64_t>> candidateCellSet;
@@ -1152,7 +1172,7 @@ double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth,
                             double baseObjective) {
   const auto currentSnapshot = snapshot();
   const double baseResidualU =
-      objectiveSpec_->supportsLocalizedDelta() ? rU(spacetime_) : 0.0;
+      compositeSupportsLocalizedDelta() ? rU(spacetime_) : 0.0;
   std::set<std::vector<std::uint64_t>> baseCellSet;
   for (const auto &topSimplex : spacetime_->getTopSimplices())
     baseCellSet.insert(topSimplex->topTuple());
@@ -1436,7 +1456,7 @@ bool MultiCobordism::stage1Update(int nCandidateMoves, bool growBoundaries,
   // instead of once per candidate endpoint (up to 524 redundant evaluations at
   // depth five).
   const double baseObjective =
-      objectiveSpec_->supportsLocalizedDelta() ? 0.0 : objectiveFor(spacetime_);
+      compositeSupportsLocalizedDelta() ? 0.0 : objectiveFor(spacetime_);
   for (int lookaheadDepth = 1; lookaheadDepth <= std::max(1, maxLookahead);
        ++lookaheadDepth) {
     const int batchSize =

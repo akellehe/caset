@@ -1195,6 +1195,11 @@ class MultiCobordism {
   /// The bulk objective's context, which is the whole cobordism.
   [[nodiscard]] ObjectiveContext objectiveContextFor(
       const std::shared_ptr<Spacetime> &spacetime) const;
+  /// Whether the SCALAR THIS NODE REPORTS admits a localized exact delta. Not
+  /// simply the bulk objective's declaration: with a pinned objective in force
+  /// the reported scalar is a sum over two scopes, and differencing the bulk
+  /// alone would score a surrogate that is not the objective.
+  [[nodiscard]] bool compositeSupportsLocalizedDelta() const;
   /// Throw unless this node can honour everything the objective declares: its
   /// register-degree domain, and a scope naming a region this node has
   /// declared. A handle cannot be mis-spelled, but a region can be cleared
