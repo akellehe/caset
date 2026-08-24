@@ -1924,6 +1924,15 @@ sums and quasi-free Wick reads on crossover fixtures.)doc")
       .value("CertifiedNearIsometry", FiberEmbeddingPolicy::CertifiedNearIsometry)
       .value("QuotientKernel", FiberEmbeddingPolicy::QuotientKernel);
 
+  py::enum_<LevelOrigin>(m, "LevelOrigin",
+      "How a recursion level was produced from its parent: Base, the static "
+      "lambda = 0 Schur complement, the exact energy-dependent BandPencil at "
+      "a declared lambda, or a certified linear AMLS Surrogate.")
+      .value("Base", LevelOrigin::Base)
+      .value("StaticResponse", LevelOrigin::StaticResponse)
+      .value("BandPencil", LevelOrigin::BandPencil)
+      .value("Surrogate", LevelOrigin::Surrogate);
+
   py::enum_<RetainedCoordinateKind>(m, "RetainedCoordinateKind",
       "Why a reduced coordinate was kept: Interface cell, interior Harmonic "
       "zero mode, Resonant shifted kernel mode, or caller-Selected cell. "
@@ -2127,8 +2136,111 @@ ancestry. Read-only: nothing here enters the emergence objective.)doc");
                     &RecursiveQuotient::LabeledFiberSumRead::effectiveRank)
       .def_readonly("quotientBasis",
                     &RecursiveQuotient::LabeledFiberSumRead::quotientBasis)
+      .def_readonly(
+          "fromCertifiedBands",
+          &RecursiveQuotient::LabeledFiberSumRead::fromCertifiedBands)
+      .def_readonly(
+          "summandCertificates",
+          &RecursiveQuotient::LabeledFiberSumRead::summandCertificates)
+      .def_readonly(
+          "worstIsolationGap",
+          &RecursiveQuotient::LabeledFiberSumRead::worstIsolationGap)
+      .def_readonly("allBandsAccepted",
+                    &RecursiveQuotient::LabeledFiberSumRead::allBandsAccepted)
       .def_readonly("certificate",
                     &RecursiveQuotient::LabeledFiberSumRead::certificate);
+
+  py::class_<RecursiveQuotient::CertifiedBand>(recursiveQuotient,
+      "CertifiedBand",
+      "One certified isolated band handed to certifiedFiberSum as the summand "
+      "E_v of the master recursion: its right frame over this level's fine "
+      "coordinates, its rank, its isolation gaps and frequency window, "
+      "whether its producing configuration accepted it, and its certificate.")
+      .def(py::init<>())
+      .def_readwrite("component", &RecursiveQuotient::CertifiedBand::component)
+      .def_readwrite("frame", &RecursiveQuotient::CertifiedBand::frame)
+      .def_readwrite("rank", &RecursiveQuotient::CertifiedBand::rank)
+      .def_readwrite("lowerGap", &RecursiveQuotient::CertifiedBand::lowerGap)
+      .def_readwrite("upperGap", &RecursiveQuotient::CertifiedBand::upperGap)
+      .def_readwrite("frequencyLower",
+                     &RecursiveQuotient::CertifiedBand::frequencyLower)
+      .def_readwrite("frequencyUpper",
+                     &RecursiveQuotient::CertifiedBand::frequencyUpper)
+      .def_readwrite("accepted", &RecursiveQuotient::CertifiedBand::accepted)
+      .def_readwrite("certificate",
+                     &RecursiveQuotient::CertifiedBand::certificate);
+
+  py::class_<RecursiveQuotient::CertifiedFiberSummand>(recursiveQuotient,
+      "CertifiedFiberSummand",
+      "The certificate data of one summand of a certified labeled sum, "
+      "carried verbatim from its producing band.")
+      .def_readonly("component",
+                    &RecursiveQuotient::CertifiedFiberSummand::component)
+      .def_readonly("rank", &RecursiveQuotient::CertifiedFiberSummand::rank)
+      .def_readonly("lowerGap",
+                    &RecursiveQuotient::CertifiedFiberSummand::lowerGap)
+      .def_readonly("upperGap",
+                    &RecursiveQuotient::CertifiedFiberSummand::upperGap)
+      .def_readonly("frequencyLower",
+                    &RecursiveQuotient::CertifiedFiberSummand::frequencyLower)
+      .def_readonly("frequencyUpper",
+                    &RecursiveQuotient::CertifiedFiberSummand::frequencyUpper)
+      .def_readonly("accepted",
+                    &RecursiveQuotient::CertifiedFiberSummand::accepted)
+      .def_readonly("certificate",
+                    &RecursiveQuotient::CertifiedFiberSummand::certificate);
+
+  py::class_<RecursiveQuotient::LevelProvenanceRead>(recursiveQuotient,
+      "LevelProvenanceRead",
+      "How a level was produced from its parent: the origin, the declared "
+      "lambda and window, the producing step's solve/compatibility residuals, "
+      "the surrogate residual and discarded-mode gap, the resonance flag, and "
+      "the producing certificate carried verbatim. Unmeasured fields are NaN, "
+      "never zero.")
+      .def_readonly("origin", &RecursiveQuotient::LevelProvenanceRead::origin)
+      .def_readonly("lambda_", &RecursiveQuotient::LevelProvenanceRead::lambda)
+      .def_readonly("windowLower",
+                    &RecursiveQuotient::LevelProvenanceRead::windowLower)
+      .def_readonly("windowUpper",
+                    &RecursiveQuotient::LevelProvenanceRead::windowUpper)
+      .def_readonly("solveResidual",
+                    &RecursiveQuotient::LevelProvenanceRead::solveResidual)
+      .def_readonly(
+          "compatibilityResidual",
+          &RecursiveQuotient::LevelProvenanceRead::compatibilityResidual)
+      .def_readonly("surrogateResidual",
+                    &RecursiveQuotient::LevelProvenanceRead::surrogateResidual)
+      .def_readonly("discardedModeGap",
+                    &RecursiveQuotient::LevelProvenanceRead::discardedModeGap)
+      .def_readonly("resonant",
+                    &RecursiveQuotient::LevelProvenanceRead::resonant)
+      .def_readonly("certificate",
+                    &RecursiveQuotient::LevelProvenanceRead::certificate);
+
+  py::class_<RecursiveQuotient::FockStageRead>(recursiveQuotient,
+      "FockStageRead",
+      "The Fock stage over a labeled sum: the one-particle compression "
+      "h = J^dag W L J, the Gram on the same basis, the pencil spectrum, "
+      "2^M as fockDimension, and the exact free many-body spectrum as "
+      "occupation subset sums. The 2^M space is never materialized and the "
+      "spectrum refuses past the declared term budget.")
+      .def_readonly("modes", &RecursiveQuotient::FockStageRead::modes)
+      .def_readonly("policy", &RecursiveQuotient::FockStageRead::policy)
+      .def_readonly("gramDefect",
+                    &RecursiveQuotient::FockStageRead::gramDefect)
+      .def_readonly("oneParticle",
+                    &RecursiveQuotient::FockStageRead::oneParticle)
+      .def_readonly("gram", &RecursiveQuotient::FockStageRead::gram)
+      .def_readonly("oneParticleSpectrum",
+                    &RecursiveQuotient::FockStageRead::oneParticleSpectrum)
+      .def_readonly("fockDimension",
+                    &RecursiveQuotient::FockStageRead::fockDimension)
+      .def_readonly("spectrumMaterialized",
+                    &RecursiveQuotient::FockStageRead::spectrumMaterialized)
+      .def_readonly("fockSpectrum",
+                    &RecursiveQuotient::FockStageRead::fockSpectrum)
+      .def_readonly("certificate",
+                    &RecursiveQuotient::FockStageRead::certificate);
 
   py::class_<RecursiveQuotient::ResponseEdge>(recursiveQuotient, "ResponseEdge",
       "One operator-valued link: from/to component and the effective block.")
@@ -2288,6 +2400,71 @@ ancestry. Read-only: nothing here enters the emergence objective.)doc");
            py::overload_cast<const std::vector<std::vector<int>> &>(
                &RecursiveQuotient::nextLevel, py::const_),
            py::arg("components"))
+      .def("certifiedFiberSum", &RecursiveQuotient::certifiedFiberSum,
+           py::arg("bands"),
+           "The labeled sum over CERTIFIED ISOLATED BANDS (the master "
+           "recursion's E_v), carrying each band's isolation gap and "
+           "certificate onto its summand. An uncertified band is summed and "
+           "reported, never dropped, and makes the sum's certificate fail to "
+           "hold.")
+      .def("fockStage", &RecursiveQuotient::fockStage, py::arg("sum"),
+           py::arg("max_terms") = std::size_t{1} << 22,
+           "The Fock stage over a labeled sum: the one-particle compression, "
+           "the pencil spectrum, and the exact free many-body spectrum as "
+           "occupation subset sums (refusing past max_terms).")
+      .def_static("persistentPartition",
+                  &RecursiveQuotient::persistentPartition, py::arg("op"),
+                  py::arg("dim"), py::arg("gamma") = 1.0,
+                  py::arg("restarts") = 4, py::arg("base_seed") = 0,
+                  "P = PersistentPartition(R): partition a response "
+                  "network's coordinates by persistent modularity over its "
+                  "symmetrized off-diagonal magnitude graph. Covers every "
+                  "index exactly once; isolated coordinates come back as "
+                  "singletons.")
+      .def("childPersistentPartition",
+           &RecursiveQuotient::childPersistentPartition,
+           py::arg("gamma") = 1.0, py::arg("restarts") = 4,
+           py::arg("base_seed") = 0,
+           "persistentPartition of this level's reduced operator — the "
+           "partition P_l to hand straight to nextLevel.")
+      .def("nextLevelAtLambda",
+           py::overload_cast<const std::vector<std::vector<int>> &,
+                             std::complex<double>, double, double,
+                             const RecursiveQuotient::Options &>(
+               &RecursiveQuotient::nextLevelAtLambda, py::const_),
+           py::arg("components"), py::arg("lambda_"), py::arg("window_lower"),
+           py::arg("window_upper"), py::arg("options"),
+           "Reduce again ON THE PENCIL: the child's operator is the exact "
+           "energy-dependent response F_B(lambda), and it carries the window, "
+           "residuals, resonance flag and producing certificate.")
+      .def("nextLevelAtLambda",
+           py::overload_cast<const std::vector<std::vector<int>> &,
+                             std::complex<double>, double, double>(
+               &RecursiveQuotient::nextLevelAtLambda, py::const_),
+           py::arg("components"), py::arg("lambda_"), py::arg("window_lower"),
+           py::arg("window_upper"))
+      .def("nextLevelFromSurrogate",
+           py::overload_cast<const std::vector<std::vector<int>> &, double,
+                             double, double, double,
+                             const RecursiveQuotient::Options &>(
+               &RecursiveQuotient::nextLevelFromSurrogate, py::const_),
+           py::arg("components"), py::arg("window_lower"),
+           py::arg("window_upper"), py::arg("mode_cutoff"),
+           py::arg("residual_tolerance"), py::arg("options"),
+           "Reduce again through the certified linear AMLS surrogate, on the "
+           "M-orthonormalized basis (a spectrum-preserving congruence). The "
+           "child carries the surrogate's certified-approximation "
+           "certificate.")
+      .def("nextLevelFromSurrogate",
+           py::overload_cast<const std::vector<std::vector<int>> &, double,
+                             double, double, double>(
+               &RecursiveQuotient::nextLevelFromSurrogate, py::const_),
+           py::arg("components"), py::arg("window_lower"),
+           py::arg("window_upper"), py::arg("mode_cutoff"),
+           py::arg("residual_tolerance") = -1.0)
+      .def_property_readonly("levelProvenance",
+                             &RecursiveQuotient::levelProvenance,
+                             "How this level was produced from its parent.")
       .def("invalidate", &RecursiveQuotient::invalidate,
            "Drop memoized results and re-read the operator values for the "
            "same cell complex (call after an accepted metric move).")

@@ -24,6 +24,8 @@
 #include "cobordism/ChainComplex.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
+#include "cobordism/OccupationSpectra.h"
+#include "observables/PersistentModularity.h"
 #include "mesh/Vertex.h"
 #include "mesh/VertexList.h"
 #include "spacetime/Spacetime.h"
@@ -1506,6 +1508,17 @@ RecursiveQuotient::LabeledFiberSumRead RecursiveQuotient::labeledFiberSum()
     }
   }
 
+  LabeledFiberSumRead summary = summarizeFiberSum(columns);
+  summary.summandComponents = std::move(read.summandComponents);
+  summary.summandRanks = std::move(read.summandRanks);
+  return summary;
+}
+
+RecursiveQuotient::LabeledFiberSumRead RecursiveQuotient::summarizeFiberSum(
+    const std::vector<Eigen::VectorXcd> &columns) const {
+  LabeledFiberSumRead read;
+  read.policy = options_.embeddingPolicy;
+
   const int total = static_cast<int>(columns.size());
   // An EMPTY labeled sum is a legitimate reduction, not a malformed one: a
   // partition with a single component covering every cell has no interface
@@ -1580,6 +1593,256 @@ RecursiveQuotient::LabeledFiberSumRead RecursiveQuotient::labeledFiberSum()
     }
   }
   return read;
+}
+
+RecursiveQuotient::LabeledFiberSumRead RecursiveQuotient::certifiedFiberSum(
+    const std::vector<CertifiedBand> &bands) const {
+  std::vector<Eigen::VectorXcd> columns;
+  std::vector<int> summandComponents;
+  std::vector<int> summandRanks;
+  std::vector<CertifiedFiberSummand> summandCertificates;
+  // The worst isolation gap over the summed bands. An UNKNOWN side (NaN) does
+  // not participate: it is not a gap of zero, and treating it as one would
+  // invent a failure the band never reported. All-unknown therefore leaves
+  // the field NaN rather than claiming a measured worst case.
+  double worstGap = kInf;
+  bool sawGap = false;
+  bool allAccepted = true;
+
+  for (const CertifiedBand &band : bands) {
+    if (band.component < 0 || band.component >= componentCount())
+      throw std::invalid_argument(
+          "certifiedFiberSum: band names an unknown component");
+    const std::size_t expected =
+        static_cast<std::size_t>(dim_) * band.rank;
+    if (band.frame.size() != expected)
+      throw std::invalid_argument(
+          "certifiedFiberSum: frame size does not match dimension x rank");
+
+    const int rank = static_cast<int>(band.rank);
+    if (rank > 0) {
+      const Eigen::MatrixXcd frame =
+          toMatrix(band.frame, dim_, rank, "certified band frame");
+      for (int j = 0; j < rank; ++j) columns.push_back(frame.col(j));
+    }
+
+    // Every supplied band is REPORTED, including a rank-zero or uncertified
+    // one: the summand lists stay 1:1 with the input, so a caller can always
+    // read back what its band contributed. Nothing is silently dropped.
+    summandComponents.push_back(band.component);
+    summandRanks.push_back(rank);
+    CertifiedFiberSummand summand;
+    summand.component = band.component;
+    summand.rank = band.rank;
+    summand.lowerGap = band.lowerGap;
+    summand.upperGap = band.upperGap;
+    summand.frequencyLower = band.frequencyLower;
+    summand.frequencyUpper = band.frequencyUpper;
+    summand.accepted = band.accepted;
+    summand.certificate = band.certificate;
+    summandCertificates.push_back(summand);
+
+    allAccepted = allAccepted && band.accepted;
+    for (const double gap : {band.lowerGap, band.upperGap}) {
+      if (std::isnan(gap)) continue;
+      worstGap = std::min(worstGap, gap);
+      sawGap = true;
+    }
+  }
+
+  LabeledFiberSumRead read = summarizeFiberSum(columns);
+  read.summandComponents = std::move(summandComponents);
+  read.summandRanks = std::move(summandRanks);
+  read.summandCertificates = std::move(summandCertificates);
+  read.fromCertifiedBands = true;
+  read.allBandsAccepted = allAccepted && !bands.empty();
+  read.worstIsolationGap = sawGap ? worstGap : kNaN;
+  // An uncertified summand cannot be laundered into a certified sum by the
+  // Gram treatment: the isometry claim may still hold exactly, but the
+  // "certified ISOLATED subspace" claim of the boxed display does not, so the
+  // sum travels with a marker that never holds.
+  if (!read.allBandsAccepted)
+    read.certificate =
+        Certificate::heuristicDiscovery(CertificateDomain::BandWindow, regime_);
+  return read;
+}
+
+RecursiveQuotient::FockStageRead RecursiveQuotient::fockStage(
+    const LabeledFiberSumRead &sum, std::size_t maxTerms) const {
+  FockStageRead read;
+  read.policy = sum.policy;
+  read.gramDefect = sum.gramDefect;
+
+  const int total = static_cast<int>(sum.nominalRank);
+  if (total == 0) {
+    // Fock of the zero space is the one-dimensional vacuum line, and its
+    // free many-body spectrum is the single value 0. That is an exact
+    // statement, not an empty read.
+    read.modes = 0;
+    read.fockDimension = 1.0;
+    read.spectrumMaterialized = true;
+    read.fockSpectrum = {cd(0.0, 0.0)};
+    read.certificate = Certificate::algebraicallyExact(
+        CertificateDomain::Static, regime_, 0.0, options_.tolerance);
+    return read;
+  }
+  if (sum.embedding.size() !=
+      static_cast<std::size_t>(dim_) * static_cast<std::size_t>(total))
+    throw std::invalid_argument(
+        "fockStage: labeled-sum embedding does not match this level");
+
+  Eigen::MatrixXcd embedding =
+      toMatrix(sum.embedding, dim_, total, "labeled sum embedding");
+  Eigen::MatrixXcd gram = toMatrix(sum.gram, total, total, "labeled sum gram");
+  // h = J^dagger W L J: the one-particle operator compressed onto the labeled
+  // sum in the W-pairing the operator is self-adjoint against.
+  const Eigen::MatrixXcd dense = Eigen::MatrixXcd(op_);
+  Eigen::MatrixXcd oneParticle =
+      embedding.adjoint() * (weights_.asDiagonal() * (dense * embedding));
+
+  // Under `QuotientKernel` the declared treatment is to quotient ker G, so the
+  // stage is built on that quotient — the overcounted directions are gone from
+  // the basis rather than carried into the many-body space.
+  bool quotiented = false;
+  if (sum.policy == FiberEmbeddingPolicy::QuotientKernel &&
+      sum.effectiveRank < sum.nominalRank) {
+    const int effective = static_cast<int>(sum.effectiveRank);
+    const Eigen::MatrixXcd basis =
+        toMatrix(sum.quotientBasis, total, effective, "quotient basis");
+    oneParticle = basis.adjoint() * oneParticle * basis;
+    gram = basis.adjoint() * gram * basis;
+    quotiented = true;
+  }
+
+  const int modes = static_cast<int>(oneParticle.rows());
+  read.modes = static_cast<std::size_t>(modes);
+  read.oneParticle = toFlat(oneParticle);
+  read.gram = toFlat(gram);
+  read.fockDimension = std::ldexp(1.0, modes);
+
+  // The one-particle spectrum is the spectrum of the PENCIL (h, G): on a
+  // labeled sum the basis is not orthonormal in general, and reading the
+  // eigenvalues of h alone would silently assume G = I. When G is singular
+  // and the run did not declare `QuotientKernel`, there is no one-particle
+  // spectrum to report — the sum overcounts and the declared treatment did
+  // not remove the overcount. That REFUSES rather than reporting the
+  // eigenvalues of h as though the basis were independent.
+  const bool singular =
+      !quotiented && sum.quotientNullity > 0 &&
+      sum.policy != FiberEmbeddingPolicy::QuotientKernel;
+  if (singular) {
+    read.spectrumMaterialized = false;
+    read.certificate =
+        Certificate::heuristicDiscovery(CertificateDomain::Static, regime_);
+    return read;
+  }
+
+  const Eigen::MatrixXcd pencil = gram.partialPivLu().solve(oneParticle);
+  Eigen::ComplexEigenSolver<Eigen::MatrixXcd> solver(pencil,
+                                                     /*computeEigenvectors=*/false);
+  std::vector<cd> spectrum(static_cast<std::size_t>(modes));
+  for (int i = 0; i < modes; ++i)
+    spectrum[static_cast<std::size_t>(i)] = solver.eigenvalues()(i);
+  std::sort(spectrum.begin(), spectrum.end(), [](const cd &a, const cd &b) {
+    if (a.real() != b.real()) return a.real() < b.real();
+    return a.imag() < b.imag();
+  });
+  read.oneParticleSpectrum = spectrum;
+
+  // The free many-body spectrum of dGamma(h) is the exact set of occupation
+  // subset sums. Nothing materializes a Fock vector; the enumeration refuses
+  // past the declared budget rather than allocating 2^M entries.
+  try {
+    read.fockSpectrum = OccupationSpectra::fockSums(spectrum, maxTerms);
+    read.spectrumMaterialized = true;
+  } catch (const std::length_error &) {
+    read.spectrumMaterialized = false;
+  }
+
+  read.certificate =
+      sum.policy == FiberEmbeddingPolicy::CertifiedNearIsometry
+          ? Certificate::algebraicallyExact(CertificateDomain::Static, regime_,
+                                            sum.gramDefect,
+                                            options_.nearIsometryEpsilon)
+          : Certificate::algebraicallyExact(CertificateDomain::Static, regime_,
+                                            0.0, options_.tolerance);
+  return read;
+}
+
+std::vector<std::vector<int>> RecursiveQuotient::persistentPartition(
+    const std::vector<cd> &op, int dim, double gamma, int restarts,
+    std::uint64_t baseSeed) {
+  if (dim < 0 || op.size() != static_cast<std::size_t>(dim) *
+                                 static_cast<std::size_t>(dim))
+    throw std::invalid_argument(
+        "persistentPartition: flat size does not match dimension");
+  if (restarts <= 0)
+    throw std::invalid_argument("persistentPartition: restarts must be > 0");
+  if (dim == 0) return {};
+
+  // The similarity graph of a response network: the SYMMETRIZED off-diagonal
+  // magnitude w_ij = |R_ij| + |R_ji|. The diagonal never enters (a coordinate
+  // is not similar to itself), and the magnitude is taken because the operator
+  // is complex and generally non-normal — a signed or complex coupling is
+  // still a coupling, and modularity needs a nonnegative weight.
+  std::vector<std::uint64_t> src;
+  std::vector<std::uint64_t> tgt;
+  std::vector<double> weight;
+  for (int i = 0; i < dim; ++i) {
+    for (int j = i + 1; j < dim; ++j) {
+      const double w =
+          std::abs(op[static_cast<std::size_t>(i) * dim + j]) +
+          std::abs(op[static_cast<std::size_t>(j) * dim + i]);
+      if (w <= 0.0) continue;
+      src.push_back(static_cast<std::uint64_t>(i));
+      tgt.push_back(static_cast<std::uint64_t>(j));
+      weight.push_back(w);
+    }
+  }
+  // Every coordinate is declared a node, so a coordinate the operator does not
+  // couple to anything still exists in the partition instead of vanishing.
+  std::vector<std::uint64_t> isolated(static_cast<std::size_t>(dim));
+  for (int i = 0; i < dim; ++i)
+    isolated[static_cast<std::size_t>(i)] = static_cast<std::uint64_t>(i);
+
+  const observables::PersistentModularity modularity =
+      observables::PersistentModularity::fromWeightedEdges(src, tgt, weight,
+                                                           isolated);
+  observables::PersistentModularityConfig config;
+  config.restarts = restarts;
+  config.baseSeed = baseSeed;
+  const observables::ResolutionSlice slice = modularity.discover(gamma, config);
+
+  std::vector<std::vector<int>> partition;
+  std::vector<bool> claimed(static_cast<std::size_t>(dim), false);
+  for (const observables::ComponentRead &component : slice.components) {
+    std::vector<int> members;
+    for (const std::uint64_t cell : component.support) {
+      const int index = static_cast<int>(cell);
+      if (index < 0 || index >= dim) continue;
+      if (claimed[static_cast<std::size_t>(index)]) continue;
+      claimed[static_cast<std::size_t>(index)] = true;
+      members.push_back(index);
+    }
+    if (!members.empty()) {
+      std::sort(members.begin(), members.end());
+      partition.push_back(std::move(members));
+    }
+  }
+  // A coordinate no discovered community claimed becomes its own component:
+  // the partition handed to `nextLevel` must cover every index, and a dropped
+  // coordinate would silently leave part of the operator unreduced.
+  for (int i = 0; i < dim; ++i)
+    if (!claimed[static_cast<std::size_t>(i)]) partition.push_back({i});
+  return partition;
+}
+
+std::vector<std::vector<int>> RecursiveQuotient::childPersistentPartition(
+    double gamma, int restarts, std::uint64_t baseSeed) const {
+  const StaticReductionRead &reduction = staticReduction();
+  return persistentPartition(reduction.effectiveOperator,
+                             static_cast<int>(reduction.coordinates.size()),
+                             gamma, restarts, baseSeed);
 }
 
 RecursiveQuotient::ResponseNetworkRead RecursiveQuotient::responseNetwork()
@@ -1809,17 +2072,18 @@ RecursiveQuotient::SheafRealizationRead RecursiveQuotient::sheafRealization()
   return read;
 }
 
-RecursiveQuotient RecursiveQuotient::nextLevel(
+RecursiveQuotient RecursiveQuotient::childOver(
+    const std::vector<cd> &op,
+    const std::vector<RetainedCoordinate> &coordinates,
     const std::vector<std::vector<int>> &components,
     const Options &options) const {
-  const StaticReductionRead &reduction = staticReduction();
-  const int reduced = static_cast<int>(reduction.coordinates.size());
+  const int reduced = static_cast<int>(coordinates.size());
   // Child chain metric: the reduced coordinates' W-norms (kept cells carry
   // their weights, retained modes their indefinite norms).
   std::vector<cd> childWeights(static_cast<std::size_t>(reduced));
   for (int coordinate = 0; coordinate < reduced; ++coordinate) {
     const RetainedCoordinate &retained =
-        reduction.coordinates[static_cast<std::size_t>(coordinate)];
+        coordinates[static_cast<std::size_t>(coordinate)];
     cd wNorm = cd(0.0, 0.0);
     for (int i = 0; i < dim_; ++i)
       wNorm += std::conj(retained.embedding[static_cast<std::size_t>(i)]) *
@@ -1832,15 +2096,149 @@ RecursiveQuotient RecursiveQuotient::nextLevel(
   for (int coordinate = 0; coordinate < reduced; ++coordinate)
     child.provenance_[static_cast<std::size_t>(coordinate)] =
         "L" + std::to_string(level_) + ":" +
-        reduction.coordinates[static_cast<std::size_t>(coordinate)].provenance;
-  child.initMatrix(reduction.effectiveOperator, reduced, childWeights,
-                   components, options);
+        coordinates[static_cast<std::size_t>(coordinate)].provenance;
+  child.initMatrix(op, reduced, childWeights, components, options);
+  return child;
+}
+
+RecursiveQuotient RecursiveQuotient::nextLevel(
+    const std::vector<std::vector<int>> &components,
+    const Options &options) const {
+  const StaticReductionRead &reduction = staticReduction();
+  RecursiveQuotient child = childOver(reduction.effectiveOperator,
+                                      reduction.coordinates, components,
+                                      options);
+  child.levelProvenance_.origin = LevelOrigin::StaticResponse;
+  // A static level carries NO window: lambda = 0 is a point, not a band, and
+  // reporting a window here would claim a band domain the reduction does not
+  // speak for. The fields stay NaN.
+  child.levelProvenance_.solveResidual = reduction.solveResidual;
+  child.levelProvenance_.compatibilityResidual = reduction.compatibilityResidual;
+  child.levelProvenance_.certificate = reduction.certificate;
   return child;
 }
 
 RecursiveQuotient RecursiveQuotient::nextLevel(
     const std::vector<std::vector<int>> &components) const {
   return nextLevel(components, options_);
+}
+
+RecursiveQuotient RecursiveQuotient::nextLevelAtLambda(
+    const std::vector<std::vector<int>> &components, cd lambda,
+    double windowLower, double windowUpper, const Options &options) const {
+  // R_{l+1}(lambda) = Feshbach_{P_l}(R_l(lambda)): the child's operator is the
+  // exact energy-dependent response at the declared lambda, NOT the static
+  // complement. The plain static Schur complement does not preserve the
+  // nonzero spectrum, which is precisely why this path exists.
+  const FeshbachRead response = feshbach(lambda, windowLower, windowUpper);
+  RecursiveQuotient child =
+      childOver(response.response, response.coordinates, components, options);
+  child.levelProvenance_.origin = LevelOrigin::BandPencil;
+  child.levelProvenance_.lambda = lambda;
+  child.levelProvenance_.windowLower = windowLower;
+  child.levelProvenance_.windowUpper = windowUpper;
+  child.levelProvenance_.solveResidual = response.solveResidual;
+  child.levelProvenance_.compatibilityResidual = response.compatibilityResidual;
+  child.levelProvenance_.resonant = response.resonant;
+  child.levelProvenance_.certificate = response.certificate;
+  return child;
+}
+
+RecursiveQuotient RecursiveQuotient::nextLevelAtLambda(
+    const std::vector<std::vector<int>> &components, cd lambda,
+    double windowLower, double windowUpper) const {
+  return nextLevelAtLambda(components, lambda, windowLower, windowUpper,
+                           options_);
+}
+
+RecursiveQuotient RecursiveQuotient::nextLevelFromSurrogate(
+    const std::vector<std::vector<int>> &components, double windowLower,
+    double windowUpper, double modeCutoff, double residualTolerance,
+    const Options &options) const {
+  const CraigBamptonRead surrogate =
+      craigBampton(windowLower, windowUpper, modeCutoff, residualTolerance);
+  const std::size_t basisColumns =
+      surrogate.basis.empty()
+          ? 0
+          : surrogate.basis.size() / static_cast<std::size_t>(dim_);
+  const int columns = static_cast<int>(basisColumns);
+  const Eigen::MatrixXcd basis =
+      toMatrix(surrogate.basis, dim_, columns, "surrogate basis");
+  const Eigen::MatrixXcd stiffness =
+      toMatrix(surrogate.reducedStiffness, columns, columns,
+               "surrogate reduced stiffness");
+  const Eigen::MatrixXcd mass = toMatrix(surrogate.reducedMass, columns,
+                                         columns, "surrogate reduced mass");
+
+  // A level carries a DIAGONAL chain metric, while the surrogate's reduced
+  // pencil (K, M) is generalized. Building the child on the M-orthonormalized
+  // basis V M^{-1/2} makes the child metric the identity and its operator
+  // M^{-1/2} K M^{-1/2}. That congruence preserves the generalized
+  // eigenvalues of (K, M) EXACTLY — no spectral content is traded for the
+  // convenience, and the approximation remains entirely in the truncation the
+  // carried certificate reports.
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> massSolver(mass);
+  if (massSolver.info() != Eigen::Success)
+    throw std::invalid_argument(
+        "nextLevelFromSurrogate: reduced mass eigendecomposition failed");
+  const Eigen::VectorXd massValues = massSolver.eigenvalues();
+  const double largest = massValues.size() ? massValues(massValues.size() - 1)
+                                           : 0.0;
+  const double floorValue = options_.rankTolerance * std::max(largest, 1e-300);
+  Eigen::VectorXcd inverseRootValues(massValues.size());
+  for (Eigen::Index i = 0; i < massValues.size(); ++i) {
+    if (massValues(i) <= floorValue)
+      throw std::invalid_argument(
+          "nextLevelFromSurrogate: reduced mass is singular — the surrogate "
+          "basis is rank deficient and no M-orthonormalization exists");
+    inverseRootValues(i) = cd(1.0 / std::sqrt(massValues(i)), 0.0);
+  }
+  const Eigen::MatrixXcd inverseRoot =
+      massSolver.eigenvectors() * inverseRootValues.asDiagonal() *
+      massSolver.eigenvectors().adjoint();
+  const Eigen::MatrixXcd childOperator = inverseRoot * stiffness * inverseRoot;
+  const Eigen::MatrixXcd childBasis = basis * inverseRoot;
+
+  // The child's coordinates are the M-orthonormalized surrogate modes. They
+  // are RETAINED interior coordinates in the reduction's vocabulary — every
+  // one of them is an explicit stalk coordinate of the surrogate, and none is
+  // a fine cell of this level.
+  std::vector<RetainedCoordinate> coordinates(
+      static_cast<std::size_t>(columns));
+  for (int j = 0; j < columns; ++j) {
+    RetainedCoordinate &coordinate = coordinates[static_cast<std::size_t>(j)];
+    coordinate.kind = RetainedCoordinateKind::Selected;
+    coordinate.component = 0;
+    coordinate.fineIndex = -1;
+    coordinate.embedding.resize(static_cast<std::size_t>(dim_));
+    for (int i = 0; i < dim_; ++i)
+      coordinate.embedding[static_cast<std::size_t>(i)] = childBasis(i, j);
+    coordinate.provenance = "amls#" + std::to_string(j);
+  }
+
+  RecursiveQuotient child =
+      childOver(toFlat(childOperator), coordinates, components, options);
+  // The M-orthonormalized child metric is the identity by construction; the
+  // W-norms `childOver` derives from the embeddings reproduce it, and the
+  // congruence above is what makes that true rather than an assumption.
+  child.levelProvenance_.origin = LevelOrigin::Surrogate;
+  child.levelProvenance_.windowLower = surrogate.windowLower;
+  child.levelProvenance_.windowUpper = surrogate.windowUpper;
+  child.levelProvenance_.discardedModeGap = surrogate.discardedModeGap;
+  child.levelProvenance_.surrogateResidual =
+      surrogate.eigenResiduals.empty()
+          ? kNaN
+          : *std::max_element(surrogate.eigenResiduals.begin(),
+                              surrogate.eigenResiduals.end());
+  child.levelProvenance_.certificate = surrogate.certificate;
+  return child;
+}
+
+RecursiveQuotient RecursiveQuotient::nextLevelFromSurrogate(
+    const std::vector<std::vector<int>> &components, double windowLower,
+    double windowUpper, double modeCutoff, double residualTolerance) const {
+  return nextLevelFromSurrogate(components, windowLower, windowUpper,
+                                modeCutoff, residualTolerance, options_);
 }
 
 void RecursiveQuotient::invalidate() {
