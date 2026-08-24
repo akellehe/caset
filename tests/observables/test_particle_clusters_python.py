@@ -2610,7 +2610,8 @@ def _binding(**kw):
 def _baryon_evidence(kinds=("u", "u", "d"), spin="sharp", rotation_turns=1,
                      color=None, flux=None, samples=None, binding=None,
                      continuum=False, spin_lift=None, class_variances=None,
-                     dense_j2=None, quarks=None, exchange=None):
+                     dense_j2=None, quarks=None, exchange=None,
+                     crossing_mass=None, crossing_baryon=None):
     """A complete #775 three-cluster evidence bundle."""
     ev = obs.BaryonCandidateEvidence()
     _groups, _fine, coarse = _modular_hierarchy()
@@ -2652,7 +2653,169 @@ def _baryon_evidence(kinds=("u", "u", "d"), spin="sharp", rotation_turns=1,
         ev.totalSpaceJ2 = dense_j2
     ev.scaleSamples = _scale_samples() if samples is None else samples
     ev.persistenceLifetime = 4.0
+    if crossing_mass is not None:
+        ev.crossingMass = crossing_mass
+    if crossing_baryon is not None:
+        ev.crossingBaryon = crossing_baryon
     return ev
+
+
+# --------------------------------------------------------------------------- #
+# world-tube crossing evidence (#807): a real causal cone, real bands
+# --------------------------------------------------------------------------- #
+_CONE_M0 = [0]
+_CONE_RUNGS = ((0, 1), (0, 2), (0, 3))
+
+
+def _crossing_cone():
+    """A cone cobordism: M0 = {0}, upper spacelike triangle 1-2-3, three
+    TIMELIKE rungs with l = i so each rung's proper time is exactly 1."""
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric, tessera.HERMITIAN_WEIGHTED, 1.0, 1.0,
+                           tessera.PREFERRED, tessera.Toroid())
+    verts = [st.createVertex(i) for i in range(4)]
+    for a, b in [(0, 1), (0, 2), (0, 3), (1, 2), (2, 3), (1, 3)]:
+        st.createSimplex([verts[a], verts[b]])
+    for e in st.getEdgeList().toVector():
+        e.setLength(1.0 + 0j)
+        e.setPhase(0.0)
+    for a, b in _CONE_RUNGS:
+        for e in st.getEdgeList().toVector():
+            if {e.getSource().getId(), e.getTarget().getId()} == {a, b}:
+                e.setLength(1j)
+    return st
+
+
+_CROSSING_BAND_RECORD = None
+
+
+def _crossing_band(cell):
+    """A rank-one degree-one band on `cell`, carrying the REAL certificate a
+    tracker issued for an accepted positive band -- never a fabricated one."""
+    global _CROSSING_BAND_RECORD
+    if _CROSSING_BAND_RECORD is None:
+        sig = tessera.Signature(4, tessera.Lorentzian)
+        metric = tessera.Metric(True, sig)
+        st = tessera.Spacetime(metric, tessera.HERMITIAN_WEIGHTED, 1.0, 1.0,
+                               tessera.PREFERRED, tessera.Toroid())
+        verts = [st.createVertex(i) for i in range(3)]
+        for a, b in [(0, 1), (1, 2), (0, 2)]:
+            st.createSimplex([verts[a], verts[b]])
+        for e in st.getEdgeList().toVector():
+            e.setLength(1.0 + 0j)
+            e.setPhase(0.0)
+        tracker = obs.SpectralFiberTracker(st, obs.SpectralFiberConfig())
+        for fiber in tracker.enumerateBands([0, 1, 2], 1).fibers:
+            cert = fiber.certificate()
+            if (fiber.rank() == 1 and cert.accepted
+                    and cert.positiveSignature == 1
+                    and cert.negativeSignature == 0):
+                _CROSSING_BAND_RECORD = fiber.toRecord()
+                break
+        else:
+            raise AssertionError("no certified rank-one positive band")
+    record = {k: (list(v) if isinstance(v, list) else v)
+              for k, v in _CROSSING_BAND_RECORD.items()}
+    record["cells"] = [list(cell)]
+    record["rows"] = 1
+    record["rank"] = 1
+    for name in ("right_frame", "left_frame"):
+        record[f"{name}_re"] = [1.0]
+        record[f"{name}_im"] = [0.0]
+    record["weights_re"] = [1.0]
+    record["weights_im"] = [0.0]
+    record["eigenvalues_re"] = [0.0]
+    record["eigenvalues_im"] = [0.0]
+    return obs.SpectralFiber.fromRecord(record)
+
+
+def _crossing_reads(orientations=(1, 1, 1), windings=None):
+    """The crossing mass and coherent baryon sum of three quark tubes on the
+    cone, read at the level 0.5 against the M0 reference level 0.0."""
+    temporal = obs.CrossingReadouts.temporalFunction(
+        _crossing_cone(), _CONE_M0)
+    windings = windings or [None] * len(orientations)
+    tubes = []
+    for index, (orientation, winding) in enumerate(zip(orientations, windings)):
+        tube = obs.WorldTubeInput()
+        tube.tubeId = f"t{index}"
+        tube.band = _crossing_band(_CONE_RUNGS[index])
+        tube.orientation = orientation
+        tube.certifiedQuarkTube = True
+        if winding is not None:
+            tube.determinantWinding = winding
+        tubes.append(tube)
+    mass = obs.CrossingReadouts.crossingMass(tubes, temporal, 0.5, 0.0)
+    baryon = obs.CrossingReadouts.baryonNumber(tubes, temporal, 0.5, 0.0)
+    return mass, baryon
+
+
+class TestCrossingReadoutGate(unittest.TestCase):
+    """The whitepaper's world-tube crossing conjunct on the baryon
+    certificate (#807).  APPLICABLE-GATED exactly like `spin-lift`: a
+    candidate assembled without crossing evidence is graded as it was before
+    the readouts existed, while supplied evidence is ENFORCED."""
+
+    def setUp(self):
+        self.pc = obs.ParticleClusters()
+
+    def test_absent_evidence_passes_vacuously(self):
+        """Backwards compatibility: no crossing evidence means the gate is
+        not applicable and never appears among the failures."""
+        read = self.pc.classifyBaryon(_baryon_evidence())
+        self.assertFalse(read.crossingMassApplicable)
+        self.assertNotIn("crossing-readouts", read.failedCertificates)
+        self.assertIsNone(read.crossingBaryonNumber)
+        self.assertTrue(math.isnan(read.crossingMassValue))
+
+    def test_three_forward_tubes_satisfy_the_gate(self):
+        mass, baryon = _crossing_reads((1, 1, 1))
+        self.assertAlmostEqual(baryon.baryonNumber, 1.0, delta=MACHINE)
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(crossing_mass=mass, crossing_baryon=baryon))
+        self.assertTrue(read.crossingMassApplicable)
+        self.assertNotIn("crossing-readouts", read.failedCertificates)
+        self.assertAlmostEqual(read.crossingBaryonNumber, 1.0, delta=MACHINE)
+        self.assertAlmostEqual(read.crossingMassValue, 3.0, delta=MACHINE)
+
+    def test_wrong_baryon_number_fails_the_gate_by_name(self):
+        """Two forward tubes and one reversed give B = 1/3, not 1."""
+        mass, baryon = _crossing_reads((1, 1, -1))
+        self.assertAlmostEqual(baryon.baryonNumber, 1.0 / 3.0, delta=MACHINE)
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(crossing_mass=mass, crossing_baryon=baryon))
+        self.assertIn("crossing-readouts", read.failedCertificates)
+
+    def test_determinant_sign_defect_fails_the_gate_by_name(self):
+        """A tube whose crossing sign disagrees with its certified winding is
+        a defect signal, and the certificate refuses on it."""
+        mass, baryon = _crossing_reads((1, 1, 1), windings=[1, 1, -1])
+        self.assertEqual(list(baryon.signDefects), ["t2"])
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(crossing_mass=mass, crossing_baryon=baryon))
+        self.assertIn("crossing-readouts", read.failedCertificates)
+        self.assertEqual(list(read.crossingSignDefects), ["t2"])
+
+    def test_half_a_bundle_fails_rather_than_grading_half(self):
+        mass, _baryon = _crossing_reads((1, 1, 1))
+        read = self.pc.classifyBaryon(_baryon_evidence(crossing_mass=mass))
+        self.assertTrue(read.crossingMassApplicable)
+        self.assertIn("crossing-readouts", read.failedCertificates)
+
+    def test_crossing_fields_survive_the_record_round_trip(self):
+        mass, baryon = _crossing_reads((1, 1, 1), windings=[1, 1, -1])
+        read = self.pc.classifyBaryon(
+            _baryon_evidence(crossing_mass=mass, crossing_baryon=baryon))
+        rebuilt = obs.BaryonRead.fromRecord(read.toRecord())
+        self.assertEqual(rebuilt.crossingMassApplicable,
+                         read.crossingMassApplicable)
+        self.assertAlmostEqual(rebuilt.crossingMassValue,
+                               read.crossingMassValue, delta=MACHINE)
+        self.assertAlmostEqual(rebuilt.crossingBaryonNumber,
+                               read.crossingBaryonNumber, delta=MACHINE)
+        self.assertEqual(list(rebuilt.crossingSignDefects),
+                         list(read.crossingSignDefects))
 
 
 class TestColorSingletCertificate(unittest.TestCase):

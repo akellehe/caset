@@ -455,6 +455,13 @@ class CrossingReadouts {
 
     /// The crossing-mass functional on `level`, as the difference against
     /// the reference level `m0Level` (the M0 surface).
+    ///
+    /// `m0Level` is the level at which the reference sum is evaluated.  The
+    /// M0 surface itself sits at `Re tau = 0`, which passes exactly through
+    /// M0's vertices and is therefore NONREGULAR: no crossing is admissible
+    /// there, and the reference sum is zero.  That is the correct M0
+    /// reference — a tube that has not yet crossed contributes nothing —
+    /// and it is why reading `level == m0Level` returns exactly zero.
     [[nodiscard]] static CrossingMassRead crossingMass(
         const std::vector<WorldTubeInput> &tubes,
         const TemporalFunctionRead &temporal, double level, double m0Level,
