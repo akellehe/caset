@@ -117,14 +117,26 @@ def boundary_vertices(spacetime):
     A boundary facet is a (d-1)-simplex with exactly one coface. This is the
     same rule the crossing panel applies, kept in one place so the host and
     the readout cannot disagree about what M0 is.
+
+    The facets are reached through the TOP cells rather than through
+    `getSimplices()`: the lower skeleton is not materialized as registered
+    simplices until something builds it, so `getSimplices()` on a fresh
+    complex returns the top cells alone and would report every complex as
+    closed.
+
+    TWO passes, and the order matters. `getFacets()` REGISTERS the coface
+    relation as a side effect, so a facet's coface count is only complete
+    once every top cell has been visited. Counting in the same pass that
+    materializes would see each facet before its second cell had registered
+    and report the whole complex as boundary.
     """
+    facets = {}
+    for top in spacetime.getTopSimplices():
+        for facet in top.getFacets():
+            facets[facet.__hash__()] = facet
     boundary = set()
-    for facet in spacetime.getSimplices(3):
-        try:
-            cofaces = facet.getCofaces()
-        except Exception:                                 # noqa: BLE001
-            continue
-        if len(list(cofaces)) == 1:
+    for facet in facets.values():
+        if len(facet.getCofaces()) == 1:
             for vertex in facet.getVertices():
                 boundary.add(int(vertex.getId()))
     return sorted(boundary)
@@ -607,7 +619,10 @@ class EmergenceFrame:
                                                       level, 0.0)
             block["baryonNumber"] = _finite(baryon.baryonNumber)
             block["quarkTubes"] = int(baryon.quarkTubes)
-            block["signDefects"] = int(baryon.signDefects)
+            # Named defects, not a count: a tube whose crossing sign
+            # disagrees with its determinant-line winding is reported, never
+            # silently resolved.
+            block["signDefects"] = [str(d) for d in baryon.signDefects]
         except Exception as error:                        # noqa: BLE001
             block["baryonNumber"] = Absent("baryon sum failed: %s" % error)
         if not block.get("quarkTubes"):
