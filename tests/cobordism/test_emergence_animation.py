@@ -73,15 +73,37 @@ class DriveTest(unittest.TestCase):
 
     def test_the_host_is_neutral(self):
         """No holes, no pinned carrier, no boundary blocks by construction."""
-        host = ea.build_neutral_host(SMALL, ea.DECLARED_HOST_SEED)
+        host = ea.build_cobordism_host(SMALL, ea.DECLARED_HOST_SEED)
         betti = list(MC.betti(host))
-        # A closed S^4 refined by stellar adds stays simply connected: the
-        # neutral host carries no hole for a quark to be identified with.
+        # A 4-ball refined by stellar adds stays contractible: the neutral
+        # host carries no hole for a quark to be identified with.
         self.assertEqual(betti[0], 1)
         self.assertTrue(all(b == 0 for b in betti[1:3]))
 
+    def test_the_host_has_an_incoming_boundary(self):
+        """The readouts need M0; a closed complex cannot supply one."""
+        host = ea.build_cobordism_host(SMALL, ea.DECLARED_HOST_SEED)
+        self.assertTrue(ea.boundary_vertices(host),
+                        "the host must be a cobordism, not a closed complex")
+
+    def test_no_causal_edge_lies_inside_a_hop_layer(self):
+        """The temporal-function certificate names and refuses that case."""
+        host = ea.build_cobordism_host(SMALL, ea.DECLARED_HOST_SEED)
+        layer = ea._hop_layers(host, ea.boundary_vertices(host))
+        timelike = 0
+        for edge in host.getEdgeList().toVector():
+            a, b = int(edge.getKey()[0]), int(edge.getKey()[1])
+            if edge.isTimelike():
+                timelike += 1
+                self.assertNotEqual(layer.get(a, 0), layer.get(b, 0))
+            else:
+                self.assertEqual(layer.get(a, 0), layer.get(b, 0))
+        self.assertGreater(timelike, 0,
+                           "a Lorentzian host with a boundary must carry "
+                           "causal edges, or tau cannot accumulate")
+
     def test_the_objective_is_joint_stationarity_in_strict_emergence(self):
-        host = ea.build_neutral_host(SMALL, ea.DECLARED_HOST_SEED)
+        host = ea.build_cobordism_host(SMALL, ea.DECLARED_HOST_SEED)
         node = MC(host, [], [], list(ea.DECLARED_REGISTER_DEGREES), 1.0,
                   ea.DECLARED_SEED)
         node.set_objective(cob.JointStationarityObjective())
