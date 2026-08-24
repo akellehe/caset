@@ -671,7 +671,7 @@ bool writeGraphML(const Spacetime &st, const std::string &path) {
 
     for (std::size_t i = 0; i < edges.size(); ++i) {
         auto *e = edges[i];
-        // Full complex l^2 + U(1) phase; causal character from the canonical
+        // Full complex l^2 + C* connection phase (re/im); causal character from the canonical
         // Edge::isTimelike(), not the superseded sign-of-Re test (#581). The
         // Re key keeps its name for compatibility with existing consumers.
         const std::complex<double> sq = (e->getLength() * e->getLength());

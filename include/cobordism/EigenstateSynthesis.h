@@ -40,7 +40,7 @@ using ::tessera::mesh::Edge;
 /// \f$ |C_k| \f$, the canonical `ChainComplex` \f$ k \f$-cell order); the tunable
 /// parameters stay the **edge** squared-lengths (`Edge::setSquaredLength`), which
 /// feed the per-simplex volume weights \f$ W_k \f$ of \f$ L_k \f$ through
-/// `Simplex::volume` (the U(1) phases enter only the \f$ k = 0 \f$ operator). This
+/// `Simplex::volume` (the connection phases enter only the \f$ k = 0 \f$ connection operator). This
 /// lifts the §5.0 fixed-boundary interior fill from the \f$ k = 0 \f$ 2-complex
 /// setting to the \f$ k = 1 \f$ boundary harmonic of a 3-manifold-with-boundary
 /// (#176): a 3-manifold \f$ W \f$ whose \f$ \ker L_1(\partial W) \f$ is matched by
@@ -70,7 +70,7 @@ using ::tessera::mesh::Edge;
 /// ## Parameters
 ///
 /// The tunable parameters are the per-edge squared-length magnitudes
-/// \f$ \{w_{ij}\} \f$ (`Edge::setSquaredLength`) and U(1) connection phases
+/// \f$ \{w_{ij}\} \f$ (`Edge::setSquaredLength`) and C* connection phases
 /// \f$ \{\theta_{ij}\} \f$ (`Edge::setPhase`), in a stable edge order fixed at
 /// construction (the `EdgeList` order, restricted to the edges that carry weight
 /// in \f$ L \f$: both endpoints present, no self-loops). `weights()` / `phases()`

@@ -149,7 +149,7 @@ Vertex::moveEdgesToImpl(
                             : spacetime->createEdge(recipient, targetVertex, movedLength);
     // Re-apply the exact edge state (the RemoveMove/SurgicalCone restore idiom,
     // #597): the complex LENGTH verbatim — no sqrt/square round-trip, so the
-    // branch (which of ±l this edge carried) survives — and the U(1) phase.
+    // branch (which of ±l this edge carried) survives — and the connection phase.
     newEdge->setLength(movedLength);
     newEdge->setPhase(movedPhase);
 

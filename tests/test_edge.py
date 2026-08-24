@@ -82,6 +82,33 @@ class TestEdgePhase(unittest.TestCase):
             edge.setPhase(value)
             self.assertEqual(edge.getPhase(), value)
 
+    def test_the_phase_is_complex(self):
+        # The structure group is C* = U(1) x R+, so the phase carries a
+        # compact angle in Re and a non-compact log-scale in Im (#804).
+        v1 = Vertex(1, [0, 0, 0, 0])
+        v2 = Vertex(2, [1, 1, 1, 1])
+        edge = Edge(v1, v2)
+        self.assertIsInstance(edge.getPhase(), complex)
+        for value in (complex(0.5, 1.5), complex(-1.25, -0.75),
+                      complex(0.0, 2.0)):
+            edge.setPhase(value)
+            self.assertEqual(edge.getPhase(), value)
+            self.assertEqual(edge.getPhase().imag, value.imag)
+
+    def test_the_phase_is_independent_of_the_length(self):
+        # Two distinct fields: writing one must not disturb the other.
+        v1 = Vertex(1, [0, 0, 0, 0])
+        v2 = Vertex(2, [1, 1, 1, 1])
+        edge = Edge(v1, v2)
+        edge.setLength(complex(2.0, -3.0))
+        edge.setPhase(complex(0.25, 0.75))
+        self.assertEqual(edge.getLength(), complex(2.0, -3.0))
+        self.assertEqual(edge.getPhase(), complex(0.25, 0.75))
+        edge.setLength(complex(-1.0, 0.5))
+        self.assertEqual(edge.getPhase(), complex(0.25, 0.75))
+        edge.setPhase(complex(1.0, 1.0))
+        self.assertEqual(edge.getLength(), complex(-1.0, 0.5))
+
 
 class TestHermitianWeightedSpacetimeType(unittest.TestCase):
 

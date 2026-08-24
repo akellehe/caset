@@ -11,13 +11,16 @@ TWO distinct operators live at degree zero and this module pins both:
     so the constant 0-cochain is harmonic at ANY weights (positive, signed,
     or complex) and dim ker L_0 = b_0. TestDerivedDegreeZero.
 
-  * the U(1) CONNECTION graph Laplacian L = D - A,
+  * the C* CONNECTION graph Laplacian L = D - A,
     HodgeLaplacian.connectionLaplacian() -- off-diagonal
-    squaredLength * exp(i*phase), diagonal sum |squaredLength| (the MAGNITUDE
-    convention). Hermitian, PSD by Gershgorin, unitary under exp(-iLt), and its
+    squaredLength * exp(i*phase) on the stored orientation and its INVERSE on
+    the reverse, diagonal sum |squaredLength| (the MAGNITUDE convention). Its
     zero mode IS lifted by a U(1) flux. It is not L_0 and is not of the derived
-    form for any weight. TestAssemblyAndSpectrum / TestHermiticityUnitarity /
-    TestFluxSpectrum / TestGaugeInvariance.
+    form for any weight. Hermitian, PSD by Gershgorin and unitary under
+    exp(-iLt) only in the compact case -- real phases on real weights -- since
+    a complex phase twists by a similarity rather than a unitary.
+    TestAssemblyAndSpectrum / TestHermiticityUnitarity / TestFluxSpectrum /
+    TestGaugeInvariance / TestComplexConnectionPhase.
 
 The two coincide exactly at unit real weights and zero phase, which is why the
 deviation went unpinned for so long; every deviation test here therefore uses a
@@ -842,10 +845,11 @@ class TestDerivedDegreeZero(unittest.TestCase):
         np.testing.assert_allclose(got, expected, atol=1e-13)
 
     def test_setPhase_does_not_enter_the_derived_operator(self):
-        # The whitepaper's phase is arg(z_e), carried by the complex squared
-        # length; Edge.setPhase is the separate U(1) link field the CONNECTION
-        # operator reads. L_0 is built from d_1 and W_1 alone, so rephasing the
-        # edges cannot move it -- recorded here so a change is noticed.
+        # An edge carries TWO fields: the complex squared length, which alone
+        # determines the metric weights, and Edge.setPhase, the independent C*
+        # link field the CONNECTION operator reads. L_0 is built from d_1 and
+        # W_1 alone, so rephasing the edges cannot move it -- recorded here so
+        # a change is noticed.
         st = _timelike_cycle(0.7)
         before = np.array(cob.HodgeLaplacian(st).laplacian(0), dtype=complex)
         for e in st.getEdgeList().toVector():

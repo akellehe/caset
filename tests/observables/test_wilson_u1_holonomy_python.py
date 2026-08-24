@@ -86,16 +86,21 @@ def _set_phases(st, phases):
 # --------------------------------------------------------------------------- #
 def _cycle_flux(st, cycle):
     """Hand oracle: directed holonomy sum of phase around a closed vertex-id
-    cycle, honoring each edge's stored source->target orientation."""
+    cycle, honoring each edge's stored source->target orientation.
+
+    The COMPACT part only. The connection phase is complex (C* = U(1) x R+),
+    and a Wilson loop measures the U(1) winding: only Re has winding, while
+    Im is a local scale that would turn the holonomy into an unbounded
+    modulus."""
     total = 0.0
     n = len(cycle)
     for k in range(n):
         a, b = cycle[k], cycle[(k + 1) % n]
         e = _edge(st, a, b)
         if e.getSource().getId() == a and e.getTarget().getId() == b:
-            total += e.getPhase()
+            total += e.getPhase().real
         else:
-            total -= e.getPhase()
+            total -= e.getPhase().real
     return total
 
 
@@ -164,6 +169,28 @@ class TestHolonomyVsOracle(unittest.TestCase):
                 r = _holonomy(st, [0, 1, 2])
                 self.assertEqual(r.loopSize, 3)
                 self.assertTrue(_close_mod_2pi(r.value, _cycle_flux(st, [0, 1, 2])))
+
+    def test_the_non_compact_part_carries_no_winding(self):
+        """The connection is C* = U(1) x R+ and only the compact factor has
+        winding, so a Wilson loop must read Re(phase) alone. Adding an
+        arbitrary imaginary part -- a local scale, no quantum number -- cannot
+        move the holonomy (#804)."""
+        for phi, scale in ((0.3, 2.5), (-1.1, -0.75), (math.pi / 2, 4.0)):
+            with self.subTest(phi=phi, scale=scale):
+                compact = _triangle()
+                _set_phases(compact, {frozenset({0, 1}): phi})
+                twisted = _triangle()
+                _set_phases(twisted, {frozenset({0, 1}): complex(phi, scale)})
+                self.assertTrue(_close_mod_2pi(
+                    _holonomy(twisted, [0, 1, 2]).value,
+                    _holonomy(compact, [0, 1, 2]).value))
+
+    def test_a_purely_non_compact_connection_is_trivial(self):
+        # An imaginary-only phase is pure scale: zero winding.
+        st = _triangle()
+        _set_phases(st, {frozenset({0, 1}): complex(0.0, 1.7),
+                         frozenset({1, 2}): complex(0.0, -0.4)})
+        self.assertAlmostEqual(_holonomy(st, [0, 1, 2]).value, 0.0, places=12)
 
     def test_equals_total_flux_mod_2pi(self):
         # Orient the cycle to hit the phased edge forward, so the holonomy is
