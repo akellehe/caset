@@ -656,6 +656,8 @@ bool writeGraphML(const Spacetime &st, const std::string &path) {
          "attr.name=\"squared_length_im\" attr.type=\"double\"/>\n"
       << "  <key id=\"phase\" for=\"edge\" attr.name=\"phase\" "
          "attr.type=\"double\"/>\n"
+      << "  <key id=\"phase_im\" for=\"edge\" attr.name=\"phase_im\" "
+         "attr.type=\"double\"/>\n"
       << "  <key id=\"timelike\" for=\"edge\" attr.name=\"timelike\" "
          "attr.type=\"boolean\"/>\n"
       << "  <graph id=\"spacetime\" edgedefault=\"undirected\">\n";
@@ -678,7 +680,10 @@ bool writeGraphML(const Spacetime &st, const std::string &path) {
           << e->getTarget()->getId() << "\">\n"
           << "      <data key=\"sq_length\">" << sq.real() << "</data>\n"
           << "      <data key=\"sq_length_im\">" << sq.imag() << "</data>\n"
-          << "      <data key=\"phase\">" << e->getPhase() << "</data>\n"
+          << "      <data key=\"phase\">" << e->getPhase().real()
+          << "</data>\n"
+          << "      <data key=\"phase_im\">" << e->getPhase().imag()
+          << "</data>\n"
           << "      <data key=\"timelike\">"
           << (e->isTimelike() ? "true" : "false") << "</data>\n"
           << "    </edge>\n";
@@ -716,7 +721,8 @@ bool writeDot(const Spacetime &st, const std::string &path) {
           << " -- " << e->getTarget()->getId()
           << " [squared_length=" << sq.real()
           << ", squared_length_im=" << sq.imag()
-          << ", phase=" << e->getPhase()
+          << ", phase=" << e->getPhase().real()
+          << ", phase_im=" << e->getPhase().imag()
           << ", timelike=" << (tl ? "true" : "false")
           << ", color=" << (tl ? "blue" : "red") << "];\n";
     }

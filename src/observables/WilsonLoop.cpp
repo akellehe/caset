@@ -403,9 +403,15 @@ WilsonResult WilsonLoop::evaluateU1Connection(
         // The canonical-orientation `sign` folds the edge's stored orientation
         // back to the cycle's u->v direction: sign * stored == (forward ? +1 :
         // -1), so this is algebraically identical to the old forward test.
+        //
+        // This is the U(1) holonomy, so it accumulates the COMPACT part of the
+        // C* connection only. Of the structure group C* = U(1) x R+, only the
+        // compact factor has winding, hence only Re(phase) quantizes; Im(phase)
+        // is a local scale carrying no quantum number and would turn a winding
+        // into an unbounded modulus if summed here.
         const double stored =
             (e->getSource()->getId() < e->getTarget()->getId()) ? 1.0 : -1.0;
-        total += sign * stored * e->getPhase();
+        total += sign * stored * e->getPhase().real();
     });
     if (open) return {};  // open path — not a closed 1-skeleton cycle
 

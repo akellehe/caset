@@ -108,7 +108,7 @@ private:
     VertexPtr source;
     VertexPtr target;
     std::complex<double> length;
-    double phase;
+    std::complex<double> phase;
   };
   std::vector<EdgeRecord> deletedEdges_;
   // Vertex tuples of the 2 replacement simplices we actually created in

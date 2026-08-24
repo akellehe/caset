@@ -92,16 +92,32 @@ class Edge {
     /// memory. But seriously, though, `getTarget` gives the vertex on one end, and `getSource` gives the other.
     [[nodiscard]] const VertexPtr &getTarget() const noexcept;
 
-    /// The U(1) connection phase carried on this edge's stored source->target orientation (and
-    /// negated on reversal). With the signed `squaredLength` magnitude it forms the complex edge
-    /// weight \f$ \text{squaredLength}\cdot e^{i\,\text{phase}} \f$ read by the Hermitian-weighted
-    /// Laplacian. The default (`phase = 0`) leaves an ordinary real-weighted CDT edge unchanged.
+    /// The \f$\mathbb{C}^{*}\f$ connection phase \f$\varphi\f$ carried on this edge's stored
+    /// source->target orientation. It is the SECOND edge field, independent of the geometry:
+    /// the link variable is \f$ U_{xy} = e^{i\varphi} \in \mathbb{C}^{*} \f$ with
+    /// \f$ U_{yx} = U_{xy}^{-1} \f$ (the INVERSE, not the conjugate — the two coincide only
+    /// for real \f$\varphi\f$), and a gauge transformation \f$ g \f$ acts by
+    /// \f$ U_{xy} \mapsto g_x^{-1} U_{xy} g_y \f$, leaving `length_` and every metric weight
+    /// built from it untouched.
     ///
-    /// @return The U(1) connection phase, in radians.
-    [[nodiscard]] double getPhase() const noexcept;
+    /// \f$\varphi\f$ is COMPLEX because the structure group is
+    /// \f$ \mathbb{C}^{*} = U(1)\times\mathbb{R}^{+} \f$:
+    /// \f$ e^{i\varphi} = e^{i\operatorname{Re}\varphi}\,e^{-\operatorname{Im}\varphi} \f$.
+    /// `Re` is the compact U(1) angle in radians — the only part with winding, hence the only
+    /// part that quantizes and the only part a Wilson loop reads. `Im` is the non-compact
+    /// \f$\mathbb{R}^{+}\f$ local scale and carries no quantum number.
+    ///
+    /// It twists the HOPPING of the Aharonov-Bohm operator (`HodgeLaplacian::connectionLaplacian`)
+    /// and never rescales a metric weight: the geometric Hodge operator `laplacian(k)` is built
+    /// from `length_` alone and is blind to \f$\varphi\f$ at every degree. Writing \f$\varphi\f$
+    /// into the weight would make the metric gauge-variant and destroy the derived form of
+    /// \f$ L_k \f$. The default (`phase = 0`) leaves an ordinary untwisted CDT edge unchanged.
+    ///
+    /// @return The \f$\mathbb{C}^{*}\f$ connection phase; `Re` in radians, `Im` the log-scale.
+    [[nodiscard]] std::complex<double> getPhase() const noexcept;
 
-    /// The (possibly complex) edge length — the causal DOF, distinct from the U(1)
-    /// `phase` and from \f$l^2\f$. Real for spacelike, imaginary for timelike, general
+    /// The (possibly complex) edge length — the causal DOF, distinct from the
+    /// connection `phase` and from \f$l^2\f$. Real for spacelike, imaginary for timelike, general
     /// complex for the Picard–Lefschetz saddle. Causal character is read from THIS
     /// (`Im(length)`) — the timelike disambiguation a real signed \f$l^2\f$ cannot give.
     [[nodiscard]] std::complex<double> getLength() const noexcept;
@@ -187,20 +203,22 @@ class Edge {
     /// edges' revisions, so an unchanged key proves no incident length changed
     /// since the cache was filled. ``setPhase`` deliberately does NOT bump it:
     /// the cache holds only length-derived data (Gram / Cayley-Menger), and
-    /// the U(1) phase never enters those.
+    /// the connection phase never enters those.
     [[nodiscard]] std::uint64_t lengthRevision() const noexcept {
       return lengthRevision_;
     }
 
-    /// Set the U(1) connection phase (radians).  Used by the Hermitian-weighted
-    /// Laplacian and its gauge transform to rephase the edge without rebuilding the mesh.
-    void setPhase(double p) noexcept {
+    /// Set the \f$\mathbb{C}^{*}\f$ connection phase: `Re` the compact U(1) angle in radians,
+    /// `Im` the non-compact log-scale. Used by the Aharonov-Bohm operator and its gauge
+    /// transform to re-twist the edge without rebuilding the mesh. A real argument converts
+    /// implicitly and reproduces the untwisted-geometry, real-angle case exactly.
+    void setPhase(std::complex<double> p) noexcept {
       phase = p;
       ++phaseRevision_;
     }
 
     /// Monotone ``setPhase`` counter, the phase analogue of ``lengthRevision``.
-    /// The k=0 Hermitian Laplacian reads phases, so the shared spectrum cache
+    /// The Aharonov-Bohm operator reads phases, so the shared spectrum cache
     /// keys on BOTH counters; the Simplex geometry cache (Gram/Cayley-Menger)
     /// keys on lengths alone and deliberately ignores this one.
     [[nodiscard]] std::uint64_t phaseRevision() const noexcept {
@@ -277,7 +295,7 @@ class Edge {
     std::uint64_t lengthRevision_{0};
     /// Monotone ``setPhase`` counter read by ``phaseRevision()``; see there.
     std::uint64_t phaseRevision_{0};
-    double phase = 0.0;
+    std::complex<double> phase{0.0, 0.0};
 
     Simplices simplices_{};
 };

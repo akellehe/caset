@@ -137,7 +137,7 @@ Vertex::moveEdgesToImpl(
     // NEW edge afterwards — reading through it then returns the new edge's own
     // fresh state, not the moved edge's (#597).
     const std::complex<double> movedLength = oldEdge->getLength();
-    const double movedPhase = oldEdge->getPhase();
+    const std::complex<double> movedPhase = oldEdge->getPhase();
 
     spacetime->absorbRemovedEdgeRevisions(oldEdge);
     spacetime->getEdgeList()->remove(oldEdge);
