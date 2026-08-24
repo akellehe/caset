@@ -54,7 +54,7 @@ class Simplex;
       return target;
     }
 
-    [[nodiscard]] double Edge::getPhase() const noexcept {
+    [[nodiscard]] std::complex<double> Edge::getPhase() const noexcept {
       return phase;
     }
 

@@ -240,8 +240,8 @@ std::vector<std::complex<double>> EigenstateSynthesis::weights() const {
   return w;
 }
 
-std::vector<double> EigenstateSynthesis::phases() const {
-  std::vector<double> th;
+std::vector<std::complex<double>> EigenstateSynthesis::phases() const {
+  std::vector<std::complex<double>> th;
   th.reserve(edges_.size());
   for (const auto e : edges_) th.push_back(e->getPhase());
   return th;
@@ -256,7 +256,8 @@ void EigenstateSynthesis::setWeights(const std::vector<double> &w) {
     edges_[i]->setLength(std::sqrt(std::complex<double>{w[i], 0.0}));
 }
 
-void EigenstateSynthesis::setPhases(const std::vector<double> &theta) {
+void EigenstateSynthesis::setPhases(
+    const std::vector<std::complex<double>> &theta) {
   if (theta.size() != edges_.size())
     throw std::runtime_error(
         "EigenstateSynthesis::setPhases: got " + std::to_string(theta.size()) +
@@ -275,8 +276,8 @@ std::vector<std::complex<double>> EigenstateSynthesis::interiorWeights() const {
   return w;
 }
 
-std::vector<double> EigenstateSynthesis::interiorPhases() const {
-  std::vector<double> th;
+std::vector<std::complex<double>> EigenstateSynthesis::interiorPhases() const {
+  std::vector<std::complex<double>> th;
   th.reserve(interiorEdgeIdx_.size());
   for (const auto i : interiorEdgeIdx_) th.push_back(edges_[i]->getPhase());
   return th;
@@ -292,7 +293,8 @@ void EigenstateSynthesis::setInteriorWeights(const std::vector<double> &w) {
     edges_[interiorEdgeIdx_[k]]->setLength(std::sqrt(std::complex<double>{w[k], 0.0}));
 }
 
-void EigenstateSynthesis::setInteriorPhases(const std::vector<double> &theta) {
+void EigenstateSynthesis::setInteriorPhases(
+    const std::vector<std::complex<double>> &theta) {
   if (theta.size() != interiorEdgeIdx_.size())
     throw std::runtime_error(
         "EigenstateSynthesis::setInteriorPhases: got " +
@@ -393,7 +395,7 @@ bool EigenstateSynthesis::attachInteriorVertex(
   // bit-exact check. The FULL complex l2 is compared, not (Re, phase) — the
   // dW invariant must catch Im-only corruption too (#581).
   std::map<std::pair<std::uint64_t, std::uint64_t>,
-           std::pair<std::complex<double>, double>>
+           std::pair<std::complex<double>, std::complex<double>>>
       boundaryBefore;
   for (const auto i : boundaryEdgeIdx_) {
     const std::uint64_t a = edges_[i]->getSource()->getId();
@@ -606,7 +608,7 @@ bool EigenstateSynthesis::removeInteriorCell(
   // Snapshot ∂W (id-pair -> (complex w, theta)) for the bit-exact check. Full
   // complex l2, not (Re, phase): the dW invariant covers Im corruption (#581).
   std::map<std::pair<std::uint64_t, std::uint64_t>,
-           std::pair<std::complex<double>, double>>
+           std::pair<std::complex<double>, std::complex<double>>>
       boundaryBefore;
   for (const auto i : boundaryEdgeIdx_) {
     const std::uint64_t a = edges_[i]->getSource()->getId();
@@ -629,7 +631,7 @@ bool EigenstateSynthesis::removeInteriorCell(
   // — the opened hole — so this is a subset check, not equality).
   bool valid = true;
   std::map<std::pair<std::uint64_t, std::uint64_t>,
-           std::pair<std::complex<double>, double>>
+           std::pair<std::complex<double>, std::complex<double>>>
       liveWeights;
   for (const auto e : edges_) {
     const std::uint64_t a = e->getSource()->getId();
@@ -1914,7 +1916,7 @@ std::vector<double> EigenstateSynthesis::periodGradientDegreeZero(
     // d|w|/d(Re w): Re w / |w| — the real-axis directional derivative (sign w
     // for real w). At the |w| kink (w == 0) take the symmetric subgradient 0.
     const double dAbs = (std::abs(w) > 0.0) ? w.real() / std::abs(w) : 0.0;
-    const cd zPhase = std::exp(cd(0.0, edge->getPhase()));
+    const cd zPhase = std::exp(cd(0.0, 1.0) * edge->getPhase());
     MatrixXcd dM = MatrixXcd::Zero(N, N);
     dM(is, is) += dAbs;                  // dD_ii
     dM(it, it) += dAbs;                  // dD_jj

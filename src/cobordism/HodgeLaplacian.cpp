@@ -550,18 +550,29 @@ void HodgeLaplacian::assemble(std::vector<cd> &A, std::vector<double> &D) const 
     if (i == j) continue;  // a simplicial complex carries no self-loops
 
     const cd w = (e->getLength() * e->getLength());  // exact complex squared length l^2
-    const double phase = e->getPhase();          // U(1) connection on src->tgt
+    const cd phase = e->getPhase();  // C* connection on src->tgt
 
     // Degree uses the magnitude convention D_ii = sum |squaredLength| over
-    // incident edges (phase-independent; keeps L Hermitian and e^{-iLt} unitary).
+    // incident edges (phase-independent; keeps L Hermitian and e^{-iLt} unitary
+    // in the real-phase, positive-weight case).
     D[i] += std::abs(w);
     D[j] += std::abs(w);
 
-    // A_ij = sum squaredLength * e^{i*phase}; the reverse orientation negates
-    // the phase, so A = A^dagger.
-    const cd z = w * std::exp(cd(0.0, phase));
-    A[i * N + j] += z;
-    A[j * N + i] += std::conj(z);
+    // The link variable U = e^{i*phase} in C*, and the reverse orientation
+    // carries its INVERSE U^{-1} = e^{-i*phase}, never its conjugate. The two
+    // agree only for real phase; for complex phase the conjugate convention
+    // breaks gauge covariance, because conj(g) != g^{-1} once the gauge
+    // function leaves U(1). With the inverse, a gauge transformation
+    // U_ij -> g_i^{-1} U_ij g_j acts on A by the similarity
+    // diag(g)^{-1} A diag(g), so the spectrum is gauge-invariant exactly.
+    //
+    // The geometry keeps the conjugate it always had: only the LINK is
+    // inverted, so a real phase reproduces the previous Hermitian magnetic
+    // operator entry for entry.
+    const cd link = std::exp(cd(0.0, 1.0) * phase);
+    const cd linkInverse = std::exp(cd(0.0, -1.0) * phase);
+    A[i * N + j] += w * link;
+    A[j * N + i] += std::conj(w) * linkInverse;
   }
 }
 

@@ -305,7 +305,7 @@ class Spacetime {
         int dimensions,
         const std::vector<std::vector<std::uint64_t>> &cells,
         double weight = 1.0,
-        double phase = 0.0,
+        std::complex<double> phase = 0.0,
         const std::optional<std::vector<double>> &vertexTimes = std::nullopt);
 
     /// The dimension-generic staircase ("prism") triangulation of

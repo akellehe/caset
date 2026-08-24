@@ -184,29 +184,40 @@ class HodgeLaplacian {
       defaultWeightConvention_ = convention;
     }
 
-    /// Weighted adjacency \f$ A \f$ of the **U(1) connection** operator as a flat
-    /// row-major \f$ N\times N \f$ array of complex entries, over the full sorted
-    /// vertex-id order. Hermitian by construction. Not part of \f$ L_0 \f$; see
+    /// Weighted adjacency \f$ A \f$ of the **\f$\mathbb{C}^{*}\f$ connection** operator
+    /// as a flat row-major \f$ N\times N \f$ array of complex entries, over the full
+    /// sorted vertex-id order. The stored orientation carries the link
+    /// \f$ U = e^{i\varphi} \f$ and the reverse carries its INVERSE \f$ U^{-1} \f$, so
+    /// \f$ A \f$ is Hermitian exactly when the phases are real AND the squared lengths
+    /// are real (the magnetic-graph case); a complex phase or a complex Lorentzian
+    /// weight makes it non-Hermitian by design. Not part of \f$ L_0 \f$; see
     /// `connectionLaplacian`.
     [[nodiscard]] std::vector<std::complex<double>> adjacency() const;
 
-    /// Degree vector \f$ (D_{00},\dots,D_{N-1,N-1}) \f$ of the **U(1)
-    /// connection** operator, real, length \f$ N \f$ (magnitude convention
-    /// \f$ D_{ii} = \sum |\text{squaredLength}| \f$). Not part of \f$ L_0 \f$;
-    /// see `connectionLaplacian`.
+    /// Degree vector \f$ (D_{00},\dots,D_{N-1,N-1}) \f$ of the
+    /// **\f$\mathbb{C}^{*}\f$ connection** operator, real, length \f$ N \f$ (magnitude
+    /// convention \f$ D_{ii} = \sum |\text{squaredLength}| \f$, hence phase-independent).
+    /// Not part of \f$ L_0 \f$; see `connectionLaplacian`.
     [[nodiscard]] std::vector<double> degree() const;
 
-    /// The **Hermitian U(1) connection graph Laplacian**
-    /// \f$ L^{U(1)} = D - A \f$ as a flat row-major \f$ N\times N \f$ array over
+    /// The **\f$\mathbb{C}^{*}\f$ connection graph Laplacian**
+    /// \f$ L^{\mathbb{C}^{*}} = D - A \f$ as a flat row-major \f$ N\times N \f$ array over
     /// the full sorted vertex-id order (\f$ N \f$ = every vertex, including any
     /// carried by no simplex). This is NOT the degree-zero Hodge Laplacian: its
     /// off-diagonal uses the signed complex weight while its diagonal uses the
     /// magnitude, so its row sums do not vanish on a Lorentzian complex and it is
     /// not \f$ \partial_1 W_1^{-1}\partial_1^{\dagger} \f$ for any \f$ W \f$. It
-    /// is the Aharonov--Bohm operator: Hermitian, positive semidefinite by
-    /// Gershgorin, unitary under \f$ e^{-iL^{U(1)}t} \f$, and its zero mode is
-    /// lifted by a nonzero U(1) flux (which \f$ \ker L_0 = b_0 \f$ can never
-    /// see). Use `laplacian(0)` for the Hodge operator.
+    /// is the Aharonov--Bohm operator: the connection twists its HOPPING, and its
+    /// zero mode is lifted by a nonzero U(1) flux (which \f$ \ker L_0 = b_0 \f$ can
+    /// never see). Use `laplacian(0)` for the Hodge operator, which is built from the
+    /// lengths alone and is blind to \f$\varphi\f$ at every degree.
+    ///
+    /// A gauge transformation acts on it by the similarity
+    /// \f$ \operatorname{diag}(g)^{-1}(\cdot)\operatorname{diag}(g) \f$, so its spectrum
+    /// is gauge-invariant for every \f$ g:K_0\to\mathbb{C}^{*} \f$. It is Hermitian,
+    /// positive semidefinite by Gershgorin and unitary under
+    /// \f$ e^{-iL^{\mathbb{C}^{*}}t} \f$ only in the compact case — real phases on real
+    /// weights — since a complex phase twists by a similarity rather than a unitary.
     [[nodiscard]] std::vector<std::complex<double>> connectionLaplacian() const;
 
     /// Laplacian \f$ L_k \f$ as a flat row-major

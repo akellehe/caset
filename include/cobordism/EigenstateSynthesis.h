@@ -40,7 +40,7 @@ using ::tessera::mesh::Edge;
 /// \f$ |C_k| \f$, the canonical `ChainComplex` \f$ k \f$-cell order); the tunable
 /// parameters stay the **edge** squared-lengths (`Edge::setSquaredLength`), which
 /// feed the per-simplex volume weights \f$ W_k \f$ of \f$ L_k \f$ through
-/// `Simplex::volume` (the U(1) phases enter only the \f$ k = 0 \f$ operator). This
+/// `Simplex::volume` (the connection phases enter only the \f$ k = 0 \f$ connection operator). This
 /// lifts the §5.0 fixed-boundary interior fill from the \f$ k = 0 \f$ 2-complex
 /// setting to the \f$ k = 1 \f$ boundary harmonic of a 3-manifold-with-boundary
 /// (#176): a 3-manifold \f$ W \f$ whose \f$ \ker L_1(\partial W) \f$ is matched by
@@ -70,7 +70,7 @@ using ::tessera::mesh::Edge;
 /// ## Parameters
 ///
 /// The tunable parameters are the per-edge squared-length magnitudes
-/// \f$ \{w_{ij}\} \f$ (`Edge::setSquaredLength`) and U(1) connection phases
+/// \f$ \{w_{ij}\} \f$ (`Edge::setSquaredLength`) and C* connection phases
 /// \f$ \{\theta_{ij}\} \f$ (`Edge::setPhase`), in a stable edge order fixed at
 /// construction (the `EdgeList` order, restricted to the edges that carry weight
 /// in \f$ L \f$: both endpoints present, no self-loops). `weights()` / `phases()`
@@ -150,17 +150,19 @@ class EigenstateSynthesis {
     /// stable edge order, length `numEdges()`.
     [[nodiscard]] std::vector<std::complex<double>> weights() const;
 
-    /// The edge phases \f$ \{\theta_{ij}\} \f$ (`Edge::getPhase`) in the stable
-    /// edge order, length `numEdges()`.
-    [[nodiscard]] std::vector<double> phases() const;
+    /// The edge connection phases \f$ \{\varphi_{ij}\} \f$ (`Edge::getPhase`) in the
+    /// stable edge order, length `numEdges()`. Complex: `Re` is the compact U(1)
+    /// angle, `Im` the non-compact \f$\mathbb{R}^{+}\f$ log-scale.
+    [[nodiscard]] std::vector<std::complex<double>> phases() const;
 
     /// Write the edge magnitudes in place (`Edge::setSquaredLength`).
     /// @throws std::runtime_error if `w.size() != numEdges()`.
     void setWeights(const std::vector<double> &w);
 
-    /// Write the edge phases in place (`Edge::setPhase`).
+    /// Write the edge connection phases in place (`Edge::setPhase`). A real value
+    /// converts implicitly and leaves the non-compact part zero.
     /// @throws std::runtime_error if `theta.size() != numEdges()`.
-    void setPhases(const std::vector<double> &theta);
+    void setPhases(const std::vector<std::complex<double>> &theta);
 
     // === Fixed-boundary interior fill (§5.0) ===
 
@@ -186,17 +188,18 @@ class EigenstateSynthesis {
     /// length `numInteriorEdges()`.
     [[nodiscard]] std::vector<std::complex<double>> interiorWeights() const;
 
-    /// The interior edge phases \f$ \{\theta_{ij}\} \f$ in interior-edge order,
-    /// length `numInteriorEdges()`.
-    [[nodiscard]] std::vector<double> interiorPhases() const;
+    /// The interior edge connection phases \f$ \{\varphi_{ij}\} \f$ in interior-edge
+    /// order, length `numInteriorEdges()`. Complex; see `phases()`.
+    [[nodiscard]] std::vector<std::complex<double>> interiorPhases() const;
 
     /// Write the interior edge magnitudes in place; the boundary edges are left
     /// untouched. @throws std::runtime_error if `w.size() != numInteriorEdges()`.
     void setInteriorWeights(const std::vector<double> &w);
 
-    /// Write the interior edge phases in place; the boundary edges are left
-    /// untouched. @throws std::runtime_error if `theta.size() != numInteriorEdges()`.
-    void setInteriorPhases(const std::vector<double> &theta);
+    /// Write the interior edge connection phases in place; the boundary edges are
+    /// left untouched.
+    /// @throws std::runtime_error if `theta.size() != numInteriorEdges()`.
+    void setInteriorPhases(const std::vector<std::complex<double>> &theta);
 
     /// The boundary tunable edges as sorted \f$ (\min\text{id},\max\text{id}) \f$
     /// endpoint pairs — the fixed \f$ \partial W \f$ edge set, for asserting it is
@@ -693,7 +696,7 @@ class EigenstateSynthesis {
     struct Removal {
       std::vector<std::uint64_t> cell{};
       std::vector<std::tuple<std::uint64_t, std::uint64_t,
-                             std::complex<double>, double>>
+                             std::complex<double>, std::complex<double>>>
           removedEdges{};
     };
     std::vector<Removal> removals_{};

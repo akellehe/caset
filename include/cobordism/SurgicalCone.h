@@ -142,7 +142,7 @@ class SurgicalCone {
     /// continued (Im l2 != 0) geometry too — a Re-only record silently
     /// projected every rejected probe onto the real axis (#581).
     std::vector<
-        std::tuple<std::uint64_t, std::uint64_t, std::complex<double>, double>>
+        std::tuple<std::uint64_t, std::uint64_t, std::complex<double>, std::complex<double>>>
         edges;
     /// Vertices touched: isolated vertices removed (cone-out, to re-create) /
     /// the single fresh vertex (cone-in, to drop), each (id, coords). An empty

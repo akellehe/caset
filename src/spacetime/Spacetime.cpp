@@ -307,7 +307,7 @@ std::shared_ptr<Spacetime> Spacetime::fromCells(
   int dimensions,
   const std::vector<std::vector<std::uint64_t>> &cells,
   double weight,
-  double phase,
+  std::complex<double> phase,
   const std::optional<std::vector<double>> &vertexTimes
 ) {
   auto metric = std::make_shared<Metric>(

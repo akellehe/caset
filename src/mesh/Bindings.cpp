@@ -129,7 +129,7 @@ Real for spacelike, imaginary for timelike, general complex off the
 real-Lorentzian locus. This is the edge's ONE degree of freedom: l^2 is derived
 by squaring and is never stored (#639), so square getLength() where you need it.
 Causal character is read from THIS (Im(length)). Distinct from getPhase() (the
-U(1) connection).)doc")
+C* connection).)doc")
       .def("isTimelike", &Edge::isTimelike,
            "Timelike iff the length has a non-negligible imaginary part "
            "(supersedes the fragile sign(l^2) test).")
@@ -138,17 +138,32 @@ U(1) connection).)doc")
       .def("isNull", &Edge::isNull,
            "Null/lightlike iff the length is ~zero.")
       .def("getPhase", &Edge::getPhase,
-           R"doc(Return the U(1) connection phase carried by this edge (radians).
+           R"doc(Return the complex C* connection phase carried by this edge.
 
-Paired with the squared length it gives the complex edge weight
-l^2 * exp(i * phase) used by the weighted Laplacian.
-The default of 0 leaves an ordinary real-weighted CDT edge unchanged.)doc")
+The SECOND edge field, independent of the geometry. The link variable is
+U = exp(i * phase) in C*, and the reverse orientation carries its INVERSE
+U**-1, not its conjugate (they agree only for a real phase). A gauge
+transformation acts by U_xy -> g_x**-1 U_xy g_y and leaves the length, and
+every metric weight built from it, untouched.
+
+The phase is complex because the structure group is C* = U(1) x R+:
+exp(i*phase) = exp(i*Re(phase)) * exp(-Im(phase)). Re is the compact U(1)
+angle in radians -- the only part with winding, hence the only part that
+quantizes and the only part a Wilson loop reads. Im is the non-compact local
+scale and carries no quantum number.
+
+It twists the hopping of the Aharonov-Bohm operator
+(HodgeLaplacian.connectionLaplacian) and never rescales a metric weight: the
+geometric Hodge laplacian(k) is built from the lengths alone and is blind to
+it at every degree. The default of 0 leaves an untwisted CDT edge unchanged.)doc")
       .def("setLength", &Edge::setLength, py::arg("length"),
            "Set the (complex) edge LENGTH: real=spacelike, imaginary=timelike, "
            "general complex off the real-Lorentzian locus. There is no squared "
            "setter (#639) -- pass sqrt(l2) and choose the branch explicitly.")
       .def("setPhase", &Edge::setPhase, py::arg("phase"),
-           "Set the U(1) connection phase carried by this edge (radians).")
+           "Set the complex C* connection phase carried by this edge: Re is "
+           "the compact U(1) angle in radians, Im the non-compact log-scale. "
+           "A real value converts and leaves the non-compact part zero.")
       .def_static("vanRaamsdonkLength", &Edge::vanRaamsdonkLength,
                   py::arg("I"), py::arg("iMax"), py::arg("epsilon") = 1e-10,
                   "Van Raamsdonk metric law: the spacelike length -log(I/iMax), "
