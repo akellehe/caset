@@ -6,8 +6,7 @@
 
 // Particle classification from persistent modular spectral components
 // (issue #773, Wave 3 of the recursive spectral-fiber program — the
-// whitepaper section "Quarks as modular
-// clusters").
+// whitepaper section "Quarks as modular clusters").
 //
 // ─── What lives here ─────────────────────────────────────────────────────
 //
@@ -1401,7 +1400,8 @@ struct BaryonCandidateEvidence {
   /// The #772 Berry-cancelled PARTICLE-EXCHANGE character
   /// (`ExchangeHolonomy::exchangeCharacter`), when the caller ran the
   /// exchange experiment.  REPORT-ONLY: the proton certificate has no
-  /// exchange row, so it gates nothing — it only fills `BaryonRead::exchangeCharacter` and the
+  /// exchange row, so it gates nothing — it only fills
+  /// `BaryonRead::exchangeCharacter` and the
   /// doubly cancelled spin-statistics ratio.  A read tagged with the wrong
   /// channel is refused (the #772 channels are never interchangeable).
   std::optional<HolonomyCharacterRead> exchange{};
@@ -1623,8 +1623,9 @@ struct BaryonRead {
 /// # ParticleClusters
 ///
 /// The #773 quark/antiquark classifier over persistent modular spectral
-/// components (whitepaper "Quarks as modular clusters").  See the file banner for the identities implemented, their
-/// domains, and the certificate vocabulary.
+/// components (whitepaper "Quarks as modular clusters").  See the file
+/// banner for the identities implemented, their domains, and the
+/// certificate vocabulary.
 ///
 /// **Composition, not recomputation.**  Every certificate consumed here is
 /// produced by a merged upstream kernel: #765 persistence diagnostics,
