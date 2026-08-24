@@ -2188,17 +2188,18 @@ class TestRecursionOnRealGeometry(unittest.TestCase):
                                 provenance.certificate.describe())
 
     def test_certified_fiber_sum_and_fock_stage_on_real_geometry(self):
-        # The boxed display's last two lines on real geometry.
+        # The boxed display's last two lines on real geometry. The overlapping
+        # vertex supports leave every k-cell an interface cell here, so the
+        # band is carried on the level's own fine coordinates.
         level0 = self._level_zero()
-        interior = list(level0.interiorIndices(0))
-        rank = min(2, len(interior))
+        rank = min(2, level0.dimension)
         self.assertGreater(rank, 0)
 
         band = cob.RecursiveQuotient.CertifiedBand()
         band.component = 0
         frame = np.zeros((level0.dimension, rank), dtype=complex)
         for position in range(rank):
-            frame[interior[position], position] = 1.0
+            frame[position, position] = 1.0
         band.frame = _flat(frame)
         band.rank = rank
         band.lowerGap = 0.5

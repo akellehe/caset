@@ -2465,6 +2465,12 @@ ancestry. Read-only: nothing here enters the emergence objective.)doc");
       .def_property_readonly("levelProvenance",
                              &RecursiveQuotient::levelProvenance,
                              "How this level was produced from its parent.")
+      .def_property_readonly("cellVertices", &RecursiveQuotient::cellVertices,
+                             "The k-cell vertex tuples of this level's fine "
+                             "coordinates, in coordinate order (spacetime "
+                             "paths only; empty on the matrix path and on "
+                             "child levels). Match a band's cells against "
+                             "these by vertex SET to build a CertifiedBand.")
       .def("invalidate", &RecursiveQuotient::invalidate,
            "Drop memoized results and re-read the operator values for the "
            "same cell complex (call after an accepted metric move).")

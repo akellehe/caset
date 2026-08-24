@@ -735,6 +735,17 @@ class RecursiveQuotient {
     /// @throws std::out_of_range on a bad component index.
     [[nodiscard]] const std::vector<int> &interiorIndices(int component) const;
 
+    /// The k-cell vertex tuples of this level's fine coordinates, in
+    /// coordinate order. Spacetime paths only: EMPTY on the matrix path and
+    /// on child levels, whose coordinates are reduced coordinates rather than
+    /// cells. This is what a caller matches a band's cells against — by
+    /// vertex SET, never by index — to place a `CertifiedBand`'s frame on
+    /// this level's coordinates.
+    [[nodiscard]] const std::vector<std::vector<std::uint64_t>> &cellVertices()
+        const noexcept {
+      return cellVertices_;
+    }
+
     /// Provenance of each fine coordinate at this level (cell vertex tuples
     /// on the spacetime path, inherited reduced-coordinate provenance under
     /// `nextLevel`).
