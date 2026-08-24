@@ -17,7 +17,7 @@ This paper proposes a single geometric formulation for the particle content alre
 The proposal has a substantial exact core. Static Schur reduction proves when a component may be replaced by a response vertex without changing supported boundary quadratic energies. Nonzero spectral bands instead use the energy-dependent Feshbach–Schur map, or a certified Craig–Bampton/AMLS linear surrogate. Simplicial gluing acts on the one-particle chain space; fermionic second quantization then turns direct sums into graded tensor products and coupling blocks into hopping terms. Every generator so obtained is quadratic, so the dynamics is exactly quasi-free; on sectors whose metric certificate is verified the state is carried without loss by a covariance matrix, Wick’s theorem evaluates every polynomial certificate, and mean-field geometry backreaction provably stays Gaussian. Three oriented edge-mode factors form the exact exterior algebra $\Lambda^{\bullet}\mathbb{C}^{3}=\mathbf{1}\oplus
 \mathbf{3}\oplus\overline{\mathbf{3}}\oplus\mathbf{1}$; the one-occupation sector is a color qutrit, its bilinears close $\mathfrak{su}(3)$, the three-occupation sector is a color singlet, and the grading gives the fermionic exchange sign and canonical anticommutation relations. A rank-$r$ connection is derived from overlap of neighboring spectral frames. At rank three its determinant line and projective $SU(3)/\mathbb{Z}_{3}$ transport are retained rather than choosing an unrecorded cube-root branch. Closed holonomies are gauge-invariant observables rather than new degrees of freedom. Successive cobordism interactions generate the finite stages of an inductive-limit Fock space.
 
-The physical identification remains a hypothesis to be tested. A quark is proposed to be a persistent, odd-parity, rank-three spectral fiber anchored to oriented faces of a certified component; a proton is three such components bound into one persistent supercomponent, occupying a normalized color wedge, carrying baryon number $+1$, electric charge $+1$, and a sharpness-certified total-space spin-$1/2$ readout. The paper separates exact identities, conditional theorems with certified hypotheses, numerical evidence, and new falsifiable conjectures, and it states the sharpest open question as a dichotomy: either an exact covariance-only proton exists, or a genuinely non-Gaussian, geometry-mediated interaction is required. An implementation program of structure-exact operations before iterative numerics keeps the defining observables from becoming uncontrolled approximations.
+The physical identification remains a hypothesis to be tested. A quark is proposed to be a persistent, odd-parity, rank-three spectral fiber anchored to oriented faces of a certified component; a proton is three such components bound into one persistent supercomponent, occupying a normalized color wedge, carrying baryon number $+1$, electric charge $+1$, and a sharpness-certified total-space spin-$1/2$ readout. The paper separates exact identities, conditional theorems with certified hypotheses, numerical evidence, and new falsifiable conjectures, and it states the sharpest open question as a dichotomy: either an exact covariance-only proton exists, or a genuinely non-Gaussian, geometry-mediated interaction is required.
 
 </div>
 
@@ -47,7 +47,9 @@ The governing constraint is parsimony. The ontology is limited to:
 
 - simplicial gluing followed by fermionic second quantization.
 
-The declared microscopic fields end there. Spectral fibers, color frames, the derived rank-three color transport, Wilson loops, particle sectors, and coarse vertices are *derived views* of that same data. They are not separately sampled fields. This is important both scientifically and computationally: adding further independent fields could fit a desired answer, while deriving every readout from the declared data leaves the construction falsifiable. One consequence is recorded in Section <a href="#sec:quasifree" data-reference-type="ref" data-reference="sec:quasifree">7</a>: every generator this ontology currently supplies is quadratic after second quantization, so the reachable states are exactly the quasi-free class together with whatever non-Gaussian data is fed at the boundary.
+The declared microscopic fields end there. Spectral fibers, color frames, the derived rank-three color transport, Wilson loops, particle sectors, and coarse vertices are *derived views* of that same data. They are not separately sampled fields. This is important scientifically: adding further independent fields could fit a desired answer, while deriving every readout from the declared data leaves the construction falsifiable. One consequence is recorded in Section <a href="#sec:quasifree" data-reference-type="ref" data-reference="sec:quasifree">7</a>: every generator this ontology currently supplies is quadratic after second quantization, so the reachable states are exactly the quasi-free class together with whatever non-Gaussian data is fed at the boundary.
+
+A second constraint governs how the four kinds of statement are kept apart in practice. Wherever an exact structural identity and an approximation determine the same object, the identity is what the claim rests on; an approximation is admissible only as a conditional theorem, carrying the certificates that bound it — for a spectral reduction, its frequency window, residual, gap, leakage, signature, and conditioning. The reason is not economy. An uncertified tolerance silently becomes a physical postulate: the reader cannot tell which part of a reported number is the theory and which part is the numerics, and no falsification test can be run against a quantity whose error is undeclared.
 
 <figure id="fig:concept">
 
@@ -204,7 +206,7 @@ Either answer is informative. A covariance-only proton would make the entire par
 # A triangle carries the exact color algebra
 
 Consider the three edge-mode factors around an oriented triangle and interpret $\lvert 1\rangle$ as an occupied edge mode. Choosing an oriented ordering $(e_{1},e_{2},e_{3})$ identifies their graded tensor product with the exterior algebra $$(\mathbb{C}^{2})^{\mathbin{\widehat{\otimes}}3}\cong\Lambda^{\bullet}\mathbb{C}^{3}
-  =\mathbf{1}\oplus\mathbf{3}\oplus\overline{\mathbf{3}}\oplus\mathbf{1}.$$ The orientation of one triangle fixes the ordering up to a cyclic, hence even, permutation, so the local wedge sign is unambiguous. Globally the exterior algebra $\Lambda^{\bullet}\mathfrak{h}_{K}$ and the CAR are intrinsic; only a compilation into tensor-product qubits or bitsets needs a deterministic mode order and the corresponding permutation parity. A Kasteleyn orientation is useful for two-dimensional surface-dimer Pfaffians but is not required to define this abstract Fock space \[19\]. A genuine continuum spinor interpretation is a separate question addressed by the rotation certificate below.
+  =\mathbf{1}\oplus\mathbf{3}\oplus\overline{\mathbf{3}}\oplus\mathbf{1}.$$ The orientation of one triangle fixes the ordering up to a cyclic, hence even, permutation, so the local wedge sign is unambiguous. Globally the exterior algebra $\Lambda^{\bullet}\mathfrak{h}_{K}$ and the CAR are intrinsic; only a presentation in ordered tensor factors needs a deterministic mode order and the corresponding permutation parity. A Kasteleyn orientation is useful for two-dimensional surface-dimer Pfaffians but is not required to define this abstract Fock space \[19\]. A genuine continuum spinor interpretation is a separate question addressed by the rotation certificate below.
 
 The sectors have occupation number $N=0,1,2,3$:
 
@@ -340,11 +342,11 @@ For $M$ oriented fermionic edge modes, $$\widehat{\bigotimes}_{m=1}^{M}\mathbb{C
   \cong\Lambda^{\bullet}\mathbb{C}^{M}
   =\bigoplus_{n=0}^{M}\Lambda^{n}\mathbb{C}^{M},$$ and the dimension identity is exact: $$2^{M}=\sum_{n=0}^{M}\binom{M}{n}.$$
 
-The exterior algebra is canonical as a functor of the one-particle space. Writing it as a literal ordered qubit tensor product, or implementing creation operators by Jordan–Wigner/bitset strings, requires a chosen mode order. Tessera derives a deterministic order from oriented component lineage and applies the parity of every reordering; all reported observables must be invariant under relabeling plus that induced unitary.
+The exterior algebra is canonical as a functor of the one-particle space. Writing it as a literal ordered tensor product, or presenting the creation operators in Jordan–Wigner form, requires a chosen mode order. A deterministic order is fixed by oriented component lineage, with the parity of every reordering applied; all reported observables must be invariant under relabeling plus that induced unitary.
 
 Adding a new noninteracting mode uses the vacuum embedding $$\iota_{M}:\mathcal{H}_{M}\hookrightarrow\mathcal{H}_{M+1},
   \qquad
-  \iota_{M}(\psi)=\psi\mathbin{\widehat{\otimes}}\lvert 0\rangle.$$ The infinite Fock space is the direct limit $$\mathcal{F}=\varinjlim(\mathcal{H}_{M},\iota_{M}).$$ This makes the infinite expansion precise without ever allocating an infinite array. At every finite simulation time only finitely many modes have interacted. Consistency requires $$\lVert\iota_{M}U_{M}-U_{M+1}\iota_{M}\rVert\longrightarrow 0$$ over a refinement sequence.
+  \iota_{M}(\psi)=\psi\mathbin{\widehat{\otimes}}\lvert 0\rangle.$$ The infinite Fock space is the direct limit $$\mathcal{F}=\varinjlim(\mathcal{H}_{M},\iota_{M}).$$ This makes the infinite expansion precise while every stage remains finite: at any finite stage only finitely many modes have interacted. Consistency requires $$\lVert\iota_{M}U_{M}-U_{M+1}\iota_{M}\rVert\longrightarrow 0$$ over a refinement sequence.
 
 A bosonic gauge sector, if realized, need not add a new local oscillator. The exact statement is representation-theoretic: the traceless even bilinears $$a^{\dagger}_{i}a_{j}-\frac{1}{3}\delta_{ij}N$$ transform in the color octet of $\mathbf{3}\otimes\overline{\mathbf{3}}=\mathbf{1}\oplus\mathbf{8}$ and have even fermion parity. That identifies the octet quantum numbers among collective fermion-pair excitations; it does not by itself establish propagating bosonic gauge excitations, which would require separate dynamical and continuum evidence. Within this model, arbitrarily many such collective excitations are represented by adding more microscopic modes at finer resolution, and each finite edge-mode factor remains two-dimensional.
 
@@ -454,37 +456,7 @@ Let $\mathcal{R}_{0}(\lambda)=L_{0}-\lambda I$ denote the microscopic one-partic
 
 The geometric subspaces $E_{v}\subset C(K)$ of adjacent components may overlap on shared interface cells, so their internal sum need not be direct. The recursion therefore never asserts $\bigoplus_{v}E_{v}\subset C(K)$. It forms the abstract labeled sum, carries the embedding $J_{\ell+1}$ and its Gram matrix $G_{\ell+1}$ exactly, and proceeds by exactly one of three declared options: carry $G$ in every subsequent formula; certify $\lVert G-I\rVert\le\varepsilon$ and propagate $\varepsilon$ through the composable amplitude budget of Section <a href="#sec:interactions" data-reference-type="ref" data-reference="sec:interactions">6</a>; or quotient $\ker G$ and restate the fiber ranks. A sheaf-stalk decomposition that assigns interface modes to link stalks is a valid realization of the same requirement \[10\], but it is not necessary.
 
-At $\lambda=0$ the response step is the exact supported static Schur complement. For a nonzero band it is the exact energy-dependent pencil; a cached linear $\mathcal{R}_{\ell+1}$ is an AMLS/component-mode surrogate with a declared frequency window and residual. The transport rank is generic; only an anchored accepted rank-three fiber receives the color interpretation. This recursion supplies the response network, retained stalk, derived transport, and expanding state space without claiming that every coarse level is literally a new simplicial complex.
-
-# Exactness and performance principles
-
-The simulation should prefer an exact structural identity over a general dense numerical operation whenever both compute the same object:
-
-- in the quasi-free sector, evolve the covariance matrix by $i\dot{\Gamma}=[h,\Gamma]$ once the generator’s metric certificate (Section <a href="#sec:quasifree" data-reference-type="ref" data-reference="sec:quasifree">7</a>) is verified, and evaluate every polynomial certificate by Wick contraction; materialize a Fock vector only for oracle tests or explicitly non-Gaussian boundary data;
-
-- use sparse static and shifted Schur/Feshbach solves, not explicit dense inverses, and use AMLS when a reusable linear band surrogate is needed;
-
-- use Künneth sums only for actual product complexes, and occupation subset sums for $d\Gamma(L)$, not diagonalization of an eager Fock matrix;
-
-- use exterior bit parity for exchange signs, not sampled phases;
-
-- use exact $3\times 3$ determinants and the fixed $F_{3}$ frame only after a rank-three band passes its triangle-anchor certificate;
-
-- use analytic Regge/Hodge derivatives and Wirtinger gradients, not finite differences;
-
-- use Smith normal form for integer homology and a spectral threshold only as a cross-check;
-
-- use matrix-determinant/Woodbury updates for local cobordism changes;
-
-- cache component factorizations and invalidate only affected stars;
-
-- keep tensor products lazy and block-sparse by occupation/parity;
-
-- use $U(r)$ polar transport at generic rank, retaining determinant-line and projective/center data at $r=3$; and
-
-- attach frequency window, residual, gap, leakage, signature, and condition-number certificates to every iterative eigensolve or reduction.
-
-The exact route is not only faster. It prevents a numerical tolerance from becoming an undocumented physical postulate.
+At $\lambda=0$ the response step is the exact supported static Schur complement. For a nonzero band it is the exact energy-dependent pencil; a linear $\mathcal{R}_{\ell+1}$ is an AMLS/component-mode surrogate with a declared frequency window and residual. The transport rank is generic; only an anchored accepted rank-three fiber receives the color interpretation. This recursion supplies the response network, retained stalk, derived transport, and expanding state space without claiming that every coarse level is literally a new simplicial complex.
 
 # Prior art and boundary of novelty
 

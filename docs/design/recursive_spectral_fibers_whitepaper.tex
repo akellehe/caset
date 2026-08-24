@@ -132,9 +132,7 @@ exact identities, conditional theorems with certified hypotheses, numerical
 evidence, and new falsifiable conjectures, and it states the sharpest open
 question as a dichotomy: either an
 exact covariance-only proton exists, or a genuinely non-Gaussian,
-geometry-mediated interaction is required. An implementation program of
-structure-exact operations before iterative numerics keeps the defining
-observables from becoming uncontrolled approximations.
+geometry-mediated interaction is required.
 \endgroup
 \end{titlepage}
 
@@ -176,13 +174,23 @@ The governing constraint is parsimony. The ontology is limited to:
 The declared microscopic fields end there. Spectral fibers, color frames, the
 derived rank-three color transport, Wilson loops, particle sectors, and coarse
 vertices are \emph{derived views} of that same data. They are not separately
-sampled fields. This is important both scientifically and computationally:
+sampled fields. This is important scientifically:
 adding further independent fields could fit a desired answer, while deriving
 every readout from the declared data leaves the construction falsifiable. One consequence is recorded in
 Section~\ref{sec:quasifree}: every generator this ontology currently supplies
 is quadratic after second quantization, so the reachable states are exactly the
 quasi-free class together with whatever non-Gaussian data is fed at the
 boundary.
+
+A second constraint governs how the four kinds of statement are kept apart in
+practice. Wherever an exact structural identity and an approximation determine
+the same object, the identity is what the claim rests on; an approximation is
+admissible only as a conditional theorem, carrying the certificates that bound
+it --- for a spectral reduction, its frequency window, residual, gap, leakage,
+signature, and conditioning. The reason is not economy. An uncertified
+tolerance silently becomes a physical postulate: the reader cannot tell which
+part of a reported number is the theory and which part is the numerics, and no
+falsification test can be run against a quantity whose error is undeclared.
 
 \begin{figure}[htb]
 \centering
@@ -827,7 +835,7 @@ algebra
 The orientation of one triangle fixes the ordering up to a cyclic, hence even,
 permutation, so the local wedge sign is unambiguous. Globally the exterior
 algebra $\Lambda^{\bullet}\hh_{K}$ and the CAR are intrinsic; only a
-compilation into tensor-product qubits or bitsets needs a deterministic mode
+presentation in ordered tensor factors needs a deterministic mode
 order and the corresponding permutation parity. A Kasteleyn orientation is
 useful for two-dimensional surface-dimer Pfaffians but is not required to
 define this abstract Fock space \cite{cimasonireshetikhin2007}. A genuine
@@ -1237,10 +1245,10 @@ and the dimension identity is exact:
 \end{equation*}
 
 The exterior algebra is canonical as a functor of the one-particle space.
-Writing it as a literal ordered qubit tensor product, or implementing creation
-operators by Jordan--Wigner/bitset strings, requires a chosen mode order.
-Tessera derives a deterministic order from oriented component lineage and
-applies the parity of every reordering; all reported observables must be
+Writing it as a literal ordered tensor product, or presenting the creation
+operators in Jordan--Wigner form, requires a chosen mode order. A deterministic
+order is fixed by oriented component lineage, with the parity of every
+reordering applied; all reported observables must be
 invariant under relabeling plus that induced unitary.
 
 Adding a new noninteracting mode uses the vacuum embedding
@@ -1253,8 +1261,8 @@ The infinite Fock space is the direct limit
 \begin{equation*}
   \mathcal{F}=\varinjlim(\HK_{M},\iota_{M}).
 \end{equation*}
-This makes the infinite expansion precise without ever allocating an infinite
-array. At every finite simulation time only finitely many modes have
+This makes the infinite expansion precise while every stage remains finite: at
+any finite stage only finitely many modes have
 interacted. Consistency requires
 \begin{equation*}
   \lVert\iota_{M}U_{M}-U_{M+1}\iota_{M}\rVert\longrightarrow 0
@@ -1626,7 +1634,7 @@ interface modes to link stalks is a valid realization of the same requirement
 
 At $\lambda=0$ the response step is the exact supported static Schur
 complement. For a nonzero band it is the exact energy-dependent pencil; a
-cached linear $\RN_{\ell+1}$ is an AMLS/component-mode surrogate with a
+linear $\RN_{\ell+1}$ is an AMLS/component-mode surrogate with a
 declared frequency window and residual. The transport rank is generic; only an
 anchored accepted rank-three fiber receives the color interpretation. This
 recursion supplies the response network, retained stalk, derived transport, and
@@ -1634,40 +1642,6 @@ expanding state space without claiming that every coarse level is literally a
 new simplicial complex.
 
 % ================================================================ 15
-\section{Exactness and performance principles}\label{sec:performance}
-
-The simulation should prefer an exact structural identity over a general dense
-numerical operation whenever both compute the same object:
-\begin{itemize}
-  \item in the quasi-free sector, evolve the covariance matrix by
-    $i\dot{\Gamma}=[h,\Gamma]$ once the generator's metric certificate
-    (Section~\ref{sec:quasifree}) is verified, and evaluate every polynomial
-    certificate by Wick contraction; materialize a Fock vector only for oracle
-    tests or explicitly non-Gaussian boundary data;
-  \item use sparse static and shifted Schur/Feshbach solves, not explicit dense
-    inverses, and use AMLS when a reusable linear band surrogate is needed;
-  \item use K\"unneth sums only for actual product complexes, and occupation
-    subset sums for $\dG(L)$, not diagonalization of an eager Fock matrix;
-  \item use exterior bit parity for exchange signs, not sampled phases;
-  \item use exact $3\times 3$ determinants and the fixed $F_{3}$ frame only
-    after a rank-three band passes its triangle-anchor certificate;
-  \item use analytic Regge/Hodge derivatives and Wirtinger gradients, not
-    finite differences;
-  \item use Smith normal form for integer homology and a spectral threshold
-    only as a cross-check;
-  \item use matrix-determinant/Woodbury updates for local cobordism changes;
-  \item cache component factorizations and invalidate only affected stars;
-  \item keep tensor products lazy and block-sparse by occupation/parity;
-  \item use $U(r)$ polar transport at generic rank, retaining determinant-line
-    and projective/center data at $r=3$; and
-  \item attach frequency window, residual, gap, leakage, signature, and
-    condition-number certificates to every iterative eigensolve or reduction.
-\end{itemize}
-
-The exact route is not only faster. It prevents a numerical tolerance from
-becoming an undocumented physical postulate.
-
-% ================================================================ 16
 \section{Prior art and boundary of novelty}\label{sec:priorart}
 
 No single cited work establishes the full recursive spectral-fiber proposal.
@@ -1793,7 +1767,7 @@ denotes conceptual inheritance, not a proof of the downstream claim.}
 \label{fig:priorart}
 \end{figure}
 
-% ================================================================ 17
+% ================================================================ 16
 \section{Falsification program}\label{sec:falsification}
 
 The formulation fails, or must be narrowed, if any of the following persists
@@ -1839,7 +1813,7 @@ under refinement and tighter numerical certification:
 Holes may re-emerge and may correlate with some phases, but no claim in this
 paper depends on them doing so.
 
-% ================================================================ 18
+% ================================================================ 17
 \section{Conclusion}\label{sec:conclusion}
 
 The geometry is economical and precise: an edge carries a two-level mode, not
