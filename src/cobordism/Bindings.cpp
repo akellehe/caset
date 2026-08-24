@@ -39,6 +39,69 @@ namespace py = pybind11;
 using namespace tessera;
 using namespace tessera::cobordism;
 
+/// # PyCobordismObjective
+///
+/// The trampoline that lets a Python subclass supply the functional
+/// `MultiCobordism` descends. Each override forwards to the Python method of
+/// the corresponding snake_case name; the three with C++ defaults fall back to
+/// the base implementation when a subclass does not define them.
+///
+/// The firewall survives the crossing unchanged, and for the same reason it
+/// held in C++: a Python objective is handed an `ObjectiveContext`, which is
+/// plain data carrying geometry, a region, that region's targets and scalar
+/// configuration. It receives no node, no callable that closes over one, and
+/// therefore no route to a component, fiber, transport, colour, charge,
+/// flavour, exchange, spin certificate or verdict. Subclassing widens who may
+/// write an objective; it does not widen what one can read.
+///
+/// The override macros acquire the GIL themselves, so an engine entry point
+/// that released it — every long-running one does — re-enters Python safely.
+class PyCobordismObjective : public CobordismObjective {
+ public:
+  using CobordismObjective::CobordismObjective;
+
+  [[nodiscard]] std::string name() const override {
+    PYBIND11_OVERRIDE_PURE(std::string, CobordismObjective, name);
+  }
+
+  [[nodiscard]] std::vector<std::string> termNames() const override {
+    PYBIND11_OVERRIDE_PURE_NAME(std::vector<std::string>, CobordismObjective,
+                                "term_names", termNames);
+  }
+
+  [[nodiscard]] ObjectiveTerms terms(
+      const ObjectiveContext &context) const override {
+    PYBIND11_OVERRIDE_PURE(ObjectiveTerms, CobordismObjective, terms, context);
+  }
+
+  [[nodiscard]] ObjectiveDirection direction(
+      const ObjectiveDirectionContext &context) const override {
+    PYBIND11_OVERRIDE_PURE(ObjectiveDirection, CobordismObjective, direction,
+                           context);
+  }
+
+  [[nodiscard]] bool isTargetConditioned() const override {
+    PYBIND11_OVERRIDE_PURE_NAME(bool, CobordismObjective,
+                                "is_target_conditioned", isTargetConditioned);
+  }
+
+  [[nodiscard]] ObjectiveScope scope() const override {
+    PYBIND11_OVERRIDE(ObjectiveScope, CobordismObjective, scope);
+  }
+
+  [[nodiscard]] bool needsRegisterResidual() const override {
+    PYBIND11_OVERRIDE_NAME(bool, CobordismObjective, "needs_register_residual",
+                           needsRegisterResidual);
+  }
+
+  [[nodiscard]] double numericalRegisterResidualWeight(
+      const ObjectiveContext &context) const override {
+    PYBIND11_OVERRIDE_NAME(double, CobordismObjective,
+                           "numerical_register_residual_weight",
+                           numericalRegisterResidualWeight, context);
+  }
+};
+
 void register_cobordism(py::module_ m) {
   // Smoke hook: lets tests assert the subsystem loaded before any
   // mathematical capability (issues #63–#70) is implemented. Single leading
@@ -1014,9 +1077,13 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("mode"))
       .def_property_readonly("objective_mode", &MultiCobordism::objectiveMode)
       .def("set_objective", &MultiCobordism::setObjective,
-           py::arg("objective"),
+           py::arg("objective"), py::keep_alive<1, 2>(),
            "Inject the functional this node descends. The engine calls through "
-           "it and knows nothing about which objective it holds.")
+           "it and knows nothing about which objective it holds.\n\n"
+           "The node keeps the objective alive for as long as it holds it, so "
+           "a Python-defined objective survives the caller dropping its own "
+           "last reference -- otherwise the Python half of a subclass could be "
+           "collected while the engine still descends through it.")
       .def_property_readonly("objective_spec", &MultiCobordism::objectiveSpec,
            "The injected functional. Never null: construction installs a "
            "default.")
@@ -1316,22 +1383,100 @@ Right -- re-read after each drive call:
       "callable, since a bound callable would capture the node and smuggle "
       "back the reachability the former static objective_of denied.")
       .def(py::init<>())
+      // Every field is readable, and every one is data. A Python objective
+      // must be able to read what it scores; what it must NOT be able to read
+      // is an analysis product, and none is here to read.
+      .def_readwrite("spacetime", &ObjectiveContext::spacetime,
+                     "The complex being scored.")
+      .def_readwrite("region", &ObjectiveContext::region,
+                     "The vertex set this objective is scored over. EMPTY "
+                     "means the whole complex.")
+      .def_readwrite("region_targets", &ObjectiveContext::regionTargets,
+                     "The target states the region is scored against. Empty "
+                     "for a purely geometric objective.")
+      .def_readwrite("register_degrees", &ObjectiveContext::registerDegrees,
+                     "The register degrees the objective is declared over.")
+      .def_readwrite("regge_weight", &ObjectiveContext::reggeWeight)
+      .def_readwrite("hodge_entropy_weight",
+                     &ObjectiveContext::hodgeEntropyWeight)
+      .def_readwrite("gamma", &ObjectiveContext::gamma)
+      .def_readwrite("carried_state_energy_weight",
+                     &ObjectiveContext::carriedStateEnergyWeight)
+      .def_readwrite("einstein_hilbert", &ObjectiveContext::einsteinHilbert)
+      .def_readwrite("hodge_entropy_phase_mode",
+                     &ObjectiveContext::hodgeEntropyPhaseMode,
+                     "Which entropy the Hodge term reads: the complex "
+                     "operator or its phase-blind entrywise ablation.")
+      .def_readwrite("register_residual", &ObjectiveContext::registerResidual,
+                     "r_U on this region, precomputed by the engine and passed "
+                     "as a NUMBER rather than a callable, so no node is "
+                     "reachable from here. NaN when the objective did not ask "
+                     "for it -- never a silent zero.")
+      .def_readwrite("carried_state_energy",
+                     &ObjectiveContext::carriedStateEnergy,
+                     "E_carried(Gamma, g), likewise a precomputed number.")
       .def_static("input_names", &ObjectiveContext::inputNames,
                   "Every field of the context, in declaration order -- the "
                   "firewall list a structural test asserts against.");
 
-  py::class_<CobordismObjective, std::shared_ptr<CobordismObjective>>(
+  py::class_<ObjectiveDirection>(m, "ObjectiveDirection",
+      "A stage-2 search direction together with the exact objective value at "
+      "the point it was taken from.")
+      .def(py::init<>())
+      .def_readwrite("ascent", &ObjectiveDirection::ascent,
+                     "The ascent displacement. Stage 2 subtracts a scaled "
+                     "multiple of it.")
+      .def_readwrite("baseline", &ObjectiveDirection::baseline,
+                     "The exact objective at the current point, when the "
+                     "direction's assembly already produced it.")
+      .def_readwrite("baseline_computed", &ObjectiveDirection::baselineComputed,
+                     "Whether `baseline` is meaningful. False makes the engine "
+                     "evaluate the scalar itself rather than trust an "
+                     "accumulated trace.");
+
+  py::class_<ObjectiveDirectionContext>(m, "ObjectiveDirectionContext",
+      "ObjectiveContext plus the extra data a stage-2 direction needs. Plain "
+      "data for the same reason, so the direction path cannot reach a node "
+      "either.")
+      .def(py::init<>())
+      .def_readwrite("scalar", &ObjectiveDirectionContext::scalar,
+                     "The scalar inputs, unchanged.")
+      .def_readwrite("edge_count", &ObjectiveDirectionContext::edgeCount,
+                     "The number of edge coordinates the direction is taken "
+                     "over.")
+      .def_readwrite("carried_state_energy_gradient",
+                     &ObjectiveDirectionContext::carriedStateEnergyGradient,
+                     "dE_carried/dz, exact and analytic, computed by the "
+                     "engine. Empty where the carried-state weight is zero.");
+
+  py::class_<CobordismObjective, PyCobordismObjective,
+             std::shared_ptr<CobordismObjective>>(
       m, "CobordismObjective",
       "The functional MultiCobordism descends, as an injected specification "
       "rather than a value of a closed enum. An objective is scored over a "
       "REGION rather than implicitly over a whole node, so more than one may "
-      "coexist on one complex.")
+      "coexist on one complex.\n\n"
+      "Subclass it in Python to descend a functional of your own: override "
+      "name, term_names, terms, direction and is_target_conditioned; scope, "
+      "needs_register_residual and numerical_register_residual_weight have "
+      "defaults. A subclass reads only the ObjectiveContext it is handed, "
+      "which is the same firewall a C++ objective sits behind.")
+      .def(py::init<>())
       .def("name", &CobordismObjective::name)
       .def("term_names", &CobordismObjective::termNames)
       .def("terms", &CobordismObjective::terms, py::arg("context"))
+      .def("direction", &CobordismObjective::direction, py::arg("context"),
+           "The stage-2 search direction over the context's region.")
       .def("is_target_conditioned", &CobordismObjective::isTargetConditioned)
       .def("needs_register_residual",
            &CobordismObjective::needsRegisterResidual)
+      .def("numerical_register_residual_weight",
+           &CobordismObjective::numericalRegisterResidualWeight,
+           py::arg("context"),
+           "The weight this objective puts on a NUMERICALLY differentiated "
+           "register-residual direction. A weight rather than a callable on "
+           "purpose: handing an objective something that could difference the "
+           "scalar would mean handing it a closure over the node.")
       .def("scope", &CobordismObjective::scope)
       .def_static("total", &CobordismObjective::total, py::arg("terms"),
                   "The scalar: the plain sum of the declared terms. STATIC by "
