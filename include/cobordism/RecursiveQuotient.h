@@ -39,6 +39,23 @@ enum class FiberEmbeddingPolicy {
   QuotientKernel,
 };
 
+/// How a level's operator was produced from its parent — the response step
+/// \f$ \RN_{\ell+1}(\lambda) = \mathrm{Feshbach}_{P_\ell}(\RN_\ell(\lambda)) \f$
+/// of the master recursion, which is a PENCIL recursion: the static
+/// \f$ \lambda = 0 \f$ complement is one point of it, not the whole of it.
+enum class LevelOrigin {
+  /// A base instance built directly over a complex or an explicit matrix.
+  Base,
+  /// The exact supported static Schur complement at \f$ \lambda = 0 \f$.
+  StaticResponse,
+  /// The exact energy-dependent Feshbach--Schur pencil evaluated at a
+  /// declared \f$ \lambda \f$ over a declared band window.
+  BandPencil,
+  /// A cached LINEAR Craig--Bampton/AMLS surrogate over a declared frequency
+  /// window — a certified approximation, never an exact spectral identity.
+  Surrogate,
+};
+
 /// Why a retained coordinate was kept instead of eliminated (design spec
 /// section 10 step 8: harmonic, resonant, and selected interior coordinates
 /// become explicit stalk/fiber coordinates — never silently deleted).
@@ -115,13 +132,34 @@ enum class RetainedCoordinateKind {
 ///    window, the discarded-mode gap, and the fine-space eigenresiduals of
 ///    the reduced pairs; it is refused outright in the non-normal regime (a
 ///    self-adjoint solver is never applied to a non-self-adjoint operator).
-///  - **Labeled retained-fiber sum.** The next-level one-particle space is
-///    the ABSTRACT labeled sum \f$ \boxplus_v E_v \f$ of the retained fibers
-///    (per component: its interface cells plus its retained interior
-///    modes), with the explicit embedding \f$ J \f$ into the chain space and
-///    Gram matrix \f$ G = J^\dagger W J \f$. Adjacent fibers may overlap on
-///    shared interface cells, so an internal direct sum is NEVER asserted;
-///    each run proceeds by exactly one declared `FiberEmbeddingPolicy`.
+///  - **Labeled fiber sum.** The next-level one-particle space is the
+///    ABSTRACT labeled sum \f$ \boxplus_v E_v \f$, with the explicit
+///    embedding \f$ J \f$ into the chain space and Gram matrix
+///    \f$ G = J^\dagger W J \f$. Adjacent fibers may overlap on shared
+///    interface cells, so an internal direct sum is NEVER asserted; each run
+///    proceeds by exactly one declared `FiberEmbeddingPolicy`. Two summand
+///    readings are available and are never conflated: `labeledFiberSum` sums
+///    the reduction's own RETAINED COORDINATES (interface cells plus owned
+///    interior modes), which carry no band certificate, while
+///    `certifiedFiberSum` sums the boxed display's \f$ E_v \f$ — CERTIFIED
+///    ISOLATED BANDS supplied by the fiber layer, with each band's isolation
+///    gap and certificate carried onto its summand.
+///  - **Fock stage.** `fockStage` closes the boxed display's final line,
+///    \f$ \HK_{\ell+1} = \Fock(\hh_{\ell+1}) \f$, at the SPECTRUM level: the
+///    one-particle compression onto the labeled sum, its spectrum, and the
+///    exact free many-body spectrum as occupation subset sums. The
+///    \f$ 2^M \f$ space is never materialized, and the read refuses past a
+///    declared term budget rather than allocating.
+///  - **Pencil recursion.** The response step is
+///    \f$ \RN_{\ell+1}(\lambda) = \mathrm{Feshbach}_{P_\ell}(\RN_\ell(\lambda)) \f$.
+///    `nextLevel` takes the static \f$ \lambda = 0 \f$ point of it;
+///    `nextLevelAtLambda` takes the exact energy-dependent pencil at a
+///    declared \f$ \lambda \f$; `nextLevelFromSurrogate` takes a certified
+///    linear AMLS surrogate. Every child carries its origin, declared window,
+///    residuals, and producing certificate on `levelProvenance()`.
+///    `childPersistentPartition` supplies \f$ P_\ell \f$ at every scale, so
+///    the recursion discovers its own components rather than partitioning
+///    only at level zero.
 ///  - **Response network / sheaf realization.** The next level is an
 ///    operator-valued response network: vertices carry the retained fibers,
 ///    links carry the effective blocks of the reduced operator. A cellular
@@ -225,6 +263,93 @@ class RecursiveQuotient {
       /// Caller-selected interior cells for the spacetime path, as vertex-id
       /// tuples (matched by vertex set).
       std::vector<std::vector<std::uint64_t>> selectedInteriorCells{};
+    };
+
+    /// How THIS level was produced from its parent, with the declared window
+    /// and the residuals of the producing response step carried on the child
+    /// (whitepaper "The master recursive construction": a cached linear
+    /// \f$ \RN_{\ell+1} \f$ is an AMLS/component-mode surrogate WITH a
+    /// declared frequency window and residual — the window and the residual
+    /// travel with the level, they are not left behind at the parent).
+    struct LevelProvenanceRead {
+      /// The response step that produced this level.
+      LevelOrigin origin{LevelOrigin::Base};
+      /// The spectral parameter the parent pencil was evaluated at
+      /// (`BandPencil` only; NaN otherwise — never 0, which would claim a
+      /// static reduction that never happened).
+      std::complex<double> lambda{std::numeric_limits<double>::quiet_NaN(),
+                                  std::numeric_limits<double>::quiet_NaN()};
+      /// The declared band/frequency window (`BandPencil`, `Surrogate`;
+      /// NaN on `Base`/`StaticResponse`, which carry no window).
+      double windowLower{std::numeric_limits<double>::quiet_NaN()};
+      double windowUpper{std::numeric_limits<double>::quiet_NaN()};
+      /// Max relative interior solve residual of the producing step.
+      double solveResidual{std::numeric_limits<double>::quiet_NaN()};
+      /// Max compatibility (left-kernel) violation of the producing step.
+      double compatibilityResidual{std::numeric_limits<double>::quiet_NaN()};
+      /// Worst fine-space eigenresidual of the retained window pairs
+      /// (`Surrogate` only; NaN otherwise).
+      double surrogateResidual{std::numeric_limits<double>::quiet_NaN()};
+      /// Smallest discarded fixed-interface eigenvalue minus the window
+      /// upper edge (`Surrogate` only; NaN otherwise).
+      double discardedModeGap{std::numeric_limits<double>::quiet_NaN()};
+      /// Whether the parent \f$ \lambda \f$ resonated with the interior
+      /// spectrum (the shifted block was rank-deficient and its kernel was
+      /// retained explicitly).
+      bool resonant{false};
+      /// The producing step's own certificate, carried verbatim. A
+      /// `Surrogate` level therefore travels with a CERTIFIED-APPROXIMATION
+      /// certificate and can never be mistaken for an exact reduction.
+      Certificate certificate{};
+    };
+
+    /// One certified isolated band handed to `certifiedFiberSum` as the
+    /// summand \f$ E_v \f$ of the boxed display. This is PLAIN DATA: the
+    /// producing band lives in the fiber layer, and this class never reaches
+    /// into it — the caller maps a certified band onto its component's fine
+    /// coordinates (cells matched by vertex SET, never by index) and hands
+    /// the frame and the certificate across.
+    struct CertifiedBand {
+      /// The component this band belongs to.
+      int component{0};
+      /// The band's right frame over THIS level's fine coordinates, flat
+      /// row-major (`dimension()` x `rank`). Columns spanning the band.
+      std::vector<std::complex<double>> frame{};
+      /// Band rank \f$ r_v \f$ (number of eigenvalues in the band).
+      std::size_t rank{0};
+      /// Distance to the nearest eigenvalue below / above the band — the
+      /// ISOLATION the boxed display's "certified isolated subspace"
+      /// requires. NaN when the side is unknown.
+      double lowerGap{std::numeric_limits<double>::quiet_NaN()};
+      double upperGap{std::numeric_limits<double>::quiet_NaN()};
+      /// The band's frequency window [min Re, max Re].
+      double frequencyLower{std::numeric_limits<double>::quiet_NaN()};
+      double frequencyUpper{std::numeric_limits<double>::quiet_NaN()};
+      /// Whether the band met every certification threshold of its producing
+      /// configuration. An UNCERTIFIED band is still summed and reported —
+      /// it is never silently dropped — but it makes the labeled sum's own
+      /// certificate fail to hold.
+      bool accepted{false};
+      /// The band's certificate, carried verbatim onto the summand.
+      Certificate certificate{};
+    };
+
+    /// The certificate data of one summand of a certified labeled sum.
+    struct CertifiedFiberSummand {
+      /// The component this summand came from.
+      int component{0};
+      /// Nominal rank of the summand.
+      std::size_t rank{0};
+      /// The band's isolation gaps, carried from the producing band.
+      double lowerGap{std::numeric_limits<double>::quiet_NaN()};
+      double upperGap{std::numeric_limits<double>::quiet_NaN()};
+      /// The band's frequency window.
+      double frequencyLower{std::numeric_limits<double>::quiet_NaN()};
+      double frequencyUpper{std::numeric_limits<double>::quiet_NaN()};
+      /// Whether the producing band was accepted.
+      bool accepted{false};
+      /// The producing band's certificate.
+      Certificate certificate{};
     };
 
     /// One retained stalk/fiber coordinate of the reduced space, with its
@@ -433,7 +558,64 @@ class RecursiveQuotient {
       /// Orthonormal basis of \f$ (\ker G)^\perp \f$, flat row-major
       /// (totalRank x effectiveRank), populated under `QuotientKernel`.
       std::vector<std::complex<double>> quotientBasis{};
+      /// Whether the summands are CERTIFIED ISOLATED BANDS (the boxed
+      /// display's \f$ E_v \f$) rather than the retained-coordinate reading.
+      /// False for `labeledFiberSum()`, true for `certifiedFiberSum()`.
+      bool fromCertifiedBands{false};
+      /// Per-summand band certificates — populated only when
+      /// `fromCertifiedBands`. Empty otherwise: a retained-coordinate
+      /// summand carries no band certificate, and none is invented for it.
+      std::vector<CertifiedFiberSummand> summandCertificates{};
+      /// The smallest isolation gap over the summed bands (the weakest link
+      /// of the "certified ISOLATED subspace" claim). NaN when not summed
+      /// from certified bands, or when every gap is unknown.
+      double worstIsolationGap{std::numeric_limits<double>::quiet_NaN()};
+      /// Whether EVERY summed band was accepted by its producing
+      /// configuration. False (with the certificate failing to hold) when any
+      /// summand is uncertified — the sum is still returned, honestly.
+      bool allBandsAccepted{false};
       /// Certificate of the declared policy's claim.
+      Certificate certificate{};
+    };
+
+    /// The Fock stage \f$ \HK_{\ell+1} = \Fock(\hh_{\ell+1}) \f$ over the
+    /// labeled sum — the boxed display's final line, the expanding state
+    /// space of the recursion.
+    ///
+    /// The many-body space is carried at the SPECTRUM level, per the
+    /// exactness contract ("occupation subset sums for \f$ d\Gamma(L) \f$,
+    /// not diagonalization of an eager Fock matrix"; "keep tensor products
+    /// lazy"). The \f$ 2^M \f$ vector is never allocated: the free many-body
+    /// spectrum is the exact set of occupation subset sums, and it REFUSES
+    /// rather than allocating past the declared term budget.
+    struct FockStageRead {
+      /// \f$ M = \dim\hh_{\ell+1} \f$: the labeled sum's effective rank under
+      /// its declared policy.
+      std::size_t modes{0};
+      /// The policy the labeled sum was treated by.
+      FiberEmbeddingPolicy policy{FiberEmbeddingPolicy::CarryGramExactly};
+      /// \f$ \|G - I\| \f$ of the underlying labeled sum, carried through.
+      double gramDefect{std::numeric_limits<double>::quiet_NaN()};
+      /// The one-particle operator on the labeled-sum basis,
+      /// \f$ h = J^\dagger W L J \f$ (restricted to \f$ (\ker G)^\perp \f$
+      /// under `QuotientKernel`), flat row-major (modes x modes).
+      std::vector<std::complex<double>> oneParticle{};
+      /// The Gram \f$ G \f$ on the same basis, carried so that a
+      /// `CarryGramExactly` run can use \f$ h \f$ against it rather than
+      /// pretending the basis is orthonormal.
+      std::vector<std::complex<double>> gram{};
+      /// Eigenvalues of \f$ h \f$, ascending by (Re, Im).
+      std::vector<std::complex<double>> oneParticleSpectrum{};
+      /// \f$ \dim\Fock(\hh) = 2^M \f$ as a double (exact through 2^53;
+      /// +inf beyond). The space itself is never materialized.
+      double fockDimension{std::numeric_limits<double>::quiet_NaN()};
+      /// Whether the free many-body spectrum below was materialized.
+      bool spectrumMaterialized{false};
+      /// The exact free many-body spectrum of \f$ d\Gamma(h) \f$: all
+      /// \f$ 2^M \f$ occupation subset sums, ascending. Empty (with
+      /// `spectrumMaterialized == false`) when the budget refused it.
+      std::vector<std::complex<double>> fockSpectrum{};
+      /// Certificate of the one-particle compression.
       Certificate certificate{};
     };
 
@@ -627,7 +809,67 @@ class RecursiveQuotient {
 
     /// The abstract labeled retained-fiber sum with embedding and Gram data,
     /// treated by the run's declared `FiberEmbeddingPolicy`.
+    ///
+    /// The summands here are the RETAINED COORDINATES of the reduction (a
+    /// component's claimed interface cells plus the interior modes it owns).
+    /// That is the reduction's own stalk structure, and it carries no band
+    /// certificate. For the boxed display's \f$ E_v \f$ — the certified
+    /// isolated subspace — use `certifiedFiberSum`.
     [[nodiscard]] LabeledFiberSumRead labeledFiberSum() const;
+
+    /// The labeled sum \f$ \boxplus_v E_v \f$ over CERTIFIED ISOLATED BANDS:
+    /// the boxed display's \f$ E_v = \f$ "certified isolated subspace of
+    /// \f$ C_v \f$", with each band's isolation gap and certificate carried
+    /// onto its summand.
+    ///
+    /// Bands are summed in the order given; an uncertified band is summed and
+    /// reported rather than dropped, and makes the sum's certificate fail to
+    /// hold. The declared `FiberEmbeddingPolicy` treats the Gram exactly as
+    /// for `labeledFiberSum` — adjacent bands may overlap on shared cells, so
+    /// an internal direct sum is never asserted.
+    /// @throws std::invalid_argument on a frame whose size is not
+    ///   `dimension() * rank`, or a band naming an unknown component.
+    [[nodiscard]] LabeledFiberSumRead certifiedFiberSum(
+        const std::vector<CertifiedBand> &bands) const;
+
+    /// The Fock stage \f$ \Fock(\boxplus_v E_v) \f$ over a labeled sum: the
+    /// one-particle compression \f$ h = J^\dagger W L J \f$ onto the sum's
+    /// basis, its spectrum, and the exact free many-body spectrum of
+    /// \f$ d\Gamma(h) \f$ as occupation subset sums.
+    ///
+    /// `maxTerms` bounds the materialized many-body spectrum; beyond it the
+    /// read REFUSES (`spectrumMaterialized == false`) instead of allocating
+    /// \f$ 2^M \f$ entries. Nothing here materializes a Fock vector.
+    /// @throws std::invalid_argument when the sum's embedding does not match
+    ///   this level's dimension.
+    [[nodiscard]] FockStageRead fockStage(
+        const LabeledFiberSumRead &sum,
+        std::size_t maxTerms = std::size_t{1} << 22) const;
+
+    /// \f$ P = \mathrm{PersistentPartition}(\RN) \f$: partition the
+    /// coordinates of an operator-valued response network by persistent
+    /// modularity over its off-diagonal magnitude graph
+    /// \f$ w_{ij} = |R_{ij}| + |R_{ji}| \f$ (a symmetric nonnegative
+    /// similarity; the diagonal never enters).
+    ///
+    /// This is the DISCOVERY step of the boxed display, available at every
+    /// scale rather than at level zero only. Modularity is a heuristic
+    /// PROPOSAL generator: it proposes candidate supports and never vetoes an
+    /// otherwise certified fiber. Coordinates isolated by the operator come
+    /// back as singleton components, so the returned partition always covers
+    /// every index exactly once.
+    /// @throws std::invalid_argument on a malformed operator size or a
+    ///   non-positive restart count.
+    [[nodiscard]] static std::vector<std::vector<int>> persistentPartition(
+        const std::vector<std::complex<double>> &op, int dim,
+        double gamma = 1.0, int restarts = 4, std::uint64_t baseSeed = 0);
+
+    /// `persistentPartition` of THIS level's reduced operator — the partition
+    /// \f$ P_\ell \f$ to hand straight to `nextLevel`, so that the recursion
+    /// discovers its own components at every scale:
+    /// `child = parent.nextLevel(parent.childPersistentPartition())`.
+    [[nodiscard]] std::vector<std::vector<int>> childPersistentPartition(
+        double gamma = 1.0, int restarts = 4, std::uint64_t baseSeed = 0) const;
 
     /// The composable amplitude budget of the `CertifiedNearIsometry`
     /// policy: two embeddings with Gram defects \f$ \varepsilon_A,
@@ -656,10 +898,11 @@ class RecursiveQuotient {
     /// refuses.
     [[nodiscard]] SheafRealizationRead sheafRealization() const;
 
-    /// Reduce again: a child quotient over this level's reduced operator
-    /// (matrix path), with `components` indexing the REDUCED coordinates.
-    /// The child inherits provenance ("L<level>:" prefixes), level + 1, and
-    /// this level's chain metric restricted through the reduced coordinates.
+    /// Reduce again at \f$ \lambda = 0 \f$: a child quotient over this
+    /// level's STATIC reduced operator, with `components` indexing the
+    /// REDUCED coordinates. The child inherits provenance ("L<level>:"
+    /// prefixes), level + 1, and this level's chain metric restricted
+    /// through the reduced coordinates.
     [[nodiscard]] RecursiveQuotient nextLevel(
         const std::vector<std::vector<int>> &components,
         const Options &options) const;
@@ -667,6 +910,67 @@ class RecursiveQuotient {
     /// `nextLevel` with this instance's options.
     [[nodiscard]] RecursiveQuotient nextLevel(
         const std::vector<std::vector<int>> &components) const;
+
+    /// Reduce again ON THE PENCIL:
+    /// \f$ \RN_{\ell+1}(\lambda) = \mathrm{Feshbach}_{P_\ell}(\RN_\ell(\lambda)) \f$
+    /// at a declared \f$ \lambda \f$ over a declared band window. The child's
+    /// operator is the exact energy-dependent response \f$ F_B(\lambda) \f$
+    /// — NOT the static complement — and it carries the window, the solve and
+    /// compatibility residuals, the resonance flag, and the producing
+    /// certificate on `levelProvenance()`.
+    ///
+    /// `components` index the pencil's reduced coordinates, which include any
+    /// RESONANT modes retained at \f$ \lambda \f$ and therefore need not
+    /// match the static reduction's coordinates. Use
+    /// `persistentPartition(feshbach(...).response, ...)` to discover them.
+    /// @throws std::invalid_argument when `windowLower > windowUpper` or the
+    ///   partition does not cover the pencil's coordinates.
+    [[nodiscard]] RecursiveQuotient nextLevelAtLambda(
+        const std::vector<std::vector<int>> &components,
+        std::complex<double> lambda, double windowLower, double windowUpper,
+        const Options &options) const;
+
+    /// `nextLevelAtLambda` with this instance's options.
+    [[nodiscard]] RecursiveQuotient nextLevelAtLambda(
+        const std::vector<std::vector<int>> &components,
+        std::complex<double> lambda, double windowLower,
+        double windowUpper) const;
+
+    /// Reduce again through a CERTIFIED LINEAR SURROGATE: the cached
+    /// Craig--Bampton/AMLS reduction over a declared frequency window, made
+    /// into a child level.
+    ///
+    /// The surrogate's reduced pencil \f$ (K, M) = (V^\dagger W L V,
+    /// V^\dagger W V) \f$ is a GENERALIZED problem, while a level carries a
+    /// diagonal chain metric. The child is therefore built on the
+    /// \f$ M \f$-orthonormalized basis \f$ V M^{-1/2} \f$: its operator is
+    /// \f$ M^{-1/2} K M^{-1/2} \f$ and its metric is the identity. That
+    /// congruence preserves the generalized eigenvalues of \f$ (K, M) \f$
+    /// EXACTLY, so no spectral content is traded for the convenience — the
+    /// approximation is entirely in the truncation, which the carried
+    /// certificate and `discardedModeGap` report.
+    ///
+    /// The child's `levelProvenance().certificate` is the surrogate's own
+    /// CERTIFIED-APPROXIMATION certificate, so a surrogate level can never be
+    /// mistaken downstream for an exact reduction.
+    /// @throws as `craigBampton`, plus std::invalid_argument when the
+    ///   partition does not cover the surrogate's coordinates.
+    [[nodiscard]] RecursiveQuotient nextLevelFromSurrogate(
+        const std::vector<std::vector<int>> &components, double windowLower,
+        double windowUpper, double modeCutoff, double residualTolerance,
+        const Options &options) const;
+
+    /// `nextLevelFromSurrogate` with this instance's options.
+    [[nodiscard]] RecursiveQuotient nextLevelFromSurrogate(
+        const std::vector<std::vector<int>> &components, double windowLower,
+        double windowUpper, double modeCutoff,
+        double residualTolerance = -1.0) const;
+
+    /// How this level was produced from its parent, with the declared window
+    /// and the producing step's residuals and certificate.
+    [[nodiscard]] const LevelProvenanceRead &levelProvenance() const noexcept {
+      return levelProvenance_;
+    }
 
     /// Drop memoized reductions/factorizations and, on the spacetime path,
     /// re-read the operator values for the SAME cell complex (metric moves;
@@ -707,6 +1011,16 @@ class RecursiveQuotient {
         int component) const;
     [[nodiscard]] std::vector<long> integerKernelStack(int component,
                                                        int *rows) const;
+    // Shared child assembly: build a level over `op` (reduced x reduced) with
+    // the chain metric induced by `coordinates`' embeddings through W.
+    [[nodiscard]] RecursiveQuotient childOver(
+        const std::vector<std::complex<double>> &op,
+        const std::vector<RetainedCoordinate> &coordinates,
+        const std::vector<std::vector<int>> &components,
+        const Options &options) const;
+    // The Gram/policy treatment shared by both labeled-sum entry points.
+    [[nodiscard]] LabeledFiberSumRead summarizeFiberSum(
+        const std::vector<Eigen::VectorXcd> &columns) const;
 
     // --- problem data (op_/weights_ refresh under invalidate()) ------------
     Eigen::SparseMatrix<std::complex<double>> op_{};
@@ -715,6 +1029,7 @@ class RecursiveQuotient {
     int dim_{0};
     int degree_{-1};
     int level_{0};
+    LevelProvenanceRead levelProvenance_{};
     CertificateRegime regime_{CertificateRegime::NonNormal};
     Options options_{};
     std::vector<std::vector<int>> components_{};       // claimed cells
