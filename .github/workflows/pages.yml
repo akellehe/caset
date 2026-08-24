@@ -33,7 +33,15 @@ jobs:
         # needs the same packages as build.yml: pybind11-dev for the
         # find_package(pybind11) cmake config, plus liblapack/libblas for the
         # quantum subsystem. Without them the build — and the whole deploy — fails.
-        run: sudo apt-get update && sudo apt-get install -y doxygen pybind11-dev liblapack-dev libblas-dev
+        # pandoc generates the whitepaper's Markdown edition from its LaTeX source.
+        run: sudo apt-get update && sudo apt-get install -y doxygen pandoc pybind11-dev liblapack-dev libblas-dev
+
+      # Cheap and independent of the extension build, so it runs before it: the
+      # Markdown edition of the whitepaper is generated from the LaTeX source,
+      # and a hand-edit or an unregenerated revision would otherwise drift
+      # silently. Regenerate with `python3 scripts/whitepaper_markdown.py`.
+      - name: Check the whitepaper Markdown edition is current
+        run: python3 scripts/whitepaper_markdown.py --check
 
       - name: Install dependencies
         run: |
