@@ -191,6 +191,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} Spectrum.h
 ```
+```{doxygenfile} CobordismObjective.h
+```
 ```{doxygenfile} MultiCobordism.h
 ```
 ```{doxygenfile} CobordismDAG.h

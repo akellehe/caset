@@ -152,6 +152,34 @@ struct ObjectiveDirectionContext {
   std::vector<std::complex<double>> carriedStateEnergyGradient;
 };
 
+/// # ObjectiveScoringDomain
+///
+/// What an objective DECLARES about the edges it scores. The engine reads the
+/// declaration and honours it; it does not infer a domain from an objective's
+/// role or decide one by convention.
+///
+/// A struct rather than a bare flag because the scoring domain is a property
+/// that will acquire more facts, and a caller should be able to read them
+/// together as one declaration.
+struct ObjectiveScoringDomain {
+  /// Whether edges with ONE endpoint inside the objective's region and the
+  /// other outside it — the straddling edges — enter this objective's score.
+  ///
+  /// The default is `true`, which is the whole-complex reading: an objective
+  /// scored over the entire cobordism has no edge that straddles anything, so
+  /// the declaration is moot and the path is exactly the one that ran before
+  /// objectives became injectable. An objective written to score a REGION of a
+  /// larger complex will normally declare `false`, so that the edges tying its
+  /// region to the bulk are scored by the bulk's objective and not twice; a
+  /// caller that wants them counted may say so.
+  ///
+  /// Note that this partitions neither the complex nor the objective. The
+  /// functional is computed over the entire cobordism, bulk and boundary
+  /// together; this declaration only decides which side scores the edges that
+  /// cross a region's border when more than one objective is present.
+  bool includesStraddlingEdges = true;
+};
+
 /// # CobordismObjective
 ///
 /// The functional `MultiCobordism` descends, as an injected specification
@@ -186,6 +214,14 @@ class CobordismObjective {
   /// than on the geometry alone. A search policy that must stay unforced
   /// consults this rather than testing for an objective by name.
   [[nodiscard]] virtual bool isTargetConditioned() const = 0;
+
+  /// The edges this objective declares itself to score. The engine honours the
+  /// declaration rather than inferring one from the objective's role. The
+  /// default is the whole-complex reading, under which nothing straddles and
+  /// the declaration has no effect.
+  [[nodiscard]] virtual ObjectiveScoringDomain scoringDomain() const {
+    return {};
+  }
 
   /// Whether this objective reads \f$r_U\f$. The engine computes that residual
   /// only when an objective asks for it, so a purely geometric objective never
