@@ -69,7 +69,7 @@ namespace {
 
 /// # Json
 ///
-/// The minimal writer/reader the design spec §20 checkpoint schema needs
+/// The minimal writer/reader the checkpoint schema needs
 /// (scalars, strings, arrays, objects, `null`). The schema uses no other
 /// construct, so a small self-contained implementation beats a third-party
 /// dependency — the same call the holography schema made.
@@ -1248,7 +1248,7 @@ void MultiCobordism::runRecursiveAnalysisOn(
     }
     bindings = classifier.boundSupercomponentSearch(nextLevelComponents,
                                                     candidates);
-    // The three-cluster verdict itself (design spec §16.4): every binding
+    // The three-cluster verdict itself: every binding
     // that grouped EXACTLY three CERTIFIED constituents is classified. The
     // evidence this pass HAS is the binding, those three #773 verdicts, and
     // the bound component's #765 lifetime; the color columns, the octet
@@ -1272,7 +1272,7 @@ void MultiCobordism::runRecursiveAnalysisOn(
         bindings, quarkReads, boundLifetimes);
   }
 
-  // ── §17.7 the checkpoint (design spec §20, schema version 4) ─────────
+  // ── the checkpoint (schema version 4) ────────────────────────────────
   std::string hierarchyText = "[";
   for (std::size_t sliceIndex = 0; sliceIndex < report.slices.size();
        ++sliceIndex) {

@@ -701,7 +701,7 @@ MultiCobordism::ObjectiveTerms MultiCobordism::objectiveTermsFor(
     terms.reggeStationarity = std::numeric_limits<double>::infinity();
     return terms;
   }
-  // The one permitted state channel (design spec §17): identically zero
+  // The one permitted state channel: identically zero
   // outside the `certificates_blind_mean_field` sub-mode, so every other run
   // — including every strict-emergence run — sums exactly the terms it summed
   // before this ticket.

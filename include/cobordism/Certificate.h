@@ -41,11 +41,11 @@ enum class CertificateGrade {
 
 /// The spectral domain a certificate speaks for. `Static` is the
 /// zero-frequency/whole-operator statement; `BandWindow` restricts the claim
-/// to an explicit frequency window \f$ \Omega \f$ (design spec section 5.3:
-/// no nonzero-spectrum claim is attached to a static reduction).
+/// to an explicit frequency window \f$ \Omega \f$ — no nonzero-spectrum
+/// claim is ever attached to a static reduction.
 enum class CertificateDomain { Static, BandWindow };
 
-/// The metric regime the producing kernel verified (design spec section 5.2).
+/// The metric regime the producing kernel verified.
 /// A self-adjoint solver is never applied outside `PositiveSemidefinite` /
 /// `HermitianIndefinite`; `NonNormal` results carry general-eigensolver
 /// conditioning instead.

@@ -25,8 +25,8 @@ using namespace ::tessera::spacetime;
 
 class AnalyticCache;
 
-/// The declared treatment of the labeled-sum embedding Gram matrix
-/// (design spec section 5.8 / 6.4). Every run proceeds by EXACTLY ONE
+/// The declared treatment of the labeled-sum embedding Gram matrix.
+/// Every run proceeds by EXACTLY ONE
 /// declared option; the implementation never assumes the geometric images of
 /// the retained fibers are independent inside the chain space.
 enum class FiberEmbeddingPolicy {
@@ -56,9 +56,9 @@ enum class LevelOrigin {
   Surrogate,
 };
 
-/// Why a retained coordinate was kept instead of eliminated (design spec
-/// section 10 step 8: harmonic, resonant, and selected interior coordinates
-/// become explicit stalk/fiber coordinates — never silently deleted).
+/// Why a retained coordinate was kept instead of eliminated: harmonic,
+/// resonant, and selected interior coordinates become explicit stalk/fiber
+/// coordinates — never silently deleted.
 enum class RetainedCoordinateKind {
   /// An interface cell (always retained; the \f$ B \f$ block).
   Interface,
@@ -75,9 +75,9 @@ enum class RetainedCoordinateKind {
 /// # RecursiveQuotient
 ///
 /// Recursive static and shifted response reduction of a (Hodge) operator
-/// over a declared cell partition (epic #763, ticket #768; design spec
-/// sections 5.3, 6.4, 10; whitepaper "A component is an exact static
-/// response vertex" and "The master recursive construction").
+/// over a declared cell partition (epic #763, ticket #768; whitepaper
+/// "A component is an exact static response vertex" and "The master
+/// recursive construction").
 ///
 /// ## Exact identities and their domains
 ///
@@ -353,7 +353,7 @@ class RecursiveQuotient {
     };
 
     /// One retained stalk/fiber coordinate of the reduced space, with its
-    /// provenance (never silently deleted; design spec section 10 step 8).
+    /// provenance (never silently deleted).
     struct RetainedCoordinate {
       /// Why this coordinate was retained.
       RetainedCoordinateKind kind{RetainedCoordinateKind::Interface};
@@ -530,7 +530,7 @@ class RecursiveQuotient {
     };
 
     /// The abstract labeled sum \f$ \boxplus_v E_v \f$ with embedding and
-    /// Gram data (design spec section 6.4).
+    /// Gram data.
     struct LabeledFiberSumRead {
       /// Component index of each summand block, in embedding column order.
       std::vector<int> summandComponents{};

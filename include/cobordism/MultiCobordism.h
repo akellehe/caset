@@ -494,8 +494,8 @@ class MultiCobordism {
   // #776 — modes, the enumerable objective, and the analysis overlay
   // ==================================================================
   //
-  // The no-feedback emergence firewall (design spec §17, whitepaper figure
-  // "No-feedback emergence protocol") is enforced STRUCTURALLY here, not by
+  // The no-feedback emergence firewall (whitepaper figure "No-feedback
+  // emergence protocol") is enforced STRUCTURALLY here, not by
   // convention:
   //
   //   * `objectiveOf` is a **static** function of `ObjectiveTerms`, a record
@@ -590,7 +590,7 @@ class MultiCobordism {
   /// checkpoint.
   [[nodiscard]] static std::string submodeName(EmergenceSubmode submode);
 
-  // ---- the carried quasi-free state (design spec §17, §4.1) ----
+  // ---- the carried quasi-free state ----
 
   /// Adopt the carried state: the covariance `Γ` (flat row-major, `m × m`)
   /// over `m` one-particle modes, each NAMED by the `degree`-cell it occupies
@@ -678,7 +678,7 @@ class MultiCobordism {
   /// by construction and the certificate MEASURES that closure.
   double advanceCarriedState();
 
-  // ---- particle-independent refinement (design spec §17) ----
+  // ---- particle-independent refinement ----
 
   /// The base geometric/numerical indicators emergence-mode refinement is
   /// allowed to consult. Every member is a quantity of the BASE problem: not
@@ -790,7 +790,7 @@ class MultiCobordism {
   }
 
   /// Run ONE post-hoc analysis pass over the CURRENT accepted geometry, in the
-  /// design spec §17 order: publish the accepted move's touched star to the
+  /// firewall order: publish the accepted move's touched star to the
   /// #764 `AnalyticCache`; update the #765 component hierarchy and its
   /// invalidated ancestry; update the #769 spectral projectors and the #768
   /// labeled retained-fiber sum; update the #770 transports and Wilson/center
@@ -803,8 +803,8 @@ class MultiCobordism {
   /// reads.
   void runRecursiveAnalysis();
 
-  /// The versioned checkpoint document of the last pass (design spec §20,
-  /// schema version 5), as JSON. Empty before the first pass. Unknown /
+  /// The versioned checkpoint document of the last pass (schema version 5),
+  /// as JSON. Empty before the first pass. Unknown /
   /// uncertified values serialize as `null`, never as zero.
   [[nodiscard]] const std::string &checkpointJson() const noexcept {
     return checkpointJson_;
@@ -1138,7 +1138,7 @@ class MultiCobordism {
   std::shared_ptr<void> analysisCache_{};
   /// The spacetime `analysisCache_` is bound to (identity comparison only).
   std::weak_ptr<Spacetime> analysisCacheBinding_{};
-  /// The last pass's checkpoint document (design spec §20).
+  /// The last pass's checkpoint document.
   std::string checkpointJson_{};
 
   /// Run the overlay when the config asks for it — called ONLY after a move

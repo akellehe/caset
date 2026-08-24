@@ -19,7 +19,7 @@ namespace tessera::cobordism {
 /// supply the independent answer a structured path is compared against (the
 /// `denseReferenceError` field of a `Certificate`); above the crossover they
 /// REFUSE (throw) — a dense global solve is the prohibited default at scale,
-/// never a silent fallback (design spec section 18).
+/// never a silent fallback.
 ///
 /// Kernels:
 ///  - `solve` — dense partial-pivot LU factor solve (a factor solve computes
