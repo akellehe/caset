@@ -2126,7 +2126,7 @@ def dichotomy(runs, proton_verdicts=None):
             out["non_spin_certificates_hold"] = len(others_hold)
             if proton_reads:
                 # The CLASSIFIER itself certified the sharp spin on an
-                # accepted candidate: every one of its fourteen gates held,
+                # accepted candidate: every one of its fifteen gates held,
                 # Var(J^2) included.
                 out["classification"] = "covariance_only_proton"
                 out["reason"] = (
