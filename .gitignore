@@ -43,3 +43,5 @@ recursive_baryon_run*.json
 recursive_baryon_campaign*.json
 recursive_baryon_sidecar*.npz
 recursive_baryon_overlay*.png
+
+run.sh
