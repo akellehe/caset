@@ -7,6 +7,8 @@
 #include <bit>
 #include <cmath>
 #include <complex>
+#include <Eigen/Dense>
+#include <Eigen/Eigenvalues>
 #include <cstdint>
 #include <deque>
 #include <limits>
@@ -29,6 +31,14 @@ namespace tessera::quantum {}
 namespace tessera::simulations {}
 namespace tessera::spacetime {}
 namespace tessera::observables {
+
+/// Sentinel for "this cell is not in the group currently being bisected",
+/// stored in the position map the leading-eigenvector search reuses across
+/// groups.  Named rather than spelled at each site: a mistyped literal here
+/// would not fail to compile, it would silently include a foreign cell in
+/// the modularity matrix.
+inline constexpr std::uint32_t kNotInGroup = 0xFFFFFFFFu;
+
 using namespace ::tessera::mesh;
 using namespace ::tessera::graph;
 using namespace ::tessera::spacetime;
@@ -453,6 +463,52 @@ void PersistentModularity::ensureCanonical() const {
   canonicalReady_ = true;
 }
 
+// ───────────────────────── shared canonicalization ──────────────────────
+
+void PersistentModularity::canonicalizeCommunities(
+    const LevelGraph &g, const std::vector<std::uint32_t> &comm,
+    const std::vector<std::vector<std::uint32_t>> &membersOf,
+    std::vector<std::vector<std::uint64_t>> &tokens, std::size_t levelNumber,
+    std::vector<std::uint32_t> *slotToCompact,
+    std::vector<std::string> *hashes) const {
+  (void)comm;
+  struct CommRec {
+    std::string hash;
+    std::uint32_t anchorRank;
+    std::uint32_t slot;
+  };
+  const std::size_t slots = membersOf.size();
+  std::vector<CommRec> recs;
+  for (std::uint32_t c = 0; c < slots; ++c) {
+    if (membersOf[c].empty()) continue;
+    std::vector<std::string> childHashes;
+    childHashes.reserve(membersOf[c].size());
+    std::uint32_t anchorRank = 0xFFFFFFFFu;
+    for (const std::uint32_t i : membersOf[c]) {
+      childHashes.push_back(g.nodeHash[i]);
+      anchorRank = std::min(anchorRank, g.nodeRank[i]);
+    }
+    std::sort(childHashes.begin(), childHashes.end());
+    std::sort(tokens[c].begin(), tokens[c].end());
+    Hash128 h;
+    h.mix(static_cast<std::uint64_t>(levelNumber));
+    for (const auto &ch : childHashes) h.mixString(ch);
+    h.mix(0x1CEB00DA1CEB00DAULL);  // separator between lineage / incidence
+    for (const std::uint64_t t : tokens[c]) h.mix(t);
+    recs.push_back(CommRec{h.hex(), anchorRank, c});
+  }
+  std::sort(recs.begin(), recs.end(), [](const CommRec &x, const CommRec &y) {
+    if (x.hash != y.hash) return x.hash < y.hash;
+    return x.anchorRank < y.anchorRank;
+  });
+  slotToCompact->assign(slots, 0xFFFFFFFFu);
+  hashes->assign(recs.size(), std::string());
+  for (std::size_t c = 0; c < recs.size(); ++c) {
+    (*slotToCompact)[recs[c].slot] = static_cast<std::uint32_t>(c);
+    (*hashes)[c] = recs[c].hash;
+  }
+}
+
 // ───────────────────────── one deterministic restart ────────────────────
 
 PersistentModularity::RunResult PersistentModularity::runOnce(
@@ -647,12 +703,6 @@ PersistentModularity::RunResult PersistentModularity::runOnce(
     for (std::size_t i = 0; i < n; ++i) {
       membersOf[comm[i]].push_back(static_cast<std::uint32_t>(i));
     }
-    struct CommRec {
-      std::string hash;
-      std::uint32_t anchorRank;
-      std::uint32_t slot;
-    };
-    std::vector<CommRec> recs;
     // Internal-edge tokens per community for the incidence part of the hash.
     // Level 1 uses the stored (oriented) input incidence; aggregated levels
     // use unordered child-hash pairs (aggregated weights are label-order-
@@ -686,34 +736,10 @@ PersistentModularity::RunResult PersistentModularity::runOnce(
       }
     }
     const std::size_t levelNumber = out.levelAssign.size() + 1;
-    for (std::uint32_t c = 0; c < slots; ++c) {
-      if (membersOf[c].empty()) continue;
-      std::vector<std::string> childHashes;
-      childHashes.reserve(membersOf[c].size());
-      std::uint32_t anchorRank = 0xFFFFFFFFu;
-      for (const std::uint32_t i : membersOf[c]) {
-        childHashes.push_back(g.nodeHash[i]);
-        anchorRank = std::min(anchorRank, g.nodeRank[i]);
-      }
-      std::sort(childHashes.begin(), childHashes.end());
-      std::sort(tokens[c].begin(), tokens[c].end());
-      Hash128 h;
-      h.mix(static_cast<std::uint64_t>(levelNumber));
-      for (const auto &ch : childHashes) h.mixString(ch);
-      h.mix(0x1CEB00DA1CEB00DAULL);  // separator between lineage / incidence
-      for (const std::uint64_t t : tokens[c]) h.mix(t);
-      recs.push_back(CommRec{h.hex(), anchorRank, c});
-    }
-    std::sort(recs.begin(), recs.end(), [](const CommRec &x, const CommRec &y) {
-      if (x.hash != y.hash) return x.hash < y.hash;
-      return x.anchorRank < y.anchorRank;
-    });
-    std::vector<std::uint32_t> slotToCompact(slots, 0xFFFFFFFFu);
-    std::vector<std::string> hashes(recs.size());
-    for (std::size_t c = 0; c < recs.size(); ++c) {
-      slotToCompact[recs[c].slot] = static_cast<std::uint32_t>(c);
-      hashes[c] = recs[c].hash;
-    }
+    std::vector<std::uint32_t> slotToCompact;
+    std::vector<std::string> hashes;
+    canonicalizeCommunities(g, comm, membersOf, tokens, levelNumber,
+                            &slotToCompact, &hashes);
 
     // Snapshot the level-0 assignment for this level.
     std::vector<std::uint32_t> snap(n0);
@@ -725,7 +751,7 @@ PersistentModularity::RunResult PersistentModularity::runOnce(
     cellAssign = out.levelAssign.back();
 
     if (!movedAtLevel) break;
-    const std::size_t nSuper = recs.size();
+    const std::size_t nSuper = hashes.size();
     if (nSuper == n) {
       // Nothing merged (pure reshuffle at this granularity); the next level
       // would repeat the same graph.
@@ -871,10 +897,506 @@ ResolutionSlice PersistentModularity::buildSlice(
   return slice;
 }
 
+// ─────────────────── leading-eigenvector (Newman) search ────────────────
+
+void PersistentModularity::applyGroupModularity(
+    const std::vector<std::uint32_t> &group,
+    const std::vector<std::uint32_t> &positionOf,
+    const std::vector<double> &groupDegree, double groupStrength, double gamma,
+    const std::vector<double> &x, std::vector<double> *out) const {
+  const std::size_t ng = group.size();
+  out->assign(ng, 0.0);
+  // The rank-one term needs sum_{j in g} k_j x_j once.
+  Kahan kx;
+  for (std::size_t p = 0; p < ng; ++p) kx.add(strength_[group[p]] * x[p]);
+  const double kDotX = kx.value();
+  const double inv2m = twoM_ > 0.0 ? 1.0 / twoM_ : 0.0;
+  for (std::size_t p = 0; p < ng; ++p) {
+    const std::uint32_t i = group[p];
+    Kahan row;
+    for (std::int64_t k = indptr_[i]; k < indptr_[i + 1]; ++k) {
+      const std::uint32_t j = indices_[static_cast<std::size_t>(k)];
+      const std::uint32_t q = positionOf[j];
+      if (q == kNotInGroup) continue;  // outside the group: excluded by B^g
+      row.add(weights_[static_cast<std::size_t>(k)] * x[q]);
+    }
+    // - gamma k_i (k . x) / 2m   and the diagonal correction that makes
+    // B^g annihilate the all-ones vector on the group.
+    const double diag =
+        groupDegree[p] - gamma * strength_[i] * groupStrength * inv2m;
+    (*out)[p] = row.value() - gamma * strength_[i] * kDotX * inv2m -
+                x[p] * diag;
+  }
+}
+
+bool PersistentModularity::denseLeadingPair(
+    const std::vector<std::uint32_t> &group,
+    const std::vector<std::uint32_t> &positionOf,
+    const std::vector<double> &groupDegree, double groupStrength, double gamma,
+    double *first, double *second, std::vector<double> *firstVector) const {
+  const std::size_t ng = group.size();
+  if (ng < 2) return false;
+  const double inv2m = twoM_ > 0.0 ? 1.0 / twoM_ : 0.0;
+
+  // Build B^g densely.  Symmetric by construction; the diagonal correction
+  // is what makes it annihilate the all-ones vector on the group.
+  Eigen::MatrixXd b = Eigen::MatrixXd::Zero(
+      static_cast<Eigen::Index>(ng), static_cast<Eigen::Index>(ng));
+  for (std::size_t p = 0; p < ng; ++p) {
+    const std::uint32_t i = group[p];
+    for (std::size_t q = 0; q < ng; ++q) {
+      const std::uint32_t j = group[q];
+      b(static_cast<Eigen::Index>(p), static_cast<Eigen::Index>(q)) =
+          -gamma * strength_[i] * strength_[j] * inv2m;
+    }
+    for (std::int64_t k = indptr_[i]; k < indptr_[i + 1]; ++k) {
+      const std::uint32_t j = indices_[static_cast<std::size_t>(k)];
+      const std::uint32_t q = positionOf[j];
+      if (q == kNotInGroup) continue;
+      b(static_cast<Eigen::Index>(p), static_cast<Eigen::Index>(q)) +=
+          weights_[static_cast<std::size_t>(k)];
+    }
+    b(static_cast<Eigen::Index>(p), static_cast<Eigen::Index>(p)) -=
+        groupDegree[p] - gamma * strength_[i] * groupStrength * inv2m;
+  }
+
+  // Restrict to the complement of the all-ones vector, which B^g always
+  // annihilates: an orthonormal basis of that complement via Householder,
+  // so the trivial zero eigenvalue cannot masquerade as the leading one.
+  Eigen::VectorXd ones =
+      Eigen::VectorXd::Ones(static_cast<Eigen::Index>(ng)) /
+      std::sqrt(static_cast<double>(ng));
+  Eigen::MatrixXd basis(static_cast<Eigen::Index>(ng),
+                        static_cast<Eigen::Index>(ng));
+  basis.col(0) = ones;
+  basis.rightCols(static_cast<Eigen::Index>(ng) - 1) =
+      Eigen::MatrixXd::Identity(static_cast<Eigen::Index>(ng),
+                                static_cast<Eigen::Index>(ng))
+          .rightCols(static_cast<Eigen::Index>(ng) - 1);
+  Eigen::HouseholderQR<Eigen::MatrixXd> qr(basis);
+  Eigen::MatrixXd q = qr.householderQ();
+  Eigen::MatrixXd perp = q.rightCols(static_cast<Eigen::Index>(ng) - 1);
+  Eigen::MatrixXd reduced = perp.transpose() * b * perp;
+  reduced = 0.5 * (reduced + reduced.transpose().eval());  // exact symmetry
+
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(reduced);
+  if (solver.info() != Eigen::Success) return false;
+  const Eigen::VectorXd &values = solver.eigenvalues();  // ascending
+  const Eigen::Index last = values.size() - 1;
+  *first = values(last);
+  *second = last >= 1 ? values(last - 1)
+                      : -std::numeric_limits<double>::infinity();
+  const Eigen::VectorXd top = perp * solver.eigenvectors().col(last);
+  firstVector->assign(ng, 0.0);
+  for (std::size_t p = 0; p < ng; ++p) {
+    (*firstVector)[p] = top(static_cast<Eigen::Index>(p));
+  }
+  return true;
+}
+
+bool PersistentModularity::leadingEigenpair(
+    const std::vector<std::uint32_t> &group,
+    const std::vector<std::uint32_t> &positionOf,
+    const std::vector<double> &groupDegree, double groupStrength, double gamma,
+    const PersistentModularityConfig &cfg, const std::vector<double> *deflate,
+    double *eigenvalue, std::vector<double> *eigenvector) const {
+  const std::size_t ng = group.size();
+  const double inv2m = twoM_ > 0.0 ? 1.0 / twoM_ : 0.0;
+
+  // Gershgorin-style bound on the spectral radius of B^g, so B^g + beta I is
+  // positive semidefinite and its dominant eigenpair is B^g's MOST POSITIVE
+  // one.  Row i absolute sum is bounded by k^g_i + gamma k_i S_g / 2m plus
+  // the diagonal magnitude.
+  double beta = 0.0;
+  for (std::size_t p = 0; p < ng; ++p) {
+    const std::uint32_t i = group[p];
+    const double rank1 = gamma * strength_[i] * groupStrength * inv2m;
+    const double diag = groupDegree[p] - rank1;
+    beta = std::max(beta, groupDegree[p] + rank1 + std::abs(diag));
+  }
+  beta = beta > 0.0 ? beta * 1.0625 : 1.0;  // margin against round-off
+
+  // Deterministic start: a fixed function of the canonical visit rank, so
+  // the search carries no seed and no RNG.  The all-ones vector is ALWAYS
+  // an exact eigenvector of B^g with eigenvalue zero, so it is projected
+  // out at the start and after every step; B^g is symmetric and annihilates
+  // it, hence its orthogonal complement is invariant and the projection is
+  // exact rather than a correction.
+  std::vector<double> v(ng);
+  for (std::size_t p = 0; p < ng; ++p) {
+    const std::uint64_t r = static_cast<std::uint64_t>(rank_[group[p]]);
+    // splitmix64 of the canonical rank, mapped into [-1, 1): label-free and
+    // reproducible, and generically not orthogonal to the leading vector.
+    const std::uint64_t bits = Mix::splitmix64(r + 0x9E3779B97F4A7C15ULL);
+    v[p] = static_cast<double>(bits >> 11) * (1.0 / 9007199254740992.0) * 2.0 -
+           1.0;
+  }
+  const auto project = [&](std::vector<double> &x) {
+    Kahan s;
+    for (const double e : x) s.add(e);
+    const double mean = s.value() / static_cast<double>(ng);
+    for (double &e : x) e -= mean;
+    if (deflate != nullptr) {
+      Kahan d;
+      for (std::size_t p = 0; p < ng; ++p) d.add(x[p] * (*deflate)[p]);
+      const double dot = d.value();
+      for (std::size_t p = 0; p < ng; ++p) x[p] -= dot * (*deflate)[p];
+    }
+  };
+  const auto normalize = [&](std::vector<double> &x) {
+    Kahan s;
+    for (const double e : x) s.add(e * e);
+    const double n = std::sqrt(s.value());
+    if (n <= 0.0) return false;
+    for (double &e : x) e /= n;
+    return true;
+  };
+  project(v);
+  if (!normalize(v)) {
+    // The start vector collapsed into the projected-out subspace; fall back
+    // to a deterministic alternating vector, which is orthogonal to ones for
+    // even ng and is re-projected below.
+    for (std::size_t p = 0; p < ng; ++p) v[p] = (p % 2 == 0) ? 1.0 : -1.0;
+    project(v);
+    if (!normalize(v)) return false;
+  }
+
+  std::vector<double> w;
+  double rayleigh = 0.0;
+  double previous = std::numeric_limits<double>::infinity();
+  bool converged = false;
+  const int maxIterations = std::max(1, cfg.maxPowerIterations);
+  for (int it = 0; it < maxIterations; ++it) {
+    applyGroupModularity(group, positionOf, groupDegree, groupStrength, gamma,
+                         v, &w);
+    Kahan rq;
+    for (std::size_t p = 0; p < ng; ++p) rq.add(v[p] * w[p]);
+    rayleigh = rq.value();
+    for (std::size_t p = 0; p < ng; ++p) w[p] += beta * v[p];
+    project(w);
+    if (!normalize(w)) return false;
+    v.swap(w);
+    const double scale = std::max(1.0, std::abs(rayleigh));
+    if (std::abs(rayleigh - previous) <= cfg.powerIterationTolerance * scale) {
+      converged = true;
+      break;
+    }
+    previous = rayleigh;
+  }
+  // One final Rayleigh quotient on the converged vector.
+  applyGroupModularity(group, positionOf, groupDegree, groupStrength, gamma, v,
+                       &w);
+  Kahan rq;
+  for (std::size_t p = 0; p < ng; ++p) rq.add(v[p] * w[p]);
+  *eigenvalue = rq.value();
+  *eigenvector = v;
+  return converged;
+}
+
+void PersistentModularity::refineBisection(
+    const std::vector<std::uint32_t> &group,
+    const std::vector<std::uint32_t> &positionOf,
+    const std::vector<double> &groupDegree, double groupStrength, double gamma,
+    std::vector<double> *signs) const {
+  const std::size_t ng = group.size();
+  if (ng < 3) return;
+  // delta-Q of the split by s is (1/4m) s^T B^g s.  Flipping s_i changes the
+  // quadratic form by -4 s_i (f_i - B_ii s_i) where f = B^g s, so each move
+  // is O(1) once f is known; f is refreshed after each accepted move.
+  std::vector<double> f;
+  std::vector<bool> moved(ng, false);
+  std::vector<double> best = *signs;
+  double cumulative = 0.0;
+  double bestGain = 0.0;
+  const double inv2m = twoM_ > 0.0 ? 1.0 / twoM_ : 0.0;
+  for (std::size_t pass = 0; pass < ng; ++pass) {
+    applyGroupModularity(group, positionOf, groupDegree, groupStrength, gamma,
+                         *signs, &f);
+    std::size_t pick = ng;
+    double pickGain = -std::numeric_limits<double>::infinity();
+    for (std::size_t p = 0; p < ng; ++p) {
+      if (moved[p]) continue;
+      const std::uint32_t i = group[p];
+      const double diag =
+          groupDegree[p] - gamma * strength_[i] * groupStrength * inv2m;
+      // B_ii within B^g: the A_ii term is zero (no self-loops at level 0),
+      // minus the rank-one diagonal, minus the group-diagonal correction.
+      const double bii = -gamma * strength_[i] * strength_[i] * inv2m - diag;
+      const double gain = -4.0 * (*signs)[p] * (f[p] - bii * (*signs)[p]);
+      if (gain > pickGain) {
+        pickGain = gain;
+        pick = p;
+      }
+    }
+    if (pick == ng) break;
+    (*signs)[pick] = -(*signs)[pick];
+    moved[pick] = true;
+    cumulative += pickGain;
+    if (cumulative > bestGain) {
+      bestGain = cumulative;
+      best = *signs;
+    }
+  }
+  *signs = best;  // rewind to the best cumulative point (possibly the input)
+}
+
+PersistentModularity::RunResult PersistentModularity::runLeadingEigenvector(
+    double gamma, const PersistentModularityConfig &cfg,
+    std::vector<SplitRead> *splits) const {
+  ensureCanonical();
+  RunResult out;
+  out.seed = 0;  // no seed: the spectral search is not a sampled restart
+  const std::size_t n0 = nNodes_;
+
+  // Base level graph, identical to the aggregation search's, so component
+  // identity is hashed by exactly the same rule.
+  LevelGraph g;
+  g.n = n0;
+  g.indptr = indptr_;
+  g.indices = indices_;
+  g.weights = weights_;
+  g.selfW.assign(n0, 0.0);
+  g.strength = strength_;
+  g.nodeRank.resize(n0);
+  g.nodeHash.resize(n0);
+  for (std::size_t i = 0; i < n0; ++i) {
+    g.nodeRank[i] = rank_[i];
+    Hash128 h;
+    h.mix(0);
+    h.mix(stableColor_[i]);
+    g.nodeHash[i] = h.hex();
+  }
+
+  // Recursive spectral bisection.  labels[] is the running partition; the
+  // queue holds groups still to examine.  Groups are examined in canonical
+  // (minimum visit rank) order so the split sequence is label-free.
+  std::vector<std::uint32_t> labels(n0, 0);
+  std::vector<std::vector<std::uint32_t>> pending;
+  {
+    std::vector<std::uint32_t> all(n0);
+    for (std::size_t i = 0; i < n0; ++i) all[i] = static_cast<std::uint32_t>(i);
+    if (!all.empty()) pending.push_back(std::move(all));
+  }
+  std::vector<double> positionScratch;
+  std::vector<std::uint32_t> positionOf(n0, kNotInGroup);
+  std::uint32_t nextLabel = 1;
+
+  while (!pending.empty()) {
+    // Pop the canonically-first group: smallest member visit rank.
+    std::size_t choose = 0;
+    std::uint32_t bestRank = 0xFFFFFFFFu;
+    for (std::size_t t = 0; t < pending.size(); ++t) {
+      std::uint32_t r = 0xFFFFFFFFu;
+      for (const std::uint32_t i : pending[t]) r = std::min(r, rank_[i]);
+      if (r < bestRank) {
+        bestRank = r;
+        choose = t;
+      }
+    }
+    std::vector<std::uint32_t> group = std::move(pending[choose]);
+    pending.erase(pending.begin() + static_cast<std::ptrdiff_t>(choose));
+
+    SplitRead read;
+    read.groupSize = group.size();
+    if (group.size() < 2) {
+      read.reason = SplitReason::kGroupTooSmall;
+      read.resolved = true;
+      splits->push_back(std::move(read));
+      continue;
+    }
+
+    for (std::size_t p = 0; p < group.size(); ++p) {
+      positionOf[group[p]] = static_cast<std::uint32_t>(p);
+    }
+    const auto clearPositions = [&]() {
+      for (const std::uint32_t i : group) positionOf[i] = kNotInGroup;
+    };
+
+    // k^g and S_g for the generalized modularity matrix.
+    std::vector<double> groupDegree(group.size(), 0.0);
+    Kahan strengthSum;
+    for (std::size_t p = 0; p < group.size(); ++p) {
+      const std::uint32_t i = group[p];
+      strengthSum.add(strength_[i]);
+      Kahan d;
+      for (std::int64_t k = indptr_[i]; k < indptr_[i + 1]; ++k) {
+        const std::uint32_t j = indices_[static_cast<std::size_t>(k)];
+        if (positionOf[j] == kNotInGroup) continue;
+        d.add(weights_[static_cast<std::size_t>(k)]);
+      }
+      groupDegree[p] = d.value();
+    }
+    const double groupStrength = strengthSum.value();
+
+    double lambda1 = 0.0;
+    double lambda2 = 0.0;
+    std::vector<double> v1;
+    bool haveBoth = false;
+    if (group.size() <= cfg.denseEigenSolveMaxGroup) {
+      // Exact: no convergence question, which matters precisely because the
+      // near-degenerate case the gap adjudicates is where iteration is
+      // slowest.  Deciding degeneracy with a method that converges only when
+      // the pair is well separated would be circular.
+      haveBoth = denseLeadingPair(group, positionOf, groupDegree,
+                                  groupStrength, gamma, &lambda1, &lambda2,
+                                  &v1);
+    }
+    if (!haveBoth) {
+      const bool converged1 =
+          leadingEigenpair(group, positionOf, groupDegree, groupStrength, gamma,
+                           cfg, nullptr, &lambda1, &v1);
+      read.leadingEigenvalue = converged1
+                                   ? lambda1
+                                   : std::numeric_limits<double>::quiet_NaN();
+      if (!converged1) {
+        read.reason = SplitReason::kPowerIterationNotConverged;
+        read.resolved = false;
+        splits->push_back(std::move(read));
+        clearPositions();
+        continue;
+      }
+      std::vector<double> v2;
+      const bool converged2 =
+          leadingEigenpair(group, positionOf, groupDegree, groupStrength, gamma,
+                           cfg, &v1, &lambda2, &v2);
+      if (!converged2) {
+        read.reason = SplitReason::kPowerIterationNotConverged;
+        read.resolved = false;
+        splits->push_back(std::move(read));
+        clearPositions();
+        continue;
+      }
+    }
+    read.leadingEigenvalue = lambda1;
+    if (lambda1 <= cfg.leadingEigenvalueTolerance) {
+      // Newman's stopping rule: no bisection of this group raises Q.
+      read.reason = SplitReason::kNoPositiveEigenvalue;
+      read.resolved = true;
+      splits->push_back(std::move(read));
+      clearPositions();
+      continue;
+    }
+    read.secondEigenvalue = lambda2;
+    read.eigenvalueGap = lambda1 - lambda2;
+    if (read.eigenvalueGap < cfg.minEigenvalueGap) {
+      // The leading pair is (near-)degenerate: the eigenvector, and so the
+      // sign pattern, is not determined.  Refuse rather than bisect on it.
+      read.reason = SplitReason::kDegenerateLeadingPair;
+      read.resolved = false;
+      splits->push_back(std::move(read));
+      clearPositions();
+      continue;
+    }
+
+    std::vector<double> signs(group.size());
+    for (std::size_t p = 0; p < group.size(); ++p) {
+      signs[p] = v1[p] >= 0.0 ? 1.0 : -1.0;
+    }
+    if (cfg.kernighanLinRefinement) {
+      refineBisection(group, positionOf, groupDegree, groupStrength, gamma,
+                      &signs);
+    }
+    std::vector<std::uint32_t> sideA;
+    std::vector<std::uint32_t> sideB;
+    for (std::size_t p = 0; p < group.size(); ++p) {
+      (signs[p] >= 0.0 ? sideA : sideB).push_back(group[p]);
+    }
+    if (sideA.empty() || sideB.empty()) {
+      read.reason = SplitReason::kEmptySide;
+      read.resolved = true;
+      splits->push_back(std::move(read));
+      clearPositions();
+      continue;
+    }
+
+    // Accept only on an exact improvement of the SAME closed form the
+    // incumbent is scored by, so the two strategies remain comparable.
+    std::vector<int> before(n0);
+    for (std::size_t i = 0; i < n0; ++i) before[i] = static_cast<int>(labels[i]);
+    std::vector<int> after = before;
+    for (const std::uint32_t i : sideB) after[i] = static_cast<int>(nextLabel);
+    const double qBefore = modularityGamma(before, gamma);
+    const double qAfter = modularityGamma(after, gamma);
+    read.deltaQ = qAfter - qBefore;
+    if (read.deltaQ <= 0.0) {
+      read.reason = SplitReason::kSplitLowersModularity;
+      read.resolved = true;
+      splits->push_back(std::move(read));
+      clearPositions();
+      continue;
+    }
+
+    for (const std::uint32_t i : sideB) labels[i] = nextLabel;
+    ++nextLabel;
+    read.reason = SplitReason::kSplitAccepted;
+    read.resolved = true;
+    read.accepted = true;
+    read.sizeA = sideA.size();
+    read.sizeB = sideB.size();
+    splits->push_back(std::move(read));
+    clearPositions();
+    pending.push_back(std::move(sideA));
+    pending.push_back(std::move(sideB));
+  }
+  (void)positionScratch;
+
+  // Canonicalize the final partition through the SAME identity rule the
+  // aggregation search uses, so components from either strategy are
+  // comparable and matchable.
+  const std::size_t slots = nextLabel;
+  std::vector<std::vector<std::uint32_t>> membersOf(slots);
+  for (std::size_t i = 0; i < n0; ++i) {
+    membersOf[labels[i]].push_back(static_cast<std::uint32_t>(i));
+  }
+  std::vector<std::vector<std::uint64_t>> tokens(slots);
+  for (std::size_t e = 0; e < nEdges_; ++e) {
+    const std::uint32_t s = orientedSrc_[e];
+    const std::uint32_t t = orientedTgt_[e];
+    if (labels[s] != labels[t]) continue;
+    Hash128 h;
+    h.mixString(g.nodeHash[s]);
+    h.mixString(g.nodeHash[t]);
+    h.mix(Mix::bits(orientedW_[e]));
+    tokens[labels[s]].push_back(h.lane());
+  }
+  std::vector<std::uint32_t> slotToCompact;
+  std::vector<std::string> hashes;
+  canonicalizeCommunities(g, labels, membersOf, tokens, 1, &slotToCompact,
+                          &hashes);
+  std::vector<std::uint32_t> snap(n0);
+  for (std::size_t i = 0; i < n0; ++i) snap[i] = slotToCompact[labels[i]];
+  out.levelAssign.push_back(std::move(snap));
+  out.levelHashes.push_back(hashes);
+
+  std::vector<int> finalLabels(n0);
+  for (std::size_t i = 0; i < n0; ++i) {
+    finalLabels[i] = static_cast<int>(out.levelAssign.back()[i]);
+  }
+  out.qCold = modularityGamma(finalLabels, gamma);
+  // The spectral search accumulates no incremental ledger: every accepted
+  // split is scored by the exact cold form above, so the two agree by
+  // construction rather than by a separate accumulation.
+  out.qIncremental = out.qCold;
+  out.communities = hashes.size();
+  out.sortedFinalHashes = hashes;
+  return out;
+}
+
 // ───────────────────────── discovery entry points ───────────────────────
 
 ResolutionSlice PersistentModularity::discover(
     double gamma, const PersistentModularityConfig &cfg) const {
+  if (cfg.strategy == DiscoveryStrategy::LeadingEigenvector) {
+    std::vector<SplitRead> splits;
+    const RunResult run = runLeadingEigenvector(gamma, cfg, &splits);
+    ResolutionSlice slice = buildSlice(gamma, run, {});
+    slice.strategy = DiscoveryStrategy::LeadingEigenvector;
+    slice.splits = std::move(splits);
+    // No seed, no restarts: there is no restart spread to report, and
+    // unmeasured is never encoded as zero.
+    slice.restartSpread = std::numeric_limits<double>::quiet_NaN();
+    return slice;
+  }
   const int restarts = std::max(1, cfg.restarts);
   std::vector<RunResult> runs;
   std::vector<RestartRead> reads;

@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -70,8 +71,64 @@ private:
   std::size_t level_ = 0;
 };
 
+/// Which search proposes the communities.  Both score the SAME exact
+/// ``Q_gamma`` closed form, so their results are directly comparable on one
+/// scale; they differ only in how a partition is searched for.
+///
+/// An enum rather than a name string: a mis-spelling is a compile error
+/// instead of a value that compiles and silently selects a default.
+enum class DiscoveryStrategy {
+  /// Multilevel aggregation from a fixed restart seed sequence, keeping the
+  /// best exact score and reporting the restart spread (the incumbent).
+  MultilevelAggregation,
+  /// Newman's leading-eigenvector bisection of the modularity matrix
+  /// ``B_gamma = A - gamma k k^T / (2m)``, recursed until no group has a
+  /// positive leading eigenvalue.  The community COUNT is fixed by the
+  /// spectrum rather than by a caller-supplied parameter, and the search
+  /// carries no seed.
+  LeadingEigenvector,
+};
+
 /// Configuration for the label-free multiscale component discovery.
 struct PersistentModularityConfig {
+  /// Which search proposes the communities.  Default keeps the incumbent, so
+  /// an existing caller sees no change.
+  DiscoveryStrategy strategy = DiscoveryStrategy::MultilevelAggregation;
+  /// LeadingEigenvector only: a group is indivisible when its leading
+  /// eigenvalue does not exceed this.  ``B_gamma`` restricted to a group
+  /// always annihilates the all-ones vector, so zero is always in the
+  /// spectrum and the leading eigenvalue is never negative; "no positive
+  /// eigenvalue" therefore means "at or below this tolerance".
+  double leadingEigenvalueTolerance = 1e-9;
+  /// LeadingEigenvector only: the minimum leading-to-second eigenvalue gap
+  /// for a bisection to be considered well determined.  Below it the split
+  /// is REFUSED and reported unresolved with a named reason rather than
+  /// taken on an ill-conditioned eigenvector.
+  double minEigenvalueGap = 1e-8;
+  /// LeadingEigenvector only: groups of at most this many cells get an EXACT
+  /// dense symmetric eigendecomposition of ``B_gamma`` restricted to the
+  /// group; larger groups fall back to shifted power iteration.
+  ///
+  /// The dense path exists because power iteration separates the leading
+  /// pair at a rate set by their ratio, so a near-degenerate pair — exactly
+  /// the case the gap certificate must adjudicate — is where iteration is
+  /// slowest and least trustworthy.  Deciding "is this pair degenerate?" by
+  /// an iteration that converges only when it is not would be circular.  At
+  /// this default the dense solve is well under a millisecond and covers
+  /// every group the shipped complexes produce.
+  std::size_t denseEigenSolveMaxGroup = 1024;
+  /// LeadingEigenvector only: hard cap on power-iteration steps per
+  /// eigenpair on groups above ``denseEigenSolveMaxGroup``.  Non-convergence
+  /// is reported, never silently accepted.
+  int maxPowerIterations = 4096;
+  /// LeadingEigenvector only: relative convergence tolerance of the power
+  /// iteration's Rayleigh quotient.
+  double powerIterationTolerance = 1e-12;
+  /// LeadingEigenvector only: run a Kernighan-Lin style local refinement
+  /// after each sign bisection.  Without it the method scores measurably
+  /// lower ``Q_gamma`` than multilevel aggregation; the flag exists so that
+  /// cost can be measured rather than asserted.
+  bool kernighanLinRefinement = true;
   /// Resolution parameters gamma for the scan, in scan order.  Adjacent
   /// entries are matched into persistence tracks.
   std::vector<double> resolutions{1.0};
@@ -111,6 +168,79 @@ struct ComponentRead {
   double modularityContribution = 0.0;
 };
 
+/// The named outcomes of one attempted leading-eigenvector bisection.
+///
+/// Constants rather than literals at each site: a mis-spelling here would
+/// not fail to compile, it would silently produce a reason no consumer
+/// matches.  Bound to Python so a caller references the constant instead of
+/// retyping the string.
+struct SplitReason {
+  /// The group was bisected and the split raised ``Q_gamma``.
+  static constexpr const char *kSplitAccepted = "split-accepted";
+  /// The leading eigenvalue is at or below the tolerance: no bisection of
+  /// this group raises ``Q_gamma``.  This is Newman's stopping rule and an
+  /// ordinary, expected outcome — the group is indivisible, not defective.
+  static constexpr const char *kNoPositiveEigenvalue = "no-positive-eigenvalue";
+  /// The leading and second eigenvalues are separated by less than the
+  /// declared minimum gap, so the leading eigenvector — and therefore the
+  /// sign pattern the bisection would use — is not well determined.  The
+  /// split is REFUSED rather than taken on an ill-conditioned vector.
+  static constexpr const char *kDegenerateLeadingPair =
+      "degenerate-leading-pair";
+  /// Fewer than two cells: nothing to bisect.
+  static constexpr const char *kGroupTooSmall = "group-too-small";
+  /// The eigenvector's sign pattern put every cell on one side, so the
+  /// proposed bisection is not a bisection.
+  static constexpr const char *kEmptySide = "empty-side";
+  /// The bisection was well determined but did not raise ``Q_gamma``.
+  static constexpr const char *kSplitLowersModularity =
+      "split-lowers-modularity";
+  /// The power iteration hit ``maxPowerIterations`` without meeting
+  /// ``powerIterationTolerance``.  Reported, never silently accepted.
+  static constexpr const char *kPowerIterationNotConverged =
+      "power-iteration-not-converged";
+};
+
+/// One attempted bisection of the leading-eigenvector search: the spectrum
+/// that decided it, and what was decided.
+///
+/// This is the strategy's certificate.  The incumbent's honesty measure is
+/// ``ResolutionSlice::restartSpread`` — an empirical proxy for whether the
+/// search found anything good.  Here the leading-to-second eigenvalue gap
+/// measures directly how well determined the bisection is, in the same way
+/// the rest of this layer certifies spectral isolation: separation measured
+/// in the spectrum, never to a sort-order neighbour.
+///
+/// Unmeasured quantities are NaN, never zero.  A group that was never
+/// bisected because it was too small has no eigenvalues, and says so.
+struct SplitRead {
+  /// Number of level-0 cells in the group that was examined.
+  std::size_t groupSize = 0;
+  /// Most positive eigenvalue of ``B_gamma`` restricted to the group, over
+  /// the complement of the all-ones vector.  NaN when not computed.
+  double leadingEigenvalue = std::numeric_limits<double>::quiet_NaN();
+  /// Second most positive eigenvalue, by deflation.  NaN when not computed.
+  double secondEigenvalue = std::numeric_limits<double>::quiet_NaN();
+  /// ``leadingEigenvalue - secondEigenvalue``: how well determined the
+  /// bisection is.  NaN when either eigenvalue is unmeasured.
+  double eigenvalueGap = std::numeric_limits<double>::quiet_NaN();
+  /// Exact change in total ``Q_gamma`` this split would produce, from the
+  /// class's own closed form.  NaN when no split was evaluated.
+  double deltaQ = std::numeric_limits<double>::quiet_NaN();
+  /// Whether the group was actually bisected.
+  bool accepted = false;
+  /// Whether the spectrum determined the outcome.  False means the split was
+  /// refused because the answer was not well determined (a degenerate pair,
+  /// or a non-converged iteration) — distinct from a determined "do not
+  /// split", which is resolved and not accepted.
+  bool resolved = true;
+  /// One of :class:`SplitReason`.
+  std::string reason;
+  /// Cell counts of the two sides when accepted; 0 otherwise.
+  std::size_t sizeA = 0;
+  std::size_t sizeB = 0;
+};
+
 /// One deterministic restart: its seed and exact best score.
 struct RestartRead {
   std::uint64_t seed = 0;
@@ -122,6 +252,12 @@ struct RestartRead {
 /// The discovery result at one resolution gamma.
 struct ResolutionSlice {
   double gamma = 1.0;
+  /// Which search produced this slice.
+  DiscoveryStrategy strategy = DiscoveryStrategy::MultilevelAggregation;
+  /// LeadingEigenvector only: one entry per attempted bisection, in the
+  /// order attempted — the strategy's spectral certificate.  Empty for
+  /// MultilevelAggregation, which performs no bisections.
+  std::vector<SplitRead> splits;
   /// Exact Q_gamma of the winning partition, recomputed cold from the final
   /// labels.  The best score across the deterministic restarts — a heuristic
   /// proposal, not the NP-hard global optimum.
@@ -139,10 +275,13 @@ struct ResolutionSlice {
   /// the communities formed at aggregation level ``k + 1``, each ordered by
   /// canonical hash.  ``hierarchy.back() == components``.
   std::vector<std::vector<ComponentRead>> hierarchy;
-  /// Every restart's exact score, in seed-sequence order.
+  /// Every restart's exact score, in seed-sequence order.  Empty under
+  /// LeadingEigenvector, which carries no seed and does not restart.
   std::vector<RestartRead> restarts;
   /// max - min of the restart scores: the honestly reported restart
-  /// uncertainty of the heuristic search.
+  /// uncertainty of the heuristic search.  NaN under LeadingEigenvector —
+  /// that search has no restart spread to report, and unmeasured is never
+  /// encoded as zero.
   double restartSpread = 0.0;
 };
 
@@ -337,10 +476,25 @@ public:
   /// order.  Throws std::invalid_argument when labels.size() != nCells().
   double modularityGamma(const std::vector<int> &labels, double gamma) const;
 
-  /// Deterministic label-free discovery at one resolution: multilevel
-  /// aggregation over ``cfg.restarts`` seeds from the fixed sequence,
-  /// keeping the best exact score (ties broken by the sorted component
-  /// hash lists).  ``cfg.resolutions`` is ignored here.
+  /// Deterministic label-free discovery at one resolution under
+  /// ``cfg.strategy``.  ``cfg.resolutions`` is ignored here.
+  ///
+  /// ``MultilevelAggregation`` runs multilevel aggregation over
+  /// ``cfg.restarts`` seeds from the fixed sequence, keeping the best exact
+  /// score (ties broken by the sorted component hash lists).
+  ///
+  /// ``LeadingEigenvector`` recursively bisects on the sign pattern of the
+  /// leading eigenvector of ``B_gamma`` restricted to each group, stopping
+  /// where no group has a positive leading eigenvalue.  The community count
+  /// is therefore a reading of the spectrum, not a parameter.  There is no
+  /// seed: the search is a pure function of the labeled graph and gamma, and
+  /// every attempted bisection is reported in ``ResolutionSlice::splits``
+  /// with the eigenvalues that decided it.
+  ///
+  /// BOTH strategies score the same exact ``Q_gamma`` closed form
+  /// (:func:`modularityGamma`), so their slices are comparable directly.
+  /// Neither claims the NP-hard global optimum; see the heuristic-status
+  /// note on this class, which applies unchanged to both.
   ResolutionSlice discover(double gamma,
                            const PersistentModularityConfig &cfg) const;
 
@@ -429,6 +583,75 @@ private:
   struct RunResult;    // one restart's full multilevel outcome
   RunResult runOnce(double gamma, std::uint64_t seed,
                     const PersistentModularityConfig &cfg) const;
+
+  /// The leading-eigenvector search: recursive spectral bisection producing
+  /// a single level-0 partition, plus one `SplitRead` per attempted
+  /// bisection appended to `splits`.
+  RunResult runLeadingEigenvector(double gamma,
+                                  const PersistentModularityConfig &cfg,
+                                  std::vector<SplitRead> *splits) const;
+
+  /// The action of `B_gamma` restricted to `group` on a vector indexed by
+  /// position within `group`:
+  ///   (B^g x)_i = sum_{j in g} A_ij x_j
+  ///               - gamma k_i (sum_{j in g} k_j x_j) / 2m
+  ///               - x_i (k^g_i - gamma k_i S_g / 2m)
+  /// the generalized modularity matrix Newman's subdivision step requires.
+  /// `groupDegree` is k^g and `groupStrength` is S_g, both precomputed.
+  void applyGroupModularity(const std::vector<std::uint32_t> &group,
+                            const std::vector<std::uint32_t> &positionOf,
+                            const std::vector<double> &groupDegree,
+                            double groupStrength, double gamma,
+                            const std::vector<double> &x,
+                            std::vector<double> *out) const;
+
+  /// The two most positive eigenvalues of `B_gamma` restricted to `group`,
+  /// over the complement of the all-ones vector, by EXACT dense symmetric
+  /// eigendecomposition.  Used when the group is small enough that the exact
+  /// answer is cheap, which is where the gap certificate must be trusted.
+  /// Returns false when the group is too small to have two eigenvalues in
+  /// that complement.
+  bool denseLeadingPair(const std::vector<std::uint32_t> &group,
+                        const std::vector<std::uint32_t> &positionOf,
+                        const std::vector<double> &groupDegree,
+                        double groupStrength, double gamma, double *first,
+                        double *second,
+                        std::vector<double> *firstVector) const;
+
+  /// Most positive eigenpair of `B_gamma` restricted to `group`, over the
+  /// complement of the all-ones vector (which `B^g` always annihilates), by
+  /// shifted power iteration from a canonical-rank start vector — no seed.
+  /// `deflate` is orthogonalized against in addition to the all-ones vector,
+  /// which yields the second eigenvalue on a second call.  Returns false
+  /// when the iteration did not converge within `maxPowerIterations`.
+  bool leadingEigenpair(const std::vector<std::uint32_t> &group,
+                        const std::vector<std::uint32_t> &positionOf,
+                        const std::vector<double> &groupDegree,
+                        double groupStrength, double gamma,
+                        const PersistentModularityConfig &cfg,
+                        const std::vector<double> *deflate,
+                        double *eigenvalue,
+                        std::vector<double> *eigenvector) const;
+
+  /// Kernighan-Lin style local refinement of a sign bisection: repeatedly
+  /// flip the single unflipped cell whose flip most raises the split's
+  /// exact delta-Q, then rewind to the best cumulative point.  Each cell
+  /// moves at most once per pass, so a pass cannot cycle.
+  void refineBisection(const std::vector<std::uint32_t> &group,
+                       const std::vector<std::uint32_t> &positionOf,
+                       const std::vector<double> &groupDegree,
+                       double groupStrength, double gamma,
+                       std::vector<double> *signs) const;
+
+  /// Canonical hashes and the compact slot map for one partition of the
+  /// level-0 cells: the shared tail of community canonicalization, used by
+  /// both discovery strategies so there is one implementation of identity.
+  void canonicalizeCommunities(
+      const LevelGraph &g, const std::vector<std::uint32_t> &comm,
+      const std::vector<std::vector<std::uint32_t>> &membersOf,
+      std::vector<std::vector<std::uint64_t>> &tokens, std::size_t levelNumber,
+      std::vector<std::uint32_t> *slotToCompact,
+      std::vector<std::string> *hashes) const;
   ResolutionSlice buildSlice(double gamma, const RunResult &winner,
                              std::vector<RestartRead> restarts) const;
 
