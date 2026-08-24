@@ -3617,8 +3617,11 @@ class TestBaryonClassification(unittest.TestCase):
         self.assertAlmostEqual(read.spectralMass, 2.25, delta=MACHINE)
 
     def test_confidence_is_the_passed_fraction(self):
+        # Fifteen gates since the world-tube crossing conjunct joined them;
+        # with no crossing evidence supplied that gate passes VACUOUSLY, so
+        # exactly one certificate (sharp-spin) fails here.
         read = self.pc.classifyBaryon(_baryon_evidence(spin="generic"))
-        self.assertAlmostEqual(read.confidence, 13.0 / 14.0, delta=MACHINE)
+        self.assertAlmostEqual(read.confidence, 14.0 / 15.0, delta=MACHINE)
         self.assertEqual(len(read.failedCertificates), 1)
 
     def test_thresholds_are_recorded(self):
@@ -4211,7 +4214,10 @@ class TestClassifyBoundSupercomponents(unittest.TestCase):
             ["color-singlet", "color-flux-zero", "spin-expectation",
              "sharp-spin", "rotation-character", "finite-radius",
              "profile-stability"])
-        self.assertEqual(read.confidence, 7.0 / 14.0)
+        # The fifteenth gate (crossing-readouts) is not applicable here -- no
+        # crossing evidence travels through classifyBoundSupercomponents --
+        # so it passes vacuously and does not appear among the failures.
+        self.assertEqual(read.confidence, 8.0 / 15.0)
 
     def test_the_constituent_derived_rows_hold_on_certified_legs(self):
         read = self.pc.classifyBoundSupercomponents(

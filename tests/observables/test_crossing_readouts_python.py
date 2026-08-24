@@ -224,8 +224,9 @@ class TestTemporalFunction(unittest.TestCase):
         change the layering."""
         st = _ladder()
         before = obs.CrossingReadouts.temporalFunction(st, M0)
-        for vertex_id in (3, 4, 5):
-            st.getVertexList().get(vertex_id).setTime(-99.0)
+        for vertex in st.getVertexList().toVector():
+            if vertex.getId() in (3, 4, 5):
+                vertex.setTime(-99.0)
         after = obs.CrossingReadouts.temporalFunction(st, M0)
         self.assertEqual(list(before.layer), list(after.layer))
         self.assertEqual(before.certified, after.certified)
