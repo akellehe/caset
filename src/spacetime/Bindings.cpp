@@ -357,7 +357,8 @@ may differ slightly due to slab quantization.)doc")
            "invariants (#692).")
       .def_static("fromCells", &Spacetime::fromCells,
            py::arg("dimensions"), py::arg("cells"),
-           py::arg("weight") = 1.0, py::arg("phase") = 0.0,
+           py::arg("weight") = 1.0,
+           py::arg("phase") = std::complex<double>{0.0, 0.0},
            py::arg("vertexTimes") = std::optional<std::vector<double>>{},
            R"doc(Build a pre-geometric complex from an explicit list of top cells.
 
@@ -381,7 +382,9 @@ Args:
         register as top simplices.
     cells: Top cells as vertex-id tuples (sorted internally).
     weight: Uniform-pin squared length (ignored when vertexTimes is given).
-    phase: Uniform-pin Hermitian phase (ignored when vertexTimes is given).
+    phase: Uniform-pin complex C* connection phase -- Re the compact U(1)
+        angle, Im the non-compact log-scale (ignored when vertexTimes is
+        given).
     vertexTimes: Optional per-vertex time indexed by vertex id; its presence
         selects the tracked-metric rule. Must index every vertex id in cells.)doc")
       .def_static("prismCells", &Spacetime::prismCells,

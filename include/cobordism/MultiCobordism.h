@@ -804,19 +804,38 @@ class MultiCobordism {
   void runRecursiveAnalysis();
 
   /// The versioned checkpoint document of the last pass (design spec §20,
-  /// schema version 4), as JSON. Empty before the first pass. Unknown /
+  /// schema version 5), as JSON. Empty before the first pass. Unknown /
   /// uncertified values serialize as `null`, never as zero.
   [[nodiscard]] const std::string &checkpointJson() const noexcept {
     return checkpointJson_;
   }
-  /// The schema version this build writes and accepts. Version 4 splits the
-  /// former `particles.baryons` block in two: the bound-supercomponent
-  /// SEARCH records moved to `particles.bound_supercomponents` and
-  /// `particles.baryons` now carries the three-cluster VERDICT itself, one
-  /// baryon read per binding of exactly three certified constituents. A
-  /// version-3 document is REJECTED on read rather than reinterpreted —
-  /// its `baryons` entries mean a different thing.
-  [[nodiscard]] static int checkpointSchemaVersion() noexcept { return 4; }
+  /// The schema version this build writes and accepts. Version 5 adds the
+  /// per-edge connection phase to `raw_complex.edges`: an edge carries TWO
+  /// fields, and a version-4 document recorded only the length, so replaying
+  /// one silently rebuilt every edge with a zero phase and dropped a live
+  /// field. Version 4 also split the former `particles.baryons` block in two:
+  /// the bound-supercomponent SEARCH records moved to
+  /// `particles.bound_supercomponents` and `particles.baryons` now carries the
+  /// three-cluster VERDICT itself, one baryon read per binding of exactly
+  /// three certified constituents.
+  ///
+  /// A version-3 document is REJECTED on read rather than reinterpreted — its
+  /// `baryons` entries mean a different thing. A version-4 document is also
+  /// rejected, because its silence about the phase is not evidence the phase
+  /// was zero; `replayPhaseDefault` documents the only reading under which one
+  /// could be accepted.
+  [[nodiscard]] static int checkpointSchemaVersion() noexcept { return 5; }
+
+  /// The phase a pre-version-5 document would replay with, were such a document
+  /// accepted: exactly zero. This is FAITHFUL to what version 4 recorded — it
+  /// stored no phase at all, so zero is what its `raw_complex` describes — but
+  /// it is NOT faithful to the run that wrote it, whose edges may have carried
+  /// any phase. That gap is why version 4 is rejected on read rather than
+  /// silently defaulted: a replay that quietly zeroes a written field is worse
+  /// than one that refuses.
+  [[nodiscard]] static std::complex<double> replayPhaseDefault() noexcept {
+    return {0.0, 0.0};
+  }
 
   /// Replay mode: rebuild the raw complex recorded in `checkpoint`, disable
   /// every cache, recompute every derived hierarchy and certificate, and

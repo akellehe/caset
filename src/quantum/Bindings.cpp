@@ -1888,6 +1888,21 @@ one-particle embedding vector is multiplied by -1, i.e. a_e -> -a_e,
 a_e+ -> -a_e+, with the two-level factor fixed pointwise and nothing
 conjugated; CAR and occupation observables are preserved).)doc")
         .def(py::init<>())
+        .def_static("fromSpacetime", &EdgeModeRegistry::fromSpacetime,
+             py::arg("spacetime"), py::arg("lineageKey") = "K1",
+             R"doc(Build the registry the ontology names: one two-level mode per EDGE.
+
+The microscopic carrier is F(h_K) with h_K = span{|e> : e in K1}, so the
+per-edge modes are the ontology and any per-band carrier is a derived view of
+them. Each edge is registered on its stored source -> target direction with
+orientationSign +1, so canonicalOrientationSign reports how that orientation
+sits against the canonical min -> max direction. Every mode gets lineageKey,
+reducing the canonical order to the deterministic endpoint sort.
+
+Reads incidence only -- never a length, never a connection phase.
+
+Raises:
+    ValueError: on a self-loop or a duplicated unordered vertex pair.)doc")
         .def("addEdge", &EdgeModeRegistry::addEdge, py::arg("vertexA"),
              py::arg("vertexB"), py::arg("orientationSign"),
              py::arg("lineageKey"),

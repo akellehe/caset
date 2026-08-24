@@ -83,6 +83,9 @@
 #include <utility>
 #include <vector>
 
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::spacetime { class Spacetime; }
+
 namespace tessera::quantum {
 
 /// # OccupationBitset
@@ -588,6 +591,28 @@ struct EdgeModeRecord {
 class EdgeModeRegistry {
   public:
     EdgeModeRegistry() = default;
+
+    /// Build the registry the ontology names: ONE two-level occupation mode per
+    /// edge of `spacetime`, over its whole edge list. The microscopic carrier is
+    /// \f$ \mathcal{F}(\mathfrak{h}_K) \f$ with
+    /// \f$ \mathfrak{h}_K = \operatorname{span}\{|e\rangle : e \in K_1\} \f$, so
+    /// the per-EDGE modes are the ontology and any per-band carrier is a derived
+    /// view of them.
+    ///
+    /// Each edge is registered on its own stored source → target direction with
+    /// `orientationSign = +1`, so `canonicalOrientationSign` reports exactly how
+    /// that stored orientation sits against the canonical min → max direction.
+    /// Every mode gets `lineageKey`, so the canonical order reduces to the
+    /// deterministic endpoint sort; a caller with genuine component lineage
+    /// assigns it afterwards. Edges with a missing endpoint are skipped. The
+    /// registry stores incidence and lineage only — it never reads a length or a
+    /// connection phase.
+    ///
+    /// @throws std::invalid_argument on a self-loop or a duplicated unordered
+    ///         vertex pair, both of which are malformed in a simplicial complex.
+    [[nodiscard]] static EdgeModeRegistry fromSpacetime(
+        const ::tessera::spacetime::Spacetime& spacetime,
+        std::string lineageKey = "K1");
 
     /// Register the edge (vertexA → vertexB) with orientation sign ±1 and
     /// its oriented-component lineage key. Returns the assigned modeId

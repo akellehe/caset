@@ -12,6 +12,11 @@
 #include <stdexcept>
 #include <unordered_set>
 
+#include "mesh/Edge.h"
+#include "mesh/EdgeList.h"
+#include "mesh/Vertex.h"
+#include "spacetime/Spacetime.h"
+
 namespace tessera::quantum {
 
 namespace {
@@ -895,6 +900,25 @@ FockDirectSum::SparseOp FockDirectSum::dGammaBlock(
 }
 
 // ─── EdgeModeRegistry ─────────────────────────────────────────────────────
+
+EdgeModeRegistry EdgeModeRegistry::fromSpacetime(
+    const ::tessera::spacetime::Spacetime& spacetime,
+    std::string lineageKey) {
+    EdgeModeRegistry registry;
+    const auto& edges = spacetime.getEdgeList();
+    if (edges == nullptr) return registry;
+    for (const auto* edge : edges->toVector()) {
+        if (edge == nullptr) continue;
+        const auto& source = edge->getSource();
+        const auto& target = edge->getTarget();
+        if (source == nullptr || target == nullptr) continue;
+        // The stored source -> target direction IS the mode's orientation, so
+        // the sign against the canonical min -> max direction stays derivable
+        // from the ids alone (canonicalOrientationSign).
+        registry.addEdge(source->getId(), target->getId(), +1, lineageKey);
+    }
+    return registry;
+}
 
 std::uint64_t EdgeModeRegistry::addEdge(std::uint64_t vertexA,
                                         std::uint64_t vertexB,
