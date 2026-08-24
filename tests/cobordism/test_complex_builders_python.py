@@ -101,8 +101,10 @@ def _snapshot(st):
     edges = {}
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
+        phase = e.getPhase()   # complex: the group is C* = U(1) x R+
         edges[(min(a, b), max(a, b))] = (round((e.getLength()**2).real, 12),
-                                         round(e.getPhase(), 12))
+                                         (round(phase.real, 12),
+                                          round(phase.imag, 12)))
     simplices = sorted(tuple(sorted(v.getId() for v in s.getVertices()))
                        for s in st.getSimplices())
     return edges, simplices
@@ -218,9 +220,21 @@ class TestFromCellsUniformPin(unittest.TestCase):
         st = tessera.Spacetime.fromCells(2, [list(f) for f in _OCTA], 1.7, -0.4)
         edges, _ = _snapshot(st)
         self.assertTrue(edges)
-        for sq, ph in edges.values():
+        for sq, (phRe, phIm) in edges.values():
             self.assertAlmostEqual(sq, 1.7)
-            self.assertAlmostEqual(ph, -0.4)
+            self.assertAlmostEqual(phRe, -0.4)
+            self.assertAlmostEqual(phIm, 0.0)
+
+    def test_the_pin_carries_a_complex_phase(self):
+        # The pin argument is the C* connection phase, so its non-compact part
+        # must reach the edges too.
+        st = tessera.Spacetime.fromCells(2, [list(f) for f in _OCTA], 1.7,
+                                         complex(-0.4, 0.9))
+        edges, _ = _snapshot(st)
+        self.assertTrue(edges)
+        for _, (phRe, phIm) in edges.values():
+            self.assertAlmostEqual(phRe, -0.4)
+            self.assertAlmostEqual(phIm, 0.9)
 
     def test_vertices_are_coordinate_free(self):
         # The uniform-pin vertices carry no coordinates (getTime() == 0; the
