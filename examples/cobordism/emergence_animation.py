@@ -80,8 +80,13 @@ MC = cob.MultiCobordism
 # declared parameters -- fixed before any datum is examined
 # =====================================================================
 
-#: Stellar Pachner adds applied to the bare boundary of a 5-simplex.
+#: Stellar Pachner adds applied to the seed 4-ball.
 DECLARED_SIZE = 6
+#: The declared name of the incoming boundary region. Named once here and
+#: passed as this constant, never spelled at a call site: `regionHandle`
+#: raises by name on an undeclared region, so a mis-spelling that reached
+#: the engine would refuse rather than silently scope to the whole complex.
+M0_REGION = "m0"
 #: Engine units to drive. One unit is one stage-1 update plus one stage-2
 #: relaxation -- the engine's deterministic unit (#579).
 DECLARED_STEPS = 6
@@ -103,20 +108,72 @@ DECLARED_BETTI_DEGREES = (0, 1, 2)
 
 
 # =====================================================================
-# the neutral host -- every structure the paper looks for is absent
+# the neutral host -- a cobordism, because the readouts need a boundary
 # =====================================================================
 
-def build_neutral_host(n_refine=DECLARED_SIZE, seed=DECLARED_HOST_SEED):
-    """The bare boundary of a 5-simplex, refined, with a mild metric.
+def boundary_vertices(spacetime):
+    """The vertices of the incoming boundary M0, or [] if the complex is closed.
 
-    NEUTRAL by construction: no holes, no pinned carrier, no boundary blocks,
-    no target register. Whatever the run comes to carry is read afterwards.
+    A boundary facet is a (d-1)-simplex with exactly one coface. This is the
+    same rule the crossing panel applies, kept in one place so the host and
+    the readout cannot disagree about what M0 is.
+
+    The facets are reached through the TOP cells rather than through
+    `getSimplices()`: the lower skeleton is not materialized as registered
+    simplices until something builds it, so `getSimplices()` on a fresh
+    complex returns the top cells alone and would report every complex as
+    closed.
+
+    TWO passes, and the order matters. `getFacets()` REGISTERS the coface
+    relation as a side effect, so a facet's coface count is only complete
+    once every top cell has been visited. Counting in the same pass that
+    materializes would see each facet before its second cell had registered
+    and report the whole complex as boundary.
+    """
+    facets = {}
+    for top in spacetime.getTopSimplices():
+        for facet in top.getFacets():
+            facets[facet.__hash__()] = facet
+    boundary = set()
+    for facet in facets.values():
+        if len(facet.getCofaces()) == 1:
+            for vertex in facet.getVertices():
+                boundary.add(int(vertex.getId()))
+    return sorted(boundary)
+
+
+#: Even weighting of the seed length's real and imaginary parts: the unit
+#: vector at Re == Im, so a length of magnitude m carries m/sqrt(2) in each.
+_EVEN_WEIGHT = (1.0 + 1.0j) / math.sqrt(2.0)
+
+
+def build_cobordism_host(n_refine=DECLARED_SIZE, seed=DECLARED_HOST_SEED):
+    """A single simplex, refined -- the canonical seed.
+
+    The paper's crossing readouts live on a cobordism: `tau` is the Lorentzian
+    distance FROM the incoming boundary M0, and the surfaces are its level
+    sets. A CLOSED complex has no such surface, so those readouts cannot run
+    on one at any size. A single 4-simplex is a 4-BALL, so it HAS a boundary
+    -- `S^3 = M0` -- structurally, rather than by carving one out of a closed
+    manifold. The whitepaper prescribes no host topology; it specifies
+    cobordisms with `∂W = M0 ⊔ M1`, and this is the smallest complex that is
+    one.
+
+    Edge lengths carry EVENLY WEIGHTED real and imaginary parts. The previous
+    host initialized every length purely real and positive, so the seed had no
+    imaginary part and no causal content at all -- a programme that is
+    Lorentzian in every path was starting from a complex that was not. Even
+    weighting seeds the general-complex regime instead of one of its two real
+    faces, and imposes no state: it is a metric seed, not a carrier.
+
+    NEUTRAL otherwise: no holes, no pinned carrier, no boundary blocks, no
+    target register. Whatever the run comes to carry is read afterwards.
     """
     st = T.Spacetime(T.Metric(True, T.Signature(4, T.Lorentzian)), T.CDT,
-                     1.0, 1.0, T.PREFERRED, T.SimplexBoundarySphere(4))
+                     1.0, 1.0, T.PREFERRED, T.SolidSimplex(4))
     st.build()
     for edge in st.getEdgeList().toVector():
-        edge.setLength(cmath.sqrt(complex(1.0)))
+        edge.setLength(_EVEN_WEIGHT)
     applied = 0
     for step in range(seed, seed + n_refine * 4):
         move = T.AddMove(st, step, False, T.PachnerMode.PreGeometric, False)
@@ -125,7 +182,7 @@ def build_neutral_host(n_refine=DECLARED_SIZE, seed=DECLARED_HOST_SEED):
         if applied >= n_refine:
             break
     for index, edge in enumerate(st.getEdgeList().toVector()):
-        edge.setLength(cmath.sqrt(complex(1.0 + 0.01 * (index % 6))))
+        edge.setLength((1.0 + 0.01 * (index % 6)) * _EVEN_WEIGHT)
     return st
 
 
@@ -476,24 +533,15 @@ class EmergenceFrame:
     def _m0_vertices(spacetime):
         """The incoming boundary's vertices, or an empty list if closed.
 
-        A boundary facet is a (d-1)-simplex with exactly one coface. A closed
+        Delegates to the module-level rule the host is built against, so the
+        host and the readout cannot disagree about what M0 is. A closed
         complex has none, and then there is no M0 -- which the paper's
         readouts require, so the channel refuses rather than inventing one.
         """
         try:
-            facets = spacetime.getSimplices(3)
+            return boundary_vertices(spacetime)
         except Exception:                                 # noqa: BLE001
             return []
-        boundary = set()
-        for facet in facets:
-            try:
-                cofaces = facet.getCofaces()
-            except Exception:                             # noqa: BLE001
-                continue
-            if len(list(cofaces)) == 1:
-                for vertex in facet.getVertices():
-                    boundary.add(int(vertex.getId()))
-        return sorted(boundary)
 
     def _read_crossings(self, spacetime):
         accepted = [f for f in self.candidates if f is not None]
@@ -541,7 +589,10 @@ class EmergenceFrame:
                                                       level, 0.0)
             block["baryonNumber"] = _finite(baryon.baryonNumber)
             block["quarkTubes"] = int(baryon.quarkTubes)
-            block["signDefects"] = int(baryon.signDefects)
+            # Named defects, not a count: a tube whose crossing sign
+            # disagrees with its determinant-line winding is reported, never
+            # silently resolved.
+            block["signDefects"] = [str(d) for d in baryon.signDefects]
         except Exception as error:                        # noqa: BLE001
             block["baryonNumber"] = Absent("baryon sum failed: %s" % error)
         if not block.get("quarkTubes"):
@@ -664,12 +715,18 @@ class EmergenceFrame:
 
 def drive(config, progress=False):
     """Drive unforced emergence, reading a frame after every engine unit."""
-    host = build_neutral_host(config["size"], config["host_seed"])
+    host = build_cobordism_host(config["size"], config["host_seed"])
     node = MC(host, [], [], list(config["register_degrees"]), 1.0,
               config["seed"])
     node.set_objective(cob.JointStationarityObjective())
     node.set_simulation_mode(MC.SimulationMode.EMERGENCE,
                              MC.EmergenceSubmode.STRICT)
+    # M0 is HELD, not targeted. Declaring the region says only WHICH cells do
+    # not vary -- the paper's fixed boundary with a relaxed bulk. No pinned
+    # objective is set, so the bulk objective scores the whole cobordism
+    # including M0 and the run stays bit-identical to an unpinned one in
+    # everything except which coordinates are free.
+    node.declare_pinned_region(M0_REGION, set(boundary_vertices(host)))
 
     frames = [EmergenceFrame(node, host, 0, config)]
     if progress:

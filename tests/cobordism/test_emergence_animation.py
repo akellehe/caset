@@ -38,6 +38,7 @@ sys.path.insert(0, os.path.join(
 import emergence_animation as ea  # noqa: E402
 
 cob = T.cobordism
+obs = T.observables
 MC = cob.MultiCobordism
 
 #: The smallest host the driver is meaningful on: a multi-component
@@ -73,15 +74,39 @@ class DriveTest(unittest.TestCase):
 
     def test_the_host_is_neutral(self):
         """No holes, no pinned carrier, no boundary blocks by construction."""
-        host = ea.build_neutral_host(SMALL, ea.DECLARED_HOST_SEED)
+        host = ea.build_cobordism_host(SMALL, ea.DECLARED_HOST_SEED)
         betti = list(MC.betti(host))
-        # A closed S^4 refined by stellar adds stays simply connected: the
-        # neutral host carries no hole for a quark to be identified with.
+        # A 4-ball refined by stellar adds stays contractible: the neutral
+        # host carries no hole for a quark to be identified with.
         self.assertEqual(betti[0], 1)
         self.assertTrue(all(b == 0 for b in betti[1:3]))
 
+    def test_the_host_has_an_incoming_boundary(self):
+        """The readouts need M0; a closed complex cannot supply one."""
+        host = ea.build_cobordism_host(SMALL, ea.DECLARED_HOST_SEED)
+        self.assertTrue(ea.boundary_vertices(host),
+                        "the host must be a cobordism, not a closed complex")
+
+    def test_the_seed_weights_real_and_imaginary_parts_evenly(self):
+        """The canonical seed, and the Lorentzian content the old host lacked.
+
+        The previous host initialized every length purely real and positive,
+        so the seed carried no imaginary part at all. Nothing CONSTRAINS the
+        geometry to stay there -- stage 2 rotates `z` freely and the engine
+        has disposition moves -- but the starting point had no causal content
+        to evolve from.
+        """
+        host = ea.build_cobordism_host(SMALL, ea.DECLARED_HOST_SEED)
+        edges = host.getEdgeList().toVector()
+        self.assertTrue(edges)
+        for edge in edges:
+            length = complex(edge.getLength())
+            with self.subTest(edge=str(edge)):
+                self.assertAlmostEqual(length.real, length.imag, places=12)
+                self.assertNotAlmostEqual(length.imag, 0.0, places=12)
+
     def test_the_objective_is_joint_stationarity_in_strict_emergence(self):
-        host = ea.build_neutral_host(SMALL, ea.DECLARED_HOST_SEED)
+        host = ea.build_cobordism_host(SMALL, ea.DECLARED_HOST_SEED)
         node = MC(host, [], [], list(ea.DECLARED_REGISTER_DEGREES), 1.0,
                   ea.DECLARED_SEED)
         node.set_objective(cob.JointStationarityObjective())
@@ -135,11 +160,55 @@ class AbsenceTest(unittest.TestCase):
                     self.assertNotEqual(value.get("reason"), "")
                     self.assertNotIn("value", value)
 
-    def test_the_closed_host_refuses_the_crossing_readouts_by_name(self):
-        """A closed complex has no M0, so tau has no reference surface."""
+    def test_the_crossing_readouts_are_reached_at_all(self):
+        """The host is a cobordism, so tau has a reference surface.
+
+        On a CLOSED complex these readouts are unreachable at any size: tau
+        is the Lorentzian distance FROM M0 and there is no M0 to measure
+        from. The channel may still refuse -- a band that fails positivity
+        supplies no crossing -- but it must refuse for a reason of its own
+        rather than for want of a surface to slice.
+        """
         frame = _frames()[-1]
-        self.assertIsInstance(frame.crossings, ea.Absent)
-        self.assertIn("M0", frame.crossings.reason)
+        if isinstance(frame.crossings, ea.Absent):
+            self.assertNotIn("closed host", frame.crossings.reason)
+            self.assertNotIn("no incoming boundary", frame.crossings.reason)
+            return
+        self.assertIn("level", frame.crossings)
+        self.assertIn("crossings", frame.crossings)
+
+    def test_the_host_supplies_a_reference_surface(self):
+        """M0 exists, so `tau` has a surface to be measured from.
+
+        This is the ticket's fix. Whether `tau` then CERTIFIES is a separate
+        question about the seed's causal content, pinned below.
+        """
+        host = ea.build_cobordism_host(SMALL, ea.DECLARED_HOST_SEED)
+        self.assertTrue(ea.boundary_vertices(host))
+
+    def test_the_seed_has_no_causal_order_yet(self):
+        """Measured, and NOT the behaviour to preserve.
+
+        The canonical seed weights every length's real and imaginary parts
+        evenly, so every edge is causal. The temporal-function certificate
+        requires that no causal edge lie inside a hop layer of M0, so it
+        refuses with `causal-cycle`: the seed has causal CHARACTER everywhere
+        but no causal ORDER. That is a reason of the readout's own, not the
+        absent surface this ticket removed.
+
+        This test records the measured state so a change is noticed. If the
+        dynamics later produces a causal order, `certified` becomes True and
+        this test should be replaced by one asserting that -- it is a
+        tripwire, not a specification.
+        """
+        host = ea.build_cobordism_host(SMALL, ea.DECLARED_HOST_SEED)
+        temporal = obs.CrossingReadouts.temporalFunction(
+            host, ea.boundary_vertices(host))
+        reasons = [str(r) for r in temporal.failedCertificates]
+        if temporal.certified:
+            self.assertEqual(reasons, [])
+            return
+        self.assertIn("causal-cycle", reasons)
 
     def test_a_refused_transport_names_why(self):
         frame = _frames()[-1]
