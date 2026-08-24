@@ -295,7 +295,8 @@ struct FiberTransportRead {
   /// One-line human-readable summary (direction, rank, leakage, gates).
   [[nodiscard]] std::string describe() const;
 
-  /// Checkpoint serialization (the `transports` array): the JSON-able :class:`Record` of the read — at rank three the
+  /// Checkpoint serialization (the `transports` array): the JSON-able
+  /// :class:`Record` of the read — at rank three the
   /// full U(3) factor, det V (U(1)), and thereby the PU(3) class (the
   /// class is `[V]` = V modulo center, determined by the serialized V) all
   /// travel; complex leaves split `{name}_re`/`{name}_im` per #580.

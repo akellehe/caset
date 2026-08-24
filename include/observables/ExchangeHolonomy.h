@@ -142,7 +142,8 @@ struct LoopHolonomyRead {
 ///
 ///   chi_hat_F = det U_loop / det U_reference
 ///
-/// (whitepaper "Fermion statistics from simplicial orientation").  The report keeps the three phase channels SEPARATE:
+/// (whitepaper "Fermion statistics from simplicial orientation").  The
+/// report keeps the three phase channels SEPARATE:
 /// `rawLoopDeterminant` (exchange or rotation motion + Berry),
 /// `referenceDeterminant` (the Berry reference motion alone), and
 /// `character` (the cancelled ratio — the dynamical certificate).
