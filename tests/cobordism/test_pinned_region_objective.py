@@ -74,12 +74,21 @@ def _cells(st):
                   for s in st.getTopSimplices())
 
 
-def _scoped(objective, node, region_name, straddling):
-    """Point `objective` at a declared region with a declared straddling rule."""
+def _scope_for(node, region_name, straddling):
+    """A scope naming a DECLARED region, with a declared straddling rule.
+
+    The handle can only come from `region_handle`, so a mis-spelling raises here
+    rather than producing a scope that silently matches nothing.
+    """
     scope = cob.ObjectiveScope()
     scope.region = node.region_handle(region_name)
     scope.includes_straddling_edges = straddling
-    objective.set_scope(scope)
+    return scope
+
+
+def _scoped(objective, node, region_name, straddling):
+    """Point `objective` at a declared region with a declared straddling rule."""
+    objective.set_scope(_scope_for(node, region_name, straddling))
     return objective
 
 
@@ -271,6 +280,65 @@ class StraddlingDeclarationTest(unittest.TestCase):
         contributions = node.objective_contributions
         self.assertEqual(contributions[1].terms.regge_stationarity, 0.0)
         self.assertEqual(contributions[1].terms.hodge_stationarity, 0.0)
+
+
+class HoldToUnitObjective(cob.CobordismObjective):
+    """A Python-defined objective: `sum |z_e - 1|^2` over the edges in scope.
+
+    Deliberately not one of the built-ins. A pinned region is most useful when
+    a caller can hold it to something of their own devising, so the feature has
+    to be reachable from Python rather than only from C++.
+    """
+
+    def name(self):
+        return "hold_to_unit"
+
+    def term_names(self):
+        return cob.CobordismObjective.declared_term_names()
+
+    def terms(self, context):
+        terms = cob.MultiCobordism.ObjectiveTerms()
+        edges = context.spacetime.getEdgeList().toVector()
+        # None means the whole cobordism; a list — even an empty one — means
+        # exactly those coordinates.
+        indices = (range(len(edges)) if context.scored_edges is None
+                   else context.scored_edges)
+        terms.regge_stationarity = sum(
+            abs(edges[index].getLength() ** 2 - 1.0) ** 2 for index in indices)
+        return terms
+
+    def direction(self, context):
+        return cob.ObjectiveDirection()
+
+    def is_target_conditioned(self):
+        return False
+
+
+class PythonObjectiveHoldsARegionTest(unittest.TestCase):
+    """A caller's own objective can hold a declared region."""
+
+    def _held(self, straddling=False):
+        node = _node()
+        node.set_objective(cob.JointStationarityObjective())
+        node.declare_pinned_region(_REGION, _half_region(node))
+        held = HoldToUnitObjective()
+        held.set_scope(_scope_for(node, _REGION, straddling))
+        node.set_pinned_objective(held)
+        return node
+
+    def test_a_python_objective_contributes_under_its_own_name(self):
+        contributions = self._held().objective_contributions
+        self.assertEqual(contributions[1].objective_name, "hold_to_unit")
+        self.assertEqual(contributions[1].region_name, _REGION)
+        self.assertGreater(contributions[1].terms.regge_stationarity, 0.0)
+
+    def test_it_scores_its_region_and_not_the_whole_complex(self):
+        interior = self._held(False).objective_contributions[1]
+        wider = self._held(True).objective_contributions[1]
+        # Honouring the declaration is observable from Python exactly as it is
+        # from C++: widening the border raises the sum.
+        self.assertGreater(wider.terms.regge_stationarity,
+                           interior.terms.regge_stationarity)
 
 
 class ScopeIsIndependentOfFreezingTest(unittest.TestCase):

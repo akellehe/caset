@@ -1074,7 +1074,7 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def_property_readonly("objective_name", &MultiCobordism::objectiveName,
            "The injected objective's stable identifier, as stamped on records.")
       .def("set_pinned_objective", &MultiCobordism::setPinnedObjective,
-           py::arg("objective"),
+           py::arg("objective"), py::keep_alive<1, 2>(),
            "Inject an ADDITIONAL objective holding a pinned region, alongside "
            "the bulk objective. Optional: with none supplied the pinned "
            "region's objective IS the bulk objective and the run is identical "
@@ -1414,6 +1414,15 @@ Right -- re-read after each drive call:
       .def_readwrite("region", &ObjectiveContext::region,
                      "The vertex set this objective is scored over. EMPTY "
                      "means the whole complex.")
+      .def_readwrite("scored_edges", &ObjectiveContext::scoredEdges,
+                     "The edge INDICES this objective's sums run over, "
+                     "resolved by the engine from the objective's declared "
+                     "scope. None means every edge -- the whole cobordism. An "
+                     "empty list is a different thing: it means score nothing, "
+                     "which is what a region with no interior edge and the "
+                     "straddling edges declared out comes to. Conflating the "
+                     "two would silently promote such a region to scoring the "
+                     "entire complex.")
       .def_readwrite("region_targets", &ObjectiveContext::regionTargets,
                      "The target states the region is scored against. Empty "
                      "for a purely geometric objective.")
