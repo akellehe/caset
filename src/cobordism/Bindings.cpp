@@ -1073,6 +1073,28 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "default.")
       .def_property_readonly("objective_name", &MultiCobordism::objectiveName,
            "The injected objective's stable identifier, as stamped on records.")
+      .def("set_pinned_objective", &MultiCobordism::setPinnedObjective,
+           py::arg("objective"), py::keep_alive<1, 2>(),
+           "Inject an ADDITIONAL objective holding a pinned region, alongside "
+           "the bulk objective. Optional: with none supplied the pinned "
+           "region's objective IS the bulk objective and the run is identical "
+           "to a single-objective one. The region is not named here -- the "
+           "objective declares its own scope, whose RegionHandle can only come "
+           "from region_handle, so a mis-spelling cannot reach this call.")
+      .def_property_readonly("pinned_objective",
+           &MultiCobordism::pinnedObjective,
+           "The additional pinned-region objective, or None where none is "
+           "supplied.")
+      .def("clear_pinned_objective", &MultiCobordism::clearPinnedObjective,
+           "Drop the pinned-region objective, returning the node to a single "
+           "objective scoring the whole cobordism.")
+      .def_property_readonly("objective_contributions",
+           &MultiCobordism::objectiveContributions,
+           "Every objective's decomposition, in evaluation order: the bulk "
+           "objective first, then the pinned-region objective where one is "
+           "supplied. Summing the terms reproduces objective_terms exactly, so "
+           "a reader can tell whether descent came from the bulk or from the "
+           "pinned region.")
       .def("region_handle", &MultiCobordism::regionHandle, py::arg("name"),
            "Mint a RegionHandle for a DECLARED region. The only way to obtain "
            "a non-empty handle; an undeclared name raises BY NAME rather than "
@@ -1309,6 +1331,23 @@ Right -- re-read after each drive call:
       .def_readwrite("carried_state_energy",
                      &MultiCobordism::ObjectiveTerms::carriedStateEnergy);
 
+  py::class_<MultiCobordism::ObjectiveContribution>(multiCobordismClass,
+      "ObjectiveContribution",
+      "One objective's decomposition, labelled by the objective that produced "
+      "it and the region it was scored over. The record carries a contribution "
+      "per objective rather than one summed record, so a reader can tell "
+      "whether descent came from the bulk or from the pinned region.")
+      .def(py::init<>())
+      .def_readwrite("objective_name",
+                     &MultiCobordism::ObjectiveContribution::objectiveName,
+                     "The objective's stable identifier.")
+      .def_readwrite("region_name",
+                     &MultiCobordism::ObjectiveContribution::regionName,
+                     "The declared region, or empty for the whole cobordism.")
+      .def_readwrite("terms",
+                     &MultiCobordism::ObjectiveContribution::terms,
+                     "That objective's terms over its own scope.");
+
   py::class_<ObjectiveScope>(m, "ObjectiveScope",
       "What an objective DECLARES that it references: a named pinned region, "
       "or -- by declaring nothing -- the whole cobordism. Independent of "
@@ -1375,6 +1414,15 @@ Right -- re-read after each drive call:
       .def_readwrite("region", &ObjectiveContext::region,
                      "The vertex set this objective is scored over. EMPTY "
                      "means the whole complex.")
+      .def_readwrite("scored_edges", &ObjectiveContext::scoredEdges,
+                     "The edge INDICES this objective's sums run over, "
+                     "resolved by the engine from the objective's declared "
+                     "scope. None means every edge -- the whole cobordism. An "
+                     "empty list is a different thing: it means score nothing, "
+                     "which is what a region with no interior edge and the "
+                     "straddling edges declared out comes to. Conflating the "
+                     "two would silently promote such a region to scoring the "
+                     "entire complex.")
       .def_readwrite("region_targets", &ObjectiveContext::regionTargets,
                      "The target states the region is scored against. Empty "
                      "for a purely geometric objective.")
@@ -1462,6 +1510,11 @@ Right -- re-read after each drive call:
            "purpose: handing an objective something that could difference the "
            "scalar would mean handing it a closure over the node.")
       .def("scope", &CobordismObjective::scope)
+      .def("set_scope", &CobordismObjective::setScope, py::arg("scope"),
+           "Declare what this objective references. Scope is a property of the "
+           "INSTANCE, so an existing objective can be pointed at a region "
+           "without writing a new type. Default-constructed means the whole "
+           "cobordism.")
       .def_static("total", &CobordismObjective::total, py::arg("terms"),
                   "The scalar: the plain sum of the declared terms. STATIC by "
                   "design -- no `this`, so it cannot reach any state at all.")

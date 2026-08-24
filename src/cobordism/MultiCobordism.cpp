@@ -643,11 +643,8 @@ double MultiCobordism::hodgeEntropyStationarity() const {
   return residual;
 }
 
-void MultiCobordism::setObjective(
-    std::shared_ptr<CobordismObjective> objective) {
-  if (!objective)
-    throw std::invalid_argument(
-        "MultiCobordism: the injected objective must not be null");
+void MultiCobordism::requireObjectiveAcceptable(
+    const std::shared_ptr<CobordismObjective> &objective) const {
   // The objective's own DECLARED domain, enforced here so the restriction
   // travels with the objective that declares it rather than living in the
   // engine as a special case. It is a declaration, not a capability limit.
@@ -664,19 +661,30 @@ void MultiCobordism::setObjective(
   // pointing at a region that no longer exists must fail loudly rather than
   // score nothing.
   const auto scope = objective->scope();
-  if (!scope.isWholeCobordism()) {
-    bool declared = false;
-    for (const auto &region : pinnedRegions_)
-      if (region.name == scope.region.name()) {
-        declared = true;
-        break;
-      }
-    if (!declared)
-      throw std::invalid_argument(
-          "MultiCobordism: the injected objective is scoped to pinned region "
-          "'" + scope.region.name() + "', which is not declared");
-  }
+  if (scope.isWholeCobordism()) return;
+  for (const auto &region : pinnedRegions_)
+    if (region.name == scope.region.name()) return;
+  throw std::invalid_argument(
+      "MultiCobordism: the injected objective is scoped to pinned region "
+      "'" + scope.region.name() + "', which is not declared");
+}
+
+void MultiCobordism::setObjective(
+    std::shared_ptr<CobordismObjective> objective) {
+  if (!objective)
+    throw std::invalid_argument(
+        "MultiCobordism: the injected objective must not be null");
+  requireObjectiveAcceptable(objective);
   objectiveSpec_ = std::move(objective);
+}
+
+void MultiCobordism::setPinnedObjective(
+    std::shared_ptr<CobordismObjective> objective) {
+  if (!objective)
+    throw std::invalid_argument(
+        "MultiCobordism: the pinned-region objective must not be null");
+  requireObjectiveAcceptable(objective);
+  pinnedObjectiveSpec_ = std::move(objective);
 }
 
 RegionHandle MultiCobordism::regionHandle(const std::string &name) const {
@@ -690,12 +698,61 @@ std::string MultiCobordism::objectiveName() const {
   return objectiveSpec_->name();
 }
 
+bool MultiCobordism::compositeSupportsLocalizedDelta() const {
+  // A localized delta differences the objective over the cells a move touches.
+  // That shortcut is only honest while the scalar being reported is the one
+  // being differenced, and with a pinned objective in force the reported scalar
+  // is the SUM of two functionals over two different scopes. Differencing the
+  // bulk alone would optimize a surrogate that is not the objective — the very
+  // thing the localized path exists to avoid — so any pinned objective drops
+  // the whole node back to global re-evaluation. Global is always correct,
+  // merely more expensive.
+  if (pinnedObjectiveSpec_) return false;
+  return objectiveSpec_->supportsLocalizedDelta();
+}
+
 bool MultiCobordism::objectiveIsTargetConditioned() const {
+  // The DISJUNCTION, not the bulk objective's answer. A search policy asks this
+  // to find out whether the run it is driving is unforced, and a run whose
+  // pinned region is held to a declared state is target-conditioned however
+  // geometric the bulk objective is. Reporting the bulk alone would let a
+  // policy believe it was unforced while a target steered part of the complex.
+  if (pinnedObjectiveSpec_ && pinnedObjectiveSpec_->isTargetConditioned())
+    return true;
   return objectiveSpec_->isTargetConditioned();
 }
 
 ObjectiveContext MultiCobordism::objectiveContextFor(
     const std::shared_ptr<Spacetime> &spacetime) const {
+  return objectiveContextFor(spacetime, objectiveSpec_);
+}
+
+std::vector<std::size_t> MultiCobordism::scopedEdgeIndices(
+    const std::shared_ptr<Spacetime> &spacetime,
+    const std::set<std::uint64_t> &region,
+    bool includesStraddlingEdges) const {
+  std::vector<std::size_t> scored;
+  if (!spacetime || region.empty()) return scored;
+  const auto edges = spacetime->getEdgeList()->toVector();
+  for (std::size_t edgeIndex = 0; edgeIndex < edges.size(); ++edgeIndex) {
+    const auto key = edges[edgeIndex]->getKey();
+    const int endpointsInside = static_cast<int>(region.count(key.first)) +
+                                static_cast<int>(region.count(key.second));
+    if (endpointsInside == 0) continue;          // wholly bulk
+    if (endpointsInside == 2) {                  // interior to the region
+      scored.push_back(edgeIndex);
+      continue;
+    }
+    // Exactly one endpoint inside: a straddling edge, in only where the
+    // objective declared it so.
+    if (includesStraddlingEdges) scored.push_back(edgeIndex);
+  }
+  return scored;
+}
+
+ObjectiveContext MultiCobordism::objectiveContextFor(
+    const std::shared_ptr<Spacetime> &spacetime,
+    const std::shared_ptr<CobordismObjective> &objective) const {
   // THE FIREWALL. Everything an objective can see is assembled here and
   // nowhere else, and every field of it is PLAIN DATA: the complex, the region
   // and its declared targets, the configured weights, and two precomputed
@@ -708,9 +765,22 @@ ObjectiveContext MultiCobordism::objectiveContextFor(
   // there.
   ObjectiveContext context;
   context.spacetime = spacetime;
-  // The node's whole complex. A region-scoped objective — one per pinned
-  // region, say — is scored by handing it a narrower set here.
+  // The objective's DECLARED scope, resolved here. Declaring nothing means the
+  // whole cobordism, which leaves `region` and `scoredEdges` empty and every
+  // sum running over every coordinate exactly as it did before scopes existed.
+  const ObjectiveScope scope = objective ? objective->scope() : ObjectiveScope{};
   context.region = {};
+  if (!scope.isWholeCobordism()) {
+    for (const auto &region : pinnedRegions_)
+      if (region.name == scope.region.name()) {
+        context.region = region.vertices;
+        break;
+      }
+    // Present, even when empty: a region with no scored coordinate scores
+    // nothing, which is not the whole cobordism.
+    context.scoredEdges = scopedEdgeIndices(spacetime, context.region,
+                                            scope.includesStraddlingEdges);
+  }
   for (const auto &block : inputBlocks_) context.regionTargets.push_back(block.target);
   for (const auto &block : outputBlocks_) context.regionTargets.push_back(block.target);
   context.registerDegrees = registerDegrees_;
@@ -723,7 +793,7 @@ ObjectiveContext MultiCobordism::objectiveContextFor(
   // Computed only where the objective declares it reads them, so a purely
   // geometric objective never pays for a target-conditioned quantity. Left NaN
   // rather than zero where not computed: unmeasured is not "measured zero".
-  if (spacetime && objectiveSpec_ && objectiveSpec_->needsRegisterResidual())
+  if (spacetime && objective && objective->needsRegisterResidual())
     context.registerResidual = rU(spacetime);
   if (spacetime && carriedStateEnergyWeight_ != 0.0)
     context.carriedStateEnergy = carriedStateEnergy(spacetime);
@@ -759,11 +829,49 @@ double MultiCobordism::objectiveOf(const ObjectiveTerms &terms) {
   return CobordismObjective::total(terms);
 }
 
+std::vector<MultiCobordism::ObjectiveContribution>
+MultiCobordism::objectiveContributionsFor(
+    const std::shared_ptr<Spacetime> &spacetime) const {
+  // One contribution per objective, in evaluation order, so a reader can tell
+  // whether descent came from the bulk or from the pinned region. Summing them
+  // reproduces `objectiveTermsFor` exactly.
+  std::vector<ObjectiveContribution> contributions;
+  const auto record = [&](const std::shared_ptr<CobordismObjective> &objective) {
+    if (!objective) return;
+    contributions.push_back(
+        {objective->name(), objective->scope().region.name(),
+         objective->terms(objectiveContextFor(spacetime, objective))});
+  };
+  record(objectiveSpec_);
+  record(pinnedObjectiveSpec_);
+  return contributions;
+}
+
+std::vector<MultiCobordism::ObjectiveContribution>
+MultiCobordism::objectiveContributions() const {
+  return objectiveContributionsFor(spacetime_);
+}
+
 MultiCobordism::ObjectiveTerms MultiCobordism::objectiveTermsFor(
     const std::shared_ptr<Spacetime> &spacetime) const {
   // The engine no longer knows which functional it is scoring: it assembles
   // the firewalled context and the injected objective decomposes itself.
-  return objectiveSpec_->terms(objectiveContextFor(spacetime));
+  ObjectiveTerms terms = objectiveSpec_->terms(objectiveContextFor(spacetime));
+  // A pinned-region objective ADDS its terms on top. The bulk objective keeps
+  // scoring the entire cobordism INCLUDING the pinned interior, so a
+  // boundary-interior edge contributes to both — additive by design rather than
+  // double-counting to be corrected, because the bulk sees one coherent
+  // cobordism and this is an additional hold on part of it.
+  if (pinnedObjectiveSpec_) {
+    const auto pinned = pinnedObjectiveSpec_->terms(
+        objectiveContextFor(spacetime, pinnedObjectiveSpec_));
+    terms.reggeStationarity += pinned.reggeStationarity;
+    terms.hodgeStationarity += pinned.hodgeStationarity;
+    terms.registerResidual += pinned.registerResidual;
+    terms.actionMagnitude += pinned.actionMagnitude;
+    terms.carriedStateEnergy += pinned.carriedStateEnergy;
+  }
+  return terms;
 }
 
 MultiCobordism::ObjectiveTerms MultiCobordism::objectiveTerms() const {
@@ -973,7 +1081,7 @@ double MultiCobordism::deltaF(
   // or action magnitudes, so its true scalar difference is the only honest
   // score. It is more expensive, but it prevents stage 1 from optimizing a
   // surrogate different from the objective it reports.
-  if (!objectiveSpec_->supportsLocalizedDelta())
+  if (!compositeSupportsLocalizedDelta())
     return objectiveFor(candidateSpacetime) - baseObjective;
 
   std::set<std::vector<std::uint64_t>> candidateCellSet;
@@ -1064,7 +1172,7 @@ double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth,
                             double baseObjective) {
   const auto currentSnapshot = snapshot();
   const double baseResidualU =
-      objectiveSpec_->supportsLocalizedDelta() ? rU(spacetime_) : 0.0;
+      compositeSupportsLocalizedDelta() ? rU(spacetime_) : 0.0;
   std::set<std::vector<std::uint64_t>> baseCellSet;
   for (const auto &topSimplex : spacetime_->getTopSimplices())
     baseCellSet.insert(topSimplex->topTuple());
@@ -1348,7 +1456,7 @@ bool MultiCobordism::stage1Update(int nCandidateMoves, bool growBoundaries,
   // instead of once per candidate endpoint (up to 524 redundant evaluations at
   // depth five).
   const double baseObjective =
-      objectiveSpec_->supportsLocalizedDelta() ? 0.0 : objectiveFor(spacetime_);
+      compositeSupportsLocalizedDelta() ? 0.0 : objectiveFor(spacetime_);
   for (int lookaheadDepth = 1; lookaheadDepth <= std::max(1, maxLookahead);
        ++lookaheadDepth) {
     const int batchSize =
@@ -1577,6 +1685,37 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
       descentDirection += numericalResidualWeight *
                           scalarAscentDirection(
                               [&]() { return rU(spacetime_); });
+
+    // The pinned-region objective's direction adds on top of the bulk's, the
+    // same way its terms add on top of the bulk's terms. Its own declared scope
+    // decides which coordinates it moves; the bulk keeps moving all of them.
+    if (pinnedObjectiveSpec_) {
+      ObjectiveDirectionContext pinnedContext;
+      pinnedContext.scalar =
+          objectiveContextFor(spacetime_, pinnedObjectiveSpec_);
+      pinnedContext.edgeCount = edgeCount;
+      if (carriedStateEnergyWeight_ != 0.0)
+        pinnedContext.carriedStateEnergyGradient =
+            directionContext.carriedStateEnergyGradient;
+      const auto pinnedDirection =
+          pinnedObjectiveSpec_->direction(pinnedContext);
+      descentDirection += pinnedDirection.ascent;
+      // The line search gates on the exact composite scalar, so a baseline
+      // assembled from the bulk alone would understate it. Only the sum of both
+      // objectives is the number being descended.
+      if (objectiveDirection.baselineComputed &&
+          pinnedDirection.baselineComputed)
+        currentObjective = objectiveDirection.baseline + pinnedDirection.baseline;
+      else if (objectiveDirection.baselineComputed)
+        currentObjective = objectiveFor(spacetime_);
+      const double pinnedNumericalWeight =
+          pinnedObjectiveSpec_->numericalRegisterResidualWeight(
+              pinnedContext.scalar);
+      if (pinnedNumericalWeight != 0.0)
+        descentDirection += pinnedNumericalWeight *
+                            scalarAscentDirection(
+                                [&]() { return rU(spacetime_); });
+    }
 
     restoreEdgeLengths();
     // Pinning enters HERE and only here: a pinned edge keeps its resident squared
