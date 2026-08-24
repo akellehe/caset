@@ -1636,5 +1636,585 @@ class TestDegreeZeroNullityDiscrepancy(unittest.TestCase):
                 self.assertEqual(read.nullityDiscrepancy, 0.0)
 
 
+# --------------------------------------------------------------------------
+# the master recursion: pencil-valued levels, certified E_v, the Fock stage,
+# and PersistentPartition at every scale
+# --------------------------------------------------------------------------
+def numpy_subset_sums(values):
+    """Independent reference: all 2^n occupation subset sums, ascending."""
+    sums = [0j]
+    for value in values:
+        sums = sums + [s + value for s in sums]
+    return sorted(sums, key=lambda z: (z.real, z.imag))
+
+
+def singleton_partition(dim):
+    """Every coordinate its own component: nothing is interior, so the
+    reduction's effective operator IS the level's own operator. That is how
+    these tests read a child's operator back out."""
+    return [[i] for i in range(dim)]
+
+
+def child_operator(child):
+    """A child level's own operator, read back through a singleton
+    partition of its coordinates."""
+    read = child.staticReduction()
+    return _mat(read.effectiveOperator, len(read.coordinates))
+
+
+class TestPencilValuedRecursion(unittest.TestCase):
+    """R_{l+1}(lambda) = Feshbach_{P_l}(R_l(lambda)): the child is built from
+    the exact energy-dependent response, not the static complement."""
+
+    # Hermitian graph Laplacian on the path 0-1-2-3 (weights 1, 2, 3).
+    L = np.array([
+        [1.0, -1.0, 0.0, 0.0],
+        [-1.0, 3.0, -2.0, 0.0],
+        [0.0, -2.0, 5.0, -3.0],
+        [0.0, 0.0, -3.0, 3.0],
+    ], dtype=complex)
+
+    def _parent(self):
+        return cob.RecursiveQuotient.overMatrix(
+            _flat(self.L), 4, [], [[0, 1], [2, 3]])
+
+    def test_pencil_child_operator_is_the_exact_feshbach_response(self):
+        lam = 0.42 + 0.0j
+        parent = self._parent()
+        response = parent.feshbach(lam, 0.0, 1.0)
+        kept = len(response.coordinates)
+        child = parent.nextLevelAtLambda(
+            singleton_partition(kept), lam, 0.0, 1.0)
+        np.testing.assert_allclose(
+            child_operator(child), _mat(response.response, kept),
+            rtol=0, atol=MACHINE)
+
+    def test_pencil_child_matches_independent_numpy_feshbach(self):
+        lam = 0.42 + 0.0j
+        parent = self._parent()
+        kept = list(parent.interfaceIndices)
+        interior = [i for i in range(4) if i not in kept]
+        expected = numpy_feshbach(self.L, kept, interior, lam)
+        child = parent.nextLevelAtLambda(
+            singleton_partition(len(kept)), lam, 0.0, 1.0)
+        np.testing.assert_allclose(child_operator(child), expected,
+                                   rtol=0, atol=1e-10)
+
+    def test_pencil_child_differs_from_the_static_child(self):
+        # The point of the pencil path: at lambda != 0 the response is NOT
+        # the static Schur complement, which does not preserve the nonzero
+        # spectrum.
+        parent = self._parent()
+        kept = len(parent.interfaceIndices)
+        static_child = parent.nextLevel(singleton_partition(kept))
+        pencil_child = parent.nextLevelAtLambda(
+            singleton_partition(kept), 0.42 + 0.0j, 0.0, 1.0)
+        difference = np.abs(
+            child_operator(static_child) - child_operator(pencil_child)).max()
+        self.assertGreater(difference, 1e-3)
+
+    def test_pencil_child_is_singular_exactly_at_a_parent_eigenvalue(self):
+        # lambda in spec(L) <=> 0 in spec(F_B(lambda)): the spectral content
+        # the static complement loses is exactly what the pencil child keeps.
+        eigenvalues = np.linalg.eigvalsh(self.L)
+        target = complex(eigenvalues[2])
+        parent = self._parent()
+        kept = len(parent.interfaceIndices)
+        at_eigenvalue = parent.nextLevelAtLambda(
+            singleton_partition(kept), target, 0.0, 10.0)
+        smallest = np.abs(
+            np.linalg.eigvals(child_operator(at_eigenvalue))).min()
+        self.assertLess(smallest, 1e-8)
+
+        off_eigenvalue = parent.nextLevelAtLambda(
+            singleton_partition(kept), target + 0.5, 0.0, 10.0)
+        smallest_off = np.abs(
+            np.linalg.eigvals(child_operator(off_eigenvalue))).min()
+        self.assertGreater(smallest_off, 1e-3)
+
+    def test_pencil_child_carries_window_lambda_and_certificate(self):
+        parent = self._parent()
+        kept = len(parent.interfaceIndices)
+        child = parent.nextLevelAtLambda(
+            singleton_partition(kept), 0.42 + 0.17j, 0.25, 0.75)
+        provenance = child.levelProvenance
+        self.assertEqual(provenance.origin, cob.LevelOrigin.BandPencil)
+        self.assertAlmostEqual(provenance.lambda_.real, 0.42)
+        self.assertAlmostEqual(provenance.lambda_.imag, 0.17)
+        self.assertEqual(provenance.windowLower, 0.25)
+        self.assertEqual(provenance.windowUpper, 0.75)
+        self.assertFalse(math.isnan(provenance.solveResidual))
+        self.assertTrue(provenance.certificate.holds(),
+                        provenance.certificate.describe())
+        self.assertEqual(child.level, 1)
+
+    def test_static_child_carries_no_window(self):
+        # lambda = 0 is a point, not a band: a static level must not claim a
+        # window it does not speak for. Unmeasured is NaN, never zero.
+        parent = self._parent()
+        child = parent.nextLevel(
+            singleton_partition(len(parent.interfaceIndices)))
+        provenance = child.levelProvenance
+        self.assertEqual(provenance.origin, cob.LevelOrigin.StaticResponse)
+        self.assertTrue(math.isnan(provenance.windowLower))
+        self.assertTrue(math.isnan(provenance.windowUpper))
+        self.assertTrue(math.isnan(provenance.lambda_.real))
+        self.assertFalse(math.isnan(provenance.solveResidual))
+
+    def test_base_level_reports_base_origin_with_nothing_measured(self):
+        provenance = self._parent().levelProvenance
+        self.assertEqual(provenance.origin, cob.LevelOrigin.Base)
+        self.assertTrue(math.isnan(provenance.windowLower))
+        self.assertTrue(math.isnan(provenance.solveResidual))
+        self.assertTrue(math.isnan(provenance.surrogateResidual))
+
+    def test_pencil_lineage_provenance_is_carried(self):
+        parent = self._parent()
+        child = parent.nextLevelAtLambda(
+            singleton_partition(len(parent.interfaceIndices)),
+            0.42 + 0.0j, 0.0, 1.0)
+        self.assertTrue(
+            all(p.startswith("L0:") for p in child.coordinateProvenance))
+
+    def test_bad_window_is_refused(self):
+        parent = self._parent()
+        with self.assertRaises(ValueError):
+            parent.nextLevelAtLambda(
+                singleton_partition(len(parent.interfaceIndices)),
+                0.1 + 0.0j, 1.0, 0.0)
+
+
+class TestSurrogateValuedRecursion(unittest.TestCase):
+    """A cached linear AMLS surrogate as a child level, on the
+    M-orthonormalized basis (a spectrum-preserving congruence)."""
+
+    L = np.array([
+        [2.0, -1.0, 0.0, -1.0, 0.0],
+        [-1.0, 3.0, -1.0, 0.0, -1.0],
+        [0.0, -1.0, 2.0, -1.0, 0.0],
+        [-1.0, 0.0, -1.0, 3.0, -1.0],
+        [0.0, -1.0, 0.0, -1.0, 2.0],
+    ], dtype=complex)
+
+    def _parent(self):
+        return cob.RecursiveQuotient.overMatrix(
+            _flat(self.L), 5, [], [[0, 1, 2], [2, 3, 4]])
+
+    @staticmethod
+    def _surrogate_dim(surrogate):
+        return int(round(math.sqrt(len(surrogate.reducedStiffness))))
+
+    def test_surrogate_child_spectrum_equals_the_generalized_pencil(self):
+        # The M^{-1/2} congruence preserves the generalized eigenvalues of
+        # (K, M) EXACTLY: no spectral content is traded for a diagonal child
+        # metric. NumPy computes the same spectrum by the independent
+        # M^{-1} K route.
+        parent = self._parent()
+        surrogate = parent.craigBampton(0.0, 1.0, 4.0)
+        dim = self._surrogate_dim(surrogate)
+        stiffness = _mat(surrogate.reducedStiffness, dim)
+        mass = _mat(surrogate.reducedMass, dim)
+        expected = np.sort_complex(
+            np.linalg.eigvals(np.linalg.solve(mass, stiffness)))
+
+        child = parent.nextLevelFromSurrogate(
+            singleton_partition(dim), 0.0, 1.0, 4.0, -1.0)
+        actual = np.sort_complex(np.linalg.eigvals(child_operator(child)))
+        np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-9)
+
+    def test_surrogate_child_metric_is_the_identity(self):
+        # The M-orthonormalization is what makes the diagonal child metric
+        # exact rather than an assumption.
+        parent = self._parent()
+        dim = self._surrogate_dim(parent.craigBampton(0.0, 1.0, 4.0))
+        child = parent.nextLevelFromSurrogate(
+            singleton_partition(dim), 0.0, 1.0, 4.0, -1.0)
+        self.assertLess(child.labeledFiberSum().gramDefect, 1e-9)
+
+    def test_surrogate_child_carries_window_gap_and_certificate(self):
+        parent = self._parent()
+        surrogate = parent.craigBampton(0.0, 1.0, 4.0, 1e-6)
+        dim = self._surrogate_dim(surrogate)
+        child = parent.nextLevelFromSurrogate(
+            singleton_partition(dim), 0.0, 1.0, 4.0, 1e-6)
+        provenance = child.levelProvenance
+        self.assertEqual(provenance.origin, cob.LevelOrigin.Surrogate)
+        self.assertEqual(provenance.windowLower, 0.0)
+        self.assertEqual(provenance.windowUpper, 1.0)
+        self.assertEqual(provenance.discardedModeGap,
+                         surrogate.discardedModeGap)
+        self.assertEqual(provenance.certificate.describe(),
+                         surrogate.certificate.describe())
+
+    def test_surrogate_child_is_not_mistakable_for_an_exact_reduction(self):
+        parent = self._parent()
+        surrogate = parent.craigBampton(0.0, 1.0, 4.0)
+        dim = self._surrogate_dim(surrogate)
+        child = parent.nextLevelFromSurrogate(
+            singleton_partition(dim), 0.0, 1.0, 4.0)
+        self.assertNotEqual(child.levelProvenance.origin,
+                            cob.LevelOrigin.StaticResponse)
+        self.assertEqual(child.levelProvenance.certificate.domain,
+                         surrogate.certificate.domain)
+
+
+class TestCertifiedFiberSum(unittest.TestCase):
+    """E_v is the CERTIFIED ISOLATED SUBSPACE of C_v, with the band's
+    isolation gap and certificate carried onto the summand."""
+
+    L = np.diag([1.0, 2.0, 5.0, 9.0]).astype(complex)
+
+    def _quotient(self, policy=None):
+        options = cob.RecursiveQuotient.Options()
+        if policy is not None:
+            options.embeddingPolicy = policy
+        return cob.RecursiveQuotient.overMatrix(
+            _flat(self.L), 4, [], [[0, 1], [2, 3]], options)
+
+    @staticmethod
+    def _band(component, columns, **kwargs):
+        band = cob.RecursiveQuotient.CertifiedBand()
+        band.component = component
+        frame = np.zeros((4, len(columns)), dtype=complex)
+        for position, index in enumerate(columns):
+            frame[index, position] = 1.0
+        band.frame = _flat(frame)
+        band.rank = len(columns)
+        band.lowerGap = kwargs.get("lowerGap", 1.0)
+        band.upperGap = kwargs.get("upperGap", 3.0)
+        band.frequencyLower = kwargs.get("frequencyLower", 1.0)
+        band.frequencyUpper = kwargs.get("frequencyUpper", 2.0)
+        band.accepted = kwargs.get("accepted", True)
+        return band
+
+    def test_summands_carry_gaps_and_stay_aligned_with_the_input(self):
+        read = self._quotient().certifiedFiberSum(
+            [self._band(0, [0], lowerGap=0.7, upperGap=2.5),
+             self._band(1, [2, 3], lowerGap=4.0, upperGap=6.0)])
+        self.assertTrue(read.fromCertifiedBands)
+        self.assertEqual(len(read.summandCertificates), 2)
+        self.assertEqual(list(read.summandComponents), [0, 1])
+        self.assertEqual(list(read.summandRanks), [1, 2])
+        self.assertEqual(read.summandCertificates[0].lowerGap, 0.7)
+        self.assertEqual(read.summandCertificates[1].upperGap, 6.0)
+        self.assertEqual(read.nominalRank, 3)
+        # The weakest link of the "certified ISOLATED subspace" claim.
+        self.assertEqual(read.worstIsolationGap, 0.7)
+        self.assertTrue(read.allBandsAccepted)
+        self.assertTrue(read.certificate.holds())
+
+    def test_orthonormal_bands_give_an_exact_identity_gram(self):
+        read = self._quotient().certifiedFiberSum(
+            [self._band(0, [0, 1]), self._band(1, [2, 3])])
+        np.testing.assert_allclose(_mat(read.gram, 4), np.eye(4),
+                                   rtol=0, atol=MACHINE)
+        self.assertLess(read.gramDefect, MACHINE)
+        self.assertEqual(read.quotientNullity, 0)
+
+    def test_uncertified_band_is_summed_and_reported_never_dropped(self):
+        read = self._quotient().certifiedFiberSum(
+            [self._band(0, [0]), self._band(1, [2], accepted=False)])
+        # Its columns are still in the sum ...
+        self.assertEqual(read.nominalRank, 2)
+        self.assertEqual(len(read.summandCertificates), 2)
+        self.assertFalse(read.summandCertificates[1].accepted)
+        # ... but the sum cannot claim to be certified.
+        self.assertFalse(read.allBandsAccepted)
+        self.assertFalse(read.certificate.holds())
+
+    def test_unknown_gap_is_not_counted_as_zero(self):
+        read = self._quotient().certifiedFiberSum(
+            [self._band(0, [0], lowerGap=float("nan"),
+                        upperGap=float("nan"))])
+        self.assertTrue(math.isnan(read.worstIsolationGap))
+
+    def test_infinite_gap_means_perfect_isolation_not_unknown(self):
+        read = self._quotient().certifiedFiberSum(
+            [self._band(0, [0], lowerGap=float("inf"),
+                        upperGap=float("inf"))])
+        self.assertEqual(read.worstIsolationGap, float("inf"))
+
+    def test_overlapping_bands_never_assert_a_direct_sum(self):
+        read = self._quotient().certifiedFiberSum(
+            [self._band(0, [0, 1]), self._band(1, [1, 2])])
+        self.assertEqual(read.nominalRank, 4)
+        self.assertEqual(read.quotientNullity, 1)
+        self.assertGreater(read.gramDefect, 0.1)
+
+    def test_retained_coordinate_sum_is_not_marked_certified(self):
+        # `labeledFiberSum` carries no band certificate, and none is invented.
+        read = self._quotient().labeledFiberSum()
+        self.assertFalse(read.fromCertifiedBands)
+        self.assertEqual(len(read.summandCertificates), 0)
+        self.assertTrue(math.isnan(read.worstIsolationGap))
+
+    def test_malformed_band_is_refused(self):
+        band = self._band(0, [0])
+        band.rank = 3  # frame no longer matches dim x rank
+        with self.assertRaises(ValueError):
+            self._quotient().certifiedFiberSum([band])
+
+    def test_unknown_component_is_refused(self):
+        with self.assertRaises(ValueError):
+            self._quotient().certifiedFiberSum([self._band(7, [0])])
+
+
+class TestFockStage(unittest.TestCase):
+    """H_{l+1} = Fock(h_{l+1}): the boxed display's final line, carried at
+    the spectrum level and never materialized."""
+
+    L = np.diag([1.0, 2.0, 5.0, 9.0]).astype(complex)
+
+    def _quotient(self, policy=None):
+        options = cob.RecursiveQuotient.Options()
+        if policy is not None:
+            options.embeddingPolicy = policy
+        return cob.RecursiveQuotient.overMatrix(
+            _flat(self.L), 4, [], [[0, 1], [2, 3]], options)
+
+    @staticmethod
+    def _band(component, columns):
+        band = cob.RecursiveQuotient.CertifiedBand()
+        band.component = component
+        frame = np.zeros((4, len(columns)), dtype=complex)
+        for position, index in enumerate(columns):
+            frame[index, position] = 1.0
+        band.frame = _flat(frame)
+        band.rank = len(columns)
+        band.accepted = True
+        return band
+
+    def _disjoint_sum(self, quotient):
+        return quotient.certifiedFiberSum(
+            [self._band(0, [0, 1]), self._band(1, [2, 3])])
+
+    def test_one_particle_operator_is_the_w_compression(self):
+        quotient = self._quotient()
+        summary = self._disjoint_sum(quotient)
+        stage = quotient.fockStage(summary)
+        embedding = _mat(summary.embedding, 4, 4)
+        expected = embedding.conj().T @ (self.L @ embedding)
+        np.testing.assert_allclose(_mat(stage.oneParticle, 4), expected,
+                                   rtol=0, atol=MACHINE)
+
+    def test_free_many_body_spectrum_is_the_occupation_subset_sums(self):
+        quotient = self._quotient()
+        stage = quotient.fockStage(self._disjoint_sum(quotient))
+        self.assertTrue(stage.spectrumMaterialized)
+        expected = numpy_subset_sums(
+            [complex(z) for z in stage.oneParticleSpectrum])
+        actual = [complex(z) for z in stage.fockSpectrum]
+        self.assertEqual(len(actual), 2 ** stage.modes)
+        np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-10)
+
+    def test_one_particle_spectrum_recovers_the_diagonal(self):
+        quotient = self._quotient()
+        stage = quotient.fockStage(self._disjoint_sum(quotient))
+        np.testing.assert_allclose(
+            sorted(complex(z).real for z in stage.oneParticleSpectrum),
+            [1.0, 2.0, 5.0, 9.0], rtol=0, atol=1e-10)
+
+    def test_fock_dimension_is_two_to_the_modes(self):
+        quotient = self._quotient()
+        stage = quotient.fockStage(self._disjoint_sum(quotient))
+        self.assertEqual(stage.modes, 4)
+        self.assertEqual(stage.fockDimension, 16.0)
+
+    def test_spectrum_refuses_past_the_declared_budget(self):
+        # Nothing allocates 2^M: the enumeration refuses instead.
+        quotient = self._quotient()
+        stage = quotient.fockStage(self._disjoint_sum(quotient), 4)
+        self.assertFalse(stage.spectrumMaterialized)
+        self.assertEqual(len(stage.fockSpectrum), 0)
+        # The one-particle layer is still fully reported.
+        self.assertEqual(stage.modes, 4)
+        self.assertEqual(len(stage.oneParticleSpectrum), 4)
+
+    def test_empty_sum_is_the_vacuum_line(self):
+        quotient = self._quotient()
+        stage = quotient.fockStage(quotient.certifiedFiberSum([]))
+        self.assertEqual(stage.modes, 0)
+        self.assertEqual(stage.fockDimension, 1.0)
+        self.assertTrue(stage.spectrumMaterialized)
+        self.assertEqual([complex(z) for z in stage.fockSpectrum], [0j])
+
+    def test_overcomplete_sum_refuses_a_spectrum_without_a_quotient(self):
+        # A singular Gram means the labeled sum overcounts. Reading the
+        # eigenvalues of h anyway would silently assume G = I.
+        quotient = self._quotient()
+        summary = quotient.certifiedFiberSum(
+            [self._band(0, [0, 1]), self._band(1, [1, 2])])
+        self.assertGreater(summary.quotientNullity, 0)
+        stage = quotient.fockStage(summary)
+        self.assertFalse(stage.spectrumMaterialized)
+        self.assertEqual(len(stage.oneParticleSpectrum), 0)
+        self.assertFalse(stage.certificate.holds())
+
+    def test_declared_quotient_removes_the_overcount(self):
+        quotient = self._quotient(cob.FiberEmbeddingPolicy.QuotientKernel)
+        summary = quotient.certifiedFiberSum(
+            [self._band(0, [0, 1]), self._band(1, [1, 2])])
+        self.assertEqual(summary.effectiveRank, 3)
+        stage = quotient.fockStage(summary)
+        self.assertEqual(stage.modes, 3)
+        self.assertTrue(stage.spectrumMaterialized)
+        self.assertEqual(len(stage.fockSpectrum), 8)
+
+
+class TestPersistentPartitionAtEveryScale(unittest.TestCase):
+    """P_l = PersistentPartition(R_l), applied at every scale rather than at
+    level zero only."""
+
+    @staticmethod
+    def _two_blocks():
+        block = np.array([[2.0, -1.0, -1.0],
+                          [-1.0, 2.0, -1.0],
+                          [-1.0, -1.0, 2.0]], dtype=complex)
+        operator = np.zeros((6, 6), dtype=complex)
+        operator[:3, :3] = block
+        operator[3:, 3:] = block
+        return operator
+
+    def test_partition_covers_every_coordinate_exactly_once(self):
+        partition = cob.RecursiveQuotient.persistentPartition(
+            _flat(self._two_blocks()), 6)
+        self.assertEqual(sorted(i for part in partition for i in part),
+                         list(range(6)))
+
+    def test_uncoupled_blocks_are_separated(self):
+        partition = cob.RecursiveQuotient.persistentPartition(
+            _flat(self._two_blocks()), 6)
+        self.assertEqual(sorted(sorted(part) for part in partition),
+                         [[0, 1, 2], [3, 4, 5]])
+
+    def test_isolated_coordinate_becomes_its_own_component(self):
+        operator = np.pad(self._two_blocks(), ((0, 1), (0, 1)))
+        operator[6, 6] = 4.0  # diagonal only: coupled to nothing
+        partition = cob.RecursiveQuotient.persistentPartition(
+            _flat(operator), 7)
+        self.assertIn([6], [sorted(part) for part in partition])
+        self.assertEqual(sorted(i for part in partition for i in part),
+                         list(range(7)))
+
+    def test_partition_is_deterministic(self):
+        flat = _flat(self._two_blocks())
+        first = cob.RecursiveQuotient.persistentPartition(flat, 6, 1.0, 4, 7)
+        second = cob.RecursiveQuotient.persistentPartition(flat, 6, 1.0, 4, 7)
+        self.assertEqual([sorted(p) for p in first],
+                         [sorted(p) for p in second])
+
+    def test_diagonal_never_enters_the_similarity_graph(self):
+        # A coordinate is not similar to itself: a purely diagonal operator
+        # has no couplings, so every coordinate is its own component.
+        partition = cob.RecursiveQuotient.persistentPartition(
+            _flat(np.diag([1.0, 2.0, 3.0, 4.0]).astype(complex)), 4)
+        self.assertEqual(sorted(sorted(p) for p in partition),
+                         [[0], [1], [2], [3]])
+
+    def test_child_partition_feeds_next_level_directly(self):
+        parent = cob.RecursiveQuotient.overMatrix(
+            _flat(self._two_blocks()), 6, [], [[0, 1, 2], [3, 4, 5]])
+        partition = parent.childPersistentPartition()
+        child = parent.nextLevel(partition)
+        self.assertEqual(child.level, 1)
+        self.assertEqual(
+            sorted(i for part in partition for i in part),
+            list(range(len(parent.staticReduction().coordinates))))
+
+    def test_malformed_arguments_are_refused(self):
+        with self.assertRaises(ValueError):
+            cob.RecursiveQuotient.persistentPartition([1 + 0j], 3)
+        with self.assertRaises(ValueError):
+            cob.RecursiveQuotient.persistentPartition(
+                _flat(np.eye(2).astype(complex)), 2, 1.0, 0)
+
+
+class TestRecursionOnRealGeometry(unittest.TestCase):
+    """The multi-scale hierarchy the construction is named after, iterated
+    end to end on a real Lorentzian complex rather than on hand-written
+    matrices."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.st = rebuild_spacetime(load_dump(14001000))
+        ids = sorted(v.getId() for v in cls.st.getVertexList().toVector())
+        half = len(ids) // 2
+        cls.supports = [ids[:half + 1], ids[half:]]
+
+    def _level_zero(self):
+        return cob.RecursiveQuotient.overVertexSupports(
+            self.st, 1, self.supports)
+
+    def test_two_static_levels_with_discovered_partitions(self):
+        level0 = self._level_zero()
+        level1 = level0.nextLevel(level0.childPersistentPartition())
+        level2 = level1.nextLevel(level1.childPersistentPartition())
+
+        self.assertEqual([level0.level, level1.level, level2.level], [0, 1, 2])
+        for level in (level1, level2):
+            with self.subTest(level=level.level):
+                read = level.staticReduction()
+                self.assertTrue(read.certificate.holds(),
+                                read.certificate.describe())
+                self.assertEqual(level.levelProvenance.origin,
+                                 cob.LevelOrigin.StaticResponse)
+        # Lineage is carried the whole way down.
+        self.assertTrue(
+            all(p.startswith("L1:L0:") for p in level2.coordinateProvenance))
+
+    def test_two_pencil_levels_on_real_geometry(self):
+        level0 = self._level_zero()
+        lam = 0.37 + 0.11j
+        response0 = level0.feshbach(lam, 0.0, 1.0)
+        level1 = level0.nextLevelAtLambda(
+            cob.RecursiveQuotient.persistentPartition(
+                response0.response, len(response0.coordinates)),
+            lam, 0.0, 1.0)
+        response1 = level1.feshbach(lam, 0.0, 1.0)
+        level2 = level1.nextLevelAtLambda(
+            cob.RecursiveQuotient.persistentPartition(
+                response1.response, len(response1.coordinates)),
+            lam, 0.0, 1.0)
+
+        self.assertEqual(level2.level, 2)
+        for level in (level1, level2):
+            with self.subTest(level=level.level):
+                provenance = level.levelProvenance
+                self.assertEqual(provenance.origin, cob.LevelOrigin.BandPencil)
+                self.assertEqual(provenance.windowLower, 0.0)
+                self.assertEqual(provenance.windowUpper, 1.0)
+                self.assertAlmostEqual(provenance.lambda_.real, lam.real)
+                self.assertTrue(provenance.certificate.holds(),
+                                provenance.certificate.describe())
+
+    def test_certified_fiber_sum_and_fock_stage_on_real_geometry(self):
+        # The boxed display's last two lines on real geometry.
+        level0 = self._level_zero()
+        interior = list(level0.interiorIndices(0))
+        rank = min(2, len(interior))
+        self.assertGreater(rank, 0)
+
+        band = cob.RecursiveQuotient.CertifiedBand()
+        band.component = 0
+        frame = np.zeros((level0.dimension, rank), dtype=complex)
+        for position in range(rank):
+            frame[interior[position], position] = 1.0
+        band.frame = _flat(frame)
+        band.rank = rank
+        band.lowerGap = 0.5
+        band.upperGap = 0.5
+        band.accepted = True
+
+        summary = level0.certifiedFiberSum([band])
+        self.assertTrue(summary.fromCertifiedBands)
+        self.assertEqual(summary.worstIsolationGap, 0.5)
+
+        stage = level0.fockStage(summary)
+        self.assertEqual(stage.modes, rank)
+        self.assertEqual(stage.fockDimension, float(2 ** rank))
+        self.assertTrue(stage.spectrumMaterialized)
+        self.assertEqual(len(stage.fockSpectrum), 2 ** rank)
+
+
 if __name__ == "__main__":
     unittest.main()
