@@ -53,7 +53,7 @@ _FRAME_CACHE = {}
 def _frames():
     if "frames" not in _FRAME_CACHE:
         config = ea.build_config(size=SMALL, steps=SMALL_STEPS)
-        _FRAME_CACHE["frames"] = ea.drive(config, progress=False)
+        _FRAME_CACHE["frames"] = ea.drive(config, progress=False).frames
         _FRAME_CACHE["config"] = config
     return _FRAME_CACHE["frames"]
 
@@ -520,7 +520,7 @@ class EdgeDispositionTest(unittest.TestCase):
 
         config = ea.build_config(size=SMALL, steps=SMALL_STEPS,
                                  edge_disposition=ea.EdgeDisposition.FOLIATED)
-        frames = ea.drive(config, progress=False)
+        frames = ea.drive(config, progress=False).frames
         figure = plt.figure(figsize=(15, 9))
         try:
             ea.draw_frame(figure, frames, len(frames) - 1)

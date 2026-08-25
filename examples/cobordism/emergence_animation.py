@@ -100,8 +100,27 @@ M0_REGION = "m0"
 DECLARED_STEPS = 6
 #: Candidate moves offered to stage 1 per unit.
 DECLARED_CANDIDATE_MOVES = 6
+#: Stage-1 combinatorial updates per engine unit.
+DECLARED_STAGE1_ITERS = 1
 #: Stage-2 relaxation iterations per unit.
 DECLARED_STAGE2_ITERS = 12
+#: How many moves deep stage 1 searches for an objective-lowering SEQUENCE.
+#:
+#: When a batch of single moves finds no improvement the search deepens
+#: iteratively -- 2-move sequences, then 3, up to this many -- committing an
+#: F-lowering sequence as a whole. One means single moves only.
+#:
+#: The deepening covers EVERY move kind the stage-1 draw offers: the four
+#: Pachner moves plus the cone-outs and cone-ins, not the surgical moves
+#: alone. The depth is over the whole draw, not over a subset of it.
+DECLARED_SURGICAL_DEPTH = 1
+#: Absolute objective tolerance. Two roles, both absolute and never relative.
+#:
+#: Stage 2 backs its line search off until a trial lowers the exact selected
+#: objective by at least this much; and the drive stops once a whole engine
+#: unit fails to improve the objective by it. A run that stops that way says
+#: so -- the terminator is recorded, never inferred from a short trace.
+DECLARED_TOLERANCE = 1e-12
 #: Objective register degrees.
 DECLARED_REGISTER_DEGREES = (1,)
 #: Laplacian degrees the Hodge entropy term is scored at.
@@ -160,6 +179,51 @@ class EdgeDisposition:
 
 #: The seed disposition when the caller names none.
 DECLARED_EDGE_DISPOSITION = EdgeDisposition.RANDOM
+
+
+class Terminator:
+    """Why a drive stopped, as a closed vocabulary.
+
+    A short trace is ambiguous on its face: it looks the same whether the run
+    exhausted its units or converged. The terminator says which, so a reader
+    never has to infer it from the frame count.
+
+    Named constants rather than bare strings: the value is written where the
+    loop exits and compared where a document is read, and a typo in either
+    place would produce a run that reports a terminator nothing matches.
+    """
+
+    #: The unit budget ran out. The run has not converged; it stopped.
+    STEPS = "steps-exhausted"
+    #: A whole engine unit failed to improve the objective by the declared
+    #: absolute tolerance. The run stopped early and says so.
+    TOLERANCE = "tolerance-reached"
+
+    #: Every value a drive may report.
+    ALL = (STEPS, TOLERANCE)
+
+
+class DriveResult:
+    """A drive's frames together with WHY it stopped.
+
+    The terminator belongs to the loop, not to any one frame: a frame is a
+    measurement of the complex at a unit, while the terminator is a fact
+    about the run that produced them. Returning them together keeps a frame
+    from carrying a field that is meaningless for every frame but the last.
+    """
+
+    __slots__ = ("frames", "terminator")
+
+    def __init__(self, frames, terminator):
+        if terminator not in Terminator.ALL:
+            raise ValueError(
+                "unknown terminator %r: expected one of %s"
+                % (terminator, ", ".join(Terminator.ALL)))
+        self.frames = frames
+        self.terminator = terminator
+
+    def __len__(self):
+        return len(self.frames)
 
 
 # =====================================================================
@@ -851,8 +915,17 @@ class EmergenceFrame:
 # the drive -- unforced emergence, one frame per engine unit
 # =====================================================================
 
-def drive(config, progress=False):
-    """Drive unforced emergence, reading a frame after every engine unit."""
+def drive(config, progress=False, on_frame=None):
+    """Drive unforced emergence, reading a frame after every engine unit.
+
+    `on_frame(frames, index)` is called as each unit completes, so a caller
+    can display a run while it is still running. It is the ONLY difference
+    between a live drive and a headless one: the loop, the engine calls and
+    the frames are the same either way, so a live view cannot diverge from
+    the run it claims to be showing.
+
+    Returns a `DriveResult` carrying the frames and the terminator.
+    """
     host = build_cobordism_host(config["size"], config["host_seed"],
                                 config["edge_disposition"])
     node = MC(host, [], [], list(config["register_degrees"]), 1.0,
@@ -880,14 +953,55 @@ def drive(config, progress=False):
     frames = [EmergenceFrame(node, node.spacetime(), 0, config)]
     if progress:
         _report(frames[-1])
+    if on_frame is not None:
+        on_frame(frames, 0)
+    terminator = Terminator.STEPS
     for step in range(1, config["steps"] + 1):
-        list(node.run_stage1(max_steps=1,
-                             n_candidate_moves=config["candidate_moves"]))
-        list(node.run_stage2(max_iters=config["stage2_iters"]))
+        before = _objective_total(frames[-1])
+        list(node.run_stage1(max_steps=config["stage1_iters"],
+                             n_candidate_moves=config["candidate_moves"],
+                             max_lookahead=config["surgical_depth"]))
+        list(node.run_stage2(max_iters=config["stage2_iters"],
+                             tolerance=config["tolerance"]))
         frames.append(EmergenceFrame(node, node.spacetime(), step, config))
         if progress:
             _report(frames[-1])
-    return frames
+        if on_frame is not None:
+            on_frame(frames, step)
+        # The unit is complete and its frame is published before the exit is
+        # considered, so a run that stops here has still reported the unit
+        # that stopped it.
+        if _converged(before, _objective_total(frames[-1]),
+                      config["tolerance"]):
+            terminator = Terminator.TOLERANCE
+            break
+    return DriveResult(frames, terminator)
+
+
+def _objective_total(frame):
+    """A frame's scalar objective, or None where it was not measured."""
+    total = frame.objective.get("total")
+    return total if isinstance(total, (int, float)) else None
+
+
+def _converged(before, after, tolerance):
+    """Whether one engine unit failed to improve the objective by `tolerance`.
+
+    ABSOLUTE, never relative: the test is on the improvement itself, not on
+    its ratio to the objective, so the same tolerance means the same thing at
+    every scale the objective happens to take.
+
+    An unmeasured objective at either end is not convergence. It is an
+    absence, and a run may not stop on one -- stopping there would report a
+    converged run on the strength of a number nobody read.
+    """
+    if before is None or after is None:
+        return False
+    if not (math.isfinite(before) and math.isfinite(after)):
+        return False
+    # A unit that RAISES the objective has also failed to improve it by the
+    # tolerance, so this stops on that too rather than running on.
+    return (before - after) < tolerance
 
 
 def _report(frame):
@@ -1192,6 +1306,71 @@ def draw_frame(figure, frames, index):
     figure.tight_layout(rect=(0, 0, 1, 0.95))
 
 
+def drive_live(config, progress=False):
+    """Drive while drawing each unit as it completes, then return the result.
+
+    The compute runs on a worker thread and the figure is drawn on the main
+    one, because a GUI toolkit may only be driven from the thread that owns
+    it. That is safe here rather than merely conventional: `run_stage1` and
+    `run_stage2` release the GIL, so the worker genuinely proceeds while the
+    main thread draws, and the worker only ever APPENDS to the frame list
+    while the main thread reads indices it has already been handed.
+
+    The drive itself is `drive`, unchanged and un-forked. A live run and a
+    headless one execute the same loop with the same engine calls; only the
+    callback differs. There is no second code path to diverge.
+    """
+    import queue
+    import threading
+
+    import matplotlib.pyplot as plt
+
+    if not plt.isinteractive():
+        plt.ion()
+    try:
+        figure = plt.figure(figsize=(15, 9))
+    except Exception as exc:  # a backend that cannot open a window
+        raise RuntimeError(
+            "--live needs an interactive matplotlib backend and this one "
+            "could not open a figure (%s: %s). Run without --live to render "
+            "to a file instead; the drive is identical either way."
+            % (type(exc).__name__, exc))
+
+    ready = queue.Queue()
+    published = {}
+    outcome = {}
+
+    def publish(frames, index):
+        published["frames"] = frames
+        ready.put(index)
+
+    def worker():
+        try:
+            outcome["result"] = drive(config, progress=progress,
+                                      on_frame=publish)
+        except BaseException as exc:            # re-raised on the main thread
+            outcome["error"] = exc
+        finally:
+            ready.put(None)
+
+    thread = threading.Thread(target=worker, name="emergence-drive",
+                              daemon=True)
+    thread.start()
+    while True:
+        index = ready.get()
+        if index is None:
+            break
+        draw_frame(figure, published["frames"], index)
+        figure.canvas.draw_idle()
+        # Yields to the GUI event loop; a backend without one still returns.
+        plt.pause(0.001)
+    thread.join()
+    plt.close(figure)
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["result"]
+
+
 def render(frames, path):
     """Render the overlay to a GIF, MP4 or a single PNG of the last frame."""
     import matplotlib
@@ -1226,11 +1405,27 @@ def render(frames, path):
 def build_config(size=DECLARED_SIZE, steps=DECLARED_STEPS, seed=DECLARED_SEED,
                  host_seed=DECLARED_HOST_SEED,
                  resolution=DECLARED_RESOLUTION,
-                 edge_disposition=DECLARED_EDGE_DISPOSITION):
+                 edge_disposition=DECLARED_EDGE_DISPOSITION,
+                 stage1_iters=DECLARED_STAGE1_ITERS,
+                 stage2_iters=DECLARED_STAGE2_ITERS,
+                 tolerance=DECLARED_TOLERANCE,
+                 surgical_depth=DECLARED_SURGICAL_DEPTH):
     if edge_disposition not in EdgeDisposition.ALL:
         raise ValueError(
             "unknown edge disposition %r: expected one of %s"
             % (edge_disposition, ", ".join(EdgeDisposition.ALL)))
+    if stage1_iters < 1:
+        raise ValueError("stage-one iterations must be at least 1, got %r"
+                         % (stage1_iters,))
+    if stage2_iters < 1:
+        raise ValueError("stage-two iterations must be at least 1, got %r"
+                         % (stage2_iters,))
+    if surgical_depth < 1:
+        raise ValueError("surgical depth must be at least 1, got %r"
+                         % (surgical_depth,))
+    if not (tolerance > 0.0 and math.isfinite(tolerance)):
+        raise ValueError("tolerance must be a positive finite absolute "
+                         "threshold, got %r" % (tolerance,))
     return {
         "size": size,
         "steps": steps,
@@ -1239,7 +1434,10 @@ def build_config(size=DECLARED_SIZE, steps=DECLARED_STEPS, seed=DECLARED_SEED,
         "resolution": resolution,
         "edge_disposition": edge_disposition,
         "candidate_moves": DECLARED_CANDIDATE_MOVES,
-        "stage2_iters": DECLARED_STAGE2_ITERS,
+        "stage1_iters": stage1_iters,
+        "tolerance": tolerance,
+        "surgical_depth": surgical_depth,
+        "stage2_iters": stage2_iters,
         "register_degrees": list(DECLARED_REGISTER_DEGREES),
         "hodge_degrees": list(DECLARED_HODGE_DEGREES),
         "degrees": list(DECLARED_ANALYSIS_DEGREES),
@@ -1265,6 +1463,37 @@ def build_parser():
                           "timelike (l^2 = -1), or foliated (a PRESCRIBED "
                           "light cone: timelike between hop layers of M0, "
                           "spacelike within one)")
+    run.add_argument("--stage-one-iterations", type=int,
+                     default=DECLARED_STAGE1_ITERS,
+                     help="combinatorial updates stage 1 may commit per "
+                          "engine unit (default %d)" % DECLARED_STAGE1_ITERS)
+    run.add_argument("--stage-two-iterations", type=int,
+                     default=DECLARED_STAGE2_ITERS,
+                     help="relaxation iterations stage 2 runs per engine "
+                          "unit (default %d)" % DECLARED_STAGE2_ITERS)
+    run.add_argument("--surgical-depth", type=int,
+                     default=DECLARED_SURGICAL_DEPTH,
+                     help="how many moves deep stage 1 searches for an "
+                          "objective-lowering SEQUENCE: when single moves "
+                          "find no improvement it tries 2-move sequences, "
+                          "then 3, up to this many, committing a lowering "
+                          "sequence whole. The depth covers EVERY move kind "
+                          "in the draw -- the four Pachner moves and the "
+                          "cone-outs and cone-ins alike -- not the surgical "
+                          "moves alone (default %d, single moves)"
+                          % DECLARED_SURGICAL_DEPTH)
+    run.add_argument("--tolerance", type=float, default=DECLARED_TOLERANCE,
+                     help="ABSOLUTE objective tolerance (default %g). Stage "
+                          "2 backs its line search off until a trial lowers "
+                          "the objective by at least this much, and the run "
+                          "EXITS once a whole engine unit fails to improve "
+                          "it by this much. Never relative"
+                          % DECLARED_TOLERANCE)
+    run.add_argument("--live", action="store_true",
+                     help="draw each frame as it is computed instead of only "
+                          "at the end; still writes --out and --json. Needs "
+                          "an interactive matplotlib backend and fails by "
+                          "name without one")
     run.add_argument("--out", default="emergence_animation.gif",
                      help="GIF, MP4, or PNG of the final frame")
     run.add_argument("--json", default=None,
@@ -1276,10 +1505,21 @@ def build_parser():
 def main(argv=None):
     args = build_parser().parse_args(argv)
     config = build_config(args.size, args.steps, args.seed, args.host_seed,
-                          args.resolution, args.edge_disposition)
-    frames = drive(config, progress=not args.quiet)
+                          args.resolution, args.edge_disposition,
+                          args.stage_one_iterations,
+                          args.stage_two_iterations,
+                          args.tolerance, args.surgical_depth)
+    result = (drive_live(config, progress=not args.quiet) if args.live
+              else drive(config, progress=not args.quiet))
+    frames = result.frames
+    if not args.quiet and result.terminator == Terminator.TOLERANCE:
+        sys.stdout.write(
+            "exited on tolerance: one engine unit improved the objective by "
+            "less than %g, after %d of %d units\n"
+            % (config["tolerance"], frames[-1].step, config["steps"]))
     if args.json:
         document = {"config": config,
+                    "terminator": result.terminator,
                     "frames": [f.to_json() for f in frames]}
         with open(args.json, "w") as handle:
             json.dump(document, handle, indent=2, sort_keys=True)
