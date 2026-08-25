@@ -27,6 +27,10 @@ phase, which is where the two spectra part company. `_chi` below is complex on
 purpose: with the `M^dag M` form the entropy drifts 4.9e-3 and the identity
 fails at 1.2e-2, against the 1e-16 and 1e-15 asserted here.
 
+Gauge orthogonality alone would certify only the gauge subspace, so a second
+exact identity — `S` is EVEN in `phi` at real weights, hence its gradient is
+ODD — carries the physical directions the first one cannot see.
+
 And `laplacian(k)` must stay blind. Making the geometric operator see `phi`
 would be the error the two-field split exists to prevent, so its bitwise
 invariance is re-asserted here alongside the new dependence.
@@ -202,6 +206,47 @@ class GaugeInvarianceIsStructuralTest(unittest.TestCase):
         for index, component in enumerate(gradient):
             with self.subTest(edge=index):
                 self.assertLess(abs(component), 1e-9)
+
+
+class TheGradientIsCertifiedInEveryDirectionTest(unittest.TestCase):
+    """A second exact identity, because gauge orthogonality is not enough.
+
+    Gauge displacements span the image of the coboundary, which is `V - 1`
+    complex dimensions out of `E`. On these hosts that is a small subspace, so a
+    gradient could be wrong in every PHYSICAL direction and still satisfy the
+    orthogonality identity exactly. That gap is closed here.
+
+    For real weights, negating the connection transposes the operator:
+    `L_ij(-phi) = -w e^{-i phi} = L_ji(phi)`. Transposition preserves
+    eigenvalues, so `S` is EVEN in `phi` and its gradient is ODD — an exact
+    identity that constrains every edge direction at once, not a subspace.
+    """
+
+    def test_the_gradient_is_odd_under_reversing_the_connection(self):
+        spacetime = _host()
+        _set_flux(spacetime)
+        edges = spacetime.getEdgeList().toVector()
+        forward = [complex(edge.getPhase()) for edge in edges]
+
+        hodge = cob.HodgeLaplacian(spacetime)
+        entropy = hodge.connectionSpectralEntropy()
+        gradient = hodge.connectionSpectralEntropyPhaseGradient()
+        scale = math.sqrt(sum(abs(component) ** 2 for component in gradient))
+        self.assertGreater(scale, 0.0, "a zero gradient would pass vacuously")
+
+        for edge, phase in zip(edges, forward):
+            edge.setPhase(-phase)
+        reversed_hodge = cob.HodgeLaplacian(spacetime)
+        reversed_entropy = reversed_hodge.connectionSpectralEntropy()
+        reversed_gradient = (
+            reversed_hodge.connectionSpectralEntropyPhaseGradient())
+
+        self.assertAlmostEqual(entropy, reversed_entropy, delta=1e-13,
+                               msg="S must be even in phi at real weights")
+        residual = math.sqrt(
+            sum(abs(a + b) ** 2 for a, b in zip(reversed_gradient, gradient)))
+        self.assertLess(residual / scale, 1e-12,
+                        "the phi gradient must be odd in phi")
 
 
 class StageTwoMovesThePhaseTest(unittest.TestCase):
