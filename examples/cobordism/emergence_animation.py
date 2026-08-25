@@ -29,19 +29,29 @@ specifies.
 The panels, and the class that feeds each
 -----------------------------------------
 1.  objective trace                 -- the node's own objective terms
-2.  drawing layout of the complex   -- persisted 1-skeleton (layout only)
-3.  persistent modular clusters     -- `PersistentModularity`
-4.  fiber rank / gap / localization -- `SpectralFiber`, `SpectralFiberTracker`
-5.  anchor profile                  -- `ColorAnchor` (score, max term,
+2.  drawing layout of the complex   -- persisted 1-skeleton, stabilized for
+                                       drawing, coloured by the interval
+3.  dual spatial curvature          -- `Re eps*|star|`, from timelike hinges
+4.  dual temporal curvature         -- `Im eps*|star|`, from spacelike hinges
+5.  persistent modular clusters     -- `PersistentModularity`
+6.  fiber rank / gap / localization -- `SpectralFiber`, `SpectralFiberTracker`
+7.  anchor profile                  -- `ColorAnchor` (score, max term,
                                        participation ratio, phase dispersion)
-6.  transports and holonomy         -- `FiberConnection`
-7.  exchange and rotation           -- `ExchangeHolonomy`
-8.  crossing readouts               -- `CrossingReadouts` (sign of Re pi_perp
+8.  transports and holonomy         -- `FiberConnection`
+9.  exchange and rotation           -- `ExchangeHolonomy`
+10. crossing readouts               -- `CrossingReadouts` (sign of Re pi_perp
                                        per crossing, crossing mass, the
                                        one-third baryon sum, charge power)
-9.  <J^2> and Var(J^2)              -- `CovarianceState` Wick reads
-10. Betti numbers                   -- `Spacetime` (topological observable)
-11. verdict and named reasons       -- `ParticleClusters.classifyBaryon`
+11. <J^2> and Var(J^2)              -- `CovarianceState` Wick reads
+12. Betti numbers                   -- `Spacetime` (topological observable)
+13. verdict and named reasons       -- `ParticleClusters.classifyBaryon`
+
+Two of those are DRAWING, not measurement, and are kept out of the record
+accordingly: the layout positions and the dual curvature appear in no
+`to_json` block. In the complex panel, POSITION is a drawing artefact while
+COLOUR is a measurement -- the causal class of each edge's own interval
+`Re(l^2)` -- and the panel says so on its face, because stabilizing the
+picture and colouring it together make it look more physical than it is.
 
 Refusals are first class. On accessible hosts most channels are absent, and an
 absent panel states WHAT is absent and WHY rather than drawing a blank or a
