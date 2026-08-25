@@ -227,6 +227,10 @@ list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX
 # in tessera_quantum — so it follows ColorFiber there.
 list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX
     "/src/observables/FiberConnection\\.cpp$")
+# ClusterRegister (#860) reads FiberConnection's transport leakage, so it
+# includes FiberConnection.h and follows it into tessera_quantum.
+list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX
+    "/src/observables/ClusterRegister\\.cpp$")
 # bindings.cpp is the pybind11 entry point — goes into _tessera, not tessera_core.
 list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX "/src/bindings\\.cpp$")
 # Per-subsystem Bindings.cpp files also belong to _tessera, not tessera_core
@@ -416,6 +420,10 @@ list(APPEND TESSERA_QUANTUM_SOURCES
 # to ColorFiber (#767), so it compiles beside it.
 list(APPEND TESSERA_QUANTUM_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/observables/FiberConnection.cpp")
+# ClusterRegister (#860) assembles the whitepaper's fiber acceptance and reads
+# FiberConnection's leakage, so it compiles beside it.
+list(APPEND TESSERA_QUANTUM_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/observables/ClusterRegister.cpp")
 # bindings.cpp uses pybind11 + Python.h and goes into _tessera, not the
 # pybind-free static lib.
 list(FILTER TESSERA_QUANTUM_SOURCES EXCLUDE REGEX "/src/quantum/Bindings\\.cpp$")

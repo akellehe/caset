@@ -32,6 +32,7 @@
 #include "observables/WilsonLoop.h"
 #include "observables/Spectral.h"
 #include "observables/Record.h"
+#include "observables/ClusterRegister.h"
 #include "observables/RegisterContext.h"
 #include "observables/RegisterObservable.h"
 #include "observables/InteriorHinges.h"
@@ -4021,4 +4022,134 @@ evidence.)doc")
                   py::arg("cfg") = CrossingReadoutsConfig{},
                   "Every readout on one level as the versioned overlay "
                   "block.");
+
+  // ── #860: the register carried by a certified cluster ───────────────
+  py::class_<RegisterConjunct>(m, "RegisterConjunct",
+      "The whitepaper's six fiber-acceptance conjuncts, named.  Reference "
+      "these constants rather than retyping the strings: a mis-spelled "
+      "literal produces a name no consumer matches.")
+      .def_property_readonly_static("CLUSTER_SUPPORT",
+          [](py::object) { return RegisterConjunct::kClusterSupport; })
+      .def_property_readonly_static("LOCALIZED_PROJECTOR",
+          [](py::object) { return RegisterConjunct::kLocalizedProjector; })
+      .def_property_readonly_static("BAND_GAP",
+          [](py::object) { return RegisterConjunct::kBandGap; })
+      .def_property_readonly_static("NEIGHBOUR_OVERLAP",
+          [](py::object) { return RegisterConjunct::kNeighbourOverlap; })
+      .def_property_readonly_static("FRAME_LIFETIME",
+          [](py::object) { return RegisterConjunct::kFrameLifetime; })
+      .def_property_readonly_static("TRANSPORT_LEAKAGE",
+          [](py::object) { return RegisterConjunct::kTransportLeakage; });
+
+  py::class_<RegisterUnmeasured>(m, "RegisterUnmeasured",
+      "Why a conjunct could not be DECIDED, as distinct from being decided "
+      "against.  An unmeasured quantity is not a failed one, and neither is "
+      "ever encoded as a zero.")
+      .def_property_readonly_static("NO_BAND",
+          [](py::object) { return RegisterUnmeasured::kNoBand; })
+      .def_property_readonly_static("LOCALIZATION_UNMEASURED",
+          [](py::object) { return RegisterUnmeasured::kLocalizationUnmeasured; })
+      .def_property_readonly_static("BAND_GAP_UNKNOWN",
+          [](py::object) { return RegisterUnmeasured::kBandGapUnknown; })
+      .def_property_readonly_static("NO_FRAME_TRACK",
+          [](py::object) { return RegisterUnmeasured::kNoFrameTrack; })
+      .def_property_readonly_static("NO_TRANSPORT",
+          [](py::object) { return RegisterUnmeasured::kNoTransport; })
+      .def_property_readonly_static("SUPPORT_UNREADABLE",
+          [](py::object) { return RegisterUnmeasured::kSupportUnreadable; });
+
+  py::class_<ClusterRegisterConfig>(m, "ClusterRegisterConfig",
+      "Thresholds the register is accepted under.  Analysis parameters "
+      "only: none of them selects which bands or clusters exist.")
+      .def(py::init<>())
+      .def_readwrite("minNeighbourOverlap",
+                     &ClusterRegisterConfig::minNeighbourOverlap)
+      .def_readwrite("minFrameLifetime",
+                     &ClusterRegisterConfig::minFrameLifetime)
+      .def_readwrite("maxTransportLeakage",
+                     &ClusterRegisterConfig::maxTransportLeakage);
+
+  py::class_<RegisterRegimeReport>(m, "RegisterRegimeReport",
+      "What the specification requires be reported of the band's metric "
+      "regime.  A negative signature is a CERTIFICATE, never an automatic "
+      "antiparticle identification.  Unmeasured values are NaN.")
+      .def_readonly("regime", &RegisterRegimeReport::regime)
+      .def_readonly("gramDefect", &RegisterRegimeReport::gramDefect)
+      .def_readonly("positiveSignature",
+                    &RegisterRegimeReport::positiveSignature)
+      .def_readonly("negativeSignature",
+                    &RegisterRegimeReport::negativeSignature)
+      .def_readonly("neutralSignature",
+                    &RegisterRegimeReport::neutralSignature)
+      .def_readonly("signatureNormalizable",
+                    &RegisterRegimeReport::signatureNormalizable)
+      .def_readonly("eigenResidual", &RegisterRegimeReport::eigenResidual)
+      .def_readonly("leftResidual", &RegisterRegimeReport::leftResidual)
+      .def_readonly("frameConditionNumber",
+                    &RegisterRegimeReport::frameConditionNumber);
+
+  py::class_<ClusterRegisterRead>(m, "ClusterRegisterRead",
+      "One register read: the cluster it is carried by, the fiber "
+      "E_C = Ran Phi_C it is, the six conjuncts as measured, and the "
+      "verdict.  Unmeasured values are NaN and unmeasured conjuncts are "
+      "named; nothing is zero-filled.")
+      .def_readonly("component", &ClusterRegisterRead::component)
+      .def_readonly("support", &ClusterRegisterRead::support)
+      .def_readonly("degree", &ClusterRegisterRead::degree)
+      .def_readonly("rank", &ClusterRegisterRead::rank)
+      .def_readonly("band", &ClusterRegisterRead::band)
+      .def_readonly("supportConnected", &ClusterRegisterRead::supportConnected)
+      .def_readonly("supportPieces", &ClusterRegisterRead::supportPieces)
+      .def_readonly("localizationExcess",
+                    &ClusterRegisterRead::localizationExcess)
+      .def_readonly("bandGap", &ClusterRegisterRead::bandGap)
+      .def_readonly("neighbourOverlap", &ClusterRegisterRead::neighbourOverlap)
+      .def_readonly("frameLifetime", &ClusterRegisterRead::frameLifetime)
+      .def_readonly("transportLeakage",
+                    &ClusterRegisterRead::transportLeakage)
+      .def_readonly("regime", &ClusterRegisterRead::regime)
+      .def_readonly("failedConjuncts", &ClusterRegisterRead::failedConjuncts)
+      .def_readonly("unmeasured", &ClusterRegisterRead::unmeasured)
+      .def_readonly("accepted", &ClusterRegisterRead::accepted)
+      .def_readonly("certificate", &ClusterRegisterRead::certificate)
+      .def_readonly("thresholds", &ClusterRegisterRead::thresholds)
+      .def("describe", &ClusterRegisterRead::describe)
+      .def("toRecord",
+           [](const ClusterRegisterRead &self) {
+             return recordToPython(self.toRecord());
+           },
+           "Checkpoint serialization: the JSON-able record of the read "
+           "(schema-versioned; unmeasured channels stay NaN).")
+      .def_static("fromRecord",
+                  [](const py::handle &record) {
+                    return ClusterRegisterRead::fromRecord(
+                        pythonToRecord(record));
+                  },
+                  py::arg("record"),
+                  "Rehydrate from toRecord() output; rejects an unknown "
+                  "schema_version (ValueError).");
+
+  py::class_<ClusterRegister>(m, "ClusterRegister",
+      "Reads the register the whitepaper's 'Recursive spectral fibers' "
+      "section defines: the fiber E_C = Ran Phi_C of an isolated localized "
+      "band on a persistent cluster, accepted under the six-conjunct list.  "
+      "Assembles the existing observables and derives no spectrum, "
+      "transport or clustering of its own.  The support's provenance is "
+      "never consulted, so no proposer can veto a certified fiber.  "
+      "Read-only; nothing here enters any emergence objective and no hole "
+      "is required or consulted.")
+      .def(py::init<ClusterRegisterConfig>(),
+           py::arg("cfg") = ClusterRegisterConfig{})
+      .def_property_readonly("config", &ClusterRegister::config)
+      .def("read", &ClusterRegister::read, py::arg("st"), py::arg("support"),
+           py::arg("band"), py::arg("track"), py::arg("externalTransports"),
+           py::arg("component") = ComponentId{},
+           "Read the register of one cluster.  An absent track leaves the "
+           "lifetime and overlap conjuncts UNMEASURED, never satisfied; an "
+           "empty transport list likewise leaves leakage unmeasured rather "
+           "than small.")
+      .def_static("supportConnectivity", &ClusterRegister::supportConnectivity,
+                  py::arg("st"), py::arg("support"),
+                  "Whether the induced one-skeleton on the support is "
+                  "connected, and in how many pieces.");
 }
