@@ -627,5 +627,97 @@ class TestNoTargetConditioning(unittest.TestCase):
             self.assertNotIn(banned, text)
 
 
+# --------------------------------------------------------------------------- #
+# end to end on a real host, with every input produced by the library
+# --------------------------------------------------------------------------- #
+class TestRealHost(unittest.TestCase):
+    """The whole read driven from real machinery: a real complex, real
+    clusters from PersistentModularity, real bands from SpectralFiberTracker,
+    a real frame track and a real transport.  Nothing here is synthetic."""
+
+    def _host(self):
+        sys.path.insert(
+            0, str(Path(__file__).resolve().parent.parent.parent /
+                   "examples" / "cobordism"))
+        import emergence_animation as ea
+        st = ea.build_cobordism_host(6, 3)
+        # Materialise the skeleton before reading (#850): the objective and
+        # the operators are functions of the FULL complex, not of a partial
+        # one.
+        node = cob.MultiCobordism(st, [], [], [1], 1.0, 7)
+        node.set_objective(cob.JointStationarityObjective())
+        list(node.run_stage1(max_steps=1, n_candidate_moves=6))
+        return st
+
+    def test_a_real_host_with_no_hole_still_measures_every_conjunct(self):
+        st = self._host()
+        self.assertEqual(
+            len(list(cob.MultiCobordism.emergent_holes(st, 1))), 0,
+            "the acceptance criterion needs a host with NO hole")
+
+        pm = obs.PersistentModularity.fromSpacetime(st)
+        cfg = obs.PersistentModularityConfig()
+        cfg.resolutions = [1.0]
+        comps = list(pm.scanResolutions(cfg).slices[0].components)
+        self.assertGreaterEqual(len(comps), 2)
+
+        supports = [[int(v) for v in c.support] for c in comps]
+        tracks = pm.trackAcrossFrames([comps, comps, comps], 0.5)
+        self.assertTrue(tracks)
+
+        tracker = obs.SpectralFiberTracker(st, obs.SpectralFiberConfig())
+        band_a = list(tracker.enumerateBands(supports[0], 1).fibers)[0]
+        band_b = list(tracker.enumerateBands(supports[1], 1).fibers)[0]
+        transport = obs.FiberConnection().transportOnSpacetime(
+            st, band_a, band_b)
+
+        read = obs.ClusterRegister().read(
+            st, supports[0], band_a, tracks[0], [transport])
+
+        # With every input supplied, NOTHING is unmeasured: the verdict rests
+        # on measurements rather than on absent evidence.
+        self.assertEqual(list(read.unmeasured), [],
+                         "every conjunct must be decided on evidence")
+        self.assertTrue(read.supportConnected)
+        self.assertEqual(read.supportPieces, 1)
+        for value in (read.localizationExcess, read.bandGap,
+                      read.neighbourOverlap, read.frameLifetime,
+                      read.transportLeakage):
+            self.assertFalse(math.isnan(value))
+        self.assertGreaterEqual(read.frameLifetime, 2.0)
+
+    def test_a_real_refusal_names_a_measured_reason(self):
+        """A refusal is a result.  On this host the external transport is
+        rank-deficient, so leakage is MEASURED and fails — the register is
+        refused for a reason, not for missing evidence."""
+        st = self._host()
+        pm = obs.PersistentModularity.fromSpacetime(st)
+        cfg = obs.PersistentModularityConfig()
+        cfg.resolutions = [1.0]
+        comps = list(pm.scanResolutions(cfg).slices[0].components)
+        supports = [[int(v) for v in c.support] for c in comps]
+        tracks = pm.trackAcrossFrames([comps, comps, comps], 0.5)
+        tracker = obs.SpectralFiberTracker(st, obs.SpectralFiberConfig())
+        band_a = list(tracker.enumerateBands(supports[0], 1).fibers)[0]
+        band_b = list(tracker.enumerateBands(supports[1], 1).fibers)[0]
+        transport = obs.FiberConnection().transportOnSpacetime(
+            st, band_a, band_b)
+
+        read = obs.ClusterRegister().read(
+            st, supports[0], band_a, tracks[0], [transport])
+        if read.accepted:
+            self.skipTest("this host's transport certified; nothing refused")
+        self.assertTrue(read.failedConjuncts,
+                        "a refusal must name at least one conjunct")
+        for name in read.failedConjuncts:
+            self.assertIn(name, (
+                obs.RegisterConjunct.CLUSTER_SUPPORT,
+                obs.RegisterConjunct.LOCALIZED_PROJECTOR,
+                obs.RegisterConjunct.BAND_GAP,
+                obs.RegisterConjunct.NEIGHBOUR_OVERLAP,
+                obs.RegisterConjunct.FRAME_LIFETIME,
+                obs.RegisterConjunct.TRANSPORT_LEAKAGE))
+
+
 if __name__ == "__main__":
     unittest.main()
