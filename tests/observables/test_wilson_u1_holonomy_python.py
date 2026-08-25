@@ -140,11 +140,13 @@ def _holonomy(st, cycle):
     r = wl.evaluateU1Connection([by_id[c] for c in cycle])
     if not hasattr(r, "loopSize"):  # degenerate/open cycles return {} unchanged
         return r
-    # WilsonResult.value is complex-typed for the deficit-angle mode's sake; a
-    # U(1) holonomy is a real phase, and this asserts that rather than assuming.
+    # WilsonResult.value is complex-typed for the deficit-angle mode's sake and
+    # in this mode holds the DERIVED residualPhase(), a real angle; this asserts
+    # that rather than assuming it. The datum itself -- the unreduced complex
+    # accumulation -- is passed through untouched for the tests that read it.
     v = complex(r.value)
-    assert v.imag == 0.0, f"U(1) holonomy grew an imaginary part: {v}"
-    return types.SimpleNamespace(value=v.real, loopSize=r.loopSize)
+    assert v.imag == 0.0, f"derived residual phase grew an imaginary part: {v}"
+    return types.SimpleNamespace(value=v.real, loopSize=r.loopSize, read=r)
 
 
 # --------------------------------------------------------------------------- #
@@ -170,27 +172,48 @@ class TestHolonomyVsOracle(unittest.TestCase):
                 self.assertEqual(r.loopSize, 3)
                 self.assertTrue(_close_mod_2pi(r.value, _cycle_flux(st, [0, 1, 2])))
 
-    def test_the_non_compact_part_carries_no_winding(self):
-        """The connection is C* = U(1) x R+ and only the compact factor has
-        winding, so a Wilson loop must read Re(phase) alone. Adding an
-        arbitrary imaginary part -- a local scale, no quantum number -- cannot
-        move the holonomy (#804)."""
+    def test_the_non_compact_part_carries_no_winding_but_is_still_measured(self):
+        """Only the compact factor of C* = U(1) x R+ has winding, so an added
+        imaginary part cannot move the WINDING. It does move the modulus, and
+        both are reported: not quantizing is not a reason to discard (#872).
+
+        The former version of this test asserted only the first half, which
+        read as licence to drop Im(phase) entirely."""
         for phi, scale in ((0.3, 2.5), (-1.1, -0.75), (math.pi / 2, 4.0)):
             with self.subTest(phi=phi, scale=scale):
                 compact = _triangle()
                 _set_phases(compact, {frozenset({0, 1}): phi})
                 twisted = _triangle()
                 _set_phases(twisted, {frozenset({0, 1}): complex(phi, scale)})
-                self.assertTrue(_close_mod_2pi(
-                    _holonomy(twisted, [0, 1, 2]).value,
-                    _holonomy(compact, [0, 1, 2]).value))
+                c = _holonomy(compact, [0, 1, 2])
+                t = _holonomy(twisted, [0, 1, 2])
+                # The winding is untouched -- the true half of the old claim.
+                self.assertTrue(_close_mod_2pi(t.value, c.value))
+                self.assertEqual(t.read.windingNumber(), c.read.windingNumber())
+                # And the modulus is NOT: the scale is measured, not discarded.
+                self.assertAlmostEqual(c.read.holonomyModulus(), 1.0, places=12)
+                self.assertAlmostEqual(t.read.holonomyModulus(),
+                                       math.exp(-scale), places=12)
+                self.assertNotAlmostEqual(t.read.holonomyModulus(), 1.0,
+                                          places=6)
 
-    def test_a_purely_non_compact_connection_is_trivial(self):
-        # An imaginary-only phase is pure scale: zero winding.
+    def test_a_purely_non_compact_connection_is_measured_not_trivial(self):
+        """An imaginary-only phase has zero winding, which the retired version
+        of this test called 'trivial'. The real part being zero while the
+        imaginary part is not is a MEASUREMENT, and the modulus reports it."""
         st = _triangle()
         _set_phases(st, {frozenset({0, 1}): complex(0.0, 1.7),
                          frozenset({1, 2}): complex(0.0, -0.4)})
-        self.assertAlmostEqual(_holonomy(st, [0, 1, 2]).value, 0.0, places=12)
+        r = _holonomy(st, [0, 1, 2])
+        sigma = complex(r.read.connectionAccumulation)
+        self.assertAlmostEqual(r.value, 0.0, places=12)   # no winding
+        self.assertEqual(r.read.windingNumber(), 0)
+        self.assertAlmostEqual(sigma.real, 0.0, places=12)
+        # The whole content of this connection lives in the part that used to
+        # be thrown away.
+        self.assertNotAlmostEqual(sigma.imag, 0.0, places=6)
+        self.assertAlmostEqual(r.read.holonomyModulus(),
+                               math.exp(-sigma.imag), places=12)
 
     def test_equals_total_flux_mod_2pi(self):
         # Orient the cycle to hit the phased edge forward, so the holonomy is
@@ -327,6 +350,132 @@ class TestDegenerateCycles(unittest.TestCase):
         r = _holonomy(st, [0, 1, 3])
         self.assertEqual(r.loopSize, 0)
         self.assertEqual(r.value, 0.0)
+
+
+# --------------------------------------------------------------------------- #
+# The datum: the unreduced complex accumulation, and its derived views
+# --------------------------------------------------------------------------- #
+class TestConnectionAccumulation(unittest.TestCase):
+    """`connectionAccumulation` is the complete gauge-invariant datum; the
+    holonomy, its modulus, the residual phase and the winding are derived from
+    it. Reducing mod 2*pi at accumulation time -- what the code used to do --
+    destroys the winding irrecoverably, so that is what these pin (#872)."""
+
+    @staticmethod
+    def _read(phases, cycle=(0, 1, 2)):
+        st = _triangle()
+        _set_phases(st, phases)
+        by_id = _vertices_by_id(st)
+        return tessera.WilsonLoop(st).evaluateU1Connection(
+            [by_id[c] for c in cycle])
+
+    def test_both_components_accumulate(self):
+        r = self._read({frozenset({0, 1}): complex(0.4, 0.2),
+                        frozenset({1, 2}): complex(0.5, -0.1),
+                        frozenset({2, 0}): complex(0.3, 0.05)})
+        sigma = complex(r.connectionAccumulation)
+        self.assertAlmostEqual(sigma.real, 1.2, places=12)
+        self.assertAlmostEqual(sigma.imag, 0.15, places=12)
+
+    def test_the_holonomy_reconstructs_from_the_datum(self):
+        r = self._read({frozenset({0, 1}): complex(0.4, 0.2),
+                        frozenset({1, 2}): complex(0.5, -0.1)})
+        sigma = complex(r.connectionAccumulation)
+        self.assertEqual(complex(r.holonomy()), cmath.exp(1j * sigma))
+        self.assertEqual(r.holonomyModulus(), math.exp(-sigma.imag))
+
+    def test_winding_beyond_two_pi_is_recoverable(self):
+        """The test the defect would have failed. `principalAngle` at
+        accumulation time folded these into one another."""
+        for turns in (0, 1, 2, -3):
+            with self.subTest(turns=turns):
+                per = (TWO_PI * turns + 0.25) / 3.0
+                r = self._read({frozenset({0, 1}): complex(per, 0.0),
+                                frozenset({1, 2}): complex(per, 0.0),
+                                frozenset({2, 0}): complex(per, 0.0)})
+                self.assertEqual(r.windingNumber(), turns)
+                self.assertAlmostEqual(r.residualPhase(), 0.25, places=9)
+                # The full value is present, not the folded one.
+                self.assertAlmostEqual(
+                    complex(r.connectionAccumulation).real,
+                    TWO_PI * turns + 0.25, places=9)
+
+    def test_a_real_connection_has_modulus_exactly_one(self):
+        """The emergent cancellation, when it happens: a purely compact
+        connection gives |H| = 1 exactly -- observed, not imposed."""
+        r = self._read({frozenset({0, 1}): complex(0.4, 0.0),
+                        frozenset({1, 2}): complex(0.5, 0.0)})
+        self.assertEqual(complex(r.connectionAccumulation).imag, 0.0)
+        self.assertEqual(r.holonomyModulus(), 1.0)
+
+    def test_the_derived_angle_is_bit_identical_to_the_hand_oracle(self):
+        """`value` is now derived from the complex datum. Re is linear over the
+        sum, so it must be bitwise what accumulating Re alone produced."""
+        for phases in ({frozenset({0, 1}): complex(0.4, 0.2),
+                        frozenset({1, 2}): complex(-1.3, 5.0)},
+                       {frozenset({0, 1}): complex(2.9, 0.0)},
+                       {frozenset({2, 0}): complex(-0.75, -3.1)}):
+            with self.subTest(phases=sorted(map(sorted, phases))):
+                st = _triangle()
+                _set_phases(st, phases)
+                by_id = _vertices_by_id(st)
+                r = tessera.WilsonLoop(st).evaluateU1Connection(
+                    [by_id[c] for c in (0, 1, 2)])
+                self.assertEqual(complex(r.connectionAccumulation).real,
+                                 _cycle_flux(st, [0, 1, 2]))
+                self.assertEqual(complex(r.value).real,
+                                 _wrap(_cycle_flux(st, [0, 1, 2])))
+
+    def test_a_gauge_transformation_moves_neither_component(self):
+        """phi_uv -> phi_uv + chi_v - chi_u telescopes to zero around a closed
+        loop, so the WHOLE complex sum is invariant. That the imaginary part is
+        invariant too is what justifies reporting the modulus at all."""
+        chi = {0: complex(0.3, -0.15),
+               1: complex(-0.8, 0.4),
+               2: complex(1.1, 0.9)}
+        base = {frozenset({0, 1}): complex(0.4, 0.2),
+                frozenset({1, 2}): complex(0.5, -0.1),
+                frozenset({2, 0}): complex(0.3, 0.05)}
+        before = self._read(base)
+
+        st = _triangle()
+        _set_phases(st, base)
+        for e in st.getEdgeList().toVector():
+            u, v = e.getSource().getId(), e.getTarget().getId()
+            e.setPhase(complex(e.getPhase()) + chi[v] - chi[u])
+        by_id = _vertices_by_id(st)
+        after = tessera.WilsonLoop(st).evaluateU1Connection(
+            [by_id[c] for c in (0, 1, 2)])
+
+        drift = abs(complex(after.connectionAccumulation)
+                    - complex(before.connectionAccumulation))
+        self.assertLess(drift, 1e-12, f"gauge drift {drift}")
+        self.assertEqual(after.windingNumber(), before.windingNumber())
+        self.assertAlmostEqual(after.holonomyModulus(),
+                               before.holonomyModulus(), places=12)
+        # Guard against a vacuous pass: the phases really did change.
+        self.assertGreater(
+            max(abs(complex(e.getPhase()) - base[frozenset(
+                {e.getSource().getId(), e.getTarget().getId()})])
+                for e in st.getEdgeList().toVector()), 0.5)
+
+    def test_an_unread_cycle_leaves_the_datum_unmeasured(self):
+        """NaN, never zero. A zero accumulation would read as a MEASURED
+        trivial holonomy, which is exactly the confusion the modulus exists to
+        avoid -- and it is what a default-constructed result would report if
+        the field were zero-initialised."""
+        st = _testbed()
+        _set_phases(st, {})
+        by_id = _vertices_by_id(st)
+        wl = tessera.WilsonLoop(st)
+        for cycle, why in (([], "empty"),
+                           ([by_id[0]], "single vertex"),
+                           ([by_id[0], by_id[1], by_id[3]], "open path")):
+            with self.subTest(why=why):
+                sigma = complex(
+                    wl.evaluateU1Connection(cycle).connectionAccumulation)
+                self.assertTrue(math.isnan(sigma.real), f"{why}: {sigma}")
+                self.assertTrue(math.isnan(sigma.imag), f"{why}: {sigma}")
 
 
 if __name__ == "__main__":
