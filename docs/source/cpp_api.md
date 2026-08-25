@@ -141,6 +141,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} FiberConnection.h
 ```
+```{doxygenfile} ClusterRegister.h
+```
 ```{doxygenfile} ParticleClusters.h
 ```
 ```{doxygenfile} CrossingReadouts.h
