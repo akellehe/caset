@@ -871,14 +871,20 @@ def drive(config, progress=False):
     # everything except which coordinates are free.
     node.declare_pinned_region(M0_REGION, set(boundary_vertices(host)))
 
-    frames = [EmergenceFrame(node, host, 0, config)]
+    # EVERY frame reads `node.spacetime()`, never the `host` handed to the
+    # constructor. Stage 1 REPLACES the node's complex when it commits a move,
+    # so `host` stops being the complex the node is driving from the first
+    # committed move onward. Reading it would freeze every panel at the initial
+    # geometry while the objective tracked something else entirely -- the two
+    # diverge silently, with no error and no empty frame to give it away.
+    frames = [EmergenceFrame(node, node.spacetime(), 0, config)]
     if progress:
         _report(frames[-1])
     for step in range(1, config["steps"] + 1):
         list(node.run_stage1(max_steps=1,
                              n_candidate_moves=config["candidate_moves"]))
         list(node.run_stage2(max_iters=config["stage2_iters"]))
-        frames.append(EmergenceFrame(node, host, step, config))
+        frames.append(EmergenceFrame(node, node.spacetime(), step, config))
         if progress:
             _report(frames[-1])
     return frames

@@ -1058,6 +1058,14 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def_static("r_state", &MultiCobordism::residualOfTargetStateAgainstHarmonic,
                   py::arg("st"), py::arg("k"), py::arg("target"))
       .def("r_u", &MultiCobordism::rU, py::arg("st"))
+      .def("spacetime", &MultiCobordism::spacetime,
+           "The node's LIVE complex. Stage 1 REPLACES the node's spacetime "
+           "whenever it commits a move, so a caller holding the shared_ptr it "
+           "passed to the constructor keeps the ORIGINAL complex, frozen from "
+           "the first committed move onward. Read this — not the constructor "
+           "argument — whenever the complex is inspected after a drive: the "
+           "two diverge silently, and a readout taken from the stale one "
+           "describes a complex the node stopped using.")
       .def("objective", &MultiCobordism::objective)
       .def("hodge_entropy", &MultiCobordism::hodgeEntropy,
            "Sum of normalized positive-operator Hodge entropies over the "
