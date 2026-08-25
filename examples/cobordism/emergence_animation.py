@@ -70,6 +70,7 @@ wherever it is reported and is never presented as emergent.
 
 import argparse
 import cmath
+import itertools
 import json
 import math
 import os
@@ -224,6 +225,80 @@ class DriveResult:
 
     def __len__(self):
         return len(self.frames)
+
+
+class CausalClass:
+    """How one edge's `l^2` reads causally, as a closed vocabulary.
+
+    Under `spacelike` and `timelike` every `l^2` sits exactly on the real
+    axis, but under `random` -- the default -- `l^2 = e^{2 i a}` sweeps the
+    whole unit circle, so most edges are NEITHER. A scheme that reported only
+    two classes would have to bucket a genuinely complex `l^2` into one of
+    them and claim a definiteness the geometry does not have.
+    """
+
+    #: `l^2` real and positive.
+    SPACELIKE = "spacelike"
+    #: `l^2` real and negative.
+    TIMELIKE = "timelike"
+    #: `l^2` real and zero -- on the light cone.
+    NULL = "null"
+    #: `l^2` off the real axis. Not a causal type at all: the edge has no
+    #: definite character to report, and saying so is the honest reading.
+    INDEFINITE = "indefinite"
+
+    ALL = (SPACELIKE, TIMELIKE, NULL, INDEFINITE)
+
+
+#: `|Im l^2|` at or below this, relative to `|l^2|`, reads as ON the real
+#: axis. Above it the edge is `INDEFINITE` and is drawn as such.
+DECLARED_CAUSAL_REAL_TOLERANCE = 1e-9
+#: `|l^2|` at or below this reads as null rather than as a tiny spacelike or
+#: timelike value.
+DECLARED_CAUSAL_NULL_TOLERANCE = 1e-12
+
+#: One colour per causal class, and the legend reads from this map, so the
+#: drawn colour and its label can never disagree.
+DECLARED_CAUSAL_COLOURS = {
+    CausalClass.SPACELIKE: "#1f4e79",
+    CausalClass.TIMELIKE: "#a33227",
+    CausalClass.NULL: "#c9a227",
+    CausalClass.INDEFINITE: "#7a5aa8",
+}
+
+#: Stabilization of the drawing layout. Classical MDS is defined only up to
+#: rotation, reflection and scale and is globally sensitive, so a small change
+#: to the complex reshuffles the whole cloud. Scale is already fixed by the
+#: RMS normalization the layout read performs; these three remove the
+#: orientation ambiguity, ease the positions, and ease the view.
+DECLARED_LAYOUT_EASE = 0.3
+DECLARED_LAYOUT_VIEW_EASE = 0.25
+DECLARED_LAYOUT_PAD = 0.18
+
+#: The two dual-curvature channels. Diverging maps, because both channels are
+#: SIGNED and centred at zero -- a sequential map would make a saddle
+#: indistinguishable from a peak.
+DECLARED_HEAT_CMAP_SPATIAL = "coolwarm"
+DECLARED_HEAT_CMAP_TEMPORAL = "PuOr"
+#: Clip the heat range at this percentile of |curvature| so one extreme cell
+#: cannot flatten the rest of the field to a single colour.
+DECLARED_HEAT_CLIP_PERCENTILE = 95
+
+
+def causal_class(squared_length):
+    """The `CausalClass` of one edge, read from its `l^2`.
+
+    Definiteness is judged RELATIVE to the magnitude, so the classification
+    does not depend on the overall scale the lengths happen to carry.
+    """
+    value = complex(squared_length)
+    magnitude = abs(value)
+    if magnitude <= DECLARED_CAUSAL_NULL_TOLERANCE:
+        return CausalClass.NULL
+    if abs(value.imag) > DECLARED_CAUSAL_REAL_TOLERANCE * magnitude:
+        return CausalClass.INDEFINITE
+    return (CausalClass.SPACELIKE if value.real > 0.0
+            else CausalClass.TIMELIKE)
 
 
 # =====================================================================
@@ -450,6 +525,9 @@ class EmergenceFrame:
         self.spacetime = spacetime
         self.objective = self._read_objective(node)
         self.layout = self._read_layout(spacetime)
+        # Drawing-only, like `layout`: neither appears in `to_json`, so the
+        # record is unchanged by anything the figure needs.
+        self.dual = self._read_dual_curvature(spacetime)
         self.clusters = self._read_clusters(spacetime, config)
         self.bands = self._read_bands(spacetime, config)
         self.states = self._build_states()
@@ -509,6 +587,7 @@ class EmergenceFrame:
         weights = np.full((n, n), np.inf)
         np.fill_diagonal(weights, 0.0)
         pairs = []
+        squared = []
         for edge in edges:
             a = index.get(int(edge.getSource().getId()))
             b = index.get(int(edge.getTarget().getId()))
@@ -518,14 +597,18 @@ class EmergenceFrame:
             w = math.sqrt(max(abs(length ** 2), 1e-6))
             weights[a, b] = weights[b, a] = min(weights[a, b], w)
             pairs.append((a, b))
+            # Carried per drawn edge so the causal colouring reads the same
+            # `l^2` the geometry holds, rather than re-deriving it from a
+            # disposition setting that only describes how the SEED was built.
+            squared.append(length ** 2)
         distances = shortest_path(weights, method="D", directed=False)
         finite = np.isfinite(distances)
         if not finite.any():
             return Absent("no finite graph distance: complex is disconnected")
         distances[~finite] = distances[finite].max() * 1.5
-        squared = distances ** 2
+        squared_distances = distances ** 2
         centering = np.eye(n) - np.ones((n, n)) / n
-        gram = -0.5 * centering @ squared @ centering
+        gram = -0.5 * centering @ squared_distances @ centering
         values, vectors = np.linalg.eigh(gram)
         order = np.argsort(values)[::-1][:2]
         coords = vectors[:, order] * np.sqrt(np.clip(values[order], 0, None))
@@ -534,7 +617,67 @@ class EmergenceFrame:
         return {"coords": {vertices[i]: tuple(coords[i] / rms)
                            for i in range(n)},
                 "edges": pairs,
+                "edge_squared_lengths": squared,
+                "edge_causal_classes": [causal_class(z) for z in squared],
                 "vertices": vertices}
+
+    # ---- 2b. dual curvature, for the two heat panels ----------------
+
+    @staticmethod
+    def _read_dual_curvature(spacetime):
+        """Per-top-cell Regge curvature, both channels, for DRAWING ONLY.
+
+        Curvature in Regge calculus lives on the hinges -- the `(d-2)`
+        simplices, which in 4D are the triangles. Each is weighted by its own
+        dual measure and summed onto the top cells that contain it, giving one
+        signed value per dual node.
+
+        The Lorentzian deficit is COMPLEX and the two parts are different
+        physics, so they are kept apart rather than collapsed to a magnitude:
+        `Re eps * |star|` is the rotation angle-defect carried by timelike
+        hinges, and `Im eps * |star|` is the boost / light-cone content
+        carried by spacelike hinges -- those whose normal plane is timelike.
+        Both keep their sign, so a saddle stays distinguishable from a peak.
+
+        Like the drawing layout, this is computed for the figure and is NOT
+        part of the record: it appears in no `to_json` block.
+        """
+        try:
+            import numpy as np  # noqa: F401  (parity with the layout read)
+        except ImportError:
+            return Absent("numpy unavailable: no dual curvature")
+        hinge = {}
+        for simplex in spacetime.getSimplices():
+            vertices = simplex.getVertices()
+            if len(vertices) != 3:
+                continue
+            key = tuple(sorted(int(v.getId()) for v in vertices))
+            try:
+                deficit = complex(simplex.deficitAngle())
+                weight = abs(complex(simplex.dualVolume()))
+            except RuntimeError:
+                # A boundary or degenerate hinge carries no deficit. Only that
+                # geometric failure is absorbed -- a contract failure
+                # (TypeError, ValueError) must propagate rather than render as
+                # zero curvature, which would be indistinguishable from a flat
+                # hinge.
+                continue
+            hinge[key] = (deficit.real * weight, deficit.imag * weight)
+        cells = []
+        for cell in spacetime.getTopSimplices():
+            ids = sorted(int(v.getId()) for v in cell.getVertices())
+            faces = [tuple(t) for t in itertools.combinations(ids, 3)]
+            cells.append({
+                "vertices": ids,
+                "spatial": sum(hinge.get(f, (0.0, 0.0))[0] for f in faces),
+                "temporal": sum(hinge.get(f, (0.0, 0.0))[1] for f in faces),
+            })
+        if not cells:
+            return Absent("no top cells: nothing to draw a dual over")
+        rows, cols, _count = spacetime.getDualAdjacency()
+        return {"cells": cells,
+                "adjacency": list(zip(list(rows), list(cols))),
+                "hinges_with_curvature": len(hinge)}
 
     # ---- 3. persistent modular clusters -----------------------------
 
@@ -1031,6 +1174,107 @@ def _report(frame):
 # the overlay -- an absent panel still says what is absent, and why
 # =====================================================================
 
+class StableLayout:
+    """Jitter-free drawing positions: the layout read's normalized embedding,
+    rigidly aligned to the previous frame and eased toward it, with an eased
+    auto-fit view.
+
+    Classical MDS is defined only up to rotation, reflection and scale, and it
+    is globally sensitive, so a small change to the complex can reshuffle the
+    whole cloud. Scale is already fixed by the read's RMS normalization; this
+    removes the orientation ambiguity by Procrustes, eases the positions, and
+    auto-fits the view, so the structure stays legible as the complex changes.
+
+    PRESENTATION ONLY. It consumes what the layout read measured and produces
+    where to draw it; it feeds nothing back into any measurement or record.
+    """
+
+    def __init__(self, ease=DECLARED_LAYOUT_EASE,
+                 view_ease=DECLARED_LAYOUT_VIEW_EASE,
+                 pad=DECLARED_LAYOUT_PAD):
+        self._previous = None
+        self._view = None
+        self.ease = ease
+        self.view_ease = view_ease
+        self.pad = pad
+
+    def place(self, coords):
+        """Stabilized positions for one frame's raw layout coordinates."""
+        import numpy as np
+
+        current = {v: np.asarray(p, dtype=float) for v, p in coords.items()}
+        if len(current) < 2 or self._previous is None:
+            # The first frame defines the frame of reference; there is nothing
+            # to align to and nothing to ease toward.
+            self._previous = current
+            return {v: tuple(p) for v, p in current.items()}
+        shared = [v for v in current if v in self._previous]
+        if len(shared) >= 2:
+            cur = np.array([current[v] for v in shared])
+            ref = np.array([self._previous[v] for v in shared])
+            cur_centre, ref_centre = cur.mean(0), ref.mean(0)
+            u, _s, vt = np.linalg.svd((cur - cur_centre).T
+                                      @ (ref - ref_centre))
+            rotation = u @ vt          # rotation/reflection only, no scale
+            aligned = {v: (p - cur_centre) @ rotation + ref_centre
+                       for v, p in current.items()}
+        else:
+            # Too little in common to define an alignment. Taking the raw
+            # embedding is honest; inventing a rotation from one point is not.
+            aligned = current
+        eased = {}
+        for vertex, target in aligned.items():
+            previous = self._previous.get(vertex)
+            # A vertex that has just appeared has nowhere to ease FROM, so it
+            # takes its target outright rather than sliding in from a position
+            # it never occupied.
+            eased[vertex] = (target if previous is None
+                             else previous + self.ease * (target - previous))
+        self._previous = eased
+        return {v: tuple(p) for v, p in eased.items()}
+
+    def view(self, coords):
+        """An eased bounding box around the current cloud.
+
+        Never grow-only: a view that could only expand would shrink the
+        structure to an unreadable dot as soon as one frame spread out.
+        """
+        import numpy as np
+
+        points = np.array(list(coords.values()), dtype=float)
+        low, high = points.min(0), points.max(0)
+        pad = self.pad * max(high[0] - low[0], high[1] - low[1], 1e-6)
+        box = [low[0] - pad, high[0] + pad, low[1] - pad, high[1] + pad]
+        if self._view is None:
+            self._view = box
+        else:
+            self._view = [self._view[i]
+                          + self.view_ease * (box[i] - self._view[i])
+                          for i in range(4)]
+        return self._view
+
+
+def stabilize(frames):
+    """Every frame's stabilized positions and view, computed once in order.
+
+    Precomputed rather than accumulated during drawing because the alignment
+    is a chain: each frame is aligned to the one before it. A renderer that
+    redraws a frame, or draws only the last, would otherwise get a different
+    picture depending on what it had drawn before.
+
+    Returns one entry per frame, `None` where the layout itself is absent.
+    """
+    state = StableLayout()
+    placed = []
+    for frame in frames:
+        if isinstance(frame.layout, Absent):
+            placed.append(None)
+            continue
+        coords = state.place(frame.layout["coords"])
+        placed.append({"coords": coords, "view": state.view(coords)})
+    return placed
+
+
 def _absent_panel(axis, title, reason):
     """Draw a legible statement of absence. Never a blank, never a zero."""
     axis.set_title(title, fontsize=8)
@@ -1064,23 +1308,134 @@ def _panel_objective(axis, frames):
     axis.grid(alpha=0.25, linewidth=0.4)
 
 
-def _panel_layout(axis, frame):
-    title = "complex (drawing layout only, no causal content)"
+def _panel_layout(axis, frame, placement=None):
+    # POSITION is a drawing artefact; COLOUR is a measurement. The two are
+    # deliberately named apart in the title, because stabilizing the layout
+    # and colouring the edges together make the picture look more physical
+    # than it is -- where a vertex sits still means nothing at all.
+    title = "complex -- position: drawing only | colour: causal type of l^2"
     if isinstance(frame.layout, Absent):
         return _absent_panel(axis, title, frame.layout.reason)
-    coords = frame.layout["coords"]
+    from matplotlib.lines import Line2D
+
+    coords = (placement or {}).get("coords") or frame.layout["coords"]
     axis.set_title(title, fontsize=8)
-    for a, b in frame.layout["edges"]:
-        va = coords[frame.layout["vertices"][a]]
-        vb = coords[frame.layout["vertices"][b]]
-        axis.plot([va[0], vb[0]], [va[1], vb[1]], linewidth=0.4,
-                  color="#888888", zorder=1)
+    vertices = frame.layout["vertices"]
+    classes = frame.layout["edge_causal_classes"]
+    seen = []
+    for (a, b), causal in zip(frame.layout["edges"], classes):
+        va = coords[vertices[a]]
+        vb = coords[vertices[b]]
+        axis.plot([va[0], vb[0]], [va[1], vb[1]], linewidth=0.7,
+                  color=DECLARED_CAUSAL_COLOURS[causal], zorder=1)
+        if causal not in seen:
+            seen.append(causal)
     xs = [c[0] for c in coords.values()]
     ys = [c[1] for c in coords.values()]
-    axis.scatter(xs, ys, s=6, color="#1f4e79", zorder=2)
+    axis.scatter(xs, ys, s=6, color="#333333", zorder=2)
+    counts = {c: classes.count(c) for c in seen}
+    handles = [Line2D([0], [0], color=DECLARED_CAUSAL_COLOURS[c],
+                      linewidth=1.4,
+                      label="%s (%d)" % (_CAUSAL_LEGEND[c], counts[c]))
+               for c in CausalClass.ALL if c in counts]
+    if handles:
+        axis.legend(handles=handles, fontsize=5, loc="upper right",
+                    frameon=True, framealpha=0.85, borderpad=0.3,
+                    handlelength=1.2)
+    if placement and placement.get("view"):
+        view = placement["view"]
+        axis.set_xlim(view[0], view[1])
+        axis.set_ylim(view[2], view[3])
     axis.set_xticks([])
     axis.set_yticks([])
     axis.set_aspect("equal")
+
+
+#: What each causal class means, spelled out in the legend rather than left to
+#: the colour alone. `indefinite` is the one that needs saying: it is not a
+#: third kind of causal character, it is the absence of a definite one.
+_CAUSAL_LEGEND = {
+    CausalClass.SPACELIKE: "spacelike  Re l^2 > 0",
+    CausalClass.TIMELIKE: "timelike  Re l^2 < 0",
+    CausalClass.NULL: "null  l^2 = 0",
+    CausalClass.INDEFINITE: "indefinite  Im l^2 != 0",
+}
+
+
+def _panel_dual(axis, frame, placement, channel, title, cmap):
+    """One dual-curvature panel: dual nodes at primal cell centroids, edges
+    across shared facets, heat-coloured by one signed channel."""
+    if isinstance(frame.dual, Absent):
+        return _absent_panel(axis, title, frame.dual.reason)
+    if isinstance(frame.layout, Absent):
+        return _absent_panel(axis, title,
+                             "no drawing layout: nowhere to place the dual")
+    import numpy as np
+
+    coords = (placement or {}).get("coords") or frame.layout["coords"]
+    cells = frame.dual["cells"]
+    positions = np.full((len(cells), 2), np.nan)
+    values = np.zeros(len(cells))
+    for i, cell in enumerate(cells):
+        here = [coords[v] for v in cell["vertices"] if v in coords]
+        if here:
+            positions[i] = np.mean(np.asarray(here, dtype=float), axis=0)
+        values[i] = cell[channel]
+    finite = np.all(np.isfinite(positions), axis=1)
+    axis.set_title("%s  (%d cells)" % (title, len(cells)), fontsize=8)
+    if not finite.any():
+        return _absent_panel(
+            axis, title, "no dual node has a drawable position")
+    for a, b in frame.dual["adjacency"]:
+        if a < len(cells) and b < len(cells) and finite[a] and finite[b]:
+            axis.plot([positions[a, 0], positions[b, 0]],
+                      [positions[a, 1], positions[b, 1]],
+                      color="0.82", linewidth=0.4, zorder=1)
+    shown = values[finite]
+    magnitude = np.abs(shown)
+    if magnitude.max() <= DECLARED_CAUSAL_NULL_TOLERANCE:
+        # A channel that is identically zero would draw as one flat colour and
+        # read as "measured, uniform". Say which channel vanished and why it
+        # can: no hinge of the kind that carries it.
+        axis.set_xticks([])
+        axis.set_yticks([])
+        axis.text(0.5, 0.5,
+                  _wrap("identically 0: no hinge carries %s curvature here"
+                        % channel, 30),
+                  transform=axis.transAxes, ha="center", va="center",
+                  fontsize=6.5, color="#666666", style="italic")
+        return
+    limit = (float(np.percentile(magnitude, DECLARED_HEAT_CLIP_PERCENTILE))
+             if finite.sum() >= 5 else float(magnitude.max()))
+    if not limit > 0:
+        limit = float(magnitude.max()) or 1.0
+    clipped = np.clip(shown, -limit, limit)
+    scatter = axis.scatter(positions[finite, 0], positions[finite, 1],
+                           c=clipped, cmap=cmap, vmin=-limit, vmax=limit,
+                           s=18, zorder=2, edgecolors="0.3", linewidths=0.2)
+    bar = axis.figure.colorbar(scatter, ax=axis, fraction=0.046, pad=0.02)
+    # The centre is the whole point of a diverging map: without the zero tick
+    # labelled, a reader cannot tell a saddle from a peak.
+    bar.set_ticks([-limit, 0.0, limit])
+    bar.ax.tick_params(labelsize=5)
+    bar.set_label("signed, 0 at centre", fontsize=5)
+    axis.set_xticks([])
+    axis.set_yticks([])
+    axis.set_aspect("equal")
+
+
+def _panel_dual_spatial(axis, frame, placement=None):
+    return _panel_dual(
+        axis, frame, placement, "spatial",
+        "dual: spatial curvature  Re eps*|star|  (timelike hinges)",
+        DECLARED_HEAT_CMAP_SPATIAL)
+
+
+def _panel_dual_temporal(axis, frame, placement=None):
+    return _panel_dual(
+        axis, frame, placement, "temporal",
+        "dual: temporal curvature  Im eps*|star|  (spacelike hinges)",
+        DECLARED_HEAT_CMAP_TEMPORAL)
 
 
 def _panel_clusters(axis, frame):
@@ -1270,9 +1625,16 @@ def _panel_verdict(axis, frame):
               fontsize=6, color="#666666")
 
 
+#: Panels whose painter also takes the frame's stabilized placement. Named
+#: rather than detected by signature, so adding a painter that needs it is a
+#: deliberate act rather than something that silently starts working.
+_PLACED_PANELS = ("layout", "dual_spatial", "dual_temporal")
+
 _PANELS = [
     ("objective", _panel_objective),
     ("layout", _panel_layout),
+    ("dual_spatial", _panel_dual_spatial),
+    ("dual_temporal", _panel_dual_temporal),
     ("clusters", _panel_clusters),
     ("bands", _panel_bands),
     ("anchors", _panel_anchors),
@@ -1286,15 +1648,32 @@ _PANELS = [
 ]
 
 
-def draw_frame(figure, frames, index):
-    """Draw one frame's twelve panels onto a figure."""
+#: Grid the panels are laid out on. Wide enough for every panel with room to
+#: spare; the spare axes are removed rather than left as empty boxes, which
+#: would read as absent measurements.
+DECLARED_PANEL_GRID = (4, 4)
+
+
+def draw_frame(figure, frames, index, placed=None):
+    """Draw one frame's panels onto a figure.
+
+    `placed` is `stabilize(frames)`. Passing it is optional so a caller can
+    draw a single frame without it, in which case the raw layout is used and
+    the picture is correct but unaligned.
+    """
     figure.clear()
     frame = frames[index]
-    axes = figure.subplots(3, 4)
+    placement = placed[index] if placed else None
+    rows, columns = DECLARED_PANEL_GRID
+    axes = figure.subplots(rows, columns)
     flat = [ax for row in axes for ax in row]
+    for axis in flat[len(_PANELS):]:
+        figure.delaxes(axis)
     for (name, painter), axis in zip(_PANELS, flat):
         if name == "objective":
             painter(axis, frames[:index + 1])
+        elif name in _PLACED_PANELS:
+            painter(axis, frame, placement)
         else:
             painter(axis, frame)
     disposition = frame.config.get("edge_disposition",
@@ -1410,17 +1789,21 @@ def render(frames, path):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    figure = plt.figure(figsize=(15, 9))
+    figure = plt.figure(figsize=(16, 12))
+    # Computed once, in frame order: the alignment is a chain, so a renderer
+    # that redraws a frame or draws only the last must still see the same
+    # positions it would have seen drawing them all in sequence.
+    placed = stabilize(frames)
     lowered = path.lower()
     if lowered.endswith(".png") or len(frames) == 1:
-        draw_frame(figure, frames, len(frames) - 1)
+        draw_frame(figure, frames, len(frames) - 1, placed)
         figure.savefig(path, dpi=110)
         plt.close(figure)
         return path
     import matplotlib.animation as animation
 
     def update(index):
-        draw_frame(figure, frames, index)
+        draw_frame(figure, frames, index, placed)
         return []
 
     movie = animation.FuncAnimation(figure, update, frames=len(frames),
