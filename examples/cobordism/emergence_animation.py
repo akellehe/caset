@@ -668,6 +668,12 @@ class EmergenceFrame:
                 # hinge.
                 continue
             hinge[key] = (deficit.real * weight, deficit.imag * weight)
+        if not hinge:
+            # The hinges are the triangles, and they are only enumerable once
+            # the lower skeleton has been materialized. Saying so beats
+            # drawing a field of zeros that would read as "measured, flat".
+            return Absent("no hinge carries a deficit: the lower skeleton "
+                          "is not materialized")
         cells = []
         for cell in spacetime.getTopSimplices():
             ids = sorted(int(v.getId()) for v in cell.getVertices())
@@ -1318,7 +1324,7 @@ def _panel_layout(axis, frame, placement=None):
     # deliberately named apart in the title, because stabilizing the layout
     # and colouring the edges together make the picture look more physical
     # than it is -- where a vertex sits still means nothing at all.
-    title = "complex -- position: drawing only | colour: causal type of l^2"
+    title = "complex -- position: drawing only | colour: causal l^2"
     if isinstance(frame.layout, Absent):
         return _absent_panel(axis, title, frame.layout.reason)
     from matplotlib.lines import Line2D
@@ -1418,7 +1424,11 @@ def _panel_dual(axis, frame, placement, channel, title, cmap):
     scatter = axis.scatter(positions[finite, 0], positions[finite, 1],
                            c=clipped, cmap=cmap, vmin=-limit, vmax=limit,
                            s=18, zorder=2, edgecolors="0.3", linewidths=0.2)
-    bar = axis.figure.colorbar(scatter, ax=axis, fraction=0.046, pad=0.02)
+    # Horizontal and beneath the panel: a vertical bar steals width from the
+    # axes, which pulls the centred title off its own panel and into the
+    # neighbour's colourbar.
+    bar = axis.figure.colorbar(scatter, ax=axis, orientation="horizontal",
+                               fraction=0.05, pad=0.04, aspect=40)
     # The centre is the whole point of a diverging map: without the zero tick
     # labelled, a reader cannot tell a saddle from a peak.
     bar.set_ticks([-limit, 0.0, limit])
@@ -1432,14 +1442,14 @@ def _panel_dual(axis, frame, placement, channel, title, cmap):
 def _panel_dual_spatial(axis, frame, placement=None):
     return _panel_dual(
         axis, frame, placement, "spatial",
-        "dual: spatial curvature  Re eps*|star|  (timelike hinges)",
+        "dual spatial: Re eps*|star| (timelike hinges)",
         DECLARED_HEAT_CMAP_SPATIAL)
 
 
 def _panel_dual_temporal(axis, frame, placement=None):
     return _panel_dual(
         axis, frame, placement, "temporal",
-        "dual: temporal curvature  Im eps*|star|  (spacelike hinges)",
+        "dual temporal: Im eps*|star| (spacelike hinges)",
         DECLARED_HEAT_CMAP_TEMPORAL)
 
 
