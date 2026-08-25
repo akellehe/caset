@@ -1073,7 +1073,16 @@ EigenstateSynthesis::FieldStrengthSplit EigenstateSynthesis::fieldStrengthSplit(
         std::to_string(order_) + " cells");
 
   // Map each sorted edge (u,v) to its live Edge* so each plaquette's causal type
-  // is read off Edge::isTimelike() — the sanctioned causal test (Im(length) != 0).
+  // is read off Edge::isTimelike() — the sanctioned causal test, which since
+  // #870 is arg(l^2) ~ +/-pi rather than Im(length) != 0.
+  //
+  // NOTE the split is BINARY: a cell is electric if any edge is timelike and
+  // magnetic otherwise, so it cannot express a cell whose edges are MIXED (off
+  // every definite argument). Such a cell lands in `magnetic` by default rather
+  // than being reported as indefinite, and a cell that read electric under the
+  // superseded test purely because an edge carried some imaginary part now
+  // falls to magnetic. Widening the split is out of scope here; the gap is
+  // recorded so it is not mistaken for a measurement.
   std::map<std::pair<std::uint64_t, std::uint64_t>, ::tessera::mesh::Edge *> em;
   for (auto *e : edges_) {
     const std::uint64_t a = e->getSource()->getId();
