@@ -218,7 +218,8 @@ class FastPathTest(unittest.TestCase):
     def test_the_emergence_firewall_is_recorded_and_intact(self):
         firewall = self.document["drive"]["firewall"]
         self.assertEqual(firewall["objective_terms"], [
-            "regge_stationarity", "hodge_stationarity", "register_residual",
+            "regge_stationarity", "hodge_stationarity",
+            "connection_stationarity", "register_residual",
             "action_magnitude", "carried_state_energy"])
         self.assertEqual(firewall["refinement_indicators"], [
             "regge_stationarity_residual", "hodge_stationarity_residual",

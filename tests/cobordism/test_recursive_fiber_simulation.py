@@ -156,10 +156,17 @@ class ObjectiveFirewallStructureTest(unittest.TestCase):
         "hole", "occupation", "wick", "fock",
     )
 
-    def test_objective_terms_are_exactly_the_declared_five(self):
+    def test_objective_terms_are_exactly_the_declared_list(self):
+        # `connection_stationarity` (#853) is the term with a gradient in the
+        # connection phase. Audited on the same terms as the rest: it is a
+        # functional of the C* connection operator's spectrum -- geometry and
+        # declared configuration -- and nothing reachable from it is a
+        # component, fiber, transport, colour, charge, flavour, exchange, spin
+        # certificate or verdict.
         self.assertEqual(
             MC.objective_term_names(),
-            ["regge_stationarity", "hodge_stationarity", "register_residual",
+            ["regge_stationarity", "hodge_stationarity",
+             "connection_stationarity", "register_residual",
              "action_magnitude", "carried_state_energy"])
 
     def test_no_objective_term_names_a_derived_observable(self):
