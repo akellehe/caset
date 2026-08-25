@@ -4,6 +4,7 @@
 #include "mesh/ForwardDeclarations.h"
 #include <map>
 #include <complex>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -53,11 +54,59 @@ struct WilsonResult {
     /// hinge is cos of the COMPLEX Lorentzian deficit — the boost part
     /// contributes a cosh, so |value| may exceed 1 and a mixed hinge yields a
     /// genuinely complex character. Real-valued modes fill the real part.
+    ///
+    /// In ``U1_CONNECTION`` mode this is a DERIVED VIEW of
+    /// ``connectionAccumulation`` — its ``residualPhase()`` — kept because
+    /// consumers read it as the mod-2π holonomy angle. The datum is the
+    /// accumulation; this is one reading of it.
     std::complex<double> value{0.0, 0.0};
+
+    /// The complete gauge-invariant datum of a ``U1_CONNECTION`` read: the
+    /// UNREDUCED complex accumulation \f$ \Sigma_\gamma\varphi \f$ of the
+    /// oriented ``Edge::phase`` around the cycle.
+    ///
+    /// Both components are carried. Around a CLOSED loop a gauge
+    /// transformation \f$ \varphi\mapsto\varphi+d\chi \f$ telescopes to zero,
+    /// so the whole complex sum is gauge-invariant — the imaginary part no
+    /// less than the real one. Of the structure group
+    /// \f$ \mathbb{C}^{*}=U(1)\times\mathbb{R}^{+} \f$ only the compact factor
+    /// has winding, so only \f$ \mathrm{Re} \f$ quantizes; that makes
+    /// \f$ e^{-\mathrm{Im}\Sigma} \f$ a gauge-invariant real rather than a
+    /// quantum number, which is not a reason to discard it. If the
+    /// non-compact direction is inert then \f$ \mathrm{Im}\Sigma\to 0 \f$ and
+    /// the modulus tends to 1 — a cancellation to be OBSERVED, never imposed.
+    ///
+    /// Deliberately NOT reduced modulo 2π at accumulation time: reducing
+    /// destroys the winding irrecoverably. ``holonomy()``,
+    /// ``holonomyModulus()``, ``residualPhase()`` and ``windingNumber()`` are
+    /// derived from this and must never replace it.
+    ///
+    /// NaN outside ``U1_CONNECTION`` mode — unmeasured, never zero.
+    std::complex<double> connectionAccumulation{
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::quiet_NaN()};
+
     int    loopSize = 0;           ///< number of simplices in the loop
     int    enclosedHinges = 0;     ///< hinges enclosed (combinatorial)
     bool   contractible = true;    ///< is the loop contractible? (combinatorial)
     int    causalWindingNumber = 0;///< net orientation changes (causal)
+
+    /// Fold an angle into the principal holonomy interval (−π, π].
+    [[nodiscard]] static double principalAngle(double theta);
+
+    /// The holonomy \f$ H(\gamma)=e^{i\Sigma} \f$, derived.
+    [[nodiscard]] std::complex<double> holonomy() const;
+
+    /// \f$ |H(\gamma)| = e^{-\mathrm{Im}\Sigma} \f$, derived. Exactly 1 when
+    /// the connection is purely compact.
+    [[nodiscard]] double holonomyModulus() const;
+
+    /// \f$ \mathrm{Re}\Sigma \bmod 2\pi \f$ in (−π, π], derived.
+    [[nodiscard]] double residualPhase() const;
+
+    /// The whole \f$ 2\pi \f$ turns in \f$ \mathrm{Re}\Sigma \f$, derived.
+    /// Recoverable only because the accumulation is stored unreduced.
+    [[nodiscard]] long windingNumber() const;
 };
 
 /// Wilson loop observable on a triangulated spacetime.
@@ -92,11 +141,13 @@ class WilsonLoop {
     [[nodiscard]] WilsonResult evaluateDeficitAngle(const LoopPath &loop) const;
     [[nodiscard]] WilsonResult evaluateCausal(const LoopPath &loop) const;
 
-    /// U(1) connection holonomy around a closed cycle of vertices on the
-    /// primal 1-skeleton.  Accumulates ``Edge::phase`` oriented along the
+    /// Connection holonomy around a closed cycle of vertices on the primal
+    /// 1-skeleton.  Accumulates the COMPLEX ``Edge::phase`` oriented along the
     /// stored source→target direction (``+phase`` forward, ``−phase`` on
-    /// reversal) and reduces the total into the principal interval (−π, π].
-    /// ``value`` carries the holonomy; ``loopSize`` the number of edges.
+    /// reversal) and carries the total UNREDUCED in
+    /// ``connectionAccumulation`` — the datum. ``value`` is its
+    /// ``residualPhase()``, kept for consumers that read the mod-2π angle;
+    /// ``loopSize`` is the number of edges.
     /// Returns an empty result if the cycle has fewer than two vertices or any
     /// consecutive pair is not joined by an edge (an open path).
     ///
@@ -140,9 +191,6 @@ class WilsonLoop {
 
     /// Edge joining two vertices on the primal 1-skeleton (nullptr if none).
     [[nodiscard]] EdgePtr edgeBetween(VertexPtr a, VertexPtr b) const;
-
-    /// Fold an angle into the principal holonomy interval (−π, π].
-    [[nodiscard]] static double principalAngle(double theta);
 
     /// Build a LoopPath from an ordered vector of simplices.
     [[nodiscard]] LoopPath buildLoopPath(
