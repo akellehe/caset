@@ -283,6 +283,11 @@ DECLARED_HEAT_CMAP_TEMPORAL = "PuOr"
 #: Clip the heat range at this percentile of |curvature| so one extreme cell
 #: cannot flatten the rest of the field to a single colour.
 DECLARED_HEAT_CLIP_PERCENTILE = 95
+#: A curvature channel whose largest magnitude is at or below this is reported
+#: as identically zero. Separate from the null-length tolerance above: that
+#: one asks whether an edge sits on the light cone, this one asks whether a
+#: whole channel has anything to draw.
+DECLARED_HEAT_ZERO_TOLERANCE = 1e-9
 
 
 def causal_class(squared_length):
@@ -1393,7 +1398,7 @@ def _panel_dual(axis, frame, placement, channel, title, cmap):
                       color="0.82", linewidth=0.4, zorder=1)
     shown = values[finite]
     magnitude = np.abs(shown)
-    if magnitude.max() <= DECLARED_CAUSAL_NULL_TOLERANCE:
+    if magnitude.max() <= DECLARED_HEAT_ZERO_TOLERANCE:
         # A channel that is identically zero would draw as one flat colour and
         # read as "measured, uniform". Say which channel vanished and why it
         # can: no hinge of the kind that carries it.
