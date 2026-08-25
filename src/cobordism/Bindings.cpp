@@ -450,6 +450,22 @@ ChainComplex omits.)doc")
            py::arg("phase_mode") =
                HodgeLaplacian::EntropyPhaseMode::IncludeComplexPhase,
            "Entropy-stationarity residual sum_e |dS/dz_e|^2.")
+      .def("connectionSpectralEntropy",
+           &HodgeLaplacian::connectionSpectralEntropy,
+           "Von Neumann entropy of the normalized C* CONNECTION operator, by "
+           "the same formula spectralEntropy uses on L_k. Read from the "
+           "spectrum alone, so it is gauge-invariant by construction: a gauge "
+           "transformation acts on that operator by a similarity. This is the "
+           "entropy that can SEE the connection; every L_k is blind to phi.")
+      .def("connectionSpectralEntropyPhaseGradient",
+           &HodgeLaplacian::connectionSpectralEntropyPhaseGradient,
+           "dS/dphi_e of connectionSpectralEntropy, EdgeList order, in the "
+           "h = S_x - i S_y convention. Exact and holomorphic: the reverse "
+           "orientation carries the INVERSE link, never the conjugate, so "
+           "dS/d(conj phi) vanishes. Both components are differentiated.")
+      .def("connectionSpectralEntropyPhaseGradientNorm",
+           &HodgeLaplacian::connectionSpectralEntropyPhaseGradientNorm,
+           "Connection-entropy stationarity residual sum_e |dS/dphi_e|^2.")
       .def("spectralEntropyGradientDirectionalDerivative",
            &HodgeLaplacian::spectralEntropyGradientDirectionalDerivative,
            py::arg("k"), py::arg("direction"),
@@ -1124,6 +1140,13 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "projects the live complex edge geometry.")
       .def_property_readonly("hodge_entropy_phase_mode",
                              &MultiCobordism::hodgeEntropyPhaseMode)
+      .def("set_connection_entropy_weight",
+           &MultiCobordism::setConnectionEntropyWeight, py::arg("weight"),
+           "Declare the weight on the connection-entropy stationarity term -- "
+           "the only term with a gradient in the connection phase. Zero by "
+           "default, so a node acquires phase dynamics only when asked.")
+      .def_property_readonly("connection_entropy_weight",
+                             &MultiCobordism::connectionEntropyWeight)
       .def("set_hodge_entropy_weight", &MultiCobordism::setHodgeEntropyWeight,
            py::arg("weight"))
       .def_property_readonly("hodge_entropy_weight",
@@ -1359,6 +1382,12 @@ Right -- re-read after each drive call:
                      &MultiCobordism::ObjectiveTerms::reggeStationarity)
       .def_readwrite("hodge_stationarity",
                      &MultiCobordism::ObjectiveTerms::hodgeStationarity)
+      .def_readwrite("connection_stationarity",
+                     &MultiCobordism::ObjectiveTerms::connectionStationarity,
+                     "eta_C ||grad_phi S||^2 of the C* connection operator -- "
+                     "the ONLY term with a gradient in the connection phase. "
+                     "Every L_k is blind to phi, so without this the phase is "
+                     "a declared field no update can move.")
       .def_readwrite("register_residual",
                      &MultiCobordism::ObjectiveTerms::registerResidual)
       .def_readwrite("action_magnitude",
@@ -1447,6 +1476,8 @@ Right -- re-read after each drive call:
                            &ObjectiveTermName::kReggeStationarity)
       .def_readonly_static("HODGE_STATIONARITY",
                            &ObjectiveTermName::kHodgeStationarity)
+      .def_readonly_static("CONNECTION_STATIONARITY",
+                           &ObjectiveTermName::kConnectionStationarity)
       .def_readonly_static("REGISTER_RESIDUAL",
                            &ObjectiveTermName::kRegisterResidual)
       .def_readonly_static("ACTION_MAGNITUDE",
@@ -1497,6 +1528,11 @@ Right -- re-read after each drive call:
       .def_readwrite("regge_weight", &ObjectiveContext::reggeWeight)
       .def_readwrite("hodge_entropy_weight",
                      &ObjectiveContext::hodgeEntropyWeight)
+      .def_readwrite("connection_entropy_weight",
+                     &ObjectiveContext::connectionEntropyWeight,
+                     "eta_C, the connection-entropy stationarity weight. Zero "
+                     "by default: an objective acquires a phi gradient only "
+                     "when a caller declares one.")
       .def_readwrite("gamma", &ObjectiveContext::gamma)
       .def_readwrite("carried_state_energy_weight",
                      &ObjectiveContext::carriedStateEnergyWeight)
@@ -1524,6 +1560,12 @@ Right -- re-read after each drive call:
       .def_readwrite("ascent", &ObjectiveDirection::ascent,
                      "The ascent displacement. Stage 2 subtracts a scaled "
                      "multiple of it.")
+      .def_readwrite("phase_ascent", &ObjectiveDirection::phaseAscent,
+                     "The ascent displacement in the CONNECTION PHASE, same "
+                     "edge order. Empty when the objective has no phi "
+                     "dependence, which is every functional of L_k alone. "
+                     "Stage 2 subtracts it from the stored phases under the "
+                     "same line search and step scale that move z.")
       .def_readwrite("baseline", &ObjectiveDirection::baseline,
                      "The exact objective at the current point, when the "
                      "direction's assembly already produced it.")

@@ -323,6 +323,54 @@ class HodgeLaplacian {
         EntropyPhaseMode phaseMode =
             EntropyPhaseMode::IncludeComplexPhase) const;
 
+    /// Von Neumann entropy of the normalized positive operator built from the
+    /// **\f$\mathbb{C}^{*}\f$ connection** Laplacian, by the same formula
+    /// `spectralEntropy` uses on \f$ L_k \f$:
+    /// \f[ A=(L^{\mathbb{C}^{*}})^\dagger L^{\mathbb{C}^{*}},\qquad
+    ///     \rho=A/\operatorname{Tr}A,\qquad S=-\operatorname{Tr}(\rho\log\rho). \f]
+    ///
+    /// This is the entropy of the operator the connection ACTS on. \f$ L_k \f$
+    /// is blind to \f$\varphi\f$ at every degree, so no Hodge entropy can see
+    /// the connection at all; this one can, because a nonzero flux lifts the
+    /// zero mode \f$ \ker L_0=b_0 \f$ can never register.
+    ///
+    /// Read from the SPECTRUM alone. A gauge transformation acts on
+    /// \f$ L^{\mathbb{C}^{*}} \f$ by the similarity
+    /// \f$ \operatorname{diag}(g)^{-1}(\cdot)\operatorname{diag}(g) \f$, so the
+    /// spectrum — and therefore this value — is invariant for every
+    /// \f$ g:K_0\to\mathbb{C}^{*} \f$. Gauge invariance is a property of the
+    /// construction here, not a correction applied afterwards.
+    [[nodiscard]] double connectionSpectralEntropy() const;
+
+    /// Gradient of `connectionSpectralEntropy` with respect to the COMPLEX
+    /// connection phases \f$ \varphi_e \f$, in `EdgeList` order, in the same
+    /// convention `spectralEntropyGradient` uses for \f$ z \f$:
+    /// \f$ h_e=\partial S/\partial\operatorname{Re}\varphi_e
+    ///        -i\,\partial S/\partial\operatorname{Im}\varphi_e \f$, so
+    /// \f$ \overline{h} \f$ is the steepest-ascent displacement in the complex
+    /// \f$ \varphi \f$ plane and the directional derivative along a displacement
+    /// \f$ v \f$ is \f$ \sum_e\operatorname{Re}(h_e v_e) \f$.
+    ///
+    /// \f$ L^{\mathbb{C}^{*}} \f$ is holomorphic in \f$ \varphi \f$ — the stored
+    /// orientation carries \f$ e^{i\varphi} \f$ and the reverse its INVERSE
+    /// \f$ e^{-i\varphi} \f$, never its conjugate — so
+    /// \f$ \partial S/\partial\overline{\varphi} \f$ vanishes and this is exact
+    /// rather than a real-parameter approximation. Each edge touches exactly two
+    /// entries of the operator, so the assembly is \f$ O(1) \f$ per edge given
+    /// the shared left factor.
+    ///
+    /// BOTH components are differentiated. Only the compact \f$ U(1) \f$ part
+    /// has winding and quantizes, but the non-compact \f$ \mathbb{R}^{+} \f$ part
+    /// rescales the hopping and is a real degree of freedom; excluding it would
+    /// IMPOSE an irrelevance that must instead be measured.
+    [[nodiscard]] std::vector<std::complex<double>>
+    connectionSpectralEntropyPhaseGradient() const;
+
+    /// \f$ \sum_e|\partial S/\partial\varphi_e|^2 \f$ — the connection-entropy
+    /// stationarity residual, the \f$ \varphi \f$ analogue of
+    /// `spectralEntropyGradientNorm`.
+    [[nodiscard]] double connectionSpectralEntropyPhaseGradientNorm() const;
+
     /// Whether \f$ \| L^{U(1)} - (L^{U(1)})^\dagger \| \le \text{tol} \f$
     /// (Frobenius norm) for the **U(1) connection** Laplacian. True by
     /// construction. It says nothing about \f$ L_0 \f$, which is complex

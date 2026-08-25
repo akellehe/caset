@@ -937,6 +937,68 @@ double HodgeLaplacian::spectralEntropy(int k,
   return spectralEntropyData(laplacian(k, /*metric=*/true), phaseMode).entropy;
 }
 
+double HodgeLaplacian::connectionSpectralEntropy() const {
+  // The SAME functional the Hodge term uses, on the operator the connection
+  // actually acts on. IncludeComplexPhase, always: the phase-blind ablation is
+  // an entrywise |.| that would erase exactly the dependence being measured.
+  return spectralEntropyData(connectionLaplacian(),
+                             EntropyPhaseMode::IncludeComplexPhase)
+      .entropy;
+}
+
+std::vector<std::complex<double>>
+HodgeLaplacian::connectionSpectralEntropyPhaseGradient() const {
+  const auto edges = st_ && st_->getEdgeList()
+                         ? st_->getEdgeList()->toVector()
+                         : std::vector<EdgePtr>{};
+  std::vector<cd> gradient(edges.size(), cd{0.0, 0.0});
+  if (!st_ || order_ == 0) return gradient;
+
+  const SpectralEntropyData data = spectralEntropyData(
+      connectionLaplacian(), EntropyPhaseMode::IncludeComplexPhase);
+  if (data.laplacian.size() == 0 || data.zeroOperator) return gradient;
+
+  // dS = 2 Re Tr(C L^dagger dL) with C = entropyDerivative, exactly as the
+  // Hodge gradient uses; in the h = S_x - i S_y convention that is
+  // h = 2 Tr(C L^dagger dL/dphi). Share the left factor across every edge.
+  const Eigen::MatrixXcd left = data.entropyDerivative * data.laplacian.adjoint();
+  const cd imaginaryUnit{0.0, 1.0};
+
+  for (std::size_t edgeIndex = 0; edgeIndex < edges.size(); ++edgeIndex) {
+    const auto *edge = edges[edgeIndex];
+    if (edge == nullptr || edge->getSource() == nullptr ||
+        edge->getTarget() == nullptr)
+      continue;
+    const auto is = idToIndex_.find(edge->getSource()->getId());
+    const auto it = idToIndex_.find(edge->getTarget()->getId());
+    if (is == idToIndex_.end() || it == idToIndex_.end()) continue;
+    const auto i = static_cast<Eigen::Index>(is->second);
+    const auto j = static_cast<Eigen::Index>(it->second);
+    if (i == j) continue;  // no self-loops in a simplicial complex
+
+    // L = D - A. The diagonal is the MAGNITUDE sum and carries no phase, so
+    // only the two off-diagonal entries move:
+    //   L_ij = -w e^{i phi}      => dL_ij/dphi =  i L_ij
+    //   L_ji = -conj(w) e^{-i phi} => dL_ji/dphi = -i L_ji
+    // Both are exact and holomorphic: no conj(phi) appears anywhere, which is
+    // what the inverse-link convention buys. Tr(C L^dagger dL) then collapses
+    // to two terms.
+    const cd lowerLeft = data.laplacian(j, i);
+    const cd upperRight = data.laplacian(i, j);
+    const cd trace = left(j, i) * (imaginaryUnit * upperRight) +
+                     left(i, j) * (-imaginaryUnit * lowerLeft);
+    gradient[edgeIndex] = 2.0 * trace;
+  }
+  return gradient;
+}
+
+double HodgeLaplacian::connectionSpectralEntropyPhaseGradientNorm() const {
+  double total = 0.0;
+  for (const cd &component : connectionSpectralEntropyPhaseGradient())
+    total += std::norm(component);
+  return total;
+}
+
 std::vector<std::complex<double>> HodgeLaplacian::spectralEntropyGradient(
     int k, EntropyPhaseMode phaseMode) const {
   requireNonNegativeDegree(k);

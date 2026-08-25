@@ -808,6 +808,7 @@ ObjectiveContext MultiCobordism::objectiveContextFor(
   context.hodgeDegreeWeights = hodgeDegreeWeights_;
   context.reggeWeight = reggeWeight_;
   context.hodgeEntropyWeight = hodgeEntropyWeight_;
+  context.connectionEntropyWeight = connectionEntropyWeight_;
   context.gamma = gamma_;
   context.carriedStateEnergyWeight = carriedStateEnergyWeight_;
   context.einsteinHilbert = einsteinHilbert_;
@@ -827,6 +828,14 @@ void MultiCobordism::setHodgeEntropyWeight(double weight) {
     throw std::invalid_argument(
         "MultiCobordism: Hodge entropy weight must be finite and non-negative");
   hodgeEntropyWeight_ = weight;
+}
+
+void MultiCobordism::setConnectionEntropyWeight(double weight) {
+  if (!std::isfinite(weight) || weight < 0.0)
+    throw std::invalid_argument(
+        "MultiCobordism: connection entropy weight must be finite and "
+        "non-negative");
+  connectionEntropyWeight_ = weight;
 }
 
 void MultiCobordism::setReggeWeight(double weight) {
@@ -1677,14 +1686,26 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
     lengths(edgeIndex) = edges[edgeIndex]->getLength();
     squaredLengths(edgeIndex) = lengths(edgeIndex) * lengths(edgeIndex);
   }
+  // The connection phase is the node's OTHER edge field, and it relaxes on its
+  // own coordinate: phi is not derived from l, so there is no square-root
+  // branch to track and the trial is written directly.
+  Eigen::VectorXcd phases(edgeCount);
+  for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+    phases(edgeIndex) = edges[edgeIndex]->getPhase();
   const auto restoreEdgeLengths = [&]() {
-    for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+    for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
       edges[edgeIndex]->setLength(lengths(edgeIndex));
+      edges[edgeIndex]->setPhase(phases(edgeIndex));
+    }
   };
   const auto setSquaredLengths = [&](const Eigen::VectorXcd &trialSquared) {
     for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
       edges[edgeIndex]->setLength(continuousSquareRoot(
           trialSquared(edgeIndex), lengths(edgeIndex)));
+  };
+  const auto setPhases = [&](const Eigen::VectorXcd &trialPhases) {
+    for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+      edges[edgeIndex]->setPhase(trialPhases(edgeIndex));
   };
   auto fullObjective = [&]() { return objectiveFor(spacetime_); };
 
@@ -1722,6 +1743,11 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
   };
 
   Eigen::VectorXcd descentDirection = Eigen::VectorXcd::Zero(edgeCount);
+  // The phase's own descent direction, empty unless the injected objective
+  // declares a phi dependence. Kept separate from `descentDirection` because
+  // the two are displacements in DIFFERENT coordinates — z and phi are distinct
+  // fields, and mixing them is the error the two-field split exists to prevent.
+  Eigen::VectorXcd phaseDescentDirection = Eigen::VectorXcd::Zero(edgeCount);
   // Exact acceptance baseline at the CURRENT state rather than
   // objectiveTrace.back(). Joint mode assembles it from the exact gradients
   // already needed for its direction; the other modes recompute their scalar.
@@ -1749,6 +1775,9 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
           carriedStateEnergyGradient(spacetime_);
     const auto objectiveDirection = objectiveSpec_->direction(directionContext);
     descentDirection += objectiveDirection.ascent;
+    if (objectiveDirection.phaseAscent.size() ==
+        static_cast<Eigen::Index>(edgeCount))
+      phaseDescentDirection += objectiveDirection.phaseAscent;
     if (objectiveDirection.baselineComputed)
       currentObjective = objectiveDirection.baseline;
     const double numericalResidualWeight =
@@ -1799,14 +1828,20 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
     if (!pinnedRegions_.empty())
       for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
         const auto key = edges[edgeIndex]->getKey();
-        if (edgeIsPinned(key.first, key.second))
+        if (edgeIsPinned(key.first, key.second)) {
           descentDirection(edgeIndex) = complexd{0.0, 0.0};
+          // A pinned edge is held in BOTH its fields. "Do not change these"
+          // that froze the length while the phase drifted would be a pin in
+          // name only.
+          phaseDescentDirection(edgeIndex) = complexd{0.0, 0.0};
+        }
       }
     // No coordinate can move, so every backtracking trial would evaluate the
     // unchanged global objective and fail the strict-improvement gate. This is
     // common at exact stationary points, when every selected term is disabled,
     // and when every edge that could move is pinned.
-    if (descentDirection.squaredNorm() == 0.0) {
+    if (descentDirection.squaredNorm() == 0.0 &&
+        phaseDescentDirection.squaredNorm() == 0.0) {
       lastStage2Stationary_ = true;
       return false;
     }
@@ -1825,6 +1860,12 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
       // l on the continuous square-root branch. No component of z is projected.
       setSquaredLengths(squaredLengths -
                         trialStepScale * descentDirection);
+      // ONE line search over BOTH fields: the same step scale moves z and phi
+      // together and the same strict-improvement gate accepts or rejects the
+      // pair. Two searches would let one field buy an improvement the other
+      // paid for, and the accepted state would not be a descent of the whole
+      // objective.
+      setPhases(phases - trialStepScale * phaseDescentDirection);
       const double trialObjective = fullObjective();
       CLOG(INFO_LEVEL, "-----------------------------------");
       CLOG(INFO_LEVEL, "Trial objective: ", trialObjective);

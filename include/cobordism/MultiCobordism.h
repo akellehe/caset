@@ -438,6 +438,16 @@ class MultiCobordism {
     return hodgeEntropyWeight_;
   }
 
+  /// Declare the weight on the connection-entropy stationarity term — the ONLY
+  /// term with a gradient in the connection phase. Zero by default, so a node
+  /// acquires phase dynamics only when a caller asks for it; every \f$ L_k \f$
+  /// is blind to \f$ \varphi \f$, so with this at zero the phase is a declared
+  /// field that no geometric update can move.
+  void setConnectionEntropyWeight(double weight);
+  [[nodiscard]] double connectionEntropyWeight() const noexcept {
+    return connectionEntropyWeight_;
+  }
+
   /// Declare the Laplacian degrees the Hodge entropy term is summed over, and
   /// optionally a weight per degree.
   ///
@@ -1278,6 +1288,7 @@ class MultiCobordism {
   /// Per-degree weights, empty for uniform.
   std::vector<double> hodgeDegreeWeights_;
   double hodgeEntropyWeight_{1.0};
+  double connectionEntropyWeight_{0.0};
   double reggeWeight_{1.0};
   /// #737: latched by the first committed combinatorial move. Block regions
   /// grow only BEFORE the bulk is connected, so once a move has linked the
