@@ -341,11 +341,22 @@ class MultiCobordism {
   /// The injected objective's scalar, using the configured Regge and
   /// Hodge-entropy weights.
   [[nodiscard]] double objective() const;
-  /// Sum of the normalized positive-operator Hodge entropies over the configured
-  /// register degrees. This is an observation; the joint objective minimizes its
+  /// Sum of the normalized positive-operator Hodge entropies over the declared
+  /// HODGE degrees — the degrees the entropy is taken at, not the register
+  /// degrees. This is an observation; the joint objective minimizes its
   /// gradient norm, not the entropy value itself.
+  ///
+  /// Reported UNWEIGHTED. The per-degree weights balance stationarity
+  /// residuals against each other in the objective; applying them to entropy
+  /// values would report a number that is not any degree's entropy.
   [[nodiscard]] double hodgeEntropy() const;
-  /// Sum_k ||grad_z S_Hodge,k||^2, the entropy half of JointStationarity.
+  /// \f$\sum_k w_k\|\nabla_zS_{{\rm Hodge},k}\|^2\f$ over the declared Hodge
+  /// degrees and their weights: the entropy half of the joint objective.
+  ///
+  /// Reads the same degrees and weights the objective does, so an observation
+  /// cannot disagree silently with the quantity being descended, and
+  /// accumulates in the term's order, so `hodgeEntropyWeight() * this`
+  /// reproduces `ObjectiveTerms::hodgeStationarity` exactly.
   [[nodiscard]] double hodgeEntropyStationarity() const;
   /// Inject the functional this node descends. The engine calls through it and
   /// knows nothing about which objective it holds; an objective reads only

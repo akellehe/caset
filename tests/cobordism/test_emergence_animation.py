@@ -226,6 +226,22 @@ class AbsenceTest(unittest.TestCase):
         objective = document["objective"]
         for key, value in objective.items():
             with self.subTest(term=key):
+                if key == "hodge_by_degree":
+                    # The per-degree breakdown (#859) is a list of records
+                    # rather than a scalar term. The same rule reaches every
+                    # numeric leaf inside it: an unmeasured share serializes as
+                    # null, never as a zero that reads like a measurement.
+                    self.assertIsInstance(value, list)
+                    for share in value:
+                        self.assertIsInstance(share["degree"], int)
+                        for field in ("weight", "gradient_norm_squared",
+                                      "contribution"):
+                            self.assertTrue(
+                                share[field] is None
+                                or isinstance(share[field], float),
+                                "%s.%s is neither null nor a float"
+                                % (key, field))
+                    continue
                 self.assertTrue(value is None or isinstance(value, float))
 
 

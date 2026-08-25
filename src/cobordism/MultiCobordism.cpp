@@ -628,18 +628,34 @@ double MultiCobordism::singularValueHalfSumRatio(
 }
 
 double MultiCobordism::hodgeEntropy() const {
+  // Over the HODGE degrees, which are what the entropy is taken at. Reported
+  // unweighted: the per-degree weights balance the stationarity residuals
+  // against each other in the objective, and applying them to entropy VALUES
+  // would report a number that is not any degree's entropy.
   double entropy = 0.0;
-  for (int degree : registerDegrees_)
+  for (int degree : hodgeDegrees_)
     entropy += HodgeLaplacian(spacetime_).spectralEntropy(
         degree, hodgeEntropyPhaseMode_);
   return entropy;
 }
 
 double MultiCobordism::hodgeEntropyStationarity() const {
+  // The entropy half of the objective, so it must read the same degrees and
+  // the same weights the objective does. Reading the register degrees here
+  // while the term reads the Hodge degrees would let an observation disagree
+  // silently with the quantity being descended.
+  //
+  // Accumulated in the term's order — weighted norms summed, the entropy
+  // weight applied by the caller — so `hodgeEntropyWeight() * this` reproduces
+  // `ObjectiveTerms::hodgeStationarity` exactly.
   double residual = 0.0;
-  for (int degree : registerDegrees_)
-    residual += HodgeLaplacian(spacetime_).spectralEntropyGradientNorm(
-        degree, hodgeEntropyPhaseMode_);
+  for (std::size_t index = 0; index < hodgeDegrees_.size(); ++index) {
+    const double weight = index < hodgeDegreeWeights_.size()
+                              ? hodgeDegreeWeights_[index]
+                              : 1.0;
+    residual += weight * HodgeLaplacian(spacetime_).spectralEntropyGradientNorm(
+                             hodgeDegrees_[index], hodgeEntropyPhaseMode_);
+  }
   return residual;
 }
 

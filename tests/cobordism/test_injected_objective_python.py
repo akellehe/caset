@@ -100,6 +100,13 @@ class ExactnessTest(unittest.TestCase):
         st = _complex_sphere4()
         node = _node(st)
         node.set_objective(cob.JointStationarityObjective())
+        # The Hodge degrees are DECLARED (#859) and no longer follow the
+        # register degrees, so the degree this reference is built at is stated
+        # here rather than inherited from the node's construction. Declaring
+        # the degree the term was scored at before reproduces it to the bit,
+        # which is the guard that decoupling moved the CONFIGURATION and not
+        # the term.
+        node.set_hodge_degrees([3])
         terms = node.objective_terms()
         reference = (node.hodge_entropy_weight *
                      cob.HodgeLaplacian(st).spectralEntropyGradientNorm(
@@ -190,10 +197,15 @@ class FirewallTest(unittest.TestCase):
         # nothing reachable from an edge index is a component, fiber,
         # transport, amplitude, colour, charge, flavour, exchange, spin
         # certificate or verdict.
+        # `hodge_degrees` and `hodge_degree_weights` (#859) declare which
+        # Laplacian degrees the entropy term is summed over and how each is
+        # weighted. Audited on the same terms: both are declared configuration
+        # -- a list of integers and a list of reals chosen by the caller -- and
+        # neither is, or leads to, an analysis product.
         self.assertEqual(
             cob.ObjectiveContext.input_names(),
             ["spacetime", "region", "scored_edges", "region_targets",
-             "register_degrees",
+             "register_degrees", "hodge_degrees", "hodge_degree_weights",
              "regge_weight", "hodge_entropy_weight", "gamma",
              "carried_state_energy_weight", "einstein_hilbert",
              "hodge_entropy_phase_mode", "register_residual",
