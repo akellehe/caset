@@ -452,17 +452,22 @@ ChainComplex omits.)doc")
            "Entropy-stationarity residual sum_e |dS/dz_e|^2.")
       .def("connectionSpectralEntropy",
            &HodgeLaplacian::connectionSpectralEntropy,
-           "Von Neumann entropy of the normalized C* CONNECTION operator, by "
-           "the same formula spectralEntropy uses on L_k. Read from the "
-           "spectrum alone, so it is gauge-invariant by construction: a gauge "
-           "transformation acts on that operator by a similarity. This is the "
+           "-sum p log p over the normalized EIGENVALUE MODULI of the C* "
+           "CONNECTION operator, p_i = |lambda_i| / sum_j |lambda_j|. Read from "
+           "the EIGENvalues, NOT from the A = M^dag M form spectralEntropy uses "
+           "on L_k: that one is a functional of the SINGULAR values, which only "
+           "UNITARY similarity preserves, and the C* gauge action is "
+           "non-unitary whenever g has a modulus. Eigenvalues survive the full "
+           "similarity, so gauge invariance here is structural. This is the "
            "entropy that can SEE the connection; every L_k is blind to phi.")
       .def("connectionSpectralEntropyPhaseGradient",
            &HodgeLaplacian::connectionSpectralEntropyPhaseGradient,
            "dS/dphi_e of connectionSpectralEntropy, EdgeList order, in the "
-           "h = S_x - i S_y convention. Exact and holomorphic: the reverse "
-           "orientation carries the INVERSE link, never the conjugate, so "
-           "dS/d(conj phi) vanishes. Both components are differentiated.")
+           "h = S_x - i S_y convention. Each eigenvalue is holomorphic in phi "
+           "-- the reverse orientation carries the INVERSE link, never the "
+           "conjugate -- and the modulus supplies the only non-holomorphic "
+           "step, in closed form, so this is exact rather than a real-parameter "
+           "approximation. Both components are differentiated.")
       .def("connectionSpectralEntropyPhaseGradientNorm",
            &HodgeLaplacian::connectionSpectralEntropyPhaseGradientNorm,
            "Connection-entropy stationarity residual sum_e |dS/dphi_e|^2.")

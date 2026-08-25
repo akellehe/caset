@@ -323,23 +323,45 @@ class HodgeLaplacian {
         EntropyPhaseMode phaseMode =
             EntropyPhaseMode::IncludeComplexPhase) const;
 
-    /// Von Neumann entropy of the normalized positive operator built from the
-    /// **\f$\mathbb{C}^{*}\f$ connection** Laplacian, by the same formula
-    /// `spectralEntropy` uses on \f$ L_k \f$:
-    /// \f[ A=(L^{\mathbb{C}^{*}})^\dagger L^{\mathbb{C}^{*}},\qquad
-    ///     \rho=A/\operatorname{Tr}A,\qquad S=-\operatorname{Tr}(\rho\log\rho). \f]
+    /// Entropy of the normalized EIGENVALUE MODULI of the
+    /// **\f$\mathbb{C}^{*}\f$ connection** Laplacian:
+    /// \f[ p_i=\frac{|\lambda_i|}{\sum_j|\lambda_j|},\qquad
+    ///     S=-\sum_i p_i\log p_i. \f]
     ///
     /// This is the entropy of the operator the connection ACTS on. \f$ L_k \f$
     /// is blind to \f$\varphi\f$ at every degree, so no Hodge entropy can see
     /// the connection at all; this one can, because a nonzero flux lifts the
     /// zero mode \f$ \ker L_0=b_0 \f$ can never register.
     ///
-    /// Read from the SPECTRUM alone. A gauge transformation acts on
-    /// \f$ L^{\mathbb{C}^{*}} \f$ by the similarity
-    /// \f$ \operatorname{diag}(g)^{-1}(\cdot)\operatorname{diag}(g) \f$, so the
-    /// spectrum — and therefore this value — is invariant for every
-    /// \f$ g:K_0\to\mathbb{C}^{*} \f$. Gauge invariance is a property of the
-    /// construction here, not a correction applied afterwards.
+    /// ### Why this is NOT the \f$ M^\dagger M \f$ form `spectralEntropy` uses
+    ///
+    /// Do not "harmonize" this back to
+    /// \f$ A=M^\dagger M,\ \rho=A/\operatorname{Tr}A \f$ for one vocabulary with
+    /// the Hodge term. That form is a functional of the SINGULAR values of
+    /// \f$ M \f$, and singular values are preserved by UNITARY similarity only.
+    ///
+    /// A gauge transformation acts here by
+    /// \f$ \operatorname{diag}(g)^{-1}(\cdot)\operatorname{diag}(g) \f$ for
+    /// \f$ g:K_0\to\mathbb{C}^{*} \f$. Since
+    /// \f$ \mathbb{C}^{*}\cong U(1)\times\mathbb{R}^{+} \f$, that similarity is
+    /// unitary exactly when \f$ g \f$ is a pure phase. Under complex
+    /// \f$ \varphi \f$ this operator is explicitly NON-NORMAL, which is where
+    /// eigenvalues and singular values part company: the EIGENvalues are
+    /// invariant under the full \f$ \mathbb{C}^{*} \f$ similarity, the singular
+    /// values are not. Measured on a fluxed \f$ S^4 \f$ host, the
+    /// \f$ M^\dagger M \f$ form drifts \f$ 1.6\times10^{-15} \f$ under real
+    /// \f$ \chi \f$ but \f$ 4.9\times10^{-3} \f$ under complex \f$ \chi \f$,
+    /// while the form used here drifts \f$ 0 \f$ under both. A term that is not
+    /// \f$ \mathbb{C}^{*} \f$-invariant is the wrong functional for a
+    /// \f$ \mathbb{C}^{*} \f$ connection, so gauge invariance is STRUCTURAL
+    /// here rather than something a test has to keep re-confirming.
+    ///
+    /// It remains the same functional form — \f$ -\sum p\log p \f$ over a
+    /// normalized non-negative spectrum. For Hermitian \f$ L \f$ it is the von
+    /// Neumann entropy of \f$ |L|/\operatorname{Tr}|L| \f$, which is the
+    /// \f$ M^\dagger M \f$ form with \f$ \sigma_i \f$ in place of
+    /// \f$ \sigma_i^2 \f$: the same construction on a different positive
+    /// operator, not an unrelated one.
     [[nodiscard]] double connectionSpectralEntropy() const;
 
     /// Gradient of `connectionSpectralEntropy` with respect to the COMPLEX
@@ -353,11 +375,18 @@ class HodgeLaplacian {
     ///
     /// \f$ L^{\mathbb{C}^{*}} \f$ is holomorphic in \f$ \varphi \f$ — the stored
     /// orientation carries \f$ e^{i\varphi} \f$ and the reverse its INVERSE
-    /// \f$ e^{-i\varphi} \f$, never its conjugate — so
-    /// \f$ \partial S/\partial\overline{\varphi} \f$ vanishes and this is exact
-    /// rather than a real-parameter approximation. Each edge touches exactly two
+    /// \f$ e^{-i\varphi} \f$, never its conjugate — so each simple eigenvalue is
+    /// holomorphic too, with the standard non-Hermitian perturbation formula
+    /// \f$ d\lambda_k=u_k^\dagger(dL)v_k/(u_k^\dagger v_k) \f$ for left/right
+    /// eigenvectors \f$ u_k,v_k \f$. \f$ S \f$ itself is NOT holomorphic — the
+    /// modulus \f$ |\lambda| \f$ is not — but the non-holomorphy enters only
+    /// through that modulus, in closed form, so this is still exact rather than
+    /// a real-parameter approximation. With
+    /// \f$ \beta_k=\frac{\partial S}{\partial|\lambda_k|}
+    ///            \frac{\overline{\lambda_k}}{|\lambda_k|} \f$ and
+    /// \f$ P=V\operatorname{diag}(\beta)V^{-1} \f$, each edge touches exactly two
     /// entries of the operator, so the assembly is \f$ O(1) \f$ per edge given
-    /// the shared left factor.
+    /// that one shared \f$ P \f$.
     ///
     /// BOTH components are differentiated. Only the compact \f$ U(1) \f$ part
     /// has winding and quantizes, but the non-compact \f$ \mathbb{R}^{+} \f$ part

@@ -10,12 +10,22 @@ nonzero flux lifts and which `ker L_0 = b_0` can never register.
 
 Two properties carry the design and each is asserted rather than argued.
 
-The term is read from the SPECTRUM alone, and a gauge transformation acts on
-that operator by a similarity, so the spectrum is fixed and the functional is
-constant along gauge orbits. Gauge invariance is therefore a property of the
-construction, not a correction — and the exact consequence, which stands in for
-an Euler identity here, is that the `phi` gradient has NO component along any
-gauge direction, for every complex vertex function.
+The term is read from the EIGENVALUES alone. A gauge transformation acts on the
+operator by the similarity `diag(g)^-1 (.) diag(g)`, which fixes eigenvalues for
+every `g: K_0 -> C*`, so the functional is constant along gauge orbits. Gauge
+invariance is therefore a property of the construction, not a correction — and
+the exact consequence, which stands in for an Euler identity here, is that the
+`phi` gradient has NO component along any gauge direction, for every complex
+vertex function.
+
+The word EIGENVALUES is load-bearing and these tests are what hold it. An
+entropy built the way the Hodge term builds one, on `A = M^dag M`, is a
+functional of the SINGULAR values instead, and those survive only UNITARY
+similarity. `C* = U(1) x R^+`, so that form is gauge-invariant for real `chi`
+and measurably not for complex `chi` — this operator is non-normal under complex
+phase, which is where the two spectra part company. `_chi` below is complex on
+purpose: with the `M^dag M` form the entropy drifts 4.9e-3 and the identity
+fails at 1.2e-2, against the 1e-16 and 1e-15 asserted here.
 
 And `laplacian(k)` must stay blind. Making the geometric operator see `phi`
 would be the error the two-field split exists to prevent, so its bitwise
@@ -141,15 +151,18 @@ class ConnectionEntropySeesThePhaseTest(unittest.TestCase):
 
 
 class GaugeInvarianceIsStructuralTest(unittest.TestCase):
-    """Built from the spectrum, so gauge invariance is not a correction."""
+    """Built from the EIGENVALUES, so gauge invariance is not a correction."""
 
     def test_a_gauge_transformation_leaves_the_entropy_unchanged(self):
+        # Machine precision, not "close": the M^dag M form this replaced passes
+        # a loose bar for real `chi` and fails at 4.9e-3 for complex `chi`, so a
+        # slack tolerance here would stop distinguishing the two.
         spacetime = _host()
         _set_flux(spacetime)
         before = cob.HodgeLaplacian(spacetime).connectionSpectralEntropy()
         _gauge(spacetime, _chi(spacetime))
         after = cob.HodgeLaplacian(spacetime).connectionSpectralEntropy()
-        self.assertAlmostEqual(before, after, places=12)
+        self.assertAlmostEqual(before, after, delta=1e-13)
 
     def test_the_phase_gradient_is_orthogonal_to_every_gauge_direction(self):
         """The exact identity this term is certified by.
@@ -176,7 +189,7 @@ class GaugeInvarianceIsStructuralTest(unittest.TestCase):
                                     chi[int(edge.getSource().getId())])
                     directional += (gradient[index] * displacement).real
                 self.assertLess(
-                    abs(directional) / scale, 1e-9,
+                    abs(directional) / scale, 1e-12,
                     "the phi gradient must have no gauge component")
 
     def test_a_flat_connection_relaxes_only_by_gauge(self):
