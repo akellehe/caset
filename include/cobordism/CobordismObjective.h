@@ -39,6 +39,11 @@ struct ObjectiveTerms {
   double reggeStationarity = 0.0;
   /// \f$\eta_H\sum_k\|\nabla_zS_{{\rm Hodge},k}\|^2\f$ — joint stationarity.
   double hodgeStationarity = 0.0;
+  /// \f$\eta_C\|\nabla_\varphi S_{\mathbb{C}^{*}}\|^2\f$ — stationarity of the
+  /// connection operator's entropy in the CONNECTION PHASE. The only term with
+  /// a \f$\varphi\f$ gradient: every \f$ L_k \f$ is blind to \f$\varphi\f$, so
+  /// without this one \f$\varphi\f$ is a declared field that no update moves.
+  double connectionStationarity = 0.0;
   /// \f$\gamma r_U\f$ — the target-conditioned register residual.
   double registerResidual = 0.0;
   /// \f$r_U+\beta|S_{\rm Regge}(W^*)|\f$'s action magnitude.
@@ -150,6 +155,10 @@ struct ObjectiveContext {
   double reggeWeight = 1.0;
   /// \f$\eta_H\f$, the Hodge-entropy stationarity weight.
   double hodgeEntropyWeight = 0.0;
+  /// \f$\eta_C\f$, the connection-entropy stationarity weight — the term that
+  /// makes \f$\varphi\f$ dynamical. Zero by default, so an objective acquires a
+  /// \f$\varphi\f$ gradient only when a caller declares one.
+  double connectionEntropyWeight = 0.0;
   /// \f$\gamma\f$, the register-residual weight.
   double gamma = 1.0;
   /// \f$\beta_E\f$, the carried-state energy weight. Exactly zero outside the
@@ -214,6 +223,13 @@ struct HodgeDegreeContribution {
 struct ObjectiveDirection {
   /// The ascent displacement. Stage 2 subtracts a scaled multiple of it.
   Eigen::VectorXcd ascent;
+  /// The ascent displacement in the CONNECTION PHASE \f$\varphi\f$, in the same
+  /// edge order. Empty when the objective has no \f$\varphi\f$ dependence,
+  /// which is the case for every functional of \f$ L_k \f$ alone. Stage 2
+  /// subtracts a scaled multiple of it from the stored phases, by the same line
+  /// search and the same step scale that moves \f$ z \f$ — one search over both
+  /// fields, not two competing ones.
+  Eigen::VectorXcd phaseAscent;
   /// The exact objective at the current point, when the direction's assembly
   /// already produced it.
   double baseline = 0.0;
@@ -336,6 +352,8 @@ class ObjectiveTermName {
  public:
   static constexpr const char *kReggeStationarity = "regge_stationarity";
   static constexpr const char *kHodgeStationarity = "hodge_stationarity";
+  static constexpr const char *kConnectionStationarity =
+      "connection_stationarity";
   static constexpr const char *kRegisterResidual = "register_residual";
   static constexpr const char *kActionMagnitude = "action_magnitude";
   static constexpr const char *kCarriedStateEnergy = "carried_state_energy";

@@ -202,11 +202,17 @@ class FirewallTest(unittest.TestCase):
         # weighted. Audited on the same terms: both are declared configuration
         # -- a list of integers and a list of reals chosen by the caller -- and
         # neither is, or leads to, an analysis product.
+        # `connection_entropy_weight` (#853) declares the weight on the
+        # connection-entropy stationarity term, the one term with a gradient in
+        # the connection phase. Audited on the same terms: it is a configured
+        # real chosen by the caller, exactly like the Regge and Hodge weights
+        # beside it, and nothing reachable from it is an analysis product.
         self.assertEqual(
             cob.ObjectiveContext.input_names(),
             ["spacetime", "region", "scored_edges", "region_targets",
              "register_degrees", "hodge_degrees", "hodge_degree_weights",
-             "regge_weight", "hodge_entropy_weight", "gamma",
+             "regge_weight", "hodge_entropy_weight",
+             "connection_entropy_weight", "gamma",
              "carried_state_energy_weight", "einstein_hilbert",
              "hodge_entropy_phase_mode", "register_residual",
              "carried_state_energy"])
@@ -214,7 +220,8 @@ class FirewallTest(unittest.TestCase):
     def test_the_declared_term_list_is_unchanged(self):
         self.assertEqual(
             cob.CobordismObjective.declared_term_names(),
-            ["regge_stationarity", "hodge_stationarity", "register_residual",
+            ["regge_stationarity", "hodge_stationarity",
+             "connection_stationarity", "register_residual",
              "action_magnitude", "carried_state_energy"])
         # The engine's own list is the same list, so a record stays comparable.
         self.assertEqual(cob.MultiCobordism.objective_term_names(),
@@ -312,6 +319,7 @@ class NamedConstantsTest(unittest.TestCase):
             cob.CobordismObjective.declared_term_names(),
             [cob.ObjectiveTermName.REGGE_STATIONARITY,
              cob.ObjectiveTermName.HODGE_STATIONARITY,
+             cob.ObjectiveTermName.CONNECTION_STATIONARITY,
              cob.ObjectiveTermName.REGISTER_RESIDUAL,
              cob.ObjectiveTermName.ACTION_MAGNITUDE,
              cob.ObjectiveTermName.CARRIED_STATE_ENERGY])

@@ -707,16 +707,15 @@ spectralEntropyData(Eigen::MatrixXcd laplacian,
   return data;
 }
 
-SpectralEntropyData
-spectralEntropyData(const std::vector<cd> &flat,
-                    HodgeLaplacian::EntropyPhaseMode phaseMode) {
-  if (flat.empty())
-    return {};
+// Row-major flat operator to a dense square matrix; `context` names the caller
+// so the not-square message stays specific.
+Eigen::MatrixXcd squareFromFlat(const std::vector<cd> &flat,
+                                const char *context) {
   const auto n = static_cast<std::size_t>(
       std::llround(std::sqrt(static_cast<double>(flat.size()))));
   if (n * n != flat.size())
-    throw std::runtime_error(
-        "HodgeLaplacian::spectralEntropy: Laplacian is not square");
+    throw std::runtime_error(std::string(context) +
+                             ": Laplacian is not square");
 
   Eigen::MatrixXcd laplacian(static_cast<Eigen::Index>(n),
                              static_cast<Eigen::Index>(n));
@@ -724,7 +723,101 @@ spectralEntropyData(const std::vector<cd> &flat,
     for (std::size_t column = 0; column < n; ++column)
       laplacian(static_cast<Eigen::Index>(row),
                 static_cast<Eigen::Index>(column)) = flat[row * n + column];
-  return spectralEntropyData(std::move(laplacian), phaseMode);
+  return laplacian;
+}
+
+SpectralEntropyData
+spectralEntropyData(const std::vector<cd> &flat,
+                    HodgeLaplacian::EntropyPhaseMode phaseMode) {
+  if (flat.empty())
+    return {};
+  return spectralEntropyData(
+      squareFromFlat(flat, "HodgeLaplacian::spectralEntropy"), phaseMode);
+}
+
+// Spectral data for the C* connection operator, read from its EIGENVALUES.
+//
+// The weights are |lambda|^2 rather than the eigenvalues of A = M^dag M. Do not
+// "simplify" this back to A: that one is a functional of the SINGULAR values,
+// which only UNITARY similarity preserves, while the C* gauge action
+// diag(g)^-1 (.) diag(g) is non-unitary whenever g has a modulus. Eigenvalues
+// survive the full similarity; singular values do not, and this operator is
+// explicitly non-normal under complex phase, which is exactly where the two
+// part company. Going back to A would silently break C* gauge invariance.
+//
+// The SQUARE is what makes the two agree in the Hermitian limit, where
+// |lambda_i|^2 = sigma_i^2 are exactly the eigenvalues of A. So this reduces to
+// the Hodge term's own functional there while staying C*-invariant away from
+// it. See the header for both measurements.
+struct ConnectionEntropyData {
+  Eigen::MatrixXcd laplacian{};
+  Eigen::MatrixXcd eigenvectors{};
+  Eigen::VectorXcd eigenvalues{};
+  // dS/d(|lambda_k|^2) on the supported stratum, zero off it.
+  Eigen::VectorXd squaredModulusDerivative{};
+  double entropy{0.0};
+  bool zeroOperator{true};
+};
+
+ConnectionEntropyData connectionEntropyData(Eigen::MatrixXcd laplacian) {
+  ConnectionEntropyData data;
+  data.laplacian = std::move(laplacian);
+  if (data.laplacian.size() == 0)
+    return data;
+  if (data.laplacian.rows() != data.laplacian.cols())
+    throw std::runtime_error(
+        "HodgeLaplacian::connectionSpectralEntropy: Laplacian is not square");
+  if (!data.laplacian.allFinite())
+    throw std::runtime_error(
+        "HodgeLaplacian::connectionSpectralEntropy: non-finite Laplacian");
+  const Eigen::Index n = data.laplacian.rows();
+
+  // General complex eigensolve: the operator is non-Hermitian as soon as the
+  // phase or a weight is complex, so no self-adjoint shortcut applies.
+  Eigen::ComplexEigenSolver<Eigen::MatrixXcd> solver(data.laplacian);
+  if (solver.info() != Eigen::Success)
+    throw std::runtime_error(
+        "HodgeLaplacian::connectionSpectralEntropy: eigendecomposition failed");
+  data.eigenvalues = solver.eigenvalues();
+  data.eigenvectors = solver.eigenvectors();
+  data.squaredModulusDerivative = Eigen::VectorXd::Zero(n);
+
+  const Eigen::VectorXd squaredModulus = data.eigenvalues.cwiseAbs2();
+  const double total = squaredModulus.sum();
+  if (!std::isfinite(total))
+    throw std::runtime_error(
+        "HodgeLaplacian::connectionSpectralEntropy: non-finite spectral sum");
+  if (total <= 0.0)
+    return data;
+
+  // Same support convention the M^dag M path uses: p log p -> 0 at the floor,
+  // and a kernel eigenvalue carries no probability to differentiate.
+  const double supportTolerance =
+      std::numeric_limits<double>::epsilon() *
+      static_cast<double>(std::max<Eigen::Index>(n, 1)) *
+      std::max(total, 1.0) * 64.0;
+
+  for (Eigen::Index i = 0; i < n; ++i) {
+    if (squaredModulus[i] <= supportTolerance) continue;
+    const double probability = squaredModulus[i] / total;
+    data.entropy -= probability * std::log(probability);
+  }
+  for (Eigen::Index i = 0; i < n; ++i) {
+    if (squaredModulus[i] <= supportTolerance) continue;
+    // S = -T/A + log A with T = sum_i a_i log a_i and A = sum_i a_i gives
+    // dS/da_k = T/A^2 - log(a_k)/A = -(S + log p_k)/A, for a_k = |lambda_k|^2.
+    data.squaredModulusDerivative[i] =
+        -(std::log(squaredModulus[i] / total) + data.entropy) / total;
+  }
+  data.zeroOperator = false;
+  return data;
+}
+
+ConnectionEntropyData connectionEntropyData(const std::vector<cd> &flat) {
+  if (flat.empty())
+    return {};
+  return connectionEntropyData(
+      squareFromFlat(flat, "HodgeLaplacian::connectionSpectralEntropy"));
 }
 
 }  // namespace
@@ -935,6 +1028,86 @@ double HodgeLaplacian::spectralEntropy(int k,
                                       EntropyPhaseMode phaseMode) const {
   requireNonNegativeDegree(k);
   return spectralEntropyData(laplacian(k, /*metric=*/true), phaseMode).entropy;
+}
+
+double HodgeLaplacian::connectionSpectralEntropy() const {
+  // -sum p log p over the normalized EIGENVALUE moduli. No EntropyPhaseMode
+  // here: the phase-blind ablation is an entrywise |.| that would erase exactly
+  // the dependence being measured, and the M^dag M route it belongs to is the
+  // one that is not C*-gauge-invariant. See `connectionEntropyData`.
+  return connectionEntropyData(connectionLaplacian()).entropy;
+}
+
+std::vector<std::complex<double>>
+HodgeLaplacian::connectionSpectralEntropyPhaseGradient() const {
+  const auto edges = st_ && st_->getEdgeList()
+                         ? st_->getEdgeList()->toVector()
+                         : std::vector<EdgePtr>{};
+  std::vector<cd> gradient(edges.size(), cd{0.0, 0.0});
+  if (!st_ || order_ == 0) return gradient;
+
+  const ConnectionEntropyData data =
+      connectionEntropyData(connectionLaplacian());
+  if (data.laplacian.size() == 0 || data.zeroOperator) return gradient;
+
+  // Each simple eigenvalue moves holomorphically,
+  //   dlambda_k = u_k^dag (dL) v_k / (u_k^dag v_k),
+  // and with V^-1 supplying the left eigenvectors that normalization is 1. The
+  // squared modulus supplies the only non-holomorphic step, in closed form:
+  // writing a_k = lambda_k conj(lambda_k) and u = conj(lambda_k) dlambda_k,
+  //   da_k/dx = 2 Re(u),   da_k/dy = -2 Im(u),
+  // so in the h = S_x - i S_y convention h = sum_k beta_k dlambda_k with
+  // beta_k = 2 (dS/da_k) conj(lambda_k). No division by |lambda| appears, which
+  // is one reason the square is the better-conditioned weight. Contracting the
+  // sum over k ONCE into P = V diag(beta) V^-1 leaves O(1) work per edge.
+  const Eigen::Index n = data.eigenvalues.size();
+  Eigen::VectorXcd beta = Eigen::VectorXcd::Zero(n);
+  for (Eigen::Index index = 0; index < n; ++index)
+    beta[index] = 2.0 * data.squaredModulusDerivative[index] *
+                  std::conj(data.eigenvalues[index]);
+  const Eigen::MatrixXcd contraction =
+      data.eigenvectors * beta.asDiagonal() * data.eigenvectors.inverse();
+  // The perturbation formula assumes simple eigenvalues. A defective operator
+  // has no eigenbasis to invert and `inverse()` reports that as non-finite
+  // rather than by failing; say so loudly instead of returning NaN gradients.
+  if (!contraction.allFinite())
+    throw std::runtime_error(
+        "HodgeLaplacian::connectionSpectralEntropyPhaseGradient: the "
+        "connection operator is not diagonalizable at this geometry");
+  const cd imaginaryUnit{0.0, 1.0};
+
+  for (std::size_t edgeIndex = 0; edgeIndex < edges.size(); ++edgeIndex) {
+    const auto *edge = edges[edgeIndex];
+    if (edge == nullptr || edge->getSource() == nullptr ||
+        edge->getTarget() == nullptr)
+      continue;
+    const auto is = idToIndex_.find(edge->getSource()->getId());
+    const auto it = idToIndex_.find(edge->getTarget()->getId());
+    if (is == idToIndex_.end() || it == idToIndex_.end()) continue;
+    const auto i = static_cast<Eigen::Index>(is->second);
+    const auto j = static_cast<Eigen::Index>(it->second);
+    if (i == j) continue;  // no self-loops in a simplicial complex
+
+    // L = D - A. The diagonal is the MAGNITUDE sum and carries no phase, so
+    // only the two off-diagonal entries move:
+    //   L_ij = -w e^{i phi}      => dL_ij/dphi =  i L_ij
+    //   L_ji = -conj(w) e^{-i phi} => dL_ji/dphi = -i L_ji
+    // Both are exact and holomorphic: no conj(phi) appears anywhere, which is
+    // what the inverse-link convention buys. Contracting dL/dphi against P then
+    // collapses to these two terms.
+    const cd lowerLeft = data.laplacian(j, i);
+    const cd upperRight = data.laplacian(i, j);
+    gradient[edgeIndex] = contraction(j, i) * (imaginaryUnit * upperRight) +
+                          contraction(i, j) * (-imaginaryUnit * lowerLeft);
+  }
+  return gradient;
+}
+
+double HodgeLaplacian::connectionSpectralEntropyPhaseGradientNorm() const {
+  double total = 0.0;
+  for (const cd &component : connectionSpectralEntropyPhaseGradient())
+    total += std::norm(component);
+  return total;
 }
 
 std::vector<std::complex<double>> HodgeLaplacian::spectralEntropyGradient(

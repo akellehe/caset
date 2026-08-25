@@ -323,6 +323,97 @@ class HodgeLaplacian {
         EntropyPhaseMode phaseMode =
             EntropyPhaseMode::IncludeComplexPhase) const;
 
+    /// Entropy of the normalized SQUARED EIGENVALUE MODULI of the
+    /// **\f$\mathbb{C}^{*}\f$ connection** Laplacian:
+    /// \f[ p_i=\frac{|\lambda_i|^{2}}{\sum_j|\lambda_j|^{2}},\qquad
+    ///     S=-\sum_i p_i\log p_i. \f]
+    ///
+    /// This is the entropy of the operator the connection ACTS on. \f$ L_k \f$
+    /// is blind to \f$\varphi\f$ at every degree, so no Hodge entropy can see
+    /// the connection at all; this one can, because a nonzero flux lifts the
+    /// zero mode \f$ \ker L_0=b_0 \f$ can never register.
+    ///
+    /// ### Why the weights are \f$|\lambda|^2\f$ and not \f$ M^\dagger M \f$
+    ///
+    /// Do not "simplify" this to
+    /// \f$ A=M^\dagger M,\ \rho=A/\operatorname{Tr}A \f$ on the grounds that the
+    /// two agree in the Hermitian limit. That form is a functional of the
+    /// SINGULAR values of \f$ M \f$, and singular values are preserved by
+    /// UNITARY similarity only.
+    ///
+    /// A gauge transformation acts here by
+    /// \f$ \operatorname{diag}(g)^{-1}(\cdot)\operatorname{diag}(g) \f$ for
+    /// \f$ g:K_0\to\mathbb{C}^{*} \f$. Since
+    /// \f$ \mathbb{C}^{*}\cong U(1)\times\mathbb{R}^{+} \f$, that similarity is
+    /// unitary exactly when \f$ g \f$ is a pure phase. Under complex
+    /// \f$ \varphi \f$ this operator is explicitly NON-NORMAL, which is where
+    /// eigenvalues and singular values part company: the EIGENvalues are
+    /// invariant under the full \f$ \mathbb{C}^{*} \f$ similarity, the singular
+    /// values are not. Measured on a fluxed \f$ S^4 \f$ host, the
+    /// \f$ M^\dagger M \f$ form drifts \f$ 1.6\times10^{-15} \f$ under real
+    /// \f$ \chi \f$ but \f$ 4.9\times10^{-3} \f$ under complex \f$ \chi \f$,
+    /// while the form used here stays at \f$ 4.4\times10^{-16} \f$ under both,
+    /// with the gradient identity at \f$ 3.3\times10^{-15} \f$. A term that is not
+    /// \f$ \mathbb{C}^{*} \f$-invariant is the wrong functional for a
+    /// \f$ \mathbb{C}^{*} \f$ connection, so gauge invariance is STRUCTURAL
+    /// here rather than something a test has to keep re-confirming.
+    ///
+    /// ### Why the weights are SQUARED
+    ///
+    /// The square is what makes this degrade gracefully. Eigenvalues are
+    /// invariant under the similarity at any power, so \f$|\lambda|\f$ and
+    /// \f$|\lambda|^2\f$ are equally \f$\mathbb{C}^{*}\f$-invariant — but only
+    /// the square reduces to the Hodge term's own functional. For Hermitian
+    /// \f$ L \f$ the eigenvalues of \f$ A=L^\dagger L \f$ are exactly
+    /// \f$ |\lambda_i|^2=\sigma_i^2 \f$, so this IS the von Neumann entropy of
+    /// \f$ A/\operatorname{Tr}A \f$ there — measured agreement
+    /// \f$ 4.4\times10^{-16} \f$ — and the two definitions separate only where
+    /// the operator stops being normal, by \f$ 1.8\times10^{-3} \f$ once a
+    /// complex phase makes it non-normal. The
+    /// unsquared weight \f$ p_i\propto|\lambda_i| \f$ is gauge-invariant too but
+    /// lands on the entropy of \f$ |L|/\operatorname{Tr}|L| \f$ instead, which
+    /// differs from the Hodge form by \f$ 8.7\times10^{-2} \f$ on a Hermitian
+    /// connection operator. Both properties at once is why the weight is
+    /// \f$|\lambda|^2\f$.
+    [[nodiscard]] double connectionSpectralEntropy() const;
+
+    /// Gradient of `connectionSpectralEntropy` with respect to the COMPLEX
+    /// connection phases \f$ \varphi_e \f$, in `EdgeList` order, in the same
+    /// convention `spectralEntropyGradient` uses for \f$ z \f$:
+    /// \f$ h_e=\partial S/\partial\operatorname{Re}\varphi_e
+    ///        -i\,\partial S/\partial\operatorname{Im}\varphi_e \f$, so
+    /// \f$ \overline{h} \f$ is the steepest-ascent displacement in the complex
+    /// \f$ \varphi \f$ plane and the directional derivative along a displacement
+    /// \f$ v \f$ is \f$ \sum_e\operatorname{Re}(h_e v_e) \f$.
+    ///
+    /// \f$ L^{\mathbb{C}^{*}} \f$ is holomorphic in \f$ \varphi \f$ — the stored
+    /// orientation carries \f$ e^{i\varphi} \f$ and the reverse its INVERSE
+    /// \f$ e^{-i\varphi} \f$, never its conjugate — so each simple eigenvalue is
+    /// holomorphic too, with the standard non-Hermitian perturbation formula
+    /// \f$ d\lambda_k=u_k^\dagger(dL)v_k/(u_k^\dagger v_k) \f$ for left/right
+    /// eigenvectors \f$ u_k,v_k \f$. \f$ S \f$ itself is NOT holomorphic —
+    /// \f$ |\lambda|^2=\lambda\overline{\lambda} \f$ is not — but the
+    /// non-holomorphy enters only through that squared modulus, in closed form,
+    /// so this is still exact rather than a real-parameter approximation. With
+    /// \f$ \beta_k=2\,\frac{\partial S}{\partial|\lambda_k|^{2}}
+    ///            \overline{\lambda_k} \f$ and
+    /// \f$ P=V\operatorname{diag}(\beta)V^{-1} \f$, each edge touches exactly two
+    /// entries of the operator, so the assembly is \f$ O(1) \f$ per edge given
+    /// that one shared \f$ P \f$. No division by \f$ |\lambda| \f$ appears,
+    /// which is a second reason to prefer the squared weight.
+    ///
+    /// BOTH components are differentiated. Only the compact \f$ U(1) \f$ part
+    /// has winding and quantizes, but the non-compact \f$ \mathbb{R}^{+} \f$ part
+    /// rescales the hopping and is a real degree of freedom; excluding it would
+    /// IMPOSE an irrelevance that must instead be measured.
+    [[nodiscard]] std::vector<std::complex<double>>
+    connectionSpectralEntropyPhaseGradient() const;
+
+    /// \f$ \sum_e|\partial S/\partial\varphi_e|^2 \f$ — the connection-entropy
+    /// stationarity residual, the \f$ \varphi \f$ analogue of
+    /// `spectralEntropyGradientNorm`.
+    [[nodiscard]] double connectionSpectralEntropyPhaseGradientNorm() const;
+
     /// Whether \f$ \| L^{U(1)} - (L^{U(1)})^\dagger \| \le \text{tol} \f$
     /// (Frobenius norm) for the **U(1) connection** Laplacian. True by
     /// construction. It says nothing about \f$ L_0 \f$, which is complex

@@ -36,6 +36,7 @@ std::vector<std::string> ObjectiveContext::inputNames() {
           "hodge_degree_weights",
           "regge_weight",
           "hodge_entropy_weight",
+          "connection_entropy_weight",
           "gamma",
           "carried_state_energy_weight",
           "einstein_hilbert",
@@ -50,8 +51,8 @@ double CobordismObjective::total(const ObjectiveTerms &terms) {
   // STATIC: no `this`, so the scalar the optimizer descends provably depends
   // on nothing but the declared terms.
   return terms.reggeStationarity + terms.hodgeStationarity +
-         terms.registerResidual + terms.actionMagnitude +
-         terms.carriedStateEnergy;
+         terms.connectionStationarity + terms.registerResidual +
+         terms.actionMagnitude + terms.carriedStateEnergy;
 }
 
 std::vector<std::string> CobordismObjective::declaredTermNames() {
@@ -59,6 +60,7 @@ std::vector<std::string> CobordismObjective::declaredTermNames() {
   // compares against cannot drift apart.
   return {ObjectiveTermName::kReggeStationarity,
           ObjectiveTermName::kHodgeStationarity,
+          ObjectiveTermName::kConnectionStationarity,
           ObjectiveTermName::kRegisterResidual,
           ObjectiveTermName::kActionMagnitude,
           ObjectiveTermName::kCarriedStateEnergy};
@@ -183,6 +185,32 @@ double hodgeTermFrom(const ObjectiveContext &context,
   return context.hodgeEntropyWeight * weightedNormSum;
 }
 
+/// The connection-entropy stationarity term, and the phase gradient it was
+/// assembled from. Returns the gradient through an out-parameter so a caller
+/// wanting both the scalar and the direction pays for one eigendecomposition
+/// rather than two.
+///
+/// Scope masks the GRADIENT, for the same reason the Regge term does: the
+/// restricted functional is the sum over the region, whose Wirtinger derivative
+/// is the masked gradient — not the masked derivative of the whole.
+double connectionStationarityTerm(
+    const ObjectiveContext &context, std::size_t edgeCount,
+    const std::vector<bool> &mask,
+    std::vector<std::complex<double>> *phaseGradient) {
+  if (phaseGradient) phaseGradient->assign(edgeCount, complexd{0.0, 0.0});
+  if (!context.spacetime || context.connectionEntropyWeight == 0.0) return 0.0;
+  const HodgeLaplacian hodge(context.spacetime);
+  const auto components = hodge.connectionSpectralEntropyPhaseGradient();
+  double normSquared = 0.0;
+  for (std::size_t edgeIndex = 0;
+       edgeIndex < components.size() && edgeIndex < edgeCount; ++edgeIndex) {
+    if (!edgeInScope(mask, edgeIndex)) continue;
+    normSquared += std::norm(components[edgeIndex]);
+    if (phaseGradient) (*phaseGradient)[edgeIndex] = components[edgeIndex];
+  }
+  return context.connectionEntropyWeight * normSquared;
+}
+
 /// The register-residual term, or zero when the engine did not compute it.
 double registerResidualTerm(const ObjectiveContext &context, double weight) {
   if (!std::isfinite(context.registerResidual)) return 0.0;
@@ -270,6 +298,15 @@ ObjectiveTerms JointStationarityObjective::terms(
   // of the register degrees and never read from them.
   terms.hodgeStationarity =
       hodgeTermFrom(context, hodgeContributions(context));
+
+  // The ONLY term with a phi gradient. Every L_k is blind to the connection, so
+  // without this one phi is a declared field that no update can move.
+  const auto edgeCount =
+      context.spacetime && context.spacetime->getEdgeList()
+          ? context.spacetime->getEdgeList()->toVector().size()
+          : std::size_t{0};
+  terms.connectionStationarity = connectionStationarityTerm(
+      context, edgeCount, scopeMask(context, edgeCount), nullptr);
   return terms;
 }
 
@@ -355,6 +392,24 @@ ObjectiveDirection JointStationarityObjective::direction(
   }
 
   addCarriedStateAscent(context, &result.ascent, &baseline);
+  // The connection term. Its gradient is with respect to PHI, not z, so it
+  // contributes to `phaseAscent` and never to `ascent` — the two fields move on
+  // their own coordinates and are never mixed. `grad ||h||^2 = 2 conj(H) h`
+  // needs the phi-Hessian; the term is instead descended by its own gradient
+  // scaled by the residual, which is exact for the STATIONARITY functional in
+  // the same sense the Regge term's is: both descend `||h||^2` along `conj(h)`.
+  if (scalar.connectionEntropyWeight != 0.0) {
+    std::vector<complexd> phaseGradient;
+    const double term = connectionStationarityTerm(scalar, context.edgeCount,
+                                                   mask, &phaseGradient);
+    baseline += term;
+    result.phaseAscent = Eigen::VectorXcd::Zero(context.edgeCount);
+    for (std::size_t edgeIndex = 0; edgeIndex < context.edgeCount; ++edgeIndex)
+      result.phaseAscent(edgeIndex) =
+          2.0 * scalar.connectionEntropyWeight *
+          std::conj(phaseGradient[edgeIndex]);
+  }
+
   result.baseline = baseline;
   return result;
 }
