@@ -59,6 +59,13 @@ Cap parallelism; this box may be shared::
 ``--out`` accepts ``.gif`` (pillow) or ``.mp4`` (ffmpeg); ``.png`` renders the
 final frame alone. ``--json`` additionally writes the per-frame measurements,
 so a panel can be checked against a number.
+
+``--edge-disposition`` chooses the seed's causal character: ``random`` (the
+default, magnitude one with the real/imaginary split drawn per edge),
+``spacelike`` (``l^2 = +1``), ``timelike`` (``l^2 = -1``), or ``foliated`` (a
+PRESCRIBED light cone -- timelike between hop layers of M0, spacelike within
+one). Only ``foliated`` prescribes a causal order; it is labelled as such
+wherever it is reported and is never presented as emergent.
 """
 
 import argparse
@@ -178,6 +185,15 @@ def boundary_vertices(spacetime):
     return sorted(boundary)
 
 
+def _edge_endpoints(edge):
+    """An edge's two vertex ids, through the bound accessors.
+
+    `Edge` exposes its endpoints as vertices, not as a key pair, so an id is
+    read through `getSource`/`getTarget` rather than by indexing.
+    """
+    return int(edge.getSource().getId()), int(edge.getTarget().getId())
+
+
 def _hop_layers(spacetime, sources):
     """Hop distance from `sources` over the 1-skeleton, per vertex id.
 
@@ -190,7 +206,7 @@ def _hop_layers(spacetime, sources):
     frontier = list(sources)
     adjacency = {}
     for edge in spacetime.getEdgeList().toVector():
-        a, b = int(edge.getKey()[0]), int(edge.getKey()[1])
+        a, b = _edge_endpoints(edge)
         adjacency.setdefault(a, set()).add(b)
         adjacency.setdefault(b, set()).add(a)
     depth = 0
@@ -237,7 +253,7 @@ def _seed_lengths(spacetime, disposition, seed):
     # are timelike and edges inside one spacelike -- a prescribed light cone.
     layer = _hop_layers(spacetime, boundary_vertices(spacetime))
     for edge in edges:
-        a, b = int(edge.getKey()[0]), int(edge.getKey()[1])
+        a, b = _edge_endpoints(edge)
         spans_layers = layer.get(a, 0) != layer.get(b, 0)
         edge.setLength(complex(0.0, 1.0) if spans_layers
                        else complex(1.0, 0.0))

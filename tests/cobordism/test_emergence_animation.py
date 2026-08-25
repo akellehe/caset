@@ -87,23 +87,31 @@ class DriveTest(unittest.TestCase):
         self.assertTrue(ea.boundary_vertices(host),
                         "the host must be a cobordism, not a closed complex")
 
-    def test_the_seed_weights_real_and_imaginary_parts_evenly(self):
-        """The canonical seed, and the Lorentzian content the old host lacked.
+    def test_the_default_seed_carries_lorentzian_content(self):
+        """The Lorentzian content the original host lacked.
 
-        The previous host initialized every length purely real and positive,
-        so the seed carried no imaginary part at all. Nothing CONSTRAINS the
-        geometry to stay there -- stage 2 rotates `z` freely and the engine
+        The first host initialized every length purely real and positive, so
+        the seed carried no imaginary part at all -- a programme Lorentzian in
+        every path starting from a complex that was not. Nothing CONSTRAINS
+        the geometry to stay real -- stage 2 rotates `z` freely and the engine
         has disposition moves -- but the starting point had no causal content
         to evolve from.
+
+        The default disposition is `random`, so this asserts the property that
+        survives the change of convention: the seed is neither all real nor
+        all one character. The per-setting `l^2` values are pinned by
+        `EdgeDispositionTest`.
         """
         host = ea.build_cobordism_host(SMALL, ea.DECLARED_HOST_SEED)
-        edges = host.getEdgeList().toVector()
-        self.assertTrue(edges)
-        for edge in edges:
-            length = complex(edge.getLength())
-            with self.subTest(edge=str(edge)):
-                self.assertAlmostEqual(length.real, length.imag, places=12)
-                self.assertNotAlmostEqual(length.imag, 0.0, places=12)
+        lengths = [complex(edge.getLength())
+                   for edge in host.getEdgeList().toVector()]
+        self.assertTrue(lengths)
+        self.assertTrue(any(abs(l.imag) > 1e-9 for l in lengths),
+                        "the seed is purely real: no causal content")
+        squared = [l ** 2 for l in lengths]
+        spread = max(abs(v - squared[0]) for v in squared)
+        self.assertGreater(spread, 1e-6,
+                           "every edge carries one causal character")
 
     def test_the_objective_is_joint_stationarity_in_strict_emergence(self):
         host = ea.build_cobordism_host(SMALL, ea.DECLARED_HOST_SEED)
@@ -426,7 +434,7 @@ class EdgeDispositionTest(unittest.TestCase):
         layer = ea._hop_layers(host, ea.boundary_vertices(host))
         across, within = 0, 0
         for edge in host.getEdgeList().toVector():
-            a, b = int(edge.getKey()[0]), int(edge.getKey()[1])
+            a, b = ea._edge_endpoints(edge)
             value = complex(edge.getLength()) ** 2
             if layer.get(a, 0) != layer.get(b, 0):
                 across += 1
