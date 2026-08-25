@@ -100,6 +100,13 @@ class PyCobordismObjective : public CobordismObjective {
                            "numerical_register_residual_weight",
                            numericalRegisterResidualWeight, context);
   }
+
+  [[nodiscard]] std::vector<HodgeDegreeContribution> hodgeDegreeContributions(
+      const ObjectiveContext &context) const override {
+    PYBIND11_OVERRIDE_NAME(std::vector<HodgeDegreeContribution>,
+                           CobordismObjective, "hodge_degree_contributions",
+                           hodgeDegreeContributions, context);
+  }
 };
 
 void register_cobordism(py::module_ m) {
@@ -1113,6 +1120,26 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("weight"))
       .def_property_readonly("hodge_entropy_weight",
                              &MultiCobordism::hodgeEntropyWeight)
+      .def("set_hodge_degrees", &MultiCobordism::setHodgeDegrees,
+           py::arg("degrees"), py::arg("weights") = std::vector<double>{},
+           "Declare the Laplacian degrees k the Hodge entropy term is summed "
+           "over, and optionally a weight per degree. These are configured "
+           "HERE and read from nowhere else -- the register degrees, which "
+           "answer the unrelated question of where a register is constructed, "
+           "never supply them, not even as a fallback. The default is [0]. An "
+           "empty weights list means uniform 1; a non-empty one must match the "
+           "degree list in length. Raises on an empty degree list, a negative "
+           "or repeated degree, or a mismatched weight list.")
+      .def_property_readonly("hodge_degrees", &MultiCobordism::hodgeDegrees,
+           "The declared Hodge degrees, in declaration order.")
+      .def_property_readonly("hodge_degree_weights",
+                             &MultiCobordism::hodgeDegreeWeights,
+           "The declared per-degree weights, or empty for uniform.")
+      .def_property_readonly("hodge_degree_contributions",
+                             &MultiCobordism::hodgeDegreeContributions,
+           "The Hodge stationarity term broken down by declared degree, so a "
+           "reader can tell WHICH degree the descent came from rather than "
+           "only the total. Empty for an objective with no Hodge term.")
       .def("set_regge_weight", &MultiCobordism::setReggeWeight,
            py::arg("weight"))
       .def_property_readonly("regge_weight", &MultiCobordism::reggeWeight)
@@ -1348,6 +1375,27 @@ Right -- re-read after each drive call:
                      &MultiCobordism::ObjectiveContribution::terms,
                      "That objective's terms over its own scope.");
 
+  py::class_<HodgeDegreeContribution>(m, "HodgeDegreeContribution",
+      "One degree's share of the Hodge stationarity term, so a reader can tell "
+      "WHICH degree the descent came from rather than only the total.")
+      .def(py::init<>())
+      .def_readwrite("degree", &HodgeDegreeContribution::degree,
+                     "The Laplacian degree k.")
+      .def_readwrite("weight", &HodgeDegreeContribution::weight,
+                     "The declared weight on this degree.")
+      .def_readwrite("gradient_norm_squared",
+                     &HodgeDegreeContribution::gradientNormSquared,
+                     "||grad_z S_k||^2 over the edges in scope, UNWEIGHTED, so "
+                     "the raw spread across degrees is visible rather than "
+                     "folded into the weighting.")
+      .def_readwrite("contribution", &HodgeDegreeContribution::contribution,
+                     "This degree's share of hodge_stationarity: the entropy "
+                     "weight times the degree weight times the norm. Summing "
+                     "this over the contributions reproduces the term to "
+                     "double round-off -- the term applies the entropy weight "
+                     "once to the accumulated weighted norms, whereas each "
+                     "share here carries its own multiply.");
+
   py::class_<ObjectiveScope>(m, "ObjectiveScope",
       "What an objective DECLARES that it references: a named pinned region, "
       "or -- by declaring nothing -- the whole cobordism. Independent of "
@@ -1428,6 +1476,16 @@ Right -- re-read after each drive call:
                      "for a purely geometric objective.")
       .def_readwrite("register_degrees", &ObjectiveContext::registerDegrees,
                      "The register degrees the objective is declared over.")
+      .def_readwrite("hodge_degrees", &ObjectiveContext::hodgeDegrees,
+                     "The Laplacian degrees k the Hodge entropy term is summed "
+                     "over. NOT a register concept: each entry selects which "
+                     "L_k the entropy is taken of, and nothing else. Never "
+                     "read from register_degrees, not even as a fallback. "
+                     "Defaults to [0].")
+      .def_readwrite("hodge_degree_weights",
+                     &ObjectiveContext::hodgeDegreeWeights,
+                     "The weight on each entry of hodge_degrees, positionally. "
+                     "Empty means uniform 1.")
       .def_readwrite("regge_weight", &ObjectiveContext::reggeWeight)
       .def_readwrite("hodge_entropy_weight",
                      &ObjectiveContext::hodgeEntropyWeight)
@@ -1509,6 +1567,14 @@ Right -- re-read after each drive call:
            "register-residual direction. A weight rather than a callable on "
            "purpose: handing an objective something that could difference the "
            "scalar would mean handing it a closure over the node.")
+      .def("hodge_degree_contributions",
+           &CobordismObjective::hodgeDegreeContributions, py::arg("context"),
+           "This objective's Hodge stationarity term broken down by degree, or "
+           "an empty list for an objective with no such term. Reported "
+           "alongside the term record rather than inside it: ObjectiveTerms is "
+           "a fixed record of scalars that `total` is static over, and a "
+           "per-degree breakdown decomposes one of those scalars rather than "
+           "adding a term.")
       .def("scope", &CobordismObjective::scope)
       .def("set_scope", &CobordismObjective::setScope, py::arg("scope"),
            "Declare what this objective references. Scope is a property of the "

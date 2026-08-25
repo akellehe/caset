@@ -96,6 +96,18 @@ DECLARED_CANDIDATE_MOVES = 6
 DECLARED_STAGE2_ITERS = 12
 #: Objective register degrees.
 DECLARED_REGISTER_DEGREES = (1,)
+#: Laplacian degrees the Hodge entropy term is scored at.
+#:
+#: Declared independently of the register degrees, which answer the unrelated
+#: question of where a register is constructed. All four carry distinct
+#: information here: the discrete weighted operator does not inherit the
+#: continuum Hodge duality that would make k and 4-k the same condition counted
+#: twice on a closed 4-manifold.
+#:
+#: Scoring more degrees makes the objective see more of the SPECTRUM, not more
+#: of the TOPOLOGY. Exact zero modes are omitted from the entropy and from its
+#: derivative, so each degree is blind to a change in its own kernel dimension.
+DECLARED_HODGE_DEGREES = (0, 1, 2, 3)
 #: Post-hoc analysis degrees. Separate from the objective's domain.
 DECLARED_ANALYSIS_DEGREES = (1,)
 #: Modularity resolution the clusters are read at.
@@ -278,6 +290,17 @@ class EmergenceFrame:
         block = {"total": _finite(node.objective())}
         for name in MC.objective_term_names():
             block[name] = _finite(getattr(terms, name, None))
+        # Which DEGREE the Hodge share came from, not only the total. The
+        # unweighted norm is carried alongside the weighted share so the raw
+        # spread across degrees stays visible rather than folded into the
+        # weighting.
+        block["hodge_by_degree"] = [
+            {"degree": contribution.degree,
+             "weight": _finite(contribution.weight),
+             "gradient_norm_squared":
+                 _finite(contribution.gradient_norm_squared),
+             "contribution": _finite(contribution.contribution)}
+            for contribution in node.hodge_degree_contributions]
         return block
 
     # ---- 2. the drawing layout --------------------------------------
@@ -719,6 +742,10 @@ def drive(config, progress=False):
     node = MC(host, [], [], list(config["register_degrees"]), 1.0,
               config["seed"])
     node.set_objective(cob.JointStationarityObjective())
+    # Declared here rather than inherited from the register degrees above: the
+    # degrees a register is constructed at and the degrees whose entropy should
+    # be stationary are different questions.
+    node.set_hodge_degrees(list(config["hodge_degrees"]))
     node.set_simulation_mode(MC.SimulationMode.EMERGENCE,
                              MC.EmergenceSubmode.STRICT)
     # M0 is HELD, not targeted. Declaring the region says only WHICH cells do
@@ -1078,6 +1105,7 @@ def build_config(size=DECLARED_SIZE, steps=DECLARED_STEPS, seed=DECLARED_SEED,
         "candidate_moves": DECLARED_CANDIDATE_MOVES,
         "stage2_iters": DECLARED_STAGE2_ITERS,
         "register_degrees": list(DECLARED_REGISTER_DEGREES),
+        "hodge_degrees": list(DECLARED_HODGE_DEGREES),
         "degrees": list(DECLARED_ANALYSIS_DEGREES),
         "betti_degrees": list(DECLARED_BETTI_DEGREES),
     }

@@ -784,6 +784,12 @@ ObjectiveContext MultiCobordism::objectiveContextFor(
   for (const auto &block : inputBlocks_) context.regionTargets.push_back(block.target);
   for (const auto &block : outputBlocks_) context.regionTargets.push_back(block.target);
   context.registerDegrees = registerDegrees_;
+  // Declared independently and never inherited from the register degrees: the
+  // degrees a register is constructed at and the degrees whose entropy should
+  // be stationary are different questions, and defaulting one to the other
+  // would reinstate that coupling in the implementation.
+  context.hodgeDegrees = hodgeDegrees_;
+  context.hodgeDegreeWeights = hodgeDegreeWeights_;
   context.reggeWeight = reggeWeight_;
   context.hodgeEntropyWeight = hodgeEntropyWeight_;
   context.gamma = gamma_;
@@ -812,6 +818,57 @@ void MultiCobordism::setReggeWeight(double weight) {
     throw std::invalid_argument(
         "MultiCobordism: Regge weight must be finite and non-negative");
   reggeWeight_ = weight;
+}
+
+void MultiCobordism::setHodgeDegrees(std::vector<int> degrees,
+                                     std::vector<double> weights) {
+  if (degrees.empty())
+    throw std::invalid_argument(
+        "MultiCobordism: the Hodge degree list must name at least one degree; "
+        "an empty list would silently score no entropy at all");
+  for (int degree : degrees)
+    if (degree < 0)
+      throw std::invalid_argument(
+          "MultiCobordism: Hodge degree " + std::to_string(degree) +
+          " is negative; a degree indexes a Laplacian L_k with k >= 0");
+  // A repeat would double-count that degree's share while reading as a list of
+  // distinct degrees, so it is refused rather than silently summed twice.
+  for (std::size_t outer = 0; outer < degrees.size(); ++outer)
+    for (std::size_t inner = outer + 1; inner < degrees.size(); ++inner)
+      if (degrees[outer] == degrees[inner])
+        throw std::invalid_argument(
+            "MultiCobordism: Hodge degree " + std::to_string(degrees[outer]) +
+            " is listed more than once");
+  if (!weights.empty()) {
+    if (weights.size() != degrees.size())
+      throw std::invalid_argument(
+          "MultiCobordism: " + std::to_string(weights.size()) +
+          " Hodge degree weights were given for " +
+          std::to_string(degrees.size()) +
+          " degrees; supply one weight per degree, or none for uniform");
+    for (double weight : weights)
+      if (!std::isfinite(weight) || weight < 0.0)
+        throw std::invalid_argument(
+            "MultiCobordism: a Hodge degree weight must be finite and "
+            "non-negative");
+  }
+  hodgeDegrees_ = std::move(degrees);
+  hodgeDegreeWeights_ = std::move(weights);
+}
+
+std::vector<HodgeDegreeContribution>
+MultiCobordism::hodgeDegreeContributionsFor(
+    const std::shared_ptr<Spacetime> &spacetime) const {
+  // Read from the objective that owns the term, so a reported share is the one
+  // that was descended rather than a second computation that could disagree.
+  if (!objectiveSpec_) return {};
+  return objectiveSpec_->hodgeDegreeContributions(
+      objectiveContextFor(spacetime, objectiveSpec_));
+}
+
+std::vector<HodgeDegreeContribution> MultiCobordism::hodgeDegreeContributions()
+    const {
+  return hodgeDegreeContributionsFor(spacetime_);
 }
 
 std::vector<std::string> MultiCobordism::objectiveTermNames() {
