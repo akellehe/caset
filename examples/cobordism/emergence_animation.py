@@ -66,6 +66,7 @@ import cmath
 import json
 import math
 import os
+import random
 import sys
 
 import tessera as T
@@ -107,6 +108,41 @@ DECLARED_HOST_SEED = 3
 DECLARED_BETTI_DEGREES = (0, 1, 2)
 
 
+class EdgeDisposition:
+    """The causal character the seed's edges are given, as a closed vocabulary.
+
+    `Edge` stores the length `l`, not the squared length, so a disposition is
+    written through `l` and read as `l^2`. A purely imaginary length squares
+    to a real negative, which IS the timelike condition, so the whole
+    vocabulary is expressible as a choice of `arg l`.
+
+    Named constants rather than bare strings: each value is written where the
+    host is built and compared where the seed is assigned, and a typo in
+    either place would not fail to compile -- it would silently select a
+    different causal structure.
+    """
+
+    #: Magnitude one, real/imaginary split uniformly at random per edge:
+    #: `l = e^{i a}`, so `l^2 = e^{2 i a}` sweeps the unit circle. The only
+    #: setting that prescribes no causal structure, and the default.
+    RANDOM = "random"
+    #: `l = 1`, so `l^2 = +1` on every edge.
+    SPACELIKE = "spacelike"
+    #: `l = i`, so `l^2 = -1` on every edge.
+    TIMELIKE = "timelike"
+    #: Timelike BETWEEN hop layers of M0, spacelike WITHIN a layer. A
+    #: PRESCRIBED foliation: it imposes a causal order rather than letting one
+    #: emerge, and must be reported as such wherever it is used.
+    FOLIATED = "foliated"
+
+    #: Every accepted value, in help order.
+    ALL = (RANDOM, SPACELIKE, TIMELIKE, FOLIATED)
+
+
+#: The seed disposition when the caller names none.
+DECLARED_EDGE_DISPOSITION = EdgeDisposition.RANDOM
+
+
 # =====================================================================
 # the neutral host -- a cobordism, because the readouts need a boundary
 # =====================================================================
@@ -142,12 +178,73 @@ def boundary_vertices(spacetime):
     return sorted(boundary)
 
 
-#: Even weighting of the seed length's real and imaginary parts: the unit
-#: vector at Re == Im, so a length of magnitude m carries m/sqrt(2) in each.
-_EVEN_WEIGHT = (1.0 + 1.0j) / math.sqrt(2.0)
+def _hop_layers(spacetime, sources):
+    """Hop distance from `sources` over the 1-skeleton, per vertex id.
+
+    This is the SAME layering `CrossingReadouts::temporalFunction` derives
+    from M0, recomputed here only to assign the causal character consistently
+    with it. Assigning by any other partition would put a causal edge inside
+    a layer, which the temporal-function certificate names and refuses.
+    """
+    layer = {vertex: 0 for vertex in sources}
+    frontier = list(sources)
+    adjacency = {}
+    for edge in spacetime.getEdgeList().toVector():
+        a, b = int(edge.getKey()[0]), int(edge.getKey()[1])
+        adjacency.setdefault(a, set()).add(b)
+        adjacency.setdefault(b, set()).add(a)
+    depth = 0
+    while frontier:
+        depth += 1
+        nxt = []
+        for vertex in frontier:
+            for neighbour in adjacency.get(vertex, ()):
+                if neighbour not in layer:
+                    layer[neighbour] = depth
+                    nxt.append(neighbour)
+        frontier = nxt
+    return layer
 
 
-def build_cobordism_host(n_refine=DECLARED_SIZE, seed=DECLARED_HOST_SEED):
+def _seed_lengths(spacetime, disposition, seed):
+    """Write the seed length on every edge, per the chosen disposition.
+
+    Every setting carries magnitude one, so the dispositions differ ONLY in
+    `arg l` -- in causal character, never in scale. Reproducible from `seed`
+    through a private generator, so the global random state is untouched.
+    """
+    if disposition not in EdgeDisposition.ALL:
+        raise ValueError(
+            "unknown edge disposition %r: expected one of %s"
+            % (disposition, ", ".join(EdgeDisposition.ALL)))
+    edges = spacetime.getEdgeList().toVector()
+    if disposition == EdgeDisposition.SPACELIKE:
+        for edge in edges:
+            edge.setLength(complex(1.0, 0.0))            # l^2 = +1
+        return
+    if disposition == EdgeDisposition.TIMELIKE:
+        for edge in edges:
+            edge.setLength(complex(0.0, 1.0))            # l^2 = -1
+        return
+    if disposition == EdgeDisposition.RANDOM:
+        generator = random.Random(seed)
+        for edge in edges:
+            angle = generator.uniform(0.0, 2.0 * math.pi)
+            edge.setLength(cmath.exp(1j * angle))        # |l| = 1
+        return
+    # FOLIATED: the causal character follows the hop layering of M0, which is
+    # the same layering the temporal function derives. Edges spanning layers
+    # are timelike and edges inside one spacelike -- a prescribed light cone.
+    layer = _hop_layers(spacetime, boundary_vertices(spacetime))
+    for edge in edges:
+        a, b = int(edge.getKey()[0]), int(edge.getKey()[1])
+        spans_layers = layer.get(a, 0) != layer.get(b, 0)
+        edge.setLength(complex(0.0, 1.0) if spans_layers
+                       else complex(1.0, 0.0))
+
+
+def build_cobordism_host(n_refine=DECLARED_SIZE, seed=DECLARED_HOST_SEED,
+                         disposition=DECLARED_EDGE_DISPOSITION):
     """A single simplex, refined -- the canonical seed.
 
     The paper's crossing readouts live on a cobordism: `tau` is the Lorentzian
@@ -159,21 +256,24 @@ def build_cobordism_host(n_refine=DECLARED_SIZE, seed=DECLARED_HOST_SEED):
     cobordisms with `∂W = M0 ⊔ M1`, and this is the smallest complex that is
     one.
 
-    Edge lengths carry EVENLY WEIGHTED real and imaginary parts. The previous
-    host initialized every length purely real and positive, so the seed had no
-    imaginary part and no causal content at all -- a programme that is
-    Lorentzian in every path was starting from a complex that was not. Even
-    weighting seeds the general-complex regime instead of one of its two real
-    faces, and imposes no state: it is a metric seed, not a carrier.
+    The seed's causal character is `disposition`, an `EdgeDisposition`. Every
+    setting carries magnitude one, so they differ only in `arg l` -- in causal
+    character, never in scale. The refinement runs on a uniform real unit
+    length REGARDLESS of the disposition, so the topology a given `seed`
+    produces is the same under all four and the settings are comparable as a
+    controlled variable; the disposition is written afterwards, over the
+    finished complex.
 
     NEUTRAL otherwise: no holes, no pinned carrier, no boundary blocks, no
     target register. Whatever the run comes to carry is read afterwards.
+    `foliated` is the exception and is not neutral: it prescribes a causal
+    order rather than letting one emerge, and is labelled as such.
     """
     st = T.Spacetime(T.Metric(True, T.Signature(4, T.Lorentzian)), T.CDT,
                      1.0, 1.0, T.PREFERRED, T.SolidSimplex(4))
     st.build()
     for edge in st.getEdgeList().toVector():
-        edge.setLength(_EVEN_WEIGHT)
+        edge.setLength(complex(1.0, 0.0))
     applied = 0
     for step in range(seed, seed + n_refine * 4):
         move = T.AddMove(st, step, False, T.PachnerMode.PreGeometric, False)
@@ -181,8 +281,7 @@ def build_cobordism_host(n_refine=DECLARED_SIZE, seed=DECLARED_HOST_SEED):
             applied += 1
         if applied >= n_refine:
             break
-    for index, edge in enumerate(st.getEdgeList().toVector()):
-        edge.setLength((1.0 + 0.01 * (index % 6)) * _EVEN_WEIGHT)
+    _seed_lengths(st, disposition, seed)
     return st
 
 
@@ -715,7 +814,8 @@ class EmergenceFrame:
 
 def drive(config, progress=False):
     """Drive unforced emergence, reading a frame after every engine unit."""
-    host = build_cobordism_host(config["size"], config["host_seed"])
+    host = build_cobordism_host(config["size"], config["host_seed"],
+                                config["edge_disposition"])
     node = MC(host, [], [], list(config["register_degrees"]), 1.0,
               config["seed"])
     node.set_objective(cob.JointStationarityObjective())
@@ -1028,10 +1128,18 @@ def draw_frame(figure, frames, index):
             painter(axis, frames[:index + 1])
         else:
             painter(axis, frame)
+    disposition = frame.config.get("edge_disposition",
+                                   DECLARED_EDGE_DISPOSITION)
+    # `foliated` prescribes a causal order rather than letting one emerge, so
+    # a frame drawn under it must say so on its face and never read as
+    # emergent.
+    seed_note = ("seed %s -- a PRESCRIBED foliation, not emergent"
+                 % disposition if disposition == EdgeDisposition.FOLIATED
+                 else "seed %s" % disposition)
     figure.suptitle(
-        "unforced Regge-Hodge emergence -- engine unit %d of %d "
+        "unforced Regge-Hodge emergence -- engine unit %d of %d -- %s "
         "(certificates read post-hoc, firewalled from the objective)"
-        % (frame.step, frames[-1].step), fontsize=9)
+        % (frame.step, frames[-1].step, seed_note), fontsize=9)
     figure.tight_layout(rect=(0, 0, 1, 0.95))
 
 
@@ -1068,13 +1176,19 @@ def render(frames, path):
 
 def build_config(size=DECLARED_SIZE, steps=DECLARED_STEPS, seed=DECLARED_SEED,
                  host_seed=DECLARED_HOST_SEED,
-                 resolution=DECLARED_RESOLUTION):
+                 resolution=DECLARED_RESOLUTION,
+                 edge_disposition=DECLARED_EDGE_DISPOSITION):
+    if edge_disposition not in EdgeDisposition.ALL:
+        raise ValueError(
+            "unknown edge disposition %r: expected one of %s"
+            % (edge_disposition, ", ".join(EdgeDisposition.ALL)))
     return {
         "size": size,
         "steps": steps,
         "seed": seed,
         "host_seed": host_seed,
         "resolution": resolution,
+        "edge_disposition": edge_disposition,
         "candidate_moves": DECLARED_CANDIDATE_MOVES,
         "stage2_iters": DECLARED_STAGE2_ITERS,
         "register_degrees": list(DECLARED_REGISTER_DEGREES),
@@ -1093,6 +1207,14 @@ def build_parser():
     run.add_argument("--seed", type=int, default=DECLARED_SEED)
     run.add_argument("--host-seed", type=int, default=DECLARED_HOST_SEED)
     run.add_argument("--resolution", type=float, default=DECLARED_RESOLUTION)
+    run.add_argument("--edge-disposition", choices=list(EdgeDisposition.ALL),
+                     default=DECLARED_EDGE_DISPOSITION,
+                     help="causal character of the seed's edges: random "
+                          "(default, magnitude one with the real/imaginary "
+                          "split drawn per edge), spacelike (l^2 = +1), "
+                          "timelike (l^2 = -1), or foliated (a PRESCRIBED "
+                          "light cone: timelike between hop layers of M0, "
+                          "spacelike within one)")
     run.add_argument("--out", default="emergence_animation.gif",
                      help="GIF, MP4, or PNG of the final frame")
     run.add_argument("--json", default=None,
@@ -1104,7 +1226,7 @@ def build_parser():
 def main(argv=None):
     args = build_parser().parse_args(argv)
     config = build_config(args.size, args.steps, args.seed, args.host_seed,
-                          args.resolution)
+                          args.resolution, args.edge_disposition)
     frames = drive(config, progress=not args.quiet)
     if args.json:
         document = {"config": config,

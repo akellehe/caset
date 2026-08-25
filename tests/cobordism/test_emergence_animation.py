@@ -373,5 +373,139 @@ class OverlayTest(unittest.TestCase):
             plt.close(figure)
 
 
+# ======================================================================
+# the seed's causal disposition
+# ======================================================================
+
+
+def _squared_lengths(spacetime):
+    """Every edge's `l^2`, which is what a disposition is read as."""
+    return [complex(edge.getLength()) ** 2
+            for edge in spacetime.getEdgeList().toVector()]
+
+
+class EdgeDispositionTest(unittest.TestCase):
+    """The four settings differ in `arg l` alone, never in scale.
+
+    Every assertion is on `l^2`, not on `l`: the squared length carries the
+    causal character, and asserting on `l` would pass for a convention that
+    squared to the wrong sign.
+    """
+
+    def test_spacelike_squares_to_plus_one_on_every_edge(self):
+        host = ea.build_cobordism_host(SMALL, 3, ea.EdgeDisposition.SPACELIKE)
+        squared = _squared_lengths(host)
+        self.assertTrue(squared, "the host has no edges to assert on")
+        for value in squared:
+            self.assertAlmostEqual(value.real, 1.0, places=12)
+            self.assertAlmostEqual(value.imag, 0.0, places=12)
+
+    def test_timelike_squares_to_minus_one_on_every_edge(self):
+        host = ea.build_cobordism_host(SMALL, 3, ea.EdgeDisposition.TIMELIKE)
+        squared = _squared_lengths(host)
+        self.assertTrue(squared, "the host has no edges to assert on")
+        for value in squared:
+            self.assertAlmostEqual(value.real, -1.0, places=12)
+            self.assertAlmostEqual(value.imag, 0.0, places=12)
+
+    def test_random_squares_onto_the_unit_circle_and_is_not_degenerate(self):
+        host = ea.build_cobordism_host(SMALL, 3, ea.EdgeDisposition.RANDOM)
+        squared = _squared_lengths(host)
+        self.assertTrue(squared, "the host has no edges to assert on")
+        for value in squared:
+            self.assertAlmostEqual(abs(value), 1.0, places=12)
+        # A guard against the degeneracy the fixed seed had: every edge
+        # carrying the SAME l^2 would satisfy the magnitude assertion above
+        # while still prescribing one uniform causal character.
+        spread = max(abs(v - squared[0]) for v in squared)
+        self.assertGreater(spread, 1e-6,
+                           "every edge drew the same l^2: not random")
+
+    def test_foliated_is_plus_one_within_a_layer_and_minus_one_across(self):
+        host = ea.build_cobordism_host(SMALL, 3, ea.EdgeDisposition.FOLIATED)
+        layer = ea._hop_layers(host, ea.boundary_vertices(host))
+        across, within = 0, 0
+        for edge in host.getEdgeList().toVector():
+            a, b = int(edge.getKey()[0]), int(edge.getKey()[1])
+            value = complex(edge.getLength()) ** 2
+            if layer.get(a, 0) != layer.get(b, 0):
+                across += 1
+                self.assertAlmostEqual(value.real, -1.0, places=12)
+            else:
+                within += 1
+                self.assertAlmostEqual(value.real, 1.0, places=12)
+            self.assertAlmostEqual(value.imag, 0.0, places=12)
+        # Both branches must fire, or the assertions above are vacuous.
+        self.assertGreater(across, 0, "no edge spans a hop layer")
+        self.assertGreater(within, 0, "no edge lies within a hop layer")
+
+    def test_random_repeats_for_one_seed_and_differs_across_seeds(self):
+        first = _squared_lengths(
+            ea.build_cobordism_host(SMALL, 3, ea.EdgeDisposition.RANDOM))
+        again = _squared_lengths(
+            ea.build_cobordism_host(SMALL, 3, ea.EdgeDisposition.RANDOM))
+        self.assertEqual(first, again)
+        other = _squared_lengths(
+            ea.build_cobordism_host(SMALL, 11, ea.EdgeDisposition.RANDOM))
+        self.assertNotEqual(first, other)
+
+    def test_the_topology_is_the_same_under_every_disposition(self):
+        """A disposition changes the causal character, never the complex.
+
+        This is what makes the settings a controlled variable: one host seed
+        gives one topology, and only `arg l` moves.
+        """
+        counts = {}
+        for disposition in ea.EdgeDisposition.ALL:
+            host = ea.build_cobordism_host(SMALL, 3, disposition)
+            counts[disposition] = (len(host.getEdgeList().toVector()),
+                                   len(host.getTopSimplices()))
+        self.assertEqual(len(set(counts.values())), 1, counts)
+
+    def test_an_unknown_disposition_fails_loudly_and_by_name(self):
+        with self.assertRaises(ValueError) as caught:
+            ea.build_cobordism_host(SMALL, 3, "spacelke")
+        self.assertIn("spacelke", str(caught.exception))
+        with self.assertRaises(ValueError) as caught:
+            ea.build_config(edge_disposition="foliatd")
+        self.assertIn("foliatd", str(caught.exception))
+
+    def test_the_default_is_random(self):
+        self.assertEqual(ea.DECLARED_EDGE_DISPOSITION,
+                         ea.EdgeDisposition.RANDOM)
+        self.assertEqual(ea.build_config()["edge_disposition"],
+                         ea.EdgeDisposition.RANDOM)
+
+    def test_the_cli_rejects_an_unknown_value(self):
+        parser = ea.build_parser()
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["run", "--edge-disposition", "lightlike"])
+        args = parser.parse_args(["run", "--edge-disposition", "foliated"])
+        self.assertEqual(args.edge_disposition, ea.EdgeDisposition.FOLIATED)
+
+    def test_the_disposition_is_recorded_in_the_config(self):
+        config = ea.build_config(size=SMALL, steps=SMALL_STEPS,
+                                 edge_disposition=ea.EdgeDisposition.TIMELIKE)
+        self.assertEqual(config["edge_disposition"],
+                         ea.EdgeDisposition.TIMELIKE)
+
+    def test_a_foliated_frame_says_on_its_face_that_it_is_prescribed(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        config = ea.build_config(size=SMALL, steps=SMALL_STEPS,
+                                 edge_disposition=ea.EdgeDisposition.FOLIATED)
+        frames = ea.drive(config, progress=False)
+        figure = plt.figure(figsize=(15, 9))
+        try:
+            ea.draw_frame(figure, frames, len(frames) - 1)
+            title = figure._suptitle.get_text()
+            self.assertIn("foliated", title)
+            self.assertIn("PRESCRIBED", title)
+        finally:
+            plt.close(figure)
+
+
 if __name__ == "__main__":
     unittest.main()
