@@ -971,6 +971,12 @@ def drive(config, progress=False, on_frame=None):
         # The unit is complete and its frame is published before the exit is
         # considered, so a run that stops here has still reported the unit
         # that stopped it.
+        #
+        # Convergence on the FINAL unit reports `tolerance-reached` even
+        # though the budget also ran out. Both are true, and this is the more
+        # informative of the two: a reader learns the run had converged, and
+        # can still see it used its whole budget from the unit count, which
+        # the document and the stdout line both carry.
         if _converged(before, _objective_total(frames[-1]),
                       config["tolerance"]):
             terminator = Terminator.TOLERANCE
@@ -1306,6 +1312,25 @@ def draw_frame(figure, frames, index):
     figure.tight_layout(rect=(0, 0, 1, 0.95))
 
 
+def _interactive_backends():
+    """The interactive matplotlib backends, lowercased.
+
+    Asked of matplotlib rather than hard-coded, so the set cannot drift out
+    of step with the installed version. The fallback names the file-only
+    backends instead, which is the smaller and far more stable list.
+    """
+    try:
+        from matplotlib.backends import BackendFilter, backend_registry
+        return {name.lower() for name in
+                backend_registry.list_builtin(BackendFilter.INTERACTIVE)}
+    except ImportError:                     # matplotlib < 3.9
+        import matplotlib
+        try:
+            return {name.lower() for name in matplotlib.rcsetup.interactive_bk}
+        except AttributeError:
+            return set()
+
+
 def drive_live(config, progress=False):
     """Drive while drawing each unit as it completes, then return the result.
 
@@ -1323,18 +1348,26 @@ def drive_live(config, progress=False):
     import queue
     import threading
 
+    import matplotlib
     import matplotlib.pyplot as plt
 
+    # Checked on the BACKEND, not on whether a figure can be created: a
+    # file-only backend like Agg makes figures perfectly well and simply
+    # shows nothing, so creating one successfully proves nothing about
+    # whether the caller will ever see a frame. Without this the flag would
+    # silently degrade into a slower headless run.
+    backend = matplotlib.get_backend()
+    if backend.lower() not in _interactive_backends():
+        raise RuntimeError(
+            "--live needs an interactive matplotlib backend; this process "
+            "has %r, which renders to files and shows no window. A run "
+            "under it would compute every frame and display none of them. "
+            "Set MPLBACKEND to an interactive backend (webagg needs no "
+            "display), or drop --live and read the rendered --out: the "
+            "drive is identical either way." % backend)
     if not plt.isinteractive():
         plt.ion()
-    try:
-        figure = plt.figure(figsize=(15, 9))
-    except Exception as exc:  # a backend that cannot open a window
-        raise RuntimeError(
-            "--live needs an interactive matplotlib backend and this one "
-            "could not open a figure (%s: %s). Run without --live to render "
-            "to a file instead; the drive is identical either way."
-            % (type(exc).__name__, exc))
+    figure = plt.figure(figsize=(15, 9))
 
     ready = queue.Queue()
     published = {}
