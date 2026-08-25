@@ -179,13 +179,18 @@ class EdgeDisposition:
     SPACELIKE = "spacelike"
     #: `l = i`, so `l^2 = -1` on every edge.
     TIMELIKE = "timelike"
+    #: `l = (1 + i)/sqrt(2)`, so `Re(l) = Im(l) > 0` and `l^2 = i` on every
+    #: edge: the argument sits on the light cone, `arg(l^2) = pi/2`. The
+    #: interval vanishes while the edge keeps unit extent, so this is the
+    #: NON-TRIVIAL lightlike case, distinct from the degenerate `l = 0`.
+    LIGHTLIKE = "lightlike"
     #: Timelike BETWEEN hop layers of M0, spacelike WITHIN a layer. A
     #: PRESCRIBED foliation: it imposes a causal order rather than letting one
     #: emerge, and must be reported as such wherever it is used.
     FOLIATED = "foliated"
 
     #: Every accepted value, in help order.
-    ALL = (RANDOM, SPACELIKE, TIMELIKE, FOLIATED)
+    ALL = (RANDOM, SPACELIKE, TIMELIKE, LIGHTLIKE, FOLIATED)
 
 
 #: The seed disposition when the caller names none.
@@ -423,6 +428,14 @@ def _seed_lengths(spacetime, disposition, seed):
     if disposition == EdgeDisposition.TIMELIKE:
         for edge in edges:
             edge.setLength(complex(0.0, 1.0))            # l^2 = -1
+        return
+    if disposition == EdgeDisposition.LIGHTLIKE:
+        # Re(l) == Im(l) > 0 with |l| = 1, so l^2 = i exactly: the interval
+        # vanishes on an edge of unit extent. Both parts are the SAME double,
+        # so x^2 - t^2 cancels to exactly zero and arg(l^2) is exactly pi/2.
+        component = math.sqrt(0.5)
+        for edge in edges:
+            edge.setLength(complex(component, component))  # l^2 = i
         return
     if disposition == EdgeDisposition.RANDOM:
         generator = random.Random(seed)

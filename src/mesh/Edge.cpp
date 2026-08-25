@@ -12,6 +12,7 @@
 #include <memory>
 #include <cmath>
 #include <limits>
+#include <numbers>
 
 
 // === tessera subsystem ns fwd-decls ===
@@ -62,25 +63,60 @@ class Simplex;
       return length_;
     }
 
-    [[nodiscard]] bool Edge::isNull() const noexcept {
-      // std::abs of a std::complex is the MODULUS sqrt(Re^2 + Im^2) -- the whole
-      // length magnitude, not the real part -- so a timelike (imaginary) length is
-      // correctly non-null.
-      return std::abs(getLength()) <= kCausalEpsilon;
+    [[nodiscard]] double Edge::squaredArgument() const noexcept {
+      const auto l = getLength();
+      return std::arg(l * l);  // in (-pi, pi]
     }
 
-    [[nodiscard]] bool Edge::isTimelike() const noexcept {
-      // .imag() is a double, so std::abs here is the ordinary real |Im(l)|.
-      return std::abs(getLength().imag()) > kCausalEpsilon;
+    [[nodiscard]] double Edge::lorentzianMagnitude() const noexcept {
+      // Re(l^2) = x^2 - t^2 for l = x + i t. Formed from the parts rather than as
+      // (l*l).real() so the subtraction is the only cancellation step. Carried for
+      // consumers that want the interval; it does not decide the disposition alone.
+      const auto l = getLength();
+      return l.real() * l.real() - l.imag() * l.imag();
+    }
+
+    [[nodiscard]] bool Edge::isDegenerate() const noexcept {
+      // The EUCLIDEAN modulus, and the one place it is the right norm: an edge with
+      // no extent at all is ABSENT, not lightlike.
+      return std::abs(getLength()) <= kDegenerateEpsilon;
     }
 
     [[nodiscard]] bool Edge::isSpacelike() const noexcept {
-      return !isNull() && !isTimelike();
+      // arg(l^2) ~ 0: l^2 real positive. |arg| folds the (-pi, pi] range so each
+      // test below is one comparison against a single definite argument.
+      if (isDegenerate()) return false;
+      return std::abs(squaredArgument()) <= kCausalAngularEpsilon;
+    }
+
+    [[nodiscard]] bool Edge::isTimelike() const noexcept {
+      // arg(l^2) ~ +/- pi: l^2 real negative.
+      if (isDegenerate()) return false;
+      return std::abs(std::abs(squaredArgument()) - std::numbers::pi)
+             <= kCausalAngularEpsilon;
+    }
+
+    [[nodiscard]] bool Edge::isNull() const noexcept {
+      // arg(l^2) ~ +/- pi/2: l^2 purely imaginary and NONZERO -- the light cone,
+      // reached non-trivially at Re(l) == Im(l) != 0. Not the same as degenerate.
+      if (isDegenerate()) return false;
+      return std::abs(std::abs(squaredArgument()) - 0.5 * std::numbers::pi)
+             <= kCausalAngularEpsilon;
+    }
+
+    [[nodiscard]] bool Edge::isMixed() const noexcept {
+      // No definite causal character. Deliberately NOT snapped to the nearest of the
+      // three: a generic argument is genuinely mixed, and reporting it as definite
+      // would invent structure the geometry does not have.
+      return !isDegenerate() && !isSpacelike() && !isTimelike() && !isNull();
     }
 
     [[nodiscard]] EdgeDisposition Edge::disposition() const noexcept {
+      if (isDegenerate()) return EdgeDisposition::Degenerate;
+      if (isSpacelike()) return EdgeDisposition::Spacelike;
+      if (isTimelike()) return EdgeDisposition::Timelike;
       if (isNull()) return EdgeDisposition::Lightlike;
-      return isTimelike() ? EdgeDisposition::Timelike : EdgeDisposition::Spacelike;
+      return EdgeDisposition::Mixed;
     }
 
 #ifdef TESSERA_VERBOSE

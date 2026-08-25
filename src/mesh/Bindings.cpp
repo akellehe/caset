@@ -128,15 +128,34 @@ endpoint vertex IDs, so Edge(v1, v2) == Edge(v2, v1).)doc")
 Real for spacelike, imaginary for timelike, general complex off the
 real-Lorentzian locus. This is the edge's ONE degree of freedom: l^2 is derived
 by squaring and is never stored (#639), so square getLength() where you need it.
-Causal character is read from THIS (Im(length)). Distinct from getPhase() (the
-C* connection).)doc")
+Causal character is the ARGUMENT of l^2 -- see squaredArgument() and the
+predicates below -- never the Euclidean modulus abs(l). Distinct from getPhase()
+(the C* connection).)doc")
+      .def("squaredArgument", &Edge::squaredArgument,
+           "arg(l^2) in (-pi, pi] -- the MEASURED quantity every causal predicate "
+           "classifies. 0 is spacelike, +/-pi/2 lightlike, +/-pi timelike, anything "
+           "else mixed. Carried so a consumer can see where an edge actually sits "
+           "rather than only which bucket it fell in.")
+      .def("lorentzianMagnitude", &Edge::lorentzianMagnitude,
+           "Re(l^2) = x^2 - t^2 for l = x + i t. Carried for consumers that want "
+           "the interval itself; it does NOT decide the disposition alone, since "
+           "that would discard Im(l^2) -- which is nonzero precisely at the "
+           "lightlike point.")
       .def("isTimelike", &Edge::isTimelike,
-           "Timelike iff the length has a non-negligible imaginary part "
-           "(supersedes the fragile sign(l^2) test).")
+           "Timelike iff arg(l^2) ~ +/-pi, i.e. l^2 real negative.")
       .def("isSpacelike", &Edge::isSpacelike,
-           "Spacelike iff the length is real and nonzero.")
+           "Spacelike iff arg(l^2) ~ 0, i.e. l^2 real positive.")
       .def("isNull", &Edge::isNull,
-           "Null/lightlike iff the length is ~zero.")
+           "Null/lightlike iff arg(l^2) ~ +/-pi/2, i.e. l^2 purely imaginary and "
+           "NONZERO -- the light cone, reached non-trivially at Re(l) == Im(l) != 0. "
+           "Distinct from isDegenerate(): a null edge is a physical lightlike ray.")
+      .def("isMixed", &Edge::isMixed,
+           "A genuinely complex l^2 with no definite causal character. NOT snapped "
+           "to the nearest of the three -- that would invent definiteness the "
+           "geometry does not have. The common case for a uniformly drawn argument.")
+      .def("isDegenerate", &Edge::isDegenerate,
+           "An ABSENT edge (Euclidean modulus ~ 0), which is not a causal type. "
+           "Exactly one of isSpacelike/isTimelike/isNull/isMixed/isDegenerate holds.")
       .def("getPhase", &Edge::getPhase,
            R"doc(Return the complex C* connection phase carried by this edge.
 
