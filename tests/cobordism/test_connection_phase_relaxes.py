@@ -31,6 +31,14 @@ Gauge orthogonality alone would certify only the gauge subspace, so a second
 exact identity — `S` is EVEN in `phi` at real weights, hence its gradient is
 ODD — carries the physical directions the first one cannot see.
 
+The weights are SQUARED moduli, and that is the second load-bearing choice.
+Eigenvalues are similarity-invariant at any power, so `|lambda|` and
+`|lambda|^2` are equally `C*`-invariant, but only the square reduces to the
+Hodge term's own functional: for Hermitian `L` the eigenvalues of `A = L^dag L`
+are exactly `|lambda|^2 = sigma^2`. So the two definitions agree in the
+Hermitian limit and separate only where the operator stops being normal, and
+both halves of that are asserted below.
+
 And `laplacian(k)` must stay blind. Making the geometric operator see `phi`
 would be the error the two-field split exists to prevent, so its bitwise
 invariance is re-asserted here alongside the new dependence.
@@ -39,6 +47,8 @@ invariance is re-asserted here alongside the new dependence.
 import cmath
 import math
 import unittest
+
+import numpy as np
 
 import tessera as T
 
@@ -206,6 +216,82 @@ class GaugeInvarianceIsStructuralTest(unittest.TestCase):
         for index, component in enumerate(gradient):
             with self.subTest(edge=index):
                 self.assertLess(abs(component), 1e-9)
+
+
+def _hermitian_host():
+    """Real lengths and a REAL connection, so `L` comes out Hermitian.
+
+    The C* connection operator is Hermitian exactly when the weights are real
+    and `phi` has no imaginary part, which is the limit the Hodge term already
+    lives in.
+    """
+    spacetime = _host(jitter=False)
+    for edge in spacetime.getEdgeList().toVector():
+        edge.setLength(complex(1.0, 0.0))
+    for index, edge in enumerate(spacetime.getEdgeList().toVector()):
+        edge.setPhase(complex(0.37 * ((index % 5) - 2), 0.0))
+    return spacetime
+
+
+def _von_neumann_of_positive_operator(spacetime):
+    """`-Tr(rho log rho)` for `rho = A/Tr A`, `A = L^dag L` — the Hodge form.
+
+    Computed here rather than called, because the whole point is to compare the
+    shipped term against the OTHER construction. Reading it off the same C*
+    operator keeps the comparison honest.
+    """
+    flat = np.array(cob.HodgeLaplacian(spacetime).connectionLaplacian())
+    order = int(round(math.sqrt(flat.size)))
+    laplacian = flat.reshape(order, order)
+    eigenvalues = np.linalg.eigvalsh(laplacian.conj().T @ laplacian)
+    floor = np.finfo(float).eps * order * 64 * max(eigenvalues.sum(), 1.0)
+    supported = eigenvalues[eigenvalues > floor]
+    probability = supported / supported.sum()
+    return float(-(probability * np.log(probability)).sum())
+
+
+class TheHermitianLimitReducesToTheHodgeFunctionalTest(unittest.TestCase):
+    """The property the SQUARE buys, and the reason the weight is not `|lambda|`.
+
+    `|lambda|` and `|lambda|^2` are equally `C*`-invariant, since eigenvalues are
+    similarity-invariant at any power. Only the square also reduces to the Hodge
+    term's own functional, because for Hermitian `L` the eigenvalues of
+    `A = L^dag L` are exactly `|lambda|^2 = sigma^2`. The unsquared weight lands
+    on the entropy of `|L|/Tr|L|` instead and misses by 8.7e-2.
+    """
+
+    def test_the_term_is_the_hodge_functional_on_a_hermitian_operator(self):
+        spacetime = _hermitian_host()
+        flat = np.array(cob.HodgeLaplacian(spacetime).connectionLaplacian())
+        order = int(round(math.sqrt(flat.size)))
+        laplacian = flat.reshape(order, order)
+        self.assertAlmostEqual(
+            float(np.linalg.norm(laplacian - laplacian.conj().T)), 0.0,
+            delta=1e-12, msg="this limit must actually be Hermitian")
+
+        self.assertAlmostEqual(
+            cob.HodgeLaplacian(spacetime).connectionSpectralEntropy(),
+            _von_neumann_of_positive_operator(spacetime),
+            delta=1e-13,
+            msg="the square must reduce to the M^dag M von Neumann entropy")
+
+    def test_the_two_constructions_separate_once_the_operator_is_not_normal(self):
+        # Without this the reduction above would be satisfied by simply BEING
+        # the M^dag M form, which is the construction that is not C*-invariant.
+        spacetime = _host()
+        _set_flux(spacetime)
+        flat = np.array(cob.HodgeLaplacian(spacetime).connectionLaplacian())
+        order = int(round(math.sqrt(flat.size)))
+        laplacian = flat.reshape(order, order)
+        self.assertGreater(
+            float(np.linalg.norm(laplacian - laplacian.conj().T)), 1e-3,
+            "a complex phase must make the operator non-normal")
+
+        self.assertNotAlmostEqual(
+            cob.HodgeLaplacian(spacetime).connectionSpectralEntropy(),
+            _von_neumann_of_positive_operator(spacetime),
+            places=6,
+            msg="away from the Hermitian limit the two must NOT agree")
 
 
 class TheGradientIsCertifiedInEveryDirectionTest(unittest.TestCase):

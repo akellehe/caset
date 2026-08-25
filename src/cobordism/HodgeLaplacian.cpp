@@ -737,21 +737,24 @@ spectralEntropyData(const std::vector<cd> &flat,
 
 // Spectral data for the C* connection operator, read from its EIGENVALUES.
 //
-// Deliberately NOT the A = M^dag M construction `spectralEntropyData` builds.
-// That one is a functional of the SINGULAR values, which only UNITARY
-// similarity preserves, while the C* gauge action diag(g)^-1 (.) diag(g) is
-// non-unitary whenever g has a modulus. Eigenvalues survive the full
-// similarity; singular values do not, and this operator is explicitly
-// non-normal under complex phase, which is exactly where the two part company.
-// Harmonizing this back to the M^dag M form for one vocabulary with the Hodge
-// term would silently break C* gauge invariance. See the header for the
-// measured drift.
+// The weights are |lambda|^2 rather than the eigenvalues of A = M^dag M. Do not
+// "simplify" this back to A: that one is a functional of the SINGULAR values,
+// which only UNITARY similarity preserves, while the C* gauge action
+// diag(g)^-1 (.) diag(g) is non-unitary whenever g has a modulus. Eigenvalues
+// survive the full similarity; singular values do not, and this operator is
+// explicitly non-normal under complex phase, which is exactly where the two
+// part company. Going back to A would silently break C* gauge invariance.
+//
+// The SQUARE is what makes the two agree in the Hermitian limit, where
+// |lambda_i|^2 = sigma_i^2 are exactly the eigenvalues of A. So this reduces to
+// the Hodge term's own functional there while staying C*-invariant away from
+// it. See the header for both measurements.
 struct ConnectionEntropyData {
   Eigen::MatrixXcd laplacian{};
   Eigen::MatrixXcd eigenvectors{};
   Eigen::VectorXcd eigenvalues{};
-  // dS/d|lambda_k| on the supported stratum, zero off it.
-  Eigen::VectorXd modulusDerivative{};
+  // dS/d(|lambda_k|^2) on the supported stratum, zero off it.
+  Eigen::VectorXd squaredModulusDerivative{};
   double entropy{0.0};
   bool zeroOperator{true};
 };
@@ -777,13 +780,13 @@ ConnectionEntropyData connectionEntropyData(Eigen::MatrixXcd laplacian) {
         "HodgeLaplacian::connectionSpectralEntropy: eigendecomposition failed");
   data.eigenvalues = solver.eigenvalues();
   data.eigenvectors = solver.eigenvectors();
-  data.modulusDerivative = Eigen::VectorXd::Zero(n);
+  data.squaredModulusDerivative = Eigen::VectorXd::Zero(n);
 
-  const Eigen::VectorXd modulus = data.eigenvalues.cwiseAbs();
-  const double total = modulus.sum();
+  const Eigen::VectorXd squaredModulus = data.eigenvalues.cwiseAbs2();
+  const double total = squaredModulus.sum();
   if (!std::isfinite(total))
     throw std::runtime_error(
-        "HodgeLaplacian::connectionSpectralEntropy: non-finite modulus sum");
+        "HodgeLaplacian::connectionSpectralEntropy: non-finite spectral sum");
   if (total <= 0.0)
     return data;
 
@@ -795,16 +798,16 @@ ConnectionEntropyData connectionEntropyData(Eigen::MatrixXcd laplacian) {
       std::max(total, 1.0) * 64.0;
 
   for (Eigen::Index i = 0; i < n; ++i) {
-    if (modulus[i] <= supportTolerance) continue;
-    const double probability = modulus[i] / total;
+    if (squaredModulus[i] <= supportTolerance) continue;
+    const double probability = squaredModulus[i] / total;
     data.entropy -= probability * std::log(probability);
   }
   for (Eigen::Index i = 0; i < n; ++i) {
-    if (modulus[i] <= supportTolerance) continue;
+    if (squaredModulus[i] <= supportTolerance) continue;
     // S = -T/A + log A with T = sum_i a_i log a_i and A = sum_i a_i gives
-    // dS/da_k = T/A^2 - log(a_k)/A = -(S + log p_k)/A.
-    data.modulusDerivative[i] =
-        -(std::log(modulus[i] / total) + data.entropy) / total;
+    // dS/da_k = T/A^2 - log(a_k)/A = -(S + log p_k)/A, for a_k = |lambda_k|^2.
+    data.squaredModulusDerivative[i] =
+        -(std::log(squaredModulus[i] / total) + data.entropy) / total;
   }
   data.zeroOperator = false;
   return data;
@@ -1050,19 +1053,18 @@ HodgeLaplacian::connectionSpectralEntropyPhaseGradient() const {
   // Each simple eigenvalue moves holomorphically,
   //   dlambda_k = u_k^dag (dL) v_k / (u_k^dag v_k),
   // and with V^-1 supplying the left eigenvectors that normalization is 1. The
-  // modulus supplies the only non-holomorphic step, in closed form:
-  //   dS = sum_k (dS/d|lambda_k|) Re(conj(lambda_k) dlambda_k)/|lambda_k|,
-  // which in the h = S_x - i S_y convention is h = sum_k beta_k dlambda_k with
-  // beta_k = (dS/d|lambda_k|) conj(lambda_k)/|lambda_k|. Contracting the sum
-  // over k ONCE into P = V diag(beta) V^-1 leaves O(1) work per edge.
+  // squared modulus supplies the only non-holomorphic step, in closed form:
+  // writing a_k = lambda_k conj(lambda_k) and u = conj(lambda_k) dlambda_k,
+  //   da_k/dx = 2 Re(u),   da_k/dy = -2 Im(u),
+  // so in the h = S_x - i S_y convention h = sum_k beta_k dlambda_k with
+  // beta_k = 2 (dS/da_k) conj(lambda_k). No division by |lambda| appears, which
+  // is one reason the square is the better-conditioned weight. Contracting the
+  // sum over k ONCE into P = V diag(beta) V^-1 leaves O(1) work per edge.
   const Eigen::Index n = data.eigenvalues.size();
   Eigen::VectorXcd beta = Eigen::VectorXcd::Zero(n);
-  for (Eigen::Index index = 0; index < n; ++index) {
-    const double modulus = std::abs(data.eigenvalues[index]);
-    if (modulus <= 0.0) continue;  // unsupported: derivative is already zero
-    beta[index] = data.modulusDerivative[index] *
-                  std::conj(data.eigenvalues[index]) / modulus;
-  }
+  for (Eigen::Index index = 0; index < n; ++index)
+    beta[index] = 2.0 * data.squaredModulusDerivative[index] *
+                  std::conj(data.eigenvalues[index]);
   const Eigen::MatrixXcd contraction =
       data.eigenvectors * beta.asDiagonal() * data.eigenvectors.inverse();
   // The perturbation formula assumes simple eigenvalues. A defective operator
