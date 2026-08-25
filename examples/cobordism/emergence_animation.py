@@ -608,7 +608,7 @@ class EmergenceFrame:
         weights = np.full((n, n), np.inf)
         np.fill_diagonal(weights, 0.0)
         pairs = []
-        squared = []
+        lengths = []
         for edge in edges:
             a = index.get(int(edge.getSource().getId()))
             b = index.get(int(edge.getTarget().getId()))
@@ -621,7 +621,7 @@ class EmergenceFrame:
             # Carried per drawn edge so the causal colouring reads the same
             # `l` the geometry holds, rather than re-deriving it from a
             # disposition setting that only describes how the SEED was built.
-            squared.append(length)
+            lengths.append(length)
         distances = shortest_path(weights, method="D", directed=False)
         finite = np.isfinite(distances)
         if not finite.any():
@@ -638,9 +638,10 @@ class EmergenceFrame:
         return {"coords": {vertices[i]: tuple(coords[i] / rms)
                            for i in range(n)},
                 "edges": pairs,
-                "edge_lengths": squared,
-                "edge_intervals": [(z * z).real for z in squared],
-                "edge_causal_classes": [causal_class(z) for z in squared],
+                "edge_lengths": lengths,
+                "edge_intervals": [(z * z).real for z in lengths],
+                "edge_causal_classes": [causal_class(z)
+                                        for z in lengths],
                 "vertices": vertices}
 
     # ---- 2b. dual curvature, for the two heat panels ----------------
