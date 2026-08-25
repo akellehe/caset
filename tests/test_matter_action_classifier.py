@@ -54,10 +54,32 @@ class TestMatterActionClassifier(unittest.TestCase):
         solver = tessera.ReggeSolver(st, matter)
         self.assertAlmostEqual(solver.matterAction(), -1.5 * 5.0, delta=1e-12)
 
-    def test_null_worldline_contributes_zero(self):
+    def test_degenerate_worldline_contributes_zero(self):
+        # l = 0 is a DEGENERATE (absent) edge, not a lightlike ray. The two were
+        # conflated while causal type came from the Euclidean modulus, which can
+        # only vanish when the edge itself does (#870). Either way it is not
+        # timelike, so it carries no proper time.
         st, verts = _chain_spacetime([0.0, 0.0])
         for e in st.getEdgeList().toVector():
+            self.assertTrue(e.isDegenerate())
+            self.assertFalse(e.isNull())
+            self.assertFalse(e.isTimelike())
+        matter = tessera.MatterConfiguration()
+        matter.setWorldlineMass(verts[1], 2.0, st)
+        solver = tessera.ReggeSolver(st, matter)
+        self.assertEqual(solver.matterAction(), 0.0)
+
+    def test_a_genuinely_lightlike_worldline_contributes_zero(self):
+        # The case the old classifier could not express: Re(l) == Im(l) > 0, so
+        # the interval vanishes on an edge of nonzero extent. Not timelike, so
+        # it carries no proper time either -- but for a physical reason rather
+        # than because the edge is absent.
+        st, verts = _chain_spacetime([1.0, 1.0])
+        component = math.sqrt(0.5)
+        for e in st.getEdgeList().toVector():
+            e.setLength(complex(component, component))
             self.assertTrue(e.isNull())
+            self.assertFalse(e.isDegenerate())
             self.assertFalse(e.isTimelike())
         matter = tessera.MatterConfiguration()
         matter.setWorldlineMass(verts[1], 2.0, st)

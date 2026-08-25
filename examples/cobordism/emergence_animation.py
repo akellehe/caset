@@ -179,13 +179,18 @@ class EdgeDisposition:
     SPACELIKE = "spacelike"
     #: `l = i`, so `l^2 = -1` on every edge.
     TIMELIKE = "timelike"
+    #: `l = (1 + i)/sqrt(2)`, so `Re(l) = Im(l) > 0` and `l^2 = i` on every
+    #: edge: the argument sits on the light cone, `arg(l^2) = pi/2`. The
+    #: interval vanishes while the edge keeps unit extent, so this is the
+    #: NON-TRIVIAL lightlike case, distinct from the degenerate `l = 0`.
+    LIGHTLIKE = "lightlike"
     #: Timelike BETWEEN hop layers of M0, spacelike WITHIN a layer. A
     #: PRESCRIBED foliation: it imposes a causal order rather than letting one
     #: emerge, and must be reported as such wherever it is used.
     FOLIATED = "foliated"
 
     #: Every accepted value, in help order.
-    ALL = (RANDOM, SPACELIKE, TIMELIKE, FOLIATED)
+    ALL = (RANDOM, SPACELIKE, TIMELIKE, LIGHTLIKE, FOLIATED)
 
 
 #: The seed disposition when the caller names none.
@@ -238,49 +243,52 @@ class DriveResult:
 
 
 class CausalClass:
-    """How one edge reads causally, by its LORENTZIAN magnitude.
+    """How one edge reads causally: LABELS for `Edge`'s own classification.
 
-    Writing `l = x + i t`, the squared length is
-    `l^2 = (x^2 - t^2) + 2 i x t`, so `Re(l^2) = x^2 - t^2` IS the Lorentzian
-    interval and its sign is the whole causal statement. Every edge therefore
-    has a definite class; there is no "neither" case to report.
+    Not a second definition of causal type. `causal_class` dispatches on
+    `Edge.isSpacelike()` and its siblings, so this panel and every certificate
+    elsewhere answer from ONE classifier. A driver-local rule would eventually
+    disagree with the engine about a physical property, which is exactly the
+    condition that makes a picture untrustworthy.
 
-    Two magnitudes live here and must not be conflated. The EUCLIDEAN modulus
-    `|l| = sqrt(x^2 + t^2)` -- what `abs()` of a complex returns -- vanishes
-    only when the edge itself collapses. The LORENTZIAN magnitude `Re(l^2)`
-    vanishes whenever `x = +/- t`, which is an ordinary lightlike edge of
-    perfectly good length. Classifying by the Euclidean modulus would make
-    lightlike unreachable except degenerately, which is the wrong norm for a
-    Lorentzian setting.
+    Causal type is the ARGUMENT of `l^2`. Writing `l = |l| e^{i a}` gives
+    `l^2 = |l|^2 e^{2 i a}`, so the three definite dispositions sit at
+    `arg(l^2) = 0`, `+/-pi` and `+/-pi/2`, and anything else is genuinely
+    MIXED. Classifying on the SIGN of `Re(l^2)` would discard `Im(l^2)`, which
+    is `2x^2 != 0` exactly at the lightlike point -- a fully null `l^2 = 0`
+    does not exist non-trivially -- so the interval's sign cannot carry the
+    whole statement, and every generic edge would be forced into a definite
+    bucket it does not belong in.
     """
 
-    #: `Re(l^2) > 0`.
+    #: `arg(l^2) ~ 0`: `l^2` real positive.
     SPACELIKE = "spacelike"
-    #: `Re(l^2) < 0`.
+    #: `arg(l^2) ~ +/-pi`: `l^2` real negative.
     TIMELIKE = "timelike"
-    #: `Re(l^2) = 0` on an edge that exists -- `Re(l) = +/- Im(l)`, both
-    #: nonzero. A populated, physical case, not an edge condition.
+    #: `arg(l^2) ~ +/-pi/2`: `l^2` purely imaginary and NONZERO, reached at
+    #: `Re(l) = +/- Im(l)`, both nonzero. A populated, physical case.
     LIGHTLIKE = "lightlike"
+    #: A generic argument: no definite causal character. NOT rounded to the
+    #: nearest of the three, which would report a definiteness the geometry
+    #: does not have. Under a uniformly drawn argument this is the common
+    #: case, and its FRACTION across engine units is the diagnostic of whether
+    #: relaxation imposes a disposition. An all-mixed panel is a finding.
+    MIXED = "mixed"
     #: `l = 0` in both parts: an absent edge, which is not a causal type at
     #: all. Reported apart so it can never be read as lightlike.
     DEGENERATE = "degenerate"
 
-    ALL = (SPACELIKE, TIMELIKE, LIGHTLIKE, DEGENERATE)
+    ALL = (SPACELIKE, TIMELIKE, LIGHTLIKE, MIXED, DEGENERATE)
 
-
-#: `|Re(l^2)|` at or below this, RELATIVE to the Euclidean `|l|^2`, sits on
-#: the light cone. Relative, so the classification does not move with the
-#: overall scale the lengths happen to carry.
-DECLARED_CAUSAL_INTERVAL_TOLERANCE = 1e-9
-#: Euclidean `|l|` at or below this is a collapsed edge, not a null one.
-DECLARED_CAUSAL_DEGENERATE_TOLERANCE = 1e-12
 
 #: One colour per causal class, and the legend reads from this map, so the
-#: drawn colour and its label can never disagree.
+#: drawn colour and its label can never disagree. Mixed is deliberately the
+#: neutral grey: it is the absence of a definite character, not a fourth one.
 DECLARED_CAUSAL_COLOURS = {
     CausalClass.SPACELIKE: "#1f4e79",
     CausalClass.TIMELIKE: "#a33227",
     CausalClass.LIGHTLIKE: "#c9a227",
+    CausalClass.MIXED: "#8c8c8c",
     CausalClass.DEGENERATE: "#7a5aa8",
 }
 
@@ -308,28 +316,26 @@ DECLARED_HEAT_CLIP_PERCENTILE = 95
 DECLARED_HEAT_ZERO_TOLERANCE = 1e-9
 
 
-def causal_class(length):
-    """The `CausalClass` of one edge, read from its LENGTH `l`.
+def causal_class(edge):
+    """The `CausalClass` of one edge, read from the LIBRARY predicates.
 
-    Takes `l` rather than `l^2` because separating a lightlike edge from an
-    absent one needs both magnitudes: the interval `Re(l^2)` vanishes for
-    each, and only the Euclidean modulus tells them apart.
+    Takes the live `Edge` rather than a length so the panel and the engine
+    answer from one classifier. `Edge` classifies on `arg(l^2)` with its own
+    declared angular tolerance; re-deriving that here would put a second
+    definition of a physical property in the driver, and the two would drift.
 
-    Computed here in the driver from `l` rather than taken from `Edge`'s
-    causal predicates, which classify by `Im(l)` instead of by the interval
-    and so report almost every edge of a `random` seed as timelike. Where the
-    two disagree, this reads the interval and `Edge` does not; #870 tracks
-    reconciling them.
+    The order matters and mirrors the library's: degenerate is tested FIRST,
+    because `arg(0)` is `0` and an absent edge would otherwise read spacelike.
     """
-    value = complex(length)
-    euclidean = abs(value)
-    if euclidean <= DECLARED_CAUSAL_DEGENERATE_TOLERANCE:
+    if edge.isDegenerate():
         return CausalClass.DEGENERATE
-    interval = (value * value).real          # x^2 - t^2
-    if abs(interval) <= DECLARED_CAUSAL_INTERVAL_TOLERANCE * euclidean ** 2:
+    if edge.isSpacelike():
+        return CausalClass.SPACELIKE
+    if edge.isTimelike():
+        return CausalClass.TIMELIKE
+    if edge.isNull():
         return CausalClass.LIGHTLIKE
-    return (CausalClass.SPACELIKE if interval > 0.0
-            else CausalClass.TIMELIKE)
+    return CausalClass.MIXED
 
 
 # =====================================================================
@@ -423,6 +429,14 @@ def _seed_lengths(spacetime, disposition, seed):
     if disposition == EdgeDisposition.TIMELIKE:
         for edge in edges:
             edge.setLength(complex(0.0, 1.0))            # l^2 = -1
+        return
+    if disposition == EdgeDisposition.LIGHTLIKE:
+        # Re(l) == Im(l) > 0 with |l| = 1, so l^2 = i exactly: the interval
+        # vanishes on an edge of unit extent. Both parts are the SAME double,
+        # so x^2 - t^2 cancels to exactly zero and arg(l^2) is exactly pi/2.
+        component = math.sqrt(0.5)
+        for edge in edges:
+            edge.setLength(complex(component, component))  # l^2 = i
         return
     if disposition == EdgeDisposition.RANDOM:
         generator = random.Random(seed)
@@ -619,6 +633,8 @@ class EmergenceFrame:
         np.fill_diagonal(weights, 0.0)
         pairs = []
         lengths = []
+        classes = []
+        arguments = []
         for edge in edges:
             a = index.get(int(edge.getSource().getId()))
             b = index.get(int(edge.getTarget().getId()))
@@ -632,6 +648,12 @@ class EmergenceFrame:
             # `l` the geometry holds, rather than re-deriving it from a
             # disposition setting that only describes how the SEED was built.
             lengths.append(length)
+            # Classified by the LIBRARY, from the live edge -- see
+            # `causal_class`. `arg(l^2)` rides along as the measured value, so
+            # a reader can see where an edge actually sits rather than only
+            # which bucket it fell in.
+            classes.append(causal_class(edge))
+            arguments.append(edge.squaredArgument())
         distances = shortest_path(weights, method="D", directed=False)
         finite = np.isfinite(distances)
         if not finite.any():
@@ -650,8 +672,8 @@ class EmergenceFrame:
                 "edges": pairs,
                 "edge_lengths": lengths,
                 "edge_intervals": [(z * z).real for z in lengths],
-                "edge_causal_classes": [causal_class(z)
-                                        for z in lengths],
+                "edge_causal_classes": classes,
+                "edge_causal_arguments": arguments,
                 "vertices": vertices}
 
     # ---- 2b. dual curvature, for the two heat panels ----------------
@@ -1392,16 +1414,9 @@ def _panel_layout(axis, frame, placement=None):
         axis.legend(handles=handles, fontsize=5, loc="upper right",
                     frameon=True, framealpha=0.85, borderpad=0.3,
                     handlelength=1.2)
-    # `Edge`'s own predicates classify by `Im(l)` rather than by the interval,
-    # so they can disagree with this panel -- notably on a `random` seed,
-    # where almost every edge has `Im(l) != 0`. Said on the face of the figure
-    # so a reader comparing it against a certificate elsewhere does not
-    # conclude that one of the two is broken. #870 reconciles them.
-    axis.text(0.5, -0.04,
-              "interval, not Edge::isTimelike() -- the two can disagree "
-              "until #870",
-              transform=axis.transAxes, ha="center", va="top",
-              fontsize=4.5, color="#888888", style="italic")
+    # No disagreement note: the colouring now dispatches on `Edge`'s own
+    # predicates (see `causal_class`), so the panel and every certificate
+    # elsewhere answer from one classifier and cannot disagree.
     if placement and placement.get("view"):
         view = placement["view"]
         axis.set_xlim(view[0], view[1])
@@ -1415,10 +1430,13 @@ def _panel_layout(axis, frame, placement=None):
 #: the colour alone. Every label names the INTERVAL, because that is what is
 #: being drawn -- `degenerate` is the one that needs saying, since an absent
 #: edge also has a vanishing interval but is not lightlike.
+#: Legend text, stated in the quantity the classification actually reads --
+#: `arg(l^2)` -- so the label cannot suggest a rule the classifier does not use.
 _CAUSAL_LEGEND = {
-    CausalClass.SPACELIKE: "spacelike  Re l^2 > 0",
-    CausalClass.TIMELIKE: "timelike  Re l^2 < 0",
-    CausalClass.LIGHTLIKE: "lightlike  Re l^2 = 0, l != 0",
+    CausalClass.SPACELIKE: "spacelike  arg l^2 = 0",
+    CausalClass.TIMELIKE: "timelike  arg l^2 = +/-pi",
+    CausalClass.LIGHTLIKE: "lightlike  arg l^2 = +/-pi/2, l != 0",
+    CausalClass.MIXED: "mixed  no definite arg",
     CausalClass.DEGENERATE: "degenerate  l = 0",
 }
 

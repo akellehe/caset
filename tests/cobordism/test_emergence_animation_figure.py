@@ -15,6 +15,7 @@ that what the figure shows is what the geometry says.
 * the JSON is byte-identical with and without any of it.
 """
 
+import cmath
 import json
 import math
 import os
@@ -215,61 +216,88 @@ class StabilizationTest(unittest.TestCase):
 # ======================================================================
 
 
-class CausalClassTest(unittest.TestCase):
-    """Classification is by the LORENTZIAN magnitude `Re(l^2) = x^2 - t^2`,
-    the interval, and never by the Euclidean modulus `sqrt(x^2 + t^2)`, which
-    vanishes only when the edge collapses."""
+def _classify(length):
+    """`causal_class` of a bare length, via a throwaway edge.
 
-    def test_the_four_classes_read_off_the_interval(self):
+    The classifier takes a live `Edge` because it dispatches on the library
+    predicates rather than re-deriving a rule; these tests supply lengths, so
+    they build an edge to carry one.
+    """
+    edge = T.Edge(T.Vertex(1, [0.0, 0.0, 0.0, 0.0]),
+                  T.Vertex(2, [0.0, 0.0, 0.0, 1.0]), complex(length))
+    return ea.causal_class(edge)
+
+
+class CausalClassTest(unittest.TestCase):
+    """Classification is the ARGUMENT of `l^2`, from the library predicates.
+
+    The sign of the interval `Re(l^2)` is not enough on its own: it discards
+    `Im(l^2)`, which is `2x^2 != 0` exactly at the lightlike point, and it
+    forces every generic edge into a definite bucket. Reading `arg(l^2)` keeps
+    both components and leaves a generic argument MIXED.
+    """
+
+    def test_the_definite_classes_read_off_the_argument(self):
         cases = [
-            # l,                  expected
-            (1.0 + 0.0j, ea.CausalClass.SPACELIKE),      # Re(l^2) = +1
-            (3.0 + 0.0j, ea.CausalClass.SPACELIKE),      # Re(l^2) = +9
-            (0.0 + 1.0j, ea.CausalClass.TIMELIKE),       # Re(l^2) = -1
-            (0.0 + 3.0j, ea.CausalClass.TIMELIKE),       # Re(l^2) = -9
-            (2.0 + 1.0j, ea.CausalClass.SPACELIKE),      # 4 - 1 = +3
-            (1.0 + 2.0j, ea.CausalClass.TIMELIKE),       # 1 - 4 = -3
+            # l,                  arg(l^2),  expected
+            (1.0 + 0.0j, ea.CausalClass.SPACELIKE),      # arg = 0
+            (3.0 + 0.0j, ea.CausalClass.SPACELIKE),      # arg = 0
+            (0.0 + 1.0j, ea.CausalClass.TIMELIKE),       # arg = pi
+            (0.0 + 3.0j, ea.CausalClass.TIMELIKE),       # arg = pi
             (0.0 + 0.0j, ea.CausalClass.DEGENERATE),
         ]
         for value, expected in cases:
             with self.subTest(length=value):
-                self.assertEqual(ea.causal_class(value), expected)
+                self.assertEqual(_classify(value), expected)
+
+    def test_a_generic_argument_is_mixed_not_rounded(self):
+        """The case a sign test gets wrong.
+
+        `l = 2 + i` has `Re(l^2) = 3 > 0`, so a sign rule calls it spacelike.
+        Its argument is `atan2(4, 3) ~ 0.927`, nowhere near `0`, so it has no
+        definite causal character and is reported mixed. Rounding it to
+        spacelike would assert a definiteness the geometry does not have.
+        """
+        for value in (2.0 + 1.0j, 1.0 + 2.0j, 3.0 + 1.0j):
+            with self.subTest(length=value):
+                self.assertNotEqual((value * value).real, 0.0)  # definite SIGN
+                self.assertEqual(_classify(value), ea.CausalClass.MIXED)
 
     def test_equal_weighting_is_lightlike_and_not_degenerate(self):
-        """`l = x(1+i)` with `x > 0` is the case the interval catches and the
-        Euclidean modulus cannot: the interval vanishes while the edge is
-        perfectly well defined."""
+        """`l = x(1+i)` with `x > 0`: the interval vanishes while the edge is
+        perfectly well defined. Asserted on both, so it cannot pass by the
+        edge having collapsed."""
         for x in (1.0, 0.5, 7.25, 1.0 / math.sqrt(2.0)):
             with self.subTest(x=x):
                 length = complex(x, x)
-                interval = (length * length).real
-                self.assertAlmostEqual(interval, 0.0, places=12,
+                self.assertAlmostEqual((length * length).real, 0.0, places=12,
                                        msg="Re(l^2) must vanish")
                 self.assertGreater(abs(length), 0.0,
                                    "the edge must not have collapsed")
-                self.assertEqual(ea.causal_class(length),
-                                 ea.CausalClass.LIGHTLIKE)
+                self.assertEqual(_classify(length), ea.CausalClass.LIGHTLIKE)
 
     def test_the_original_even_weighting_seed_was_entirely_lightlike(self):
-        """`l = (1+i)/sqrt(2)` gives `l^2 = i`, so `Re(l^2) = 0` on every
-        edge -- the host that seed built was lightlike throughout, which the
-        Euclidean-modulus predicates report as timelike."""
+        """`l = (1+i)/sqrt(2)` gives `l^2 = i`, so every edge of the host that
+        seed built sat on the light cone -- read as timelike for as long as any
+        imaginary part counted as such."""
         length = complex(1.0, 1.0) / math.sqrt(2.0)
         self.assertAlmostEqual((length * length).real, 0.0, places=12)
-        self.assertEqual(ea.causal_class(length), ea.CausalClass.LIGHTLIKE)
+        self.assertEqual(_classify(length), ea.CausalClass.LIGHTLIKE)
 
     def test_lightlike_is_judged_relative_to_scale(self):
-        """A large edge slightly off the cone is not lightlike; a tiny one the
-        same absolute distance off it is."""
-        self.assertEqual(ea.causal_class(complex(1e3, 0.0)),
+        """An angular tolerance is dimensionless, so the classification does
+        not move with the scale the lengths happen to carry."""
+        self.assertEqual(_classify(complex(1e3, 0.0)),
                          ea.CausalClass.SPACELIKE)
-        self.assertEqual(ea.causal_class(complex(1.0, 1.0 - 1e-13)),
+        self.assertEqual(_classify(complex(1e-3, 0.0)),
+                         ea.CausalClass.SPACELIKE)
+        self.assertEqual(_classify(complex(1.0, 1.0 - 1e-13)),
                          ea.CausalClass.LIGHTLIKE)
 
     def test_degenerate_is_not_lightlike(self):
-        """Both have a vanishing interval; only one is an edge."""
-        self.assertEqual(ea.causal_class(0j), ea.CausalClass.DEGENERATE)
-        self.assertEqual(ea.causal_class(complex(1.0, 1.0)),
+        """Both sit at a vanishing interval; only one is an edge."""
+        self.assertEqual(_classify(0j), ea.CausalClass.DEGENERATE)
+        self.assertEqual(_classify(complex(1.0, 1.0)),
                          ea.CausalClass.LIGHTLIKE)
 
     def test_every_class_has_a_colour_and_a_legend_entry(self):
@@ -280,49 +308,58 @@ class CausalClassTest(unittest.TestCase):
             self.assertIn(name, ea._CAUSAL_LEGEND)
 
     def test_the_dispositions_produce_the_classes_they_name(self):
-        """Asserted on the interval computed from l, never on the colour."""
         expected = {
             ea.EdgeDisposition.SPACELIKE: ea.CausalClass.SPACELIKE,
             ea.EdgeDisposition.TIMELIKE: ea.CausalClass.TIMELIKE,
+            ea.EdgeDisposition.LIGHTLIKE: ea.CausalClass.LIGHTLIKE,
         }
         for disposition, causal in expected.items():
             with self.subTest(disposition=disposition):
                 host = ea.build_cobordism_host(HOST, ea.DECLARED_HOST_SEED,
                                                disposition)
-                classes = {ea.causal_class(e.getLength())
+                classes = {ea.causal_class(e)
                            for e in host.getEdgeList().toVector()}
                 self.assertEqual(classes, {causal})
 
-    def test_random_spans_more_than_one_class(self):
-        """`l = e^{ia}` gives `Re(l^2) = cos 2a`, which takes both signs, so
-        the default seed carries a genuine mix rather than one colour."""
+    def test_random_is_entirely_mixed(self):
+        """Measured, and the finding rather than a defect.
+
+        `l = e^{ia}` with `a` uniform gives a generic `arg(l^2)` almost surely,
+        so a random seed has NO definite causal character anywhere. An earlier
+        version of this panel read that as saying nothing and replaced the
+        indefinite class with a sign test, which reported every edge as
+        definitely spacelike or timelike. All-mixed is the honest reading, and
+        the mixed fraction across engine units is the diagnostic of whether
+        relaxation imposes a disposition.
+        """
         host = ea.build_cobordism_host(HOST, ea.DECLARED_HOST_SEED,
                                        ea.EdgeDisposition.RANDOM)
-        classes = {ea.causal_class(e.getLength())
-                   for e in host.getEdgeList().toVector()}
-        self.assertGreater(
-            len(classes), 1,
-            "a random seed drew only %s: the interval should take both "
-            "signs" % classes)
+        classes = {ea.causal_class(e) for e in host.getEdgeList().toVector()}
+        self.assertEqual(classes, {ea.CausalClass.MIXED})
 
     def test_foliated_carries_both_definite_classes(self):
         host = ea.build_cobordism_host(HOST, ea.DECLARED_HOST_SEED,
                                        ea.EdgeDisposition.FOLIATED)
-        classes = {ea.causal_class(e.getLength())
-                   for e in host.getEdgeList().toVector()}
+        classes = {ea.causal_class(e) for e in host.getEdgeList().toVector()}
         self.assertIn(ea.CausalClass.SPACELIKE, classes)
         self.assertIn(ea.CausalClass.TIMELIKE, classes)
+        self.assertNotIn(ea.CausalClass.MIXED, classes)
 
-    def test_the_frame_carries_a_class_per_drawn_edge(self):
+    def test_the_frame_carries_a_class_and_an_argument_per_drawn_edge(self):
         frame = _frames()[0]
-        self.assertEqual(len(frame.layout["edge_causal_classes"]),
-                         len(frame.layout["edges"]))
-        for causal, length, interval in zip(
+        edges = frame.layout["edges"]
+        self.assertEqual(len(frame.layout["edge_causal_classes"]), len(edges))
+        self.assertEqual(len(frame.layout["edge_causal_arguments"]), len(edges))
+        for causal, length, interval, argument in zip(
                 frame.layout["edge_causal_classes"],
                 frame.layout["edge_lengths"],
-                frame.layout["edge_intervals"]):
-            self.assertEqual(causal, ea.causal_class(length))
+                frame.layout["edge_intervals"],
+                frame.layout["edge_causal_arguments"]):
+            self.assertEqual(causal, _classify(length))
             self.assertAlmostEqual(interval, (length * length).real,
+                                   places=12)
+            # arg(l^2) is carried as the MEASURED value beside the bucket.
+            self.assertAlmostEqual(argument, cmath.phase(length * length),
                                    places=12)
 
 

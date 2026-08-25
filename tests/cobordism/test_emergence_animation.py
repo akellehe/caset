@@ -197,17 +197,24 @@ class AbsenceTest(unittest.TestCase):
     def test_the_seed_has_no_causal_order_yet(self):
         """Measured, and NOT the behaviour to preserve.
 
-        The canonical seed weights every length's real and imaginary parts
-        evenly, so every edge is causal. The temporal-function certificate
-        requires that no causal edge lie inside a hop layer of M0, so it
-        refuses with `causal-cycle`: the seed has causal CHARACTER everywhere
-        but no causal ORDER. That is a reason of the readout's own, not the
-        absent surface this ticket removed.
+        The default seed draws `arg l` uniformly, so almost every edge has a
+        GENERIC argument and is therefore mixed -- no definite causal
+        character at all. The temporal function needs causal edges before it
+        can order anything, so it refuses with `no-causal-edges`.
+
+        This reason CHANGED when causal type began to be read from `arg(l^2)`
+        rather than from `Im(l) != 0` (#870). Under the superseded test any
+        nonzero imaginary part counted as timelike, so a randomly seeded
+        complex looked causal EVERYWHERE and the refusal was `causal-cycle`:
+        causal character with no causal order. Reading the argument shows the
+        seed has no definite character to begin with, which is both the honest
+        state and a stricter starting point -- there is nothing to order,
+        rather than too much.
 
         This test records the measured state so a change is noticed. If the
-        dynamics later produces a causal order, `certified` becomes True and
-        this test should be replaced by one asserting that -- it is a
-        tripwire, not a specification.
+        dynamics later drives edges onto definite arguments and produces an
+        order, `certified` becomes True and this test should be replaced by
+        one asserting that -- it is a tripwire, not a specification.
         """
         host = ea.build_cobordism_host(SMALL, ea.DECLARED_HOST_SEED)
         temporal = obs.CrossingReadouts.temporalFunction(
@@ -216,7 +223,7 @@ class AbsenceTest(unittest.TestCase):
         if temporal.certified:
             self.assertEqual(reasons, [])
             return
-        self.assertIn("causal-cycle", reasons)
+        self.assertIn("no-causal-edges", reasons)
 
     def test_a_refused_transport_names_why(self):
         frame = _frames()[-1]
@@ -503,9 +510,17 @@ class EdgeDispositionTest(unittest.TestCase):
     def test_the_cli_rejects_an_unknown_value(self):
         parser = ea.build_parser()
         with self.assertRaises(SystemExit):
-            parser.parse_args(["run", "--edge-disposition", "lightlike"])
+            parser.parse_args(["run", "--edge-disposition", "chronological"])
         args = parser.parse_args(["run", "--edge-disposition", "foliated"])
         self.assertEqual(args.edge_disposition, ea.EdgeDisposition.FOLIATED)
+
+    def test_the_cli_accepts_lightlike(self):
+        # `lightlike` became a real setting once a null INTERVAL was
+        # expressible on an edge of nonzero extent (#870); before that it was
+        # reachable only by collapsing the edge, which is degenerate instead.
+        args = ea.build_parser().parse_args(
+            ["run", "--edge-disposition", "lightlike"])
+        self.assertEqual(args.edge_disposition, ea.EdgeDisposition.LIGHTLIKE)
 
     def test_the_disposition_is_recorded_in_the_config(self):
         config = ea.build_config(size=SMALL, steps=SMALL_STEPS,

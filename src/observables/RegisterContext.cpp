@@ -109,6 +109,13 @@ void RegisterContext::initialize(
   // same accessor WilsonLoop / ReggeSolver read), never a cell-size guess.
   dimensions_ = st.getMetric()->getSignature()->getDimensions();
 
+  // "Causal content" is the NEGATION of spacelike, so since #870 it covers
+  // timelike and lightlike edges as before, and now also MIXED ones — an edge
+  // off every definite argument is not definitely spacelike either. That is
+  // the conservative reading (the complex is not purely spatial) and it is
+  // deliberately kept, but it is broader than "timelike or null": a complex of
+  // entirely mixed edges reports causal content while carrying no definite
+  // causal structure at all.
   causalContent_ = false;
   for (const auto *e : st.getEdgeList()->toVector()) {
     if (!e->isSpacelike()) {

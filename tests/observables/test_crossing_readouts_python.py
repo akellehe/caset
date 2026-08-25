@@ -214,17 +214,34 @@ class TestTemporalFunction(unittest.TestCase):
         self.assertEqual(read.causalEdgeCount, 3)
         self.assertEqual(read.unreachableCount, 0)
 
-    def test_tau_is_complex_valued(self):
-        """tau is complex like the geometry that defines it: a rung with a
-        complex squared length carries a complex proper time."""
+    def test_a_generically_complex_rung_is_mixed_and_carries_no_time(self):
+        """Measured after #870, and NOT obviously the behaviour to want.
+
+        This rung has `l^2 = -(1 + i)`, so `arg(l^2) = -3pi/4` -- a generic
+        argument, hence MIXED: no definite causal character. A mixed edge
+        cannot order anything, so tau does not propagate along it and vertex 3
+        is unreachable.
+
+        The consequence is worth stating plainly, because it narrows the
+        readout. Causal edges are now timelike (`l^2` real negative) or null,
+        and null ones are refused by name; a timelike edge has proper time
+        `sqrt(-l^2)`, which is REAL. So on a CERTIFIED configuration tau is
+        always real, and the complex-tau path this test used to exercise is
+        unreachable -- exactly as the lightlike case was unreachable before.
+
+        That is a direct consequence of classifying on the argument and
+        refusing to snap a generic one to the nearest definite type. It may be
+        right, but it is a narrowing rather than a fix, and it is recorded here
+        as a tripwire so the decision is visible rather than assumed.
+        """
         st = _ladder()
-        # l^2 = -(1 + i) -> proper time sqrt(1 + i), genuinely complex.
-        _edge(st, 0, 3).setLength(cmath.sqrt(complex(-1.0, -1.0)))
+        edge = _edge(st, 0, 3)
+        edge.setLength(cmath.sqrt(complex(-1.0, -1.0)))
+        self.assertTrue(edge.isMixed())
+        self.assertAlmostEqual(edge.squaredArgument(), -3.0 * math.pi / 4.0,
+                               delta=1e-12)
         read = obs.CrossingReadouts.temporalFunction(st, M0)
-        expected = cmath.sqrt(complex(1.0, 1.0))
-        self.assertAlmostEqual(read.at(3).real, expected.real, delta=1e-9)
-        self.assertAlmostEqual(read.at(3).imag, expected.imag, delta=1e-9)
-        self.assertGreater(abs(read.at(3).imag), 1e-3)
+        self.assertTrue(math.isnan(read.at(3).real))   # unreachable, not zero
 
     def test_layers_are_intrinsic_not_coordinates(self):
         """The time orientation is the one M0 induces combinatorially; no
@@ -245,9 +262,20 @@ class TestTemporalFunction(unittest.TestCase):
         self.assertIn("empty-boundary", list(read.failedCertificates))
 
     def test_null_causal_edge_refuses_by_name(self):
-        """A null edge is refused, never counted at zero."""
+        """A null edge is refused, never counted at zero.
+
+        The edge here is genuinely LIGHTLIKE -- `Re(l) == Im(l) > 0`, so the
+        interval vanishes while the edge keeps nonzero extent. Before #870 that
+        case was unreachable and this test stood in a zero-length edge, which is
+        DEGENERATE (absent) rather than null. Reading `arg(l^2)` separates the
+        two, so the reason is now exercised by the thing it is named for.
+        """
         st = _ladder()
-        _edge(st, 0, 3).setLength(0.0 + 0j)
+        component = math.sqrt(0.5)
+        edge = _edge(st, 0, 3)
+        edge.setLength(complex(component, component))
+        self.assertTrue(edge.isNull())          # a lightlike ray ...
+        self.assertFalse(edge.isDegenerate())   # ... not an absent edge
         read = obs.CrossingReadouts.temporalFunction(st, M0)
         self.assertFalse(read.certified)
         self.assertIn("null-causal-edge", list(read.failedCertificates))

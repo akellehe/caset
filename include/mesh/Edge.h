@@ -45,7 +45,13 @@ using namespace ::tessera::quantum;
 enum class EdgeDisposition : uint8_t {
   Spacelike = 0,
   Timelike = 1,
-  Lightlike = 2
+  Lightlike = 2,
+  /// A genuinely complex \f$ l^2 \f$ — an argument at none of the three definite
+  /// values. The honest reading of an edge that has not acquired a causal
+  /// character, and the common case for a randomly seeded complex.
+  Mixed = 3,
+  /// An absent edge, \f$ l = 0 \f$. Not a causal type.
+  Degenerate = 4
 };
 
 
@@ -118,18 +124,91 @@ class Edge {
 
     /// The (possibly complex) edge length — the causal DOF, distinct from the
     /// connection `phase` and from \f$l^2\f$. Real for spacelike, imaginary for timelike, general
-    /// complex for the Picard–Lefschetz saddle. Causal character is read from THIS
-    /// (`Im(length)`) — the timelike disambiguation a real signed \f$l^2\f$ cannot give.
+    /// complex for the Picard–Lefschetz saddle. Causal character is the LORENTZIAN
+    /// magnitude of this, \f$\mathrm{Re}(l^2)\f$ — see the predicates below.
     [[nodiscard]] std::complex<double> getLength() const noexcept;
 
-    /// Causal character read from the LENGTH, not the fragile `sign(l^2)`: an edge
-    /// is timelike iff its length has a (non-negligible) imaginary part. A genuinely
-    /// spacelike (real) length has `Im == 0`; the epsilon only guards float noise.
-    /// These supersede the scattered `sign(l^2)` tests.
-    static constexpr double kCausalEpsilon = 1e-12;
+    /// # Causal character, from the ARGUMENT of \f$ l^2 \f$
+    ///
+    /// Classifying on \f$ \mathrm{Re}(l^2) \f$ alone would discard
+    /// \f$ \mathrm{Im}(l^2) \f$, which is real physics here rather than a residue —
+    /// the same error as building a diagnostic on \f$ \mathrm{Re}\,S \f$ alone. It
+    /// bites exactly at the case of interest: at the lightlike point
+    /// \f$ \mathrm{Im}(l^2) = 2x^2 \neq 0 \f$, so \f$ l^2 \f$ is purely imaginary and
+    /// NONZERO. A fully null \f$ l^2 = 0 \f$ does not exist non-trivially.
+    ///
+    /// Both components are accounted for by classifying on the argument. Writing
+    /// \f$ l = |l| e^{i a} \f$,
+    /// \f[ l^2 = |l|^2 e^{2ia}, \quad
+    ///     \mathrm{Re}(l^2) = |l|^2 \cos 2a, \quad
+    ///     \mathrm{Im}(l^2) = |l|^2 \sin 2a. \f]
+    ///
+    /// | \f$ a = \arg l \f$ | \f$ l^2 \f$ | disposition |
+    /// |---|---|---|
+    /// | \f$ 0 \f$ (mod \f$\pi\f$) | real positive | spacelike |
+    /// | \f$ \pi/2 \f$ (mod \f$\pi\f$) | real negative | timelike |
+    /// | \f$ \pi/4 \f$ (mod \f$\pi/2\f$) | purely imaginary | lightlike |
+    /// | anything else | genuinely complex | **mixed** |
+    /// | \f$ l = 0 \f$ | — | degenerate: an absent edge, not a causal type |
+    ///
+    /// A generic argument is reported as MIXED, never assigned to the nearest of the
+    /// three — that would invent a definiteness the geometry does not have. Under a
+    /// uniformly drawn argument almost every edge is mixed, and the mixed FRACTION is
+    /// a diagnostic: if relaxation imposes causal character, it should fall.
+    ///
+    /// `squaredArgument()` carries \f$ \arg(l^2) \f$ as the measured quantity, so a
+    /// consumer can see where an edge actually sits rather than only which bucket it
+    /// fell in.
+    ///
+    /// The canonical cases are unchanged: a real length is spacelike and an imaginary
+    /// one timelike. What changes is that a genuinely complex length is no longer read
+    /// as timelike merely for having an imaginary part.
+    ///
+    /// `isDegenerate` is separate from `isNull` on purpose: a null edge is a physical
+    /// lightlike ray, a degenerate one is absent, and conflating them was the defect
+    /// this replaces. Exactly one of the five predicates holds for any edge.
+
+    /// Absolute floor on the EUCLIDEAN modulus below which an edge is degenerate
+    /// rather than any causal type. Dimensions of LENGTH. This is the one place the
+    /// Euclidean modulus is the right norm — an edge with no extent is absent.
+    static constexpr double kDegenerateEpsilon = 1e-12;
+
+    /// Angular half-width, in radians, within which an argument counts as definite.
+    ///
+    /// ANGULAR because it is dimensionless and therefore scale-free. An absolute
+    /// floor on \f$ \mathrm{Re}(l^2) \f$ could not work: that quantity has dimensions
+    /// of length SQUARED while the superseded `kCausalEpsilon` compared
+    /// \f$ |\mathrm{Im}(l)| \f$, a LENGTH, so one constant cannot serve both and
+    /// either choice silently reclassifies edges near the cone as a complex refines.
+    ///
+    /// In \f$ \arg(l^2) \f$ the three definite dispositions sit at \f$ 0 \f$,
+    /// \f$ \pm\pi/2 \f$ and \f$ \pi \f$ — equivalently \f$ a = 0, \pi/4, \pi/2 \f$ —
+    /// so ONE half-width applied at each treats them symmetrically, which is the
+    /// property to want. The buckets stay disjoint for any width below
+    /// \f$ \pi/4 \f$.
+    ///
+    /// The value is a numerical-noise guard, not a bucket width: a deliberately
+    /// constructed disposition lands on its argument to within a few ulp
+    /// (\f$ \sim 10^{-16} \f$ rad), so \f$ 10^{-9} \f$ sits some seven orders above
+    /// float noise and eight below the \f$ \pi/4 \f$ collision bound. Widening it
+    /// would start absorbing genuinely mixed edges into definite buckets, which is
+    /// exactly the invented definiteness this classification refuses.
+    static constexpr double kCausalAngularEpsilon = 1e-9;
+
+    /// \f$ \arg(l^2) \in (-\pi, \pi] \f$ — the measured quantity every predicate
+    /// below classifies. Zero is spacelike, \f$ \pm\pi/2 \f$ lightlike, \f$ \pi \f$
+    /// timelike, anything else mixed.
+    [[nodiscard]] double squaredArgument() const noexcept;
+    /// \f$ \mathrm{Re}(l^2) = x^2 - t^2 \f$, carried for consumers that want the
+    /// interval itself. It does NOT decide the disposition on its own.
+    [[nodiscard]] double lorentzianMagnitude() const noexcept;
     [[nodiscard]] bool isTimelike() const noexcept;
     [[nodiscard]] bool isSpacelike() const noexcept;
     [[nodiscard]] bool isNull() const noexcept;
+    /// A genuinely complex \f$ l^2 \f$: no definite causal character.
+    [[nodiscard]] bool isMixed() const noexcept;
+    /// An absent edge (\f$ |l|_E \approx 0 \f$), which is not a causal type.
+    [[nodiscard]] bool isDegenerate() const noexcept;
     [[nodiscard]] EdgeDisposition disposition() const noexcept;
 
 #ifdef TESSERA_VERBOSE
