@@ -82,9 +82,17 @@ def test_graphml_export_roundtrip(tmp_path):
         assert (d["timelike"] == "true") == canon[k], (
             f"edge {k}: exported timelike={d['timelike']} disagrees with "
             f"Edge.isTimelike()={canon[k]}")
-    # the Im-carrying edge is timelike by the canonical classifier even
-    # though Re(l^2) > 0 — the case the sign-of-Re export got wrong
-    assert seen[(0, 2)]["timelike"] == "true"
+    # The Im-carrying edge (l^2 = 1 + 0.25i) has arg(l^2) ~ 0.245 rad -- a
+    # generic argument, so it is MIXED: no definite causal character, and in
+    # particular NOT timelike (#870). It read as timelike only while any
+    # nonzero Im(l) counted as such.
+    #
+    # NOTE the export carries a BOOLEAN `timelike`, which cannot distinguish
+    # mixed from spacelike now that the classification has five cases. That is
+    # a fidelity gap in the GraphML schema rather than a defect in the
+    # classifier; the assertion above still pins export against the live
+    # classifier, so the two cannot silently drift.
+    assert seen[(0, 2)]["timelike"] == "false"
 
 
 def test_dot_export_roundtrip(tmp_path):

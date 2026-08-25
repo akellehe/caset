@@ -163,7 +163,15 @@ class ComplexStageTwoContractTest(unittest.TestCase):
         for e in opt.st.getEdgeList().toVector():
             l = complex(e.getLength())
             self.assertTrue(cmath.isfinite(l))
-            self.assertTrue(e.isTimelike() or e.isSpacelike() or e.isNull())
+            # Classifiable means EXACTLY ONE of the five cases holds. Since
+            # #870 the definite three are not exhaustive: an edge off the
+            # definite arguments is mixed, and one with no extent is
+            # degenerate. Stage 2 may legitimately leave an edge mixed -- the
+            # invariant is that it is never in none of the cases nor in two at
+            # once, which the old three-way `or` could not express.
+            cases = (e.isSpacelike(), e.isTimelike(), e.isNull(),
+                     e.isMixed(), e.isDegenerate())
+            self.assertEqual(sum(bool(c) for c in cases), 1, cases)
 
     def test_descent_descends_through_the_crossing_regime(self):
         # The objective genuinely decreases while hinges cross the cone — the
