@@ -4114,9 +4114,20 @@ evidence.)doc")
       .def_readonly("certificate", &ClusterRegisterRead::certificate)
       .def_readonly("thresholds", &ClusterRegisterRead::thresholds)
       .def("describe", &ClusterRegisterRead::describe)
-      .def("toRecord", &ClusterRegisterRead::toRecord)
-      .def_static("fromRecord", &ClusterRegisterRead::fromRecord,
-                  py::arg("record"));
+      .def("toRecord",
+           [](const ClusterRegisterRead &self) {
+             return recordToPython(self.toRecord());
+           },
+           "Checkpoint serialization: the JSON-able record of the read "
+           "(schema-versioned; unmeasured channels stay NaN).")
+      .def_static("fromRecord",
+                  [](const py::handle &record) {
+                    return ClusterRegisterRead::fromRecord(
+                        pythonToRecord(record));
+                  },
+                  py::arg("record"),
+                  "Rehydrate from toRecord() output; rejects an unknown "
+                  "schema_version (ValueError).");
 
   py::class_<ClusterRegister>(m, "ClusterRegister",
       "Reads the register the whitepaper's 'Recursive spectral fibers' "
