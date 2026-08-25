@@ -228,42 +228,50 @@ class DriveResult:
 
 
 class CausalClass:
-    """How one edge's `l^2` reads causally, as a closed vocabulary.
+    """How one edge reads causally, by its LORENTZIAN magnitude.
 
-    Under `spacelike` and `timelike` every `l^2` sits exactly on the real
-    axis, but under `random` -- the default -- `l^2 = e^{2 i a}` sweeps the
-    whole unit circle, so most edges are NEITHER. A scheme that reported only
-    two classes would have to bucket a genuinely complex `l^2` into one of
-    them and claim a definiteness the geometry does not have.
+    Writing `l = x + i t`, the squared length is
+    `l^2 = (x^2 - t^2) + 2 i x t`, so `Re(l^2) = x^2 - t^2` IS the Lorentzian
+    interval and its sign is the whole causal statement. Every edge therefore
+    has a definite class; there is no "neither" case to report.
+
+    Two magnitudes live here and must not be conflated. The EUCLIDEAN modulus
+    `|l| = sqrt(x^2 + t^2)` -- what `abs()` of a complex returns -- vanishes
+    only when the edge itself collapses. The LORENTZIAN magnitude `Re(l^2)`
+    vanishes whenever `x = +/- t`, which is an ordinary lightlike edge of
+    perfectly good length. Classifying by the Euclidean modulus would make
+    lightlike unreachable except degenerately, which is the wrong norm for a
+    Lorentzian setting.
     """
 
-    #: `l^2` real and positive.
+    #: `Re(l^2) > 0`.
     SPACELIKE = "spacelike"
-    #: `l^2` real and negative.
+    #: `Re(l^2) < 0`.
     TIMELIKE = "timelike"
-    #: `l^2` real and zero -- on the light cone.
-    NULL = "null"
-    #: `l^2` off the real axis. Not a causal type at all: the edge has no
-    #: definite character to report, and saying so is the honest reading.
-    INDEFINITE = "indefinite"
+    #: `Re(l^2) = 0` on an edge that exists -- `Re(l) = +/- Im(l)`, both
+    #: nonzero. A populated, physical case, not an edge condition.
+    LIGHTLIKE = "lightlike"
+    #: `l = 0` in both parts: an absent edge, which is not a causal type at
+    #: all. Reported apart so it can never be read as lightlike.
+    DEGENERATE = "degenerate"
 
-    ALL = (SPACELIKE, TIMELIKE, NULL, INDEFINITE)
+    ALL = (SPACELIKE, TIMELIKE, LIGHTLIKE, DEGENERATE)
 
 
-#: `|Im l^2|` at or below this, relative to `|l^2|`, reads as ON the real
-#: axis. Above it the edge is `INDEFINITE` and is drawn as such.
-DECLARED_CAUSAL_REAL_TOLERANCE = 1e-9
-#: `|l^2|` at or below this reads as null rather than as a tiny spacelike or
-#: timelike value.
-DECLARED_CAUSAL_NULL_TOLERANCE = 1e-12
+#: `|Re(l^2)|` at or below this, RELATIVE to the Euclidean `|l|^2`, sits on
+#: the light cone. Relative, so the classification does not move with the
+#: overall scale the lengths happen to carry.
+DECLARED_CAUSAL_INTERVAL_TOLERANCE = 1e-9
+#: Euclidean `|l|` at or below this is a collapsed edge, not a null one.
+DECLARED_CAUSAL_DEGENERATE_TOLERANCE = 1e-12
 
 #: One colour per causal class, and the legend reads from this map, so the
 #: drawn colour and its label can never disagree.
 DECLARED_CAUSAL_COLOURS = {
     CausalClass.SPACELIKE: "#1f4e79",
     CausalClass.TIMELIKE: "#a33227",
-    CausalClass.NULL: "#c9a227",
-    CausalClass.INDEFINITE: "#7a5aa8",
+    CausalClass.LIGHTLIKE: "#c9a227",
+    CausalClass.DEGENERATE: "#7a5aa8",
 }
 
 #: Stabilization of the drawing layout. Classical MDS is defined only up to
@@ -290,19 +298,27 @@ DECLARED_HEAT_CLIP_PERCENTILE = 95
 DECLARED_HEAT_ZERO_TOLERANCE = 1e-9
 
 
-def causal_class(squared_length):
-    """The `CausalClass` of one edge, read from its `l^2`.
+def causal_class(length):
+    """The `CausalClass` of one edge, read from its LENGTH `l`.
 
-    Definiteness is judged RELATIVE to the magnitude, so the classification
-    does not depend on the overall scale the lengths happen to carry.
+    Takes `l` rather than `l^2` because separating a lightlike edge from an
+    absent one needs both magnitudes: the interval `Re(l^2)` vanishes for
+    each, and only the Euclidean modulus tells them apart.
+
+    Computed here in the driver from `l` rather than taken from `Edge`'s
+    causal predicates, which classify by `Im(l)` instead of by the interval
+    and so report almost every edge of a `random` seed as timelike. Where the
+    two disagree, this reads the interval and `Edge` does not; #870 tracks
+    reconciling them.
     """
-    value = complex(squared_length)
-    magnitude = abs(value)
-    if magnitude <= DECLARED_CAUSAL_NULL_TOLERANCE:
-        return CausalClass.NULL
-    if abs(value.imag) > DECLARED_CAUSAL_REAL_TOLERANCE * magnitude:
-        return CausalClass.INDEFINITE
-    return (CausalClass.SPACELIKE if value.real > 0.0
+    value = complex(length)
+    euclidean = abs(value)
+    if euclidean <= DECLARED_CAUSAL_DEGENERATE_TOLERANCE:
+        return CausalClass.DEGENERATE
+    interval = (value * value).real          # x^2 - t^2
+    if abs(interval) <= DECLARED_CAUSAL_INTERVAL_TOLERANCE * euclidean ** 2:
+        return CausalClass.LIGHTLIKE
+    return (CausalClass.SPACELIKE if interval > 0.0
             else CausalClass.TIMELIKE)
 
 
@@ -603,9 +619,9 @@ class EmergenceFrame:
             weights[a, b] = weights[b, a] = min(weights[a, b], w)
             pairs.append((a, b))
             # Carried per drawn edge so the causal colouring reads the same
-            # `l^2` the geometry holds, rather than re-deriving it from a
+            # `l` the geometry holds, rather than re-deriving it from a
             # disposition setting that only describes how the SEED was built.
-            squared.append(length ** 2)
+            squared.append(length)
         distances = shortest_path(weights, method="D", directed=False)
         finite = np.isfinite(distances)
         if not finite.any():
@@ -622,7 +638,8 @@ class EmergenceFrame:
         return {"coords": {vertices[i]: tuple(coords[i] / rms)
                            for i in range(n)},
                 "edges": pairs,
-                "edge_squared_lengths": squared,
+                "edge_lengths": squared,
+                "edge_intervals": [(z * z).real for z in squared],
                 "edge_causal_classes": [causal_class(z) for z in squared],
                 "vertices": vertices}
 
@@ -1324,7 +1341,7 @@ def _panel_layout(axis, frame, placement=None):
     # deliberately named apart in the title, because stabilizing the layout
     # and colouring the edges together make the picture look more physical
     # than it is -- where a vertex sits still means nothing at all.
-    title = "complex -- position: drawing only | colour: causal l^2"
+    title = "complex -- position: drawing only | colour: interval Re(l^2)"
     if isinstance(frame.layout, Absent):
         return _absent_panel(axis, title, frame.layout.reason)
     from matplotlib.lines import Line2D
@@ -1353,6 +1370,16 @@ def _panel_layout(axis, frame, placement=None):
         axis.legend(handles=handles, fontsize=5, loc="upper right",
                     frameon=True, framealpha=0.85, borderpad=0.3,
                     handlelength=1.2)
+    # `Edge`'s own predicates classify by `Im(l)` rather than by the interval,
+    # so they can disagree with this panel -- notably on a `random` seed,
+    # where almost every edge has `Im(l) != 0`. Said on the face of the figure
+    # so a reader comparing it against a certificate elsewhere does not
+    # conclude that one of the two is broken. #870 reconciles them.
+    axis.text(0.5, -0.04,
+              "interval, not Edge::isTimelike() -- the two can disagree "
+              "until #870",
+              transform=axis.transAxes, ha="center", va="top",
+              fontsize=4.5, color="#888888", style="italic")
     if placement and placement.get("view"):
         view = placement["view"]
         axis.set_xlim(view[0], view[1])
@@ -1363,13 +1390,14 @@ def _panel_layout(axis, frame, placement=None):
 
 
 #: What each causal class means, spelled out in the legend rather than left to
-#: the colour alone. `indefinite` is the one that needs saying: it is not a
-#: third kind of causal character, it is the absence of a definite one.
+#: the colour alone. Every label names the INTERVAL, because that is what is
+#: being drawn -- `degenerate` is the one that needs saying, since an absent
+#: edge also has a vanishing interval but is not lightlike.
 _CAUSAL_LEGEND = {
     CausalClass.SPACELIKE: "spacelike  Re l^2 > 0",
     CausalClass.TIMELIKE: "timelike  Re l^2 < 0",
-    CausalClass.NULL: "null  l^2 = 0",
-    CausalClass.INDEFINITE: "indefinite  Im l^2 != 0",
+    CausalClass.LIGHTLIKE: "lightlike  Re l^2 = 0, l != 0",
+    CausalClass.DEGENERATE: "degenerate  l = 0",
 }
 
 
