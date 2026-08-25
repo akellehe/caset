@@ -32,6 +32,8 @@ std::vector<std::string> ObjectiveContext::inputNames() {
           "scored_edges",
           "region_targets",
           "register_degrees",
+          "hodge_degrees",
+          "hodge_degree_weights",
           "regge_weight",
           "hodge_entropy_weight",
           "gamma",
@@ -108,6 +110,77 @@ double reggeTerm(const ObjectiveContext &context) {
         normSquared += std::norm(gradient[edgeIndex]);
   }
   return context.reggeWeight * normSquared;
+}
+
+/// The declared weight on the `index`-th entry of `hodgeDegrees`. An empty
+/// weight list means uniform, and multiplying by exactly 1 is exact in binary
+/// floating point, so an explicitly-configured single-degree run reproduces a
+/// pre-weights run to the bit.
+double hodgeDegreeWeight(const ObjectiveContext &context, std::size_t index) {
+  if (context.hodgeDegreeWeights.empty()) return 1.0;
+  if (index >= context.hodgeDegreeWeights.size()) return 1.0;
+  return context.hodgeDegreeWeights[index];
+}
+
+/// \f$\|\nabla_zS_k\|^2\f$ over the edges in scope, UNWEIGHTED.
+///
+/// The whole-cobordism path calls the same primitive the single-objective run
+/// has always called, so that path stays bit-identical; a scope restricts the
+/// identical sum to its own coordinates.
+double hodgeGradientNormSquared(const ObjectiveContext &context, int degree) {
+  const HodgeLaplacian hodge(context.spacetime);
+  if (!context.scoredEdges.has_value())
+    return hodge.spectralEntropyGradientNorm(degree,
+                                             context.hodgeEntropyPhaseMode);
+  const auto components =
+      hodge.spectralEntropyGradient(degree, context.hodgeEntropyPhaseMode);
+  const auto mask = scopeMask(context, components.size());
+  double normSquared = 0.0;
+  for (std::size_t edgeIndex = 0; edgeIndex < components.size(); ++edgeIndex)
+    if (edgeInScope(mask, edgeIndex))
+      normSquared += std::norm(components[edgeIndex]);
+  return normSquared;
+}
+
+/// Every declared degree's share of the Hodge term, in declaration order.
+///
+/// The single place the breakdown is computed: `terms`, the direction's
+/// baseline and the reported contributions all read this, so a reported share
+/// cannot disagree with the number that was descended.
+std::vector<HodgeDegreeContribution> hodgeContributions(
+    const ObjectiveContext &context) {
+  std::vector<HodgeDegreeContribution> contributions;
+  if (!context.spacetime || context.hodgeEntropyWeight == 0.0)
+    return contributions;
+  contributions.reserve(context.hodgeDegrees.size());
+  for (std::size_t index = 0; index < context.hodgeDegrees.size(); ++index) {
+    HodgeDegreeContribution contribution;
+    contribution.degree = context.hodgeDegrees[index];
+    contribution.weight = hodgeDegreeWeight(context, index);
+    contribution.gradientNormSquared =
+        hodgeGradientNormSquared(context, contribution.degree);
+    contribution.contribution = context.hodgeEntropyWeight *
+                                contribution.weight *
+                                contribution.gradientNormSquared;
+    contributions.push_back(contribution);
+  }
+  return contributions;
+}
+
+/// The Hodge stationarity term from an already-computed breakdown.
+///
+/// Accumulates the WEIGHTED norms and applies the entropy weight ONCE at the
+/// end, which is the order the term has always been summed in. That order is
+/// what preserves bit-identity: with uniform weights, multiplying each norm by
+/// exactly 1 leaves the partial sums untouched and the single final multiply is
+/// the same operation as before. Distributing the entropy weight across the
+/// degrees instead would be algebraically equal and numerically different.
+double hodgeTermFrom(const ObjectiveContext &context,
+                     const std::vector<HodgeDegreeContribution> &contributions) {
+  double weightedNormSum = 0.0;
+  for (const auto &contribution : contributions)
+    weightedNormSum += contribution.weight * contribution.gradientNormSquared;
+  return context.hodgeEntropyWeight * weightedNormSum;
 }
 
 /// The register-residual term, or zero when the engine did not compute it.
@@ -193,28 +266,17 @@ ObjectiveTerms JointStationarityObjective::terms(
   terms.carriedStateEnergy = carriedStateTerm(context);
   terms.reggeStationarity = reggeTerm(context);
 
-  double entropyStationarity = 0.0;
-  if (context.hodgeEntropyWeight != 0.0)
-    for (int degree : context.registerDegrees) {
-      const HodgeLaplacian hodge(context.spacetime);
-      if (!context.scoredEdges.has_value()) {
-        // The whole cobordism: the primitive the single-objective run has
-        // always called, so this path is bit-identical.
-        entropyStationarity += hodge.spectralEntropyGradientNorm(
-            degree, context.hodgeEntropyPhaseMode);
-        continue;
-      }
-      // A scope restricts the same sum to its own coordinates.
-      const auto components =
-          hodge.spectralEntropyGradient(degree, context.hodgeEntropyPhaseMode);
-      const auto mask = scopeMask(context, components.size());
-      for (std::size_t edgeIndex = 0; edgeIndex < components.size();
-           ++edgeIndex)
-        if (edgeInScope(mask, edgeIndex))
-          entropyStationarity += std::norm(components[edgeIndex]);
-    }
-  terms.hodgeStationarity = context.hodgeEntropyWeight * entropyStationarity;
+  // Summed over the DECLARED Hodge degrees, which are configured independently
+  // of the register degrees and never read from them.
+  terms.hodgeStationarity =
+      hodgeTermFrom(context, hodgeContributions(context));
   return terms;
+}
+
+std::vector<HodgeDegreeContribution>
+JointStationarityObjective::hodgeDegreeContributions(
+    const ObjectiveContext &context) const {
+  return hodgeContributions(context);
 }
 
 ObjectiveDirection JointStationarityObjective::direction(
@@ -247,7 +309,11 @@ ObjectiveDirection JointStationarityObjective::direction(
     // and the Daleckii-Krein derivative of dS/dA on the same fixed-rank
     // stratum the value uses. No step size and no finite difference enter the
     // descent direction. The resulting ascent displacement is 2 conj(dh).
-    for (int degree : scalar.registerDegrees) {
+    double weightedNormSum = 0.0;
+    for (std::size_t degreeIndex = 0;
+         degreeIndex < scalar.hodgeDegrees.size(); ++degreeIndex) {
+      const int degree = scalar.hodgeDegrees[degreeIndex];
+      const double degreeWeight = hodgeDegreeWeight(scalar, degreeIndex);
       const HodgeLaplacian hodge(scalar.spacetime);
       const auto baseComponents =
           hodge.spectralEntropyGradient(degree, scalar.hodgeEntropyPhaseMode);
@@ -266,7 +332,10 @@ ObjectiveDirection JointStationarityObjective::direction(
         entropyGradientNormSquared += std::norm(baseComponents[edgeIndex]);
         entropyAscent[edgeIndex] = std::conj(baseComponents[edgeIndex]);
       }
-      baseline += scalar.hodgeEntropyWeight * entropyGradientNormSquared;
+      // Accumulated and weighted ONCE at the end, matching how the scalar term
+      // is summed, so an explicitly-configured single-degree run reproduces a
+      // pre-weights baseline to the bit.
+      weightedNormSum += degreeWeight * entropyGradientNormSquared;
       if (entropyGradientNormSquared == 0.0)
         continue;  // the exact HVP of the zero direction is zero
       const auto directionalComponents =
@@ -276,9 +345,13 @@ ObjectiveDirection JointStationarityObjective::direction(
       for (std::size_t edgeIndex = 0; edgeIndex < context.edgeCount;
            ++edgeIndex)
         directionalDerivative(edgeIndex) = directionalComponents[edgeIndex];
-      result.ascent +=
-          scalar.hodgeEntropyWeight * 2.0 * directionalDerivative.conjugate();
+      // The degree's weight scales its own share of the displacement, which is
+      // the exact derivative of the weighted sum rather than a reweighting of
+      // the finished direction.
+      result.ascent += scalar.hodgeEntropyWeight * degreeWeight * 2.0 *
+                       directionalDerivative.conjugate();
     }
+    baseline += scalar.hodgeEntropyWeight * weightedNormSum;
   }
 
   addCarriedStateAscent(context, &result.ascent, &baseline);

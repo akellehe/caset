@@ -108,6 +108,44 @@ struct ObjectiveContext {
 
   /// The register degrees the objective is declared over.
   std::vector<int> registerDegrees;
+
+  /// The Laplacian degrees \f$k\f$ the Hodge entropy term is summed over.
+  ///
+  /// **This is not a register concept and must not be read as one.** Each entry
+  /// selects which \f$L_k\f$ the entropy
+  /// \f$S_k=-\operatorname{Tr}(\rho_k\log\rho_k)\f$ is taken of, and nothing
+  /// else. `registerDegrees` answers an unrelated question — the degrees at
+  /// which a register is constructed, where a target component with no cycle to
+  /// occupy scores as full leakage — and the two lists are integers over the
+  /// same range without meaning the same thing.
+  ///
+  /// This list NEVER reads `registerDegrees`, not as a default and not as a
+  /// fallback. Defaulting one to the other would reinstate at the level of
+  /// implementation exactly the coupling that keeping them apart exists to
+  /// remove, and would leave a reader unable to tell whether a shared value was
+  /// chosen or merely inherited.
+  ///
+  /// The default is \f$\{0\}\f$: the degree-zero Laplacian alone.
+  std::vector<int> hodgeDegrees{0};
+
+  /// The weight on each entry of `hodgeDegrees`, positionally and of the same
+  /// length.
+  ///
+  /// Uniform \f$1\f$ is the default, and deliberately so. The per-degree
+  /// gradient norms differ by more than an order of magnitude on a real
+  /// complex, so a uniform sum lets the lowest degree dominate the descent
+  /// direction while the higher ones appear in the objective without moving the
+  /// geometry much. That imbalance is a FACT about the operator rather than a
+  /// defect to be silently corrected: rebalancing an objective on a caller's
+  /// behalf would change what is being descended without saying so, and would
+  /// bake one complex's spread into every complex. A caller that wants the
+  /// degrees comparable declares that intent here.
+  ///
+  /// Uniform weights are also what makes an explicitly-configured single-degree
+  /// run reproduce a pre-weights run exactly, since multiplying by \f$1\f$ is
+  /// exact in binary floating point. An EMPTY list means uniform.
+  std::vector<double> hodgeDegreeWeights;
+
   /// \f$\beta_R\f$, the Regge stationarity weight.
   double reggeWeight = 1.0;
   /// \f$\eta_H\f$, the Hodge-entropy stationarity weight.
@@ -137,6 +175,33 @@ struct ObjectiveContext {
   /// a structural test asserts against, exactly as `objectiveTermNames` does
   /// for the output side.
   [[nodiscard]] static std::vector<std::string> inputNames();
+};
+
+/// # HodgeDegreeContribution
+///
+/// One degree's share of the Hodge stationarity term, so a reader can tell
+/// WHICH degree the descent came from rather than only the total. The same
+/// discipline `MultiCobordism::ObjectiveContribution` applies to bulk versus
+/// pinned-region objectives: a summed number that cannot be taken apart hides
+/// where it came from.
+struct HodgeDegreeContribution {
+  /// The Laplacian degree \f$k\f$.
+  int degree = 0;
+  /// The declared weight on this degree.
+  double weight = 1.0;
+  /// \f$\|\nabla_zS_k\|^2\f$ over the edges in scope, UNWEIGHTED, so the raw
+  /// spread across degrees is visible rather than folded into the weighting.
+  double gradientNormSquared = 0.0;
+  /// This degree's share of `ObjectiveTerms::hodgeStationarity`: the entropy
+  /// weight times the degree weight times the norm above.
+  ///
+  /// Summing this member over the contributions reproduces the term to double
+  /// round-off rather than to the bit. The term applies the entropy weight ONCE
+  /// to the accumulated weighted norms — the order it has always been summed
+  /// in, and the order that keeps an explicitly-configured single-degree run
+  /// bit-identical — whereas each share here carries its own multiply.
+  /// Algebraically equal, numerically distinguishable in the last places.
+  double contribution = 0.0;
 };
 
 /// # ObjectiveDirection
@@ -306,6 +371,19 @@ class CobordismObjective {
   [[nodiscard]] virtual ObjectiveDirection direction(
       const ObjectiveDirectionContext &context) const = 0;
 
+  /// This objective's Hodge stationarity term broken down by degree, or an
+  /// empty list for an objective that has no such term.
+  ///
+  /// Reported separately from `terms` because `ObjectiveTerms` is a fixed
+  /// record of scalars that `total` is static over — the property that makes
+  /// the collapse to the optimizer's number provably depend on nothing else.
+  /// A per-degree breakdown is a decomposition OF one of those scalars rather
+  /// than a new term, so it is read alongside the record and never added to it.
+  [[nodiscard]] virtual std::vector<HodgeDegreeContribution>
+  hodgeDegreeContributions(const ObjectiveContext &) const {
+    return {};
+  }
+
   /// Whether this objective's value depends on prescribed target states rather
   /// than on the geometry alone. A search policy that must stay unforced
   /// consults this rather than testing for an objective by name.
@@ -389,6 +467,17 @@ class CobordismObjective {
 /// Hodge},k}\|^2\f$ — both the Regge action and the Hodge entropy stationary
 /// at the same metric. The objective the whitepaper describes, and the only
 /// one of the three built-ins that is not target-conditioned.
+/// The Hodge sum runs over `ObjectiveContext::hodgeDegrees`, which the engine
+/// resolves independently of the register degrees. Scoring more degrees makes
+/// the objective see more of the SPECTRUM; it does not make it see more of the
+/// TOPOLOGY. Exact zero modes are omitted from the entropy and from its
+/// derivative, so each degree's term is taken on the fixed-rank stratum the
+/// current topology selects and is blind to a change in its own kernel
+/// dimension. Adding degrees therefore adds one such blind spot per degree —
+/// one per Betti number — and a reader must not infer that a wider degree list
+/// makes the geometric half of the objective topology-aware. Only stage-1 move
+/// acceptance sees a topology change, by re-evaluating the functional after the
+/// move.
 class JointStationarityObjective final : public CobordismObjective {
  public:
   [[nodiscard]] std::string name() const override;
@@ -397,6 +486,8 @@ class JointStationarityObjective final : public CobordismObjective {
       const ObjectiveContext &context) const override;
   [[nodiscard]] ObjectiveDirection direction(
       const ObjectiveDirectionContext &context) const override;
+  [[nodiscard]] std::vector<HodgeDegreeContribution> hodgeDegreeContributions(
+      const ObjectiveContext &context) const override;
   [[nodiscard]] bool isTargetConditioned() const override { return false; }
   /// A DECLARED domain restriction, not a capability limit. Since the
   /// degree-zero \f$L_0=d_1W_1^{-1}d_1^{\mathsf T}\f$ is holomorphic in

@@ -341,11 +341,22 @@ class MultiCobordism {
   /// The injected objective's scalar, using the configured Regge and
   /// Hodge-entropy weights.
   [[nodiscard]] double objective() const;
-  /// Sum of the normalized positive-operator Hodge entropies over the configured
-  /// register degrees. This is an observation; the joint objective minimizes its
+  /// Sum of the normalized positive-operator Hodge entropies over the declared
+  /// HODGE degrees — the degrees the entropy is taken at, not the register
+  /// degrees. This is an observation; the joint objective minimizes its
   /// gradient norm, not the entropy value itself.
+  ///
+  /// Reported UNWEIGHTED. The per-degree weights balance stationarity
+  /// residuals against each other in the objective; applying them to entropy
+  /// values would report a number that is not any degree's entropy.
   [[nodiscard]] double hodgeEntropy() const;
-  /// Sum_k ||grad_z S_Hodge,k||^2, the entropy half of JointStationarity.
+  /// \f$\sum_k w_k\|\nabla_zS_{{\rm Hodge},k}\|^2\f$ over the declared Hodge
+  /// degrees and their weights: the entropy half of the joint objective.
+  ///
+  /// Reads the same degrees and weights the objective does, so an observation
+  /// cannot disagree silently with the quantity being descended, and
+  /// accumulates in the term's order, so `hodgeEntropyWeight() * this`
+  /// reproduces `ObjectiveTerms::hodgeStationarity` exactly.
   [[nodiscard]] double hodgeEntropyStationarity() const;
   /// Inject the functional this node descends. The engine calls through it and
   /// knows nothing about which objective it holds; an objective reads only
@@ -426,6 +437,44 @@ class MultiCobordism {
   [[nodiscard]] double hodgeEntropyWeight() const noexcept {
     return hodgeEntropyWeight_;
   }
+
+  /// Declare the Laplacian degrees the Hodge entropy term is summed over, and
+  /// optionally a weight per degree.
+  ///
+  /// These are the degrees \f$k\f$ whose \f$L_k\f$ the entropy is taken of.
+  /// They are configured HERE and read from nowhere else — in particular the
+  /// register degrees, which answer the unrelated question of where a register
+  /// is constructed, never supply them, not even as a fallback. The default is
+  /// \f$\{0\}\f$.
+  ///
+  /// An empty `weights` means uniform \f$1\f$. A non-empty one must match
+  /// `degrees` in length, so a caller cannot silently leave a degree
+  /// unweighted.
+  ///
+  /// @throws std::invalid_argument on an empty degree list, a negative degree,
+  ///   a repeated degree, or a weight list whose length differs from the
+  ///   degree list's.
+  void setHodgeDegrees(std::vector<int> degrees,
+                       std::vector<double> weights = {});
+  /// The declared Hodge degrees, in declaration order.
+  [[nodiscard]] const std::vector<int> &hodgeDegrees() const noexcept {
+    return hodgeDegrees_;
+  }
+  /// The declared per-degree weights, or empty for uniform.
+  [[nodiscard]] const std::vector<double> &hodgeDegreeWeights() const noexcept {
+    return hodgeDegreeWeights_;
+  }
+
+  /// The Hodge stationarity term broken down by declared degree, so a reader
+  /// can tell WHICH degree the descent came from rather than only the total.
+  /// Empty for an objective with no Hodge term.
+  [[nodiscard]] std::vector<HodgeDegreeContribution>
+  hodgeDegreeContributionsFor(
+      const std::shared_ptr<Spacetime> &spacetime) const;
+  /// `hodgeDegreeContributionsFor` on this node's own complex.
+  [[nodiscard]] std::vector<HodgeDegreeContribution> hodgeDegreeContributions()
+      const;
+
   void setReggeWeight(double weight);
   [[nodiscard]] double reggeWeight() const noexcept { return reggeWeight_; }
   /// Weight on each INPUT block's residual in `rU` (the output/whole term keeps
@@ -1223,6 +1272,11 @@ class MultiCobordism {
       bool includesStraddlingEdges) const;
   HodgeLaplacian::EntropyPhaseMode hodgeEntropyPhaseMode_{
       HodgeLaplacian::EntropyPhaseMode::IncludeComplexPhase};
+  /// The declared Hodge degrees. Defaults to the degree-zero Laplacian alone
+  /// and is never populated from `registerDegrees_`.
+  std::vector<int> hodgeDegrees_{0};
+  /// Per-degree weights, empty for uniform.
+  std::vector<double> hodgeDegreeWeights_;
   double hodgeEntropyWeight_{1.0};
   double reggeWeight_{1.0};
   /// #737: latched by the first committed combinatorial move. Block regions

@@ -144,6 +144,10 @@ class ComplexSquaredCoordinateStepTest(unittest.TestCase):
         node = _node(st)
         node.set_objective(cob.JointStationarityObjective())
         node.set_hodge_entropy_weight(1.0)
+        # The Hodge degrees are DECLARED (#859) rather than inherited from the
+        # register degrees, so the degree this test builds its finite-difference
+        # reference at is stated explicitly.
+        node.set_hodge_degrees([3])
         mode = cob.HodgeEntropyPhaseMode.IncludeComplexPhase
         node.set_hodge_entropy_phase_mode(mode)
         edges = st.getEdgeList().toVector()
