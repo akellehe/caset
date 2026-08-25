@@ -368,11 +368,38 @@ EdgePtr WilsonLoop::edgeBetween(VertexPtr a, VertexPtr b) const {
     return nullptr;
 }
 
-double WilsonLoop::principalAngle(double theta) {
+double WilsonResult::principalAngle(double theta) {
     constexpr double twoPi = 2.0 * std::numbers::pi;
     double r = std::remainder(theta, twoPi);   // [-π, π]
     if (r <= -std::numbers::pi) r += twoPi;     // fold the −π endpoint up to π
     return r;
+}
+
+// The four derived views of `connectionAccumulation`. Each reads the stored
+// datum; none of them is stored, so no reading can drift from another and the
+// datum can never be reconstructed FROM a view.
+
+std::complex<double> WilsonResult::holonomy() const {
+    return std::exp(std::complex<double>(0.0, 1.0) * connectionAccumulation);
+}
+
+double WilsonResult::holonomyModulus() const {
+    // |e^{i(a+ib)}| = e^{-b}. Exactly 1 when the connection is purely compact,
+    // which is the emergent cancellation this reading exists to expose.
+    return std::exp(-connectionAccumulation.imag());
+}
+
+double WilsonResult::residualPhase() const {
+    return principalAngle(connectionAccumulation.real());
+}
+
+long WilsonResult::windingNumber() const {
+    constexpr double twoPi = 2.0 * std::numbers::pi;
+    const double re = connectionAccumulation.real();
+    if (!std::isfinite(re)) return 0;
+    // Recoverable ONLY because the accumulation was never reduced: the whole
+    // turns are what a mod-2π fold at accumulation time would have destroyed.
+    return std::lround((re - principalAngle(re)) / twoPi);
 }
 
 WilsonResult WilsonLoop::evaluateU1Connection(
@@ -393,7 +420,7 @@ WilsonResult WilsonLoop::evaluateU1Connection(
         byId[cycle[i]->getId()] = cycle[i];
     }
 
-    double total = 0.0;
+    std::complex<double> total{0.0, 0.0};
     bool open = false;
     Edge::walkLoop(steps, [&](std::uint64_t u, std::uint64_t v, double sign) {
         if (open) return;
@@ -404,20 +431,25 @@ WilsonResult WilsonLoop::evaluateU1Connection(
         // back to the cycle's u->v direction: sign * stored == (forward ? +1 :
         // -1), so this is algebraically identical to the old forward test.
         //
-        // This is the U(1) holonomy, so it accumulates the COMPACT part of the
-        // C* connection only. Of the structure group C* = U(1) x R+, only the
-        // compact factor has winding, hence only Re(phase) quantizes; Im(phase)
-        // is a local scale carrying no quantum number and would turn a winding
-        // into an unbounded modulus if summed here.
+        // The WHOLE complex phase accumulates. Around a closed loop a gauge
+        // transformation telescopes to zero, so both components of the sum are
+        // gauge-invariant; only Re quantizes, which makes e^{-Im} a
+        // gauge-invariant real rather than a quantum number — not grounds for
+        // dropping it. Taking `.real()` here discarded the non-compact
+        // direction and with it any evidence of whether it does anything.
         const double stored =
             (e->getSource()->getId() < e->getTarget()->getId()) ? 1.0 : -1.0;
-        total += sign * stored * e->getPhase().real();
+        total += (sign * stored) * e->getPhase();
     });
     if (open) return {};  // open path — not a closed 1-skeleton cycle
 
     WilsonResult r;
     r.loopSize = n;
-    r.value = principalAngle(total);  // holonomy mod 2π, principal value (−π, π]
+    // The datum, unreduced: folding mod 2π here would destroy the winding.
+    r.connectionAccumulation = total;
+    // A derived reading, not a second datum. Re is linear over the sum, so
+    // principalAngle(Re total) == the old principalAngle(sum of Re) exactly.
+    r.value = r.residualPhase();
     return r;
 }
 

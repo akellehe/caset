@@ -1111,7 +1111,30 @@ Args:
   py::class_<WilsonResult>(m, "WilsonResult",
       "Result of evaluating a Wilson loop.")
       .def_readonly("value", &WilsonResult::value,
-                    "Primary scalar value.")
+                    "Primary scalar value. In U1_CONNECTION mode this is a "
+                    "DERIVED view of connectionAccumulation (its "
+                    "residualPhase()), not a second datum.")
+      .def_readonly("connectionAccumulation",
+                    &WilsonResult::connectionAccumulation,
+                    "U1_CONNECTION mode: the complete gauge-invariant datum -- "
+                    "the UNREDUCED complex accumulation of the oriented edge "
+                    "phase around the cycle. Both components are carried: "
+                    "around a closed loop a gauge transformation telescopes to "
+                    "zero, so the whole complex sum is gauge-invariant. Only Re "
+                    "quantizes, which makes e^{-Im} a gauge-invariant real "
+                    "rather than a quantum number. Never reduced mod 2*pi -- "
+                    "reducing would destroy the winding. NaN in other modes: "
+                    "unmeasured, never zero.")
+      .def("holonomy", &WilsonResult::holonomy,
+           "Derived: the holonomy exp(i * connectionAccumulation).")
+      .def("holonomyModulus", &WilsonResult::holonomyModulus,
+           "Derived: |H| = exp(-Im accumulation). Exactly 1 for a purely "
+           "compact connection -- a cancellation to be observed, not imposed.")
+      .def("residualPhase", &WilsonResult::residualPhase,
+           "Derived: Re(accumulation) mod 2*pi, in (-pi, pi].")
+      .def("windingNumber", &WilsonResult::windingNumber,
+           "Derived: whole 2*pi turns in Re(accumulation). Recoverable only "
+           "because the accumulation is stored unreduced.")
       .def_readonly("loopSize", &WilsonResult::loopSize,
                     "Number of simplices in the loop.")
       .def_readonly("enclosedHinges", &WilsonResult::enclosedHinges,
