@@ -53,7 +53,7 @@ _FRAME_CACHE = {}
 def _frames():
     if "frames" not in _FRAME_CACHE:
         config = ea.build_config(size=SMALL, steps=SMALL_STEPS)
-        _FRAME_CACHE["frames"] = ea.drive(config, progress=False)
+        _FRAME_CACHE["frames"] = ea.drive(config, progress=False).frames
         _FRAME_CACHE["config"] = config
     return _FRAME_CACHE["frames"]
 
@@ -520,7 +520,7 @@ class EdgeDispositionTest(unittest.TestCase):
 
         config = ea.build_config(size=SMALL, steps=SMALL_STEPS,
                                  edge_disposition=ea.EdgeDisposition.FOLIATED)
-        frames = ea.drive(config, progress=False)
+        frames = ea.drive(config, progress=False).frames
         figure = plt.figure(figsize=(15, 9))
         try:
             ea.draw_frame(figure, frames, len(frames) - 1)
@@ -529,6 +529,188 @@ class EdgeDispositionTest(unittest.TestCase):
             self.assertIn("PRESCRIBED", title)
         finally:
             plt.close(figure)
+
+
+# ======================================================================
+# the drive flags (#863)
+# ======================================================================
+
+
+class _SpyMeta(type):
+    """Class-level statics fall through to the real MultiCobordism."""
+
+    def __getattr__(cls, name):
+        return getattr(MC, name)
+
+
+class _SpyNode(metaclass=_SpyMeta):
+    """Records the keywords the two stage calls actually receive.
+
+    A flag that reaches `build_config` but not the engine would pass any
+    test written against the config alone, so the assertion has to be made
+    where the value crosses into C++.
+    """
+
+    calls = []
+
+    def __init__(self, *args, **kwargs):
+        object.__setattr__(self, "_node", MC(*args, **kwargs))
+
+    def run_stage1(self, **kwargs):
+        _SpyNode.calls.append(("stage1", dict(kwargs)))
+        return self._node.run_stage1(**kwargs)
+
+    def run_stage2(self, **kwargs):
+        _SpyNode.calls.append(("stage2", dict(kwargs)))
+        return self._node.run_stage2(**kwargs)
+
+    def __getattr__(self, name):
+        return getattr(object.__getattribute__(self, "_node"), name)
+
+
+class DriveFlagTest(unittest.TestCase):
+    """Each flag reaches the engine carrying the value the caller gave."""
+
+    def _spy(self, **config_kwargs):
+        real, _SpyNode.calls = ea.MC, []
+        ea.MC = _SpyNode
+        try:
+            config = ea.build_config(size=SMALL, steps=1, **config_kwargs)
+            ea.drive(config, progress=False)
+        finally:
+            ea.MC = real
+        return dict(_SpyNode.calls)
+
+    def test_the_stage_and_depth_flags_reach_the_engine(self):
+        calls = self._spy(stage1_iters=5, stage2_iters=9, tolerance=1e-30,
+                          surgical_depth=3)
+        self.assertEqual(calls["stage1"]["max_steps"], 5)
+        self.assertEqual(calls["stage1"]["max_lookahead"], 3)
+        self.assertEqual(calls["stage2"]["max_iters"], 9)
+        self.assertEqual(calls["stage2"]["tolerance"], 1e-30)
+
+    def test_the_defaults_are_the_declared_ones(self):
+        calls = self._spy()
+        self.assertEqual(calls["stage1"]["max_steps"],
+                         ea.DECLARED_STAGE1_ITERS)
+        self.assertEqual(calls["stage1"]["max_lookahead"],
+                         ea.DECLARED_SURGICAL_DEPTH)
+        self.assertEqual(calls["stage2"]["max_iters"],
+                         ea.DECLARED_STAGE2_ITERS)
+        self.assertEqual(calls["stage2"]["tolerance"], ea.DECLARED_TOLERANCE)
+
+    def test_a_nonsense_drive_parameter_is_refused_by_name(self):
+        for kwargs in ({"stage1_iters": 0}, {"stage2_iters": 0},
+                       {"surgical_depth": 0}, {"tolerance": 0.0},
+                       {"tolerance": -1.0},
+                       {"tolerance": float("inf")}):
+            with self.subTest(**kwargs):
+                with self.assertRaises(ValueError):
+                    ea.build_config(size=SMALL, steps=1, **kwargs)
+
+
+class TerminatorTest(unittest.TestCase):
+    """A run says WHY it stopped; a short trace is never ambiguous."""
+
+    def test_the_vocabulary_is_closed_and_a_result_rejects_anything_else(self):
+        self.assertEqual(set(ea.Terminator.ALL),
+                         {ea.Terminator.STEPS, ea.Terminator.TOLERANCE})
+        with self.assertRaises(ValueError):
+            ea.DriveResult([], "converged")
+
+    def test_an_impossible_tolerance_stops_the_run_early_and_says_so(self):
+        """A tolerance no unit can meet must exit on the FIRST unit.
+
+        The assertion is on the terminator AND the unit count: a run that
+        merely ran out of budget would report the other terminator, and one
+        that stopped early without saying so would report this one at the
+        full length.
+        """
+        config = ea.build_config(size=SMALL, steps=4, tolerance=1e30)
+        result = ea.drive(config, progress=False)
+        self.assertEqual(result.terminator, ea.Terminator.TOLERANCE)
+        self.assertEqual(result.frames[-1].step, 1)
+        self.assertLess(len(result.frames), 4 + 1)
+
+    def test_convergence_is_absolute_and_an_absence_is_not_convergence(self):
+        # Improvement is compared to the tolerance directly, never to its
+        # ratio against the objective, so the same tolerance means the same
+        # thing at every scale.
+        self.assertTrue(ea._converged(100.0, 99.9999, 1e-3))
+        self.assertFalse(ea._converged(100.0, 99.0, 1e-3))
+        # A unit that RAISES the objective has also failed to improve it.
+        self.assertTrue(ea._converged(100.0, 101.0, 1e-3))
+        # An unmeasured objective is an absence, and a run may not stop on
+        # one: that would report convergence off a number nobody read.
+        self.assertFalse(ea._converged(None, 99.0, 1e-3))
+        self.assertFalse(ea._converged(100.0, None, 1e-3))
+        self.assertFalse(ea._converged(float("nan"), 99.0, 1e-3))
+
+
+class LiveTest(unittest.TestCase):
+    """`--live` shows a run as it happens, or refuses by name."""
+
+    def test_frames_are_delivered_while_the_run_is_still_going(self):
+        """The callback fires per unit, not once at the end.
+
+        This is the whole substance of a live view: if the frames only
+        arrived after the drive returned, the display would be a slower
+        headless render wearing a different name.
+        """
+        seen = []
+        config = ea.build_config(size=SMALL, steps=2, tolerance=1e-30)
+        result = ea.drive(
+            config, progress=False,
+            on_frame=lambda frames, index: seen.append((index, len(frames))))
+        # One callback per unit plus the initial read, each seeing exactly
+        # the frames published so far.
+        self.assertEqual([index for index, _ in seen],
+                         list(range(len(result.frames))))
+        self.assertEqual([count for _, count in seen],
+                         list(range(1, len(result.frames) + 1)))
+
+    def test_a_file_only_backend_is_refused_by_name(self):
+        """Agg makes figures happily and displays nothing.
+
+        So the guard cannot be "did a figure open" — it has to be asked of
+        the backend, or `--live` would silently become a slower headless
+        run that computes every frame and shows none.
+        """
+        import matplotlib
+        matplotlib.use("Agg")
+        config = ea.build_config(size=SMALL, steps=1)
+        with self.assertRaises(RuntimeError) as caught:
+            ea.drive_live(config, progress=False)
+        message = str(caught.exception)
+        self.assertIn("interactive", message)
+        self.assertIn("Agg", message)
+
+    def test_agg_is_not_mistaken_for_an_interactive_backend(self):
+        interactive = ea._interactive_backends()
+        self.assertNotIn("agg", interactive)
+        self.assertIn("webagg", interactive)
+
+
+class DriveDocumentTest(unittest.TestCase):
+    """The run document records how the run was driven and how it ended."""
+
+    def test_the_document_carries_every_flag_and_the_terminator(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "run.json")
+            ea.main(["run", "--size", str(SMALL), "--steps", "1",
+                     "--stage-one-iterations", "2",
+                     "--stage-two-iterations", "3",
+                     "--surgical-depth", "2",
+                     "--tolerance", "1e-30",
+                     "--json", path, "--out", "", "--quiet"])
+            with open(path) as handle:
+                document = json.load(handle)
+        config = document["config"]
+        self.assertEqual(config["stage1_iters"], 2)
+        self.assertEqual(config["stage2_iters"], 3)
+        self.assertEqual(config["surgical_depth"], 2)
+        self.assertEqual(config["tolerance"], 1e-30)
+        self.assertIn(document["terminator"], ea.Terminator.ALL)
 
 
 if __name__ == "__main__":
