@@ -1293,6 +1293,24 @@ class StableLayout:
         return self._view
 
 
+def place_frame(state, frame):
+    """One frame's stabilized placement, advancing `state` by one link.
+
+    The single step both drivers share. `stabilize` walks it over a finished
+    run and the live path calls it as each unit completes; because the
+    alignment is a CHAIN, the two agree only if they feed the same state the
+    same frames in the same order. Sharing the step makes that structural
+    rather than a coincidence two call sites have to maintain.
+
+    `None` where the layout itself is absent, so the chain skips a frame it
+    cannot place rather than aligning the next one to nothing.
+    """
+    if isinstance(frame.layout, Absent):
+        return None
+    coords = state.place(frame.layout["coords"])
+    return {"coords": coords, "view": state.view(coords)}
+
+
 def stabilize(frames):
     """Every frame's stabilized positions and view, computed once in order.
 
@@ -1304,14 +1322,7 @@ def stabilize(frames):
     Returns one entry per frame, `None` where the layout itself is absent.
     """
     state = StableLayout()
-    placed = []
-    for frame in frames:
-        if isinstance(frame.layout, Absent):
-            placed.append(None)
-            continue
-        coords = state.place(frame.layout["coords"])
-        placed.append({"coords": coords, "view": state.view(coords)})
-    return placed
+    return [place_frame(state, frame) for frame in frames]
 
 
 def _absent_panel(axis, title, reason):
@@ -1822,11 +1833,21 @@ def drive_live(config, progress=False):
     thread = threading.Thread(target=worker, name="emergence-drive",
                               daemon=True)
     thread.start()
+    # The live path stabilizes through the SAME chained step a headless render
+    # walks, advanced once per unit as it completes. Frames are published in
+    # index order, so the state sees exactly the sequence `stabilize` would
+    # feed it and the two produce identical placements. Accumulated here
+    # rather than precomputed because there is no finished run to walk yet.
+    state = StableLayout()
+    placed = []
     while True:
         index = ready.get()
         if index is None:
             break
-        draw_frame(figure, published["frames"], index)
+        frames = published["frames"]
+        while len(placed) <= index:
+            placed.append(place_frame(state, frames[len(placed)]))
+        draw_frame(figure, frames, index, placed)
         figure.canvas.draw_idle()
         # Yields to the GUI event loop; a backend without one still returns.
         plt.pause(0.001)

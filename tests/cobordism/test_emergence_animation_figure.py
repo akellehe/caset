@@ -46,7 +46,7 @@ _CACHE = {}
 def _frames():
     if "frames" not in _CACHE:
         config = ea.build_config(size=HOST, steps=STEPS)
-        _CACHE["frames"] = ea.drive(config, progress=False)
+        _CACHE["frames"] = ea.drive(config, progress=False).frames
     return _CACHE["frames"]
 
 
@@ -138,6 +138,62 @@ class StabilizationTest(unittest.TestCase):
                 flipped, len(shared) // 2,
                 "most shared vertices crossed the axis: the frame was "
                 "mirrored rather than aligned")
+
+    def test_the_live_path_places_frames_exactly_as_headless_does(self):
+        """`--live` advances the chain one unit at a time as frames arrive,
+        while a headless render walks a finished run. The alignment is a
+        CHAIN, so the two agree only if one state sees the same frames in the
+        same order. A live run stabilized against the wrong previous frame
+        would look subtly wrong while every other check here still passed --
+        the layout is not in the record, so the byte-identical JSON cannot
+        catch it.
+        """
+        frames = _frames()
+        headless = ea.stabilize(frames)
+        # Exactly what `drive_live` does: one `place_frame` per unit, in
+        # arrival order, against a single chained state.
+        state = ea.StableLayout()
+        live = [ea.place_frame(state, frame) for frame in frames]
+
+        self.assertEqual(len(live), len(headless))
+        for index, (a, b) in enumerate(zip(live, headless)):
+            with self.subTest(frame=index):
+                if a is None or b is None:
+                    self.assertIs(a, b)
+                    continue
+                self.assertEqual(sorted(a["coords"]), sorted(b["coords"]))
+                for vertex, position in a["coords"].items():
+                    other = b["coords"][vertex]
+                    self.assertAlmostEqual(position[0], other[0], places=12)
+                    self.assertAlmostEqual(position[1], other[1], places=12)
+                for left, right in zip(a["view"], b["view"]):
+                    self.assertAlmostEqual(left, right, places=12)
+
+    def test_reordering_the_chain_would_change_it(self):
+        """Guard on the test above. If order did not matter, the two agreeing
+        would prove nothing, so feeding the same frames reversed must NOT
+        reproduce the forward chain."""
+        frames = _frames()
+        if len(frames) < 3:
+            self.skipTest("needs at least three frames to reorder")
+        forward = ea.stabilize(frames)
+        state = ea.StableLayout()
+        backward = [ea.place_frame(state, f) for f in reversed(frames)]
+        differs = False
+        for a, b in zip(forward, backward):
+            if a is None or b is None:
+                continue
+            for vertex, position in a["coords"].items():
+                other = b["coords"].get(vertex)
+                if other is None or abs(position[0] - other[0]) > 1e-9:
+                    differs = True
+                    break
+            if differs:
+                break
+        self.assertTrue(
+            differs,
+            "reversing the frame order changed nothing, so the ordering "
+            "assertion above is vacuous")
 
     def test_the_view_is_never_grow_only(self):
         """A grow-only view shrinks the structure to a dot; the eased box has
@@ -302,7 +358,7 @@ class DualCurvatureTest(unittest.TestCase):
         plane. An all-spacelike geometry has no boost content to report."""
         config = ea.build_config(size=HOST, steps=0,
                                  edge_disposition=ea.EdgeDisposition.SPACELIKE)
-        frames = ea.drive(config, progress=False)
+        frames = ea.drive(config, progress=False).frames
         dual = frames[-1].dual
         self.assertNotIsInstance(dual, ea.Absent)
         worst = max(abs(c["temporal"]) for c in dual["cells"])
@@ -348,7 +404,7 @@ class RecordIsUntouchedTest(unittest.TestCase):
         'presentation only'."""
         def document():
             config = ea.build_config(size=HOST, steps=0)
-            frames = ea.drive(config, progress=False)
+            frames = ea.drive(config, progress=False).frames
             return json.dumps({"config": config,
                                "frames": [f.to_json() for f in frames]},
                               indent=2, sort_keys=True)
