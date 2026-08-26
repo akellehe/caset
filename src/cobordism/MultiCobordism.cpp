@@ -1001,10 +1001,11 @@ MultiCobordism::Snapshot MultiCobordism::snapshotOf(
   std::vector<std::vector<std::uint64_t>> cellVertexTuples;
   for (const auto &topSimplex : spacetime.getTopSimplices())
     cellVertexTuples.push_back(topSimplex->topTuple());
-  std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> lengthsByEdge;
+  std::map<std::pair<std::uint64_t, std::uint64_t>, EdgeSnapshot> fieldsByEdge;
   for (const auto *edge : spacetime.getEdgeList()->toVector())
-    lengthsByEdge[edgeKey(edge)] = edge->getLength();  // verbatim, branch-exact
-  return {std::move(cellVertexTuples), std::move(lengthsByEdge)};
+    fieldsByEdge[edgeKey(edge)] =
+        EdgeSnapshot{edge->squaredLength(), edge->canonicalLink()};
+  return {std::move(cellVertexTuples), std::move(fieldsByEdge)};
 }
 
 MultiCobordism::Snapshot MultiCobordism::snapshot() const {
@@ -1020,8 +1021,10 @@ std::shared_ptr<Spacetime> MultiCobordism::build(
   rebuiltSpacetime->setBalancedEdgeWiring(balancedEdgeWiring_);
   for (auto *edge : rebuiltSpacetime->getEdgeList()->toVector()) {
     const auto savedEntry = complexSnapshot.second.find(edgeKey(edge));
-    if (savedEntry != complexSnapshot.second.end())
-      edge->setLength(savedEntry->second);  // verbatim, branch-exact
+    if (savedEntry != complexSnapshot.second.end()) {
+      edge->setSquaredLength(savedEntry->second.squaredLength);
+      edge->setCanonicalLink(savedEntry->second.canonicalLink);
+    }
   }
   return rebuiltSpacetime;
 }
@@ -1135,7 +1138,7 @@ bool MultiCobordism::applyMoveSpecification(
                                          moveSpecification.second[1]);
       if (auto *edge =
               spacetime->getEdgeList()->get(key.fingerprint.fingerprint())) {
-        edge->setLength(std::sqrt(-(edge->getLength() * edge->getLength())));
+        edge->setSquaredLength(-edge->squaredLength());
         moveWasApplied = true;
       }
     }
@@ -1189,13 +1192,13 @@ double MultiCobordism::deltaF(
   // its gradient and cancels. A superset costs compute, never correctness.
   std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> baseLengths;
   for (const auto *edge : spacetime_->getEdgeList()->toVector())
-    baseLengths[edgeKey(edge)] = edge->getLength();
+    baseLengths[edgeKey(edge)] = edge->squaredLength();
   std::set<std::pair<std::uint64_t, std::uint64_t>> movedEdges;
   for (const auto *edge : candidateSpacetime->getEdgeList()->toVector()) {
     const auto key = edgeKey(edge);
     const auto found = baseLengths.find(key);
     if (found == baseLengths.end() ||
-        found->second != edge->getLength())
+        found->second != edge->squaredLength())
       movedEdges.insert(key);
     if (found != baseLengths.end()) baseLengths.erase(found);
   }
@@ -1563,17 +1566,18 @@ bool MultiCobordism::stage1Update(int nCandidateMoves, bool growBoundaries,
 }
 
 void MultiCobordism::seedInputs(const std::vector<std::uint64_t> &seeds) {
-  seedBlocks(seeds, inputTargets_, inputBlocks_);
+  seedBlocks(seeds, inputTargets_, inputBlocks_, BoundaryRole::Incoming);
 }
 
 void MultiCobordism::seedOutputs(const std::vector<std::uint64_t> &seeds) {
-  seedBlocks(seeds, outputTargets_, outputBlocks_);
+  seedBlocks(seeds, outputTargets_, outputBlocks_, BoundaryRole::Outgoing);
 }
 
 void MultiCobordism::seedBlocks(
     const std::vector<std::uint64_t> &seeds,
     const std::vector<std::vector<complexd>> &targets,
-    std::vector<BoundaryBlock> &destinationBlocks) {
+    std::vector<BoundaryBlock> &destinationBlocks,
+    BoundaryRole role) {
   // Seed one boundary block per (seed vertex, target): its initial region is the seed
   // vertex's cell-neighbourhood. The block is NOT pre-grown here — runStage1's
   // growBlockRegions grows it under the objective, so the carrying topology is fully
@@ -1589,7 +1593,8 @@ void MultiCobordism::seedBlocks(
           cellVertexIds.end())
         regionVertexIds.insert(cellVertexIds.begin(), cellVertexIds.end());
     }
-    destinationBlocks.push_back(BoundaryBlock{regionVertexIds, targets[blockIndex]});
+    destinationBlocks.push_back(
+        BoundaryBlock{regionVertexIds, targets[blockIndex], role});
   }
 }
 
@@ -1680,32 +1685,36 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
   // picks up the edges a stage-1 move just created or removed.
   const auto &edges = spacetime_->getEdgeList()->toVector();
   const std::size_t edgeCount = edges.size();
-  Eigen::VectorXcd lengths(edgeCount);
   Eigen::VectorXcd squaredLengths(edgeCount);
+  Eigen::VectorXcd canonicalLinks(edgeCount);
   for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
-    lengths(edgeIndex) = edges[edgeIndex]->getLength();
-    squaredLengths(edgeIndex) = lengths(edgeIndex) * lengths(edgeIndex);
+    squaredLengths(edgeIndex) = edges[edgeIndex]->squaredLength();
+    canonicalLinks(edgeIndex) = edges[edgeIndex]->canonicalLink();
   }
-  // The connection phase is the node's OTHER edge field, and it relaxes on its
-  // own coordinate: phi is not derived from l, so there is no square-root
-  // branch to track and the trial is written directly.
-  Eigen::VectorXcd phases(edgeCount);
-  for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
-    phases(edgeIndex) = edges[edgeIndex]->getPhase();
-  const auto restoreEdgeLengths = [&]() {
+  const auto restoreEdgeFields = [&]() {
     for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
-      edges[edgeIndex]->setLength(lengths(edgeIndex));
-      edges[edgeIndex]->setPhase(phases(edgeIndex));
+      edges[edgeIndex]->setSquaredLength(squaredLengths(edgeIndex));
+      edges[edgeIndex]->setCanonicalLink(canonicalLinks(edgeIndex));
     }
   };
   const auto setSquaredLengths = [&](const Eigen::VectorXcd &trialSquared) {
     for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
-      edges[edgeIndex]->setLength(continuousSquareRoot(
-          trialSquared(edgeIndex), lengths(edgeIndex)));
+      edges[edgeIndex]->setSquaredLength(trialSquared(edgeIndex));
   };
-  const auto setPhases = [&](const Eigen::VectorXcd &trialPhases) {
-    for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
-      edges[edgeIndex]->setPhase(trialPhases(edgeIndex));
+  const auto setLogLinkDisplacement = [&](
+      double scale, const Eigen::VectorXcd &sourceOrientedDisplacement) {
+    const complexd imaginaryUnit{0.0, 1.0};
+    for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
+      auto *edge = edges[edgeIndex];
+      const double orientation =
+          edge->getSource()->getId() < edge->getTarget()->getId() ? 1.0 : -1.0;
+      // If legacy direction data says p -> p-scale*d with U=exp(i p),
+      // update U multiplicatively.  No logarithm of the resident link is taken.
+      const complexd multiplier = std::exp(
+          -imaginaryUnit * orientation * scale *
+          sourceOrientedDisplacement(edgeIndex));
+      edge->setCanonicalLink(canonicalLinks(edgeIndex) * multiplier);
+    }
   };
   auto fullObjective = [&]() { return objectiveFor(spacetime_); };
 
@@ -1720,8 +1729,7 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
       const double coordinateStep =
           relativeStep * std::max(std::abs(squaredLengths(edgeIndex)), 1.0);
       const auto evaluateAt = [&](complexd value) {
-        edges[edgeIndex]->setLength(continuousSquareRoot(
-            value, lengths(edgeIndex)));
+        edges[edgeIndex]->setSquaredLength(value);
         return functional();
       };
       const double realPlus =
@@ -1734,7 +1742,7 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
       const double imaginaryMinus =
           evaluateAt(squaredLengths(edgeIndex) -
                      complexd{0.0, coordinateStep});
-      edges[edgeIndex]->setLength(lengths(edgeIndex));
+      edges[edgeIndex]->setSquaredLength(squaredLengths(edgeIndex));
       ascent(edgeIndex) = complexd{
           (realPlus - realMinus) / (2.0 * coordinateStep),
           (imaginaryPlus - imaginaryMinus) / (2.0 * coordinateStep)};
@@ -1745,7 +1753,8 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
   Eigen::VectorXcd descentDirection = Eigen::VectorXcd::Zero(edgeCount);
   // The phase's own descent direction, empty unless the injected objective
   // declares a phi dependence. Kept separate from `descentDirection` because
-  // the two are displacements in DIFFERENT coordinates — z and phi are distinct
+  // the two are displacements in DIFFERENT coordinates — direct z and a
+  // left-trivialized tangent of U are distinct
   // fields, and mixing them is the error the two-field split exists to prevent.
   Eigen::VectorXcd phaseDescentDirection = Eigen::VectorXcd::Zero(edgeCount);
   // Exact acceptance baseline at the CURRENT state rather than
@@ -1819,7 +1828,7 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
                                 [&]() { return rU(spacetime_); });
     }
 
-    restoreEdgeLengths();
+    restoreEdgeFields();
     // Pinning enters HERE and only here: a pinned edge keeps its resident squared
     // length while the rest of the complex relaxes around it. Zeroing the descent
     // component is the whole mechanism — no clamp, no projection after the fact,
@@ -1831,7 +1840,7 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
         if (edgeIsPinned(key.first, key.second)) {
           descentDirection(edgeIndex) = complexd{0.0, 0.0};
           // A pinned edge is held in BOTH its fields. "Do not change these"
-          // that froze the length while the phase drifted would be a pin in
+          // that froze z while U drifted would be a pin in
           // name only.
           phaseDescentDirection(edgeIndex) = complexd{0.0, 0.0};
         }
@@ -1855,17 +1864,15 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
     // at every objective scale.
     const double improvementThreshold = tolerance;
     for (int lineSearchIndex = 0; lineSearchIndex < 24; ++lineSearchIndex) {
-      // This is the key coordinate correction: derivatives are with respect to
-      // z=l^2, so subtract the direction from z, then map back to Edge's stored
-      // l on the continuous square-root branch. No component of z is projected.
+      // Derivatives are with respect to the directly stored complex z field.
       setSquaredLengths(squaredLengths -
                         trialStepScale * descentDirection);
-      // ONE line search over BOTH fields: the same step scale moves z and phi
+      // ONE line search over BOTH fields: the same step scale moves z and U
       // together and the same strict-improvement gate accepts or rejects the
       // pair. Two searches would let one field buy an improvement the other
       // paid for, and the accepted state would not be a descent of the whole
       // objective.
-      setPhases(phases - trialStepScale * phaseDescentDirection);
+      setLogLinkDisplacement(trialStepScale, phaseDescentDirection);
       const double trialObjective = fullObjective();
       CLOG(INFO_LEVEL, "-----------------------------------");
       CLOG(INFO_LEVEL, "Trial objective: ", trialObjective);
@@ -1895,11 +1902,11 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
     // it. The throw comes from a TRIAL the line search had not accepted, so the
     // complex the caller still holds must be the one it had on entry, not a
     // half-applied step everything downstream would then read.
-    restoreEdgeLengths();
+    restoreEdgeFields();
     throw;
   }
   if (!objectiveImproved) {
-    restoreEdgeLengths();
+    restoreEdgeFields();
     lastStage2Stationary_ = true;
     lastStage2Improvement_ = 0.0;  // #776: stationary means zero solver error
     return false;

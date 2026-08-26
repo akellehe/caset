@@ -354,11 +354,12 @@ yields empty results. Spectra are computed lazily and cached. This is the
 operator only -- fluxes, cycle bases, and Betti numbers belong to WilsonLoop /
 ChainComplex.
 
-The U(1) CONNECTION Laplacian is a DIFFERENT operator (#805). connectionLaplacian
-(with adjacency, degree, connectionSpectrum and friends) is the Hermitian
-L = D - A on the 1-skeleton assembled from each edge's complex weight
-squaredLength * exp(i*phase): adjacency Hermitian (the reverse orientation
-negates the phase), degree D_ii = sum |squaredLength| (the MAGNITUDE convention).
+The C* CONNECTION Laplacian is a DIFFERENT compatibility operator (#805).
+connectionLaplacian (with adjacency, degree, connectionSpectrum and friends)
+assembles L = D - A from each edge's direct z and oriented U. The reverse
+orientation uses U^-1, never a conjugate. It is Hermitian only on a verified
+compact/real specialization; generic complex z/U makes it non-normal. Its
+legacy degree is D_ii = sum |z_e|.
 On a Lorentzian complex a timelike edge has l^2 < 0, so its magnitude diagonal
 and signed off-diagonal disagree, its row sums do not vanish, and it is not
 d_1 W_1^-1 d_1^dagger for any W. It carries the Aharonov-Bohm content that L_0
@@ -393,23 +394,23 @@ ChainComplex omits.)doc")
            "at startup (e.g. the animation's --hodge-weights flag); flipping "
            "mid-run mixes conventions across cached spectra.")
       .def("adjacency", &HodgeLaplacian::adjacency,
-           "Weighted adjacency A of the U(1) CONNECTION operator as a flat "
+           "Weighted adjacency A of the C* CONNECTION compatibility operator as a flat "
            "row-major N*N complex array over the sorted vertex order "
-           "(Hermitian; A_ij = sum squaredLength * exp(i*phase)). Not part of "
+           "(A_ij = sum z_e U_ij). Generic complex z/U is non-normal. Not part of "
            "L_0.")
       .def("degree", &HodgeLaplacian::degree,
            "Degree vector of the U(1) CONNECTION operator (length N, real): "
            "D_ii = sum |squaredLength| over incident edges (magnitude "
            "convention). Not part of L_0.")
       .def("connectionLaplacian", &HodgeLaplacian::connectionLaplacian,
-           "The Hermitian U(1) connection graph Laplacian L = D - A as a flat "
+           "The legacy C* connection graph operator L = D - A as a flat "
            "row-major N*N complex array over the FULL sorted vertex-id order "
            "(every vertex, including any carried by no simplex). NOT the "
            "degree-zero Hodge Laplacian: its off-diagonal is the signed complex "
            "weight while its diagonal is the magnitude, so its row sums do not "
            "vanish on a Lorentzian complex. It is the Aharonov-Bohm operator -- "
-           "Hermitian, PSD by Gershgorin, unitary under exp(-iLt), zero mode "
-           "lifted by flux. Use laplacian(0) for the Hodge operator.")
+           "It is not presumed Hermitian for generic complex z/U. Use "
+           "laplacian(0) for the Hodge operator.")
       .def("laplacian", &HodgeLaplacian::laplacian, py::arg("k") = 0,
            py::arg("metric") = true,
            "Laplacian L_k as a flat row-major |C_k|*|C_k| complex array in the "
@@ -565,7 +566,7 @@ ChainComplex omits.)doc")
   auto eigenstateSynthesis = py::class_<EigenstateSynthesis>(m, "EigenstateSynthesis",
       R"doc(§4b inverse eigenvector problem on a fixed complex, degree-k.
 
-Scores how close the complex's current Hermitian edge weights make a target
+Scores how close the complex's current edge fields make a target
 state psi to being an eigenvector of the degree-k Hodge Laplacian L_k (via
 HodgeLaplacian), and reads/writes those weights so a search can perturb them.
 At k=0 the scored operator is the U(1) CONNECTION graph Laplacian D - A
@@ -587,14 +588,15 @@ Residual: for a unit target, r(psi) = ||(I - psi psi^dagger) L psi||^2 =
 ||L psi - lambda psi||^2 with lambda = psi^dagger L psi, so r = 0 iff
 L psi || psi (psi is an eigenvector) and the realized eigenvalue is the Rayleigh
 quotient lambda. A non-unit psi is normalized internally. L is reassembled from
-the live edge weights/phases on every call, so residual() tracks setWeights /
-setPhases in place. psi is indexed in the same sorted-vertex-id order as
+the live direct z/U fields on every call, so residual() tracks
+setSquaredLengths / setLinks in place. The older weight/phase accessors remain
+explicitly legacy. psi is indexed in the same sorted-vertex-id order as
 HodgeLaplacian (k=0).
 
-Parameters: the per-edge SIGNED real squared lengths {w_ij} = Re l^2
-(Edge.setSquaredLength; weights() reads Re, not a magnitude — #581) and U(1)
-phases {theta_ij} (Edge.setPhase), in a stable edge order fixed at
-construction (the weight-carrying edges: both endpoints present, no self-loops).
+Canonical parameters: the per-edge complex squared lengths {z_ij} and direct
+nonzero canonical links {U_ij}, in a stable edge order. Use
+squaredLengths()/setSquaredLengths() and links()/setLinks(); weights/phases are
+compatibility coordinates only.
 
 Fixed-boundary interior fill (§5.0): the tunable edges split into a boundary set
 dW (edges on a codim-1 face in exactly one top cell — held fixed) and an interior
@@ -638,12 +640,20 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "The SIGNED real parts {Re l^2_ij} of the edge squared lengths, in "
            "the stable edge order — not magnitudes (a timelike edge reads "
            "negative), and any resident Im l^2 is not reported (#581).")
+      .def("squaredLengths", &EigenstateSynthesis::squaredLengths,
+           "Exact complex squared lengths z_e in stable edge order.")
+      .def("links", &EigenstateSynthesis::links,
+           "Direct canonical nonzero C* links in stable edge order.")
       .def("phases", &EigenstateSynthesis::phases,
            "Edge phases {theta_ij} (radians) in the stable edge order.")
       .def("setWeights", &EigenstateSynthesis::setWeights, py::arg("w"),
            "Write the edge squared lengths in place as REAL signed values "
            "(l^2 = w + 0i, zeroing any resident Im — the ordinary-Lorentzian "
            "convention, #581). Raises if len(w) != numEdges().")
+      .def("setSquaredLengths", &EigenstateSynthesis::setSquaredLengths,
+           py::arg("z"), "Store exact complex z_e values without projection.")
+      .def("setLinks", &EigenstateSynthesis::setLinks, py::arg("U"),
+           "Store direct canonical nonzero C* links.")
       .def("setPhases", &EigenstateSynthesis::setPhases, py::arg("theta"),
            "Write the edge phases in place. Raises if len(theta) != numEdges().")
       // ----- Fixed-boundary interior fill (§5.0, #147) -----
@@ -659,6 +669,9 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def("interiorWeights", &EigenstateSynthesis::interiorWeights,
            "Interior edge SIGNED real squared lengths {Re l^2_ij} in "
            "interior-edge order (Re, not magnitudes — #581).")
+      .def("interiorSquaredLengths",
+           &EigenstateSynthesis::interiorSquaredLengths)
+      .def("interiorLinks", &EigenstateSynthesis::interiorLinks)
       .def("interiorPhases", &EigenstateSynthesis::interiorPhases,
            "Interior edge phases {theta_ij} (radians) in interior-edge order.")
       .def("setInteriorWeights", &EigenstateSynthesis::setInteriorWeights,
@@ -666,6 +679,10 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "Write the interior edge squared lengths in place as REAL signed "
            "values (l^2 = w + 0i, zeroing any resident Im — #581); the boundary "
            "edges are left untouched. Raises if len(w) != numInteriorEdges().")
+      .def("setInteriorSquaredLengths",
+           &EigenstateSynthesis::setInteriorSquaredLengths, py::arg("z"))
+      .def("setInteriorLinks", &EigenstateSynthesis::setInteriorLinks,
+           py::arg("U"))
       .def("setInteriorPhases", &EigenstateSynthesis::setInteriorPhases,
            py::arg("theta"),
            "Write the interior edge phases in place; the boundary edges are left "
@@ -994,6 +1011,19 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
   // === MultiCobordism (#491): the C++ source-of-truth fully-emergent merge
   // optimizer — emergent topology at a user-defined degree k. ===
 
+  py::enum_<BoundaryRole>(m, "BoundaryRole")
+      .value("Incoming", BoundaryRole::Incoming)
+      .value("Outgoing", BoundaryRole::Outgoing);
+  py::enum_<Coorientation>(m, "Coorientation")
+      .value("Negative", Coorientation::Negative)
+      .value("Positive", Coorientation::Positive);
+  py::class_<CoorientedCut>(m, "CoorientedCut")
+      .def(py::init<>())
+      .def_readwrite("id", &CoorientedCut::id)
+      .def_readwrite("oriented_simplices", &CoorientedCut::orientedSimplices)
+      .def_readwrite("coorientation", &CoorientedCut::coorientation)
+      .def("reversed", &CoorientedCut::reversed);
+
   py::class_<MultiCobordism::BoundaryBlock>(m, "MultiCobordismBlock",
       "An emergent boundary block of a MultiCobordism (an input or output): the "
       "vertex set whose own sub-complex carries the block, and its target period "
@@ -1008,7 +1038,9 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def_property_readonly("target",
                              [](const MultiCobordism::BoundaryBlock &block) {
                                return block.target;
-                             });
+                             })
+      .def_readonly("role", &MultiCobordism::BoundaryBlock::role)
+      .def("reversed", &MultiCobordism::BoundaryBlock::reversed);
   auto multiCobordismClass =
       py::class_<MultiCobordism, std::shared_ptr<MultiCobordism>>(m, "MultiCobordism",
       "The fully-emergent MultiCobordism merge optimizer (#491): merge as a "
@@ -1186,6 +1218,14 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("weight"))
       .def("seed_inputs", &MultiCobordism::seedInputs, py::arg("seeds"))
       .def("seed_outputs", &MultiCobordism::seedOutputs, py::arg("seeds"))
+      .def("set_cooriented_cuts", &MultiCobordism::setCoorientedCuts,
+           py::arg("cuts"))
+      .def_property_readonly("cooriented_cuts",
+                             &MultiCobordism::coorientedCuts)
+      .def("reverse_cobordism_orientation",
+           &MultiCobordism::reverseCobordismOrientation,
+           "Swap structural boundary roles and reverse every cut "
+           "coorientation without consulting complex metric data.")
       // Long pure-C++ compute: release the GIL for the duration so a background thread can
       // drive a pass (a single call, per the register-growth constraint) without blocking the
       // main thread -- e.g. multicobordism_animation.py --live keeps its GUI responsive.
@@ -1202,9 +1242,10 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("tolerance") = 1e-12,
            py::call_guard<py::gil_scoped_release>(),
            "Stage 2 (geometric): relax the full complex squared edge coordinates "
-           "z=l^2 under the selected objective. Derivatives are subtracted from "
-           "z itself, then written to Edge's stored l on the nearest square-root "
-           "branch; no imaginary component or phase is projected away. A real "
+           "z under the selected objective and the independent multiplicative "
+           "links U in left-trivialized tangent coordinates. Trial z values are "
+           "stored directly and trial U values are applied multiplicatively; no "
+           "resident square root, logarithm, argument, or normalization is used. A real "
            "backtracking scale accepts only exact objective decreases of at least "
            "the absolute tolerance. Read last_stage2_stationary to distinguish "
            "line-search stationarity from the max_iters budget. Returns F trace.")
@@ -1800,11 +1841,8 @@ Right -- re-read after each drive call:
            "in firewall order. Read-only on the geometry.")
       .def_property_readonly("checkpoint_json", &MultiCobordism::checkpointJson,
                              "The versioned checkpoint document of the last "
-                             "pass (schema 4). Schema 4 splits the "
-                             "bound-supercomponent search records and the "
-                             "three-cluster verdicts "
-                             "into two blocks; unknown values are null, "
-                             "never zero.")
+                             "pass. Schema 6 stores direct complex z/U fields, "
+                             "canonical orientation, boundary roles, and cuts.")
       .def_static("checkpoint_schema_version",
                   &MultiCobordism::checkpointSchemaVersion)
       .def_static("checkpoint_version_of", &MultiCobordism::checkpointVersionOf,
@@ -1815,7 +1853,14 @@ Right -- re-read after each drive call:
                   "Replay mode: rebuild the raw complex, disable every cache, "
                   "recompute every derived hierarchy and certificate, and "
                   "return the freshly written checkpoint. Raises on an unknown "
-                  "schema_version.");
+                  "schema_version.")
+      .def_static("migrate_legacy_checkpoint_v5",
+                  &MultiCobordism::migrateLegacyCheckpointV5,
+                  py::arg("checkpoint"),
+                  py::call_guard<py::gil_scoped_release>(),
+                  "Explicitly convert schema-5 length/phase records using "
+                  "z=length*length and U=exp(i*phase); normal replay never "
+                  "does this implicitly.");
 
   // === CobordismDAG (#491): chain emergent merges, output -> input ===
   py::class_<CobordismDAG>(m, "CobordismDAG",
@@ -2012,9 +2057,8 @@ existing vertices, lowering b_{d-1} by 1 when it caps a hole. EVERY move is gate
 on ChainComplex.dualComplexIsValid (a valid manifold-with-boundary; the #429
 n>=4 recursive check) -- surgery is allowed BECAUSE it is gated; bypassing the
 gate is what broke the #353 weld. Rejected moves roll back bit-identically.
-Accepted moves stack; rollback() undoes the last LIFO, restoring every edge
-length and phase so a round trip leaves the dual Regge action (Re AND Im)
-invariant.)doc")
+Accepted moves stack; rollback() undoes the last LIFO, restoring every direct
+complex z/U edge field so a round trip leaves the full geometry invariant.)doc")
       .def(py::init<Spacetime *>(), py::arg("spacetime"), py::keep_alive<1, 2>(),
            "Bind the cone to a spacetime (does not mutate it).")
       .def("coneOut", &SurgicalCone::coneOut, py::arg("cell"),
@@ -2030,7 +2074,7 @@ invariant.)doc")
            "valid manifold-with-boundary; otherwise undoes the additions.")
       .def("rollback", &SurgicalCone::rollback,
            "Undo the last accepted move (LIFO), restoring the complex bit-for-"
-           "bit (edge lengths and phases). False if nothing is applied.")
+           "bit (direct z/U edge fields). False if nothing is applied.")
       .def("rollbackAll", &SurgicalCone::rollbackAll,
            "Roll every accepted move back; returns the number undone.")
       .def_property_readonly("depth", &SurgicalCone::depth,
@@ -2124,7 +2168,7 @@ meets this star; disjoint siblings survive.)doc")
            "Record a simplex whose geometry or incidence changed.")
       .def("addChangedEdge", &TouchedStar::addChangedEdge, py::arg("vertex_a"),
            py::arg("vertex_b"),
-           "Record an edge whose complex length or phase changed.")
+           "Record an edge whose direct complex z or U field changed.")
       .def("addCreatedCell", &TouchedStar::addCreatedCell, py::arg("vertex_ids"),
            "Record a created cell (a combinatorial change).")
       .def("addDeletedCell", &TouchedStar::addDeletedCell, py::arg("vertex_ids"),
@@ -2159,7 +2203,7 @@ the incremental path.)doc")
                   "(any permutation yields the same key).")
       .def("geometryRevision", &AnalyticCache::geometryRevision,
            "Spacetime.metricRevisionKey(): moves on any combinatorial change, "
-           "setLength, or setPhase.")
+           "setSquaredLength, or direct link mutation.")
       .def("structuralRevision", &AnalyticCache::structuralRevision,
            "Spacetime.structuralRevision(): the combinatorial revision.")
       .def("store",

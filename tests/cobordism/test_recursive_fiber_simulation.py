@@ -90,34 +90,29 @@ def _cells(node):
 
 
 def _lengths(node):
-    """Every edge length, keyed by endpoints — the exact geometric state."""
+    """Every exact complex squared length, keyed by endpoints."""
     out = {}
     for e in node.st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
-        out[(min(a, b), max(a, b))] = e.getLength()
+        out[(min(a, b), max(a, b))] = e.squaredLength()
     return out
 
 
 def _phases(node):
-    """Every edge connection phase on the CANONICAL min->max direction.
-
-    Unlike the length, the phase is orientation-dependent: the reverse
-    orientation carries the inverse link, so an edge stored target->source
-    contributes the negated phase."""
+    """Every direct link on the canonical min->max direction."""
     out = {}
     for e in node.st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
-        out[(min(a, b), max(a, b))] = e.getPhase() if a < b else -e.getPhase()
+        out[(min(a, b), max(a, b))] = e.canonicalLink()
     return out
 
 
 def _twist(node, seed=804):
-    """Give every edge a distinct COMPLEX connection phase, so a serializer
-    that drops the field, or keeps only its compact part, is caught."""
+    """Give every edge a distinct nonzero direct complex link."""
     import numpy as np
     rng = np.random.default_rng(seed)
     for e in node.st.getEdgeList().toVector():
-        e.setPhase(complex(rng.normal(), rng.normal()))
+        e.setCanonicalLink(complex(1.0 + rng.normal(), rng.normal()))
 
 
 def _drive(node, candidates=6):
@@ -1004,7 +999,7 @@ class CheckpointSchemaTest(unittest.TestCase):
                          len(_cells(self.node)[0]) - 1)
         self.assertEqual(len(raw["cells"]), len(_cells(self.node)))
         self.assertEqual(len(raw["edges"]), len(_lengths(self.node)))
-        recorded = {(e["a"], e["b"]): complex(e["length"][0], e["length"][1])
+        recorded = {(e["a"], e["b"]): complex(e["z"][0], e["z"][1])
                     for e in raw["edges"]}
         self.assertEqual(recorded, _lengths(self.node))
 
@@ -1013,8 +1008,11 @@ class CheckpointSchemaTest(unittest.TestCase):
         self.assertEqual(pairs, sorted(pairs))
         for a, b in pairs:
             self.assertLess(a, b)
+        for edge in self.doc["raw_complex"]["edges"]:
+            self.assertEqual(edge["canonical_orientation"],
+                             [edge["a"], edge["b"]])
 
-    def test_the_raw_complex_records_the_connection_phase(self):
+    def test_the_raw_complex_records_the_multiplicative_link(self):
         """An edge carries TWO fields, so a document that records only the
         length describes a different complex than the one that wrote it."""
         node = _node()
@@ -1022,7 +1020,7 @@ class CheckpointSchemaTest(unittest.TestCase):
         _twist(node)
         node.run_recursive_analysis()
         raw = json.loads(node.checkpoint_json)["raw_complex"]
-        recorded = {(e["a"], e["b"]): complex(e["phase"][0], e["phase"][1])
+        recorded = {(e["a"], e["b"]): complex(e["U"][0], e["U"][1])
                     for e in raw["edges"]}
         self.assertEqual(recorded, _phases(node))
         # and it is genuinely complex, not a real angle widened to complex
@@ -1150,7 +1148,55 @@ class ReplayTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             MC.replay_checkpoint(older)
 
-    def test_replay_restores_every_connection_phase_exactly(self):
+    def test_schema_five_is_not_silently_reinterpreted_as_direct_z_u(self):
+        node = self._driven_node()
+        current = '"schema_version": %d' % MC.checkpoint_schema_version()
+        older = node.checkpoint_json.replace(current, '"schema_version": 5')
+        self.assertEqual(MC.checkpoint_version_of(older), 5)
+        with self.assertRaises(ValueError):
+            MC.replay_checkpoint(older)
+
+    def test_schema_five_has_an_explicit_named_one_way_migration(self):
+        node = _node()
+        node.set_analysis_config(_overlay_config())
+        node.run_recursive_analysis()
+        legacy = json.loads(node.checkpoint_json)
+        legacy["schema_version"] = 5
+        for edge in legacy["raw_complex"]["edges"]:
+            z = complex(*edge.pop("z"))
+            U = complex(*edge.pop("U"))
+            edge.pop("canonical_orientation")
+            length = cmath.sqrt(z)
+            phase = -1j * cmath.log(U)
+            edge["length"] = [length.real, length.imag]
+            edge["phase"] = [phase.real, phase.imag]
+        legacy["raw_complex"].pop("boundary_components")
+        legacy["raw_complex"].pop("cooriented_cuts")
+
+        migrated = json.loads(MC.migrate_legacy_checkpoint_v5(
+            json.dumps(legacy)))
+        migrated_again = json.loads(MC.migrate_legacy_checkpoint_v5(
+            json.dumps(legacy)))
+        self.assertEqual(migrated_again, migrated)
+        self.assertEqual(migrated["schema_version"], 6)
+        self.assertEqual(migrated["legacy_migration"]["phase_to_link"],
+                         "U=exp(i*phase)")
+        self.assertFalse(
+            migrated["legacy_migration"]["square_root_sheet_selected"])
+        expected = {}
+        for edge in legacy["raw_complex"]["edges"]:
+            length = complex(*edge["length"])
+            phase = complex(*edge["phase"])
+            expected[(edge["a"], edge["b"])] = (
+                length * length, cmath.exp(1j * phase))
+        actual = {
+            (edge["a"], edge["b"]):
+                (complex(*edge["z"]), complex(*edge["U"]))
+            for edge in migrated["raw_complex"]["edges"]
+        }
+        self.assertEqual(actual, expected)
+
+    def test_replay_restores_every_connection_link_exactly(self):
         """The defect this ticket exists for: replay used to rebuild through
         fromCells with phase 0 and silently drop a live field."""
         node = _node()
@@ -1161,9 +1207,39 @@ class ReplayTest(unittest.TestCase):
         self.assertGreater(max(abs(p.imag) for p in written.values()), 1e-6)
 
         replayed = json.loads(MC.replay_checkpoint(node.checkpoint_json))
-        restored = {(e["a"], e["b"]): complex(e["phase"][0], e["phase"][1])
+        restored = {(e["a"], e["b"]): complex(e["U"][0], e["U"][1])
                     for e in replayed["raw_complex"]["edges"]}
         self.assertEqual(restored, written)   # exactly, not approximately
+
+    def test_replay_rejects_zero_link_and_missing_orientation_metadata(self):
+        node = _node()
+        node.set_analysis_config(_overlay_config())
+        node.run_recursive_analysis()
+        zero_link = json.loads(node.checkpoint_json)
+        zero_link["raw_complex"]["edges"][0]["U"] = [0.0, 0.0]
+        with self.assertRaises(ValueError):
+            MC.replay_checkpoint(json.dumps(zero_link))
+
+        nonfinite_z = json.loads(node.checkpoint_json)
+        nonfinite_z["raw_complex"]["edges"][0]["z"] = [float("nan"), 0.0]
+        with self.assertRaises(ValueError):
+            MC.replay_checkpoint(json.dumps(nonfinite_z))
+
+        no_orientation = json.loads(node.checkpoint_json)
+        no_orientation["raw_complex"]["edges"][0].pop(
+            "canonical_orientation")
+        with self.assertRaises(ValueError):
+            MC.replay_checkpoint(json.dumps(no_orientation))
+
+        no_boundary_roles = json.loads(node.checkpoint_json)
+        no_boundary_roles["raw_complex"].pop("boundary_components")
+        with self.assertRaises(ValueError):
+            MC.replay_checkpoint(json.dumps(no_boundary_roles))
+
+        no_cuts = json.loads(node.checkpoint_json)
+        no_cuts["raw_complex"].pop("cooriented_cuts")
+        with self.assertRaises(ValueError):
+            MC.replay_checkpoint(json.dumps(no_cuts))
 
     def test_replay_of_a_twisted_complex_reproduces_the_checkpoint(self):
         """Round-tripping a complex whose phases are all nonzero must be as
@@ -1420,7 +1496,7 @@ class AnalysisOverlayTest(unittest.TestCase):
                 break
         self.assertIsNotNone(target, "no intra-component edge in the fixture")
         edge, endpoints = target
-        edge.setLength(edge.getLength() * 1.001)
+        edge.setSquaredLength(edge.squaredLength() * complex(1.001, 0.0003))
         node.run_recursive_analysis()
         second = json.loads(node.checkpoint_json)
         ancestry = second["invalidated_ancestry"]
@@ -1444,12 +1520,31 @@ class AnalysisOverlayTest(unittest.TestCase):
         first = json.loads(node.checkpoint_json)["analysis"]
         self.assertGreater(first["cache_entries"], 1)
         edges = node.st.getEdgeList().toVector()
-        edges[0].setLength(edges[0].getLength() * 1.01)
+        edges[0].setSquaredLength(
+            edges[0].squaredLength() * complex(1.01, 0.002))
         node.run_recursive_analysis()
         after = json.loads(node.checkpoint_json)["analysis"]
         self.assertGreater(after["cache_invalidations"], 0)
         self.assertLess(after["cache_invalidations"], first["cache_entries"],
                         "a local metric change dropped the whole cache")
+
+    def test_a_pure_link_change_invalidates_only_the_touched_stars(self):
+        """U has its own revision and the same component-local invalidation."""
+        node = _node()
+        node.set_analysis_config(_overlay_config())
+        node.run_recursive_analysis()
+        first = json.loads(node.checkpoint_json)["analysis"]
+        self.assertGreater(first["cache_entries"], 1)
+        edge = node.st.getEdgeList().toVector()[0]
+        z_before = edge.squaredLength()
+        edge.setCanonicalLink(
+            edge.canonicalLink() * complex(1.003, -0.017))
+        self.assertEqual(edge.squaredLength(), z_before)
+        node.run_recursive_analysis()
+        after = json.loads(node.checkpoint_json)["analysis"]
+        self.assertGreater(after["cache_invalidations"], 0)
+        self.assertLess(after["cache_invalidations"], first["cache_entries"],
+                        "a local link change dropped the whole cache")
 
     def test_a_second_pass_on_an_unchanged_complex_is_served_from_cache(self):
         node = _node()
@@ -1494,7 +1589,7 @@ class RelabelingInvarianceTest(unittest.TestCase):
         rebuilt = T.spacetime.Spacetime.fromCells(dimension, cells, 1.0, 0.0)
         for edge in rebuilt.getEdgeList().toVector():
             a, b = edge.getSource().getId(), edge.getTarget().getId()
-            edge.setLength(lengths[(min(a, b), max(a, b))])
+            edge.setSquaredLength(lengths[(min(a, b), max(a, b))])
         rebuilt_node = MC(rebuilt, [], [], [1], 1.0, _NODE_SEED)
         rebuilt_node.set_objective(cob.JointStationarityObjective())
         rebuilt_node.set_analysis_config(_overlay_config())

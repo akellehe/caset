@@ -612,13 +612,15 @@ SpectralFiberTracker::assembleRestricted(
       const auto it = index.find(e->getTarget()->getId());
       if (is == index.end() || it == index.end()) continue;
       if (is->second == it->second) continue;  // no self-loops
-      const cd w = e->getLength() * e->getLength();
+      const cd w = e->squaredLength();
       // The reverse orientation carries the INVERSE link e^{-i*phase}, never its
       // conjugate; the two agree only for real phase. Mirrors
       // HodgeLaplacian::assemble, the operator this reproduces.
-      const cd phase = e->getPhase();
-      A(is->second, it->second) += w * std::exp(cd(0.0, 1.0) * phase);
-      A(it->second, is->second) += std::conj(w) * std::exp(cd(0.0, -1.0) * phase);
+      A(is->second, it->second) +=
+          w * e->link(e->getSource()->getId(), e->getTarget()->getId());
+      A(it->second, is->second) +=
+          std::conj(w) *
+          e->link(e->getTarget()->getId(), e->getSource()->getId());
       D[is->second] += std::abs(w);
       D[it->second] += std::abs(w);
     }

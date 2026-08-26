@@ -269,7 +269,7 @@ class TestExternalSimplicesNonCDT(unittest.TestCase):
         st = Spacetime()
         V = [st.createVertex(i, [0.0]) for i in range(4)]
         for a, b in itertools.combinations(range(4), 2):
-            st.createEdge(V[a], V[b], cmath.sqrt(complex(1.0)))
+            st.createEdge(V[a], V[b], complex(1.0))
         tris = [st.createSimplex([V[i] for i in c])[0]
                 for c in itertools.combinations(range(4), 3)]
         return st, V, tris

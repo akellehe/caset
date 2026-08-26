@@ -1,12 +1,13 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
 
-"""Causal character is read from the ARGUMENT of the squared edge LENGTH: an
+"""Direct complex squared-length storage plus legacy presentation checks.
+
+Causal character is read from the ARGUMENT of the squared edge LENGTH: an
 edge is spacelike at `arg(l^2) ~ 0`, timelike at `~ +/-pi`, lightlike at
 `~ +/-pi/2`, and mixed anywhere else (#870).
-`getLength()` is the metric DOF (distinct from the U(1) `getPhase()`) and the
-edge's ONLY stored quantity: real for spacelike, imaginary for timelike, and it
-squares to the squared length rather than being derived from one (#639)."""
+`squaredLength()` is the exact complex metric datum. `getLength()` is only a
+legacy principal-root view and is not used as a replay identity."""
 
 import cmath
 import math
@@ -16,11 +17,9 @@ from tessera import Vertex, Edge
 
 
 def _edge(sq):
-    # The Edge ctor takes the complex LENGTH (#639); l^2 is never stored, so a
-    # fixture specified by a squared value goes in as its principal root -- real
-    # for spacelike, imaginary for timelike.
+    # The Edge ctor stores the full complex squared length verbatim.
     return Edge(Vertex(1, [0.0, 0.0, 0.0, 0.0]),
-                Vertex(2, [0.0, 0.0, 0.0, 1.0]), cmath.sqrt(complex(sq, 0.0)))
+                Vertex(2, [0.0, 0.0, 0.0, 1.0]), complex(sq, 0.0))
 
 
 class EdgeComplexLengthTest(unittest.TestCase):
@@ -89,6 +88,14 @@ class EdgeComplexLengthTest(unittest.TestCase):
             sq2 = length * length
             self.assertAlmostEqual(sq2.real, sq, places=9)
             self.assertAlmostEqual(sq2.imag, 0.0, places=12)
+
+    def test_arbitrary_complex_squared_length_round_trips_exactly(self):
+        z = complex(-2.75, 4.125)
+        e = Edge(Vertex(7), Vertex(11), z)
+        self.assertEqual(complex(e.squaredLength()), z)
+        replacement = complex(0.375, -9.5)
+        e.setSquaredLength(replacement)
+        self.assertEqual(complex(e.squaredLength()), replacement)
 
     def test_causal_character_is_a_length_test_not_a_magnitude_test(self):
         # tiny-but-nonzero squared lengths still resolve cleanly by imaginary part

@@ -35,13 +35,14 @@ class EdgeList {
     [[nodiscard]] const Edges &toVector() const noexcept;
 
     EdgePtr add(const VertexPtr &source, const VertexPtr &target);
-    EdgePtr add(const VertexPtr &source, const VertexPtr &target, std::complex<double> length) noexcept;
+    EdgePtr add(const VertexPtr &source, const VertexPtr &target,
+                std::complex<double> squaredLength) noexcept;
     /// Insert if absent, otherwise return the existing edge.
     /// Returns {ptr, true} on fresh insert, {ptr, false} on dedupe-hit.
     /// Used by transactional Pachner moves to record which edges they
     /// freshly created (so rollback knows which to remove).
     std::pair<EdgePtr, bool> tryAdd(const VertexPtr &source, const VertexPtr &target,
-                                    std::complex<double> length);
+                                    std::complex<double> squaredLength);
     EdgePtr get(const std::uint64_t &fingerprint);
     void remove(const EdgePtr &edge) noexcept;
 
@@ -73,8 +74,10 @@ class EdgeList {
     std::unordered_map<std::uint64_t, std::uint32_t> fpToSlot_;
     std::vector<EdgePtr> liveVec_;
 
-    EdgePtr getOrInsert(const VertexPtr &source, const VertexPtr &target, std::complex<double> length);
-    std::uint32_t allocSlot(const VertexPtr &source, const VertexPtr &target, std::complex<double> length);
+    EdgePtr getOrInsert(const VertexPtr &source, const VertexPtr &target,
+                        std::complex<double> squaredLength);
+    std::uint32_t allocSlot(const VertexPtr &source, const VertexPtr &target,
+                            std::complex<double> squaredLength);
 };
 } // namespace tessera::mesh
 

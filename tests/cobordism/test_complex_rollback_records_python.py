@@ -1,4 +1,4 @@
-"""Complex+phase-exact rollback records (#581 scope items 2 and 3).
+"""Direct complex z/U-exact rollback records (#581, #882).
 
 Three of the four rollback families restored edges from Re-only records,
 violating their own "restore bit-exactly" contracts on analytically continued
@@ -35,7 +35,6 @@ gates:
 import pytest
 
 import tessera as T
-import cmath
 
 cob = T.cobordism
 
@@ -65,31 +64,33 @@ def _full_icosa():
 
 
 def _seed_complex_geometry(st):
-    """Distinct synthetic Im l^2 != 0 and phase != 0 on every edge, keyed off
-    the endpoint ids so the values are order-independent."""
+    """Distinct direct z in C and U in C* on every canonical edge."""
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
         lo, hi = min(a, b), max(a, b)
-        e.setLength(cmath.sqrt(complex(complex(1.0 + 0.01 * lo, 0.05 + 0.01 * hi))))
-        e.setPhase(0.1 + 0.003 * (lo * 13 + hi))
+        e.setSquaredLength(complex(1.0 + 0.01 * lo, 0.05 + 0.01 * hi))
+        e.setCanonicalLink(complex(1.1 + 0.003 * lo,
+                                   0.2 + 0.003 * (lo * 13 + hi)))
 
 
 def _seed_signed_geometry(st, timelike_keys):
-    """Real signed l^2 (some timelike), zero Im, nonzero phases."""
+    """Real signed z fixture with nontrivial direct C* links."""
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
         k = (min(a, b), max(a, b))
-        e.setLength(cmath.sqrt(complex(-1.5 if k in timelike_keys else 1.0 + 0.01 * k[0])))
-        e.setPhase(0.2 + 0.001 * k[1])
+        e.setSquaredLength(complex(
+            -1.5 if k in timelike_keys else 1.0 + 0.01 * k[0]))
+        e.setCanonicalLink(complex(1.05 + 0.001 * k[0],
+                                   0.2 + 0.001 * k[1]))
 
 
 def _edge_state(st):
-    """{(a, b): (complex l^2, phase)} over the live edge list."""
+    """{(a, b): (complex z, canonical U)} over the live edge list."""
     out = {}
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
-        out[(min(a, b), max(a, b))] = (complex(e.getLength()**2),
-                                       e.getPhase())
+        out[(min(a, b), max(a, b))] = (complex(e.squaredLength()),
+                                       complex(e.canonicalLink()))
     return out
 
 
@@ -130,10 +131,11 @@ def _assert_state_equal(before, after, allow_missing=()):
     assert set(after) == set(before) - set(allow_missing), (
         f"edge set drifted: only-before={set(before) - set(after)} "
         f"only-after={set(after) - set(before)}")
-    for k, (sq, ph) in after.items():
-        sq0, ph0 = before[k]
+    for k, (sq, link) in after.items():
+        sq0, link0 = before[k]
         assert sq == sq0, f"edge {k}: l^2 {sq0!r} -> {sq!r} (not bit-exact)"
-        assert ph == ph0, f"edge {k}: phase {ph0!r} -> {ph!r} (not bit-exact)"
+        assert link == link0, (
+            f"edge {k}: canonical U {link0!r} -> {link!r} (not bit-exact)")
 
 
 # --------------------------------------------------------------------------- #

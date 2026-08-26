@@ -134,14 +134,10 @@ Spacetime::CreateSimplexResult Spacetime::createSimplexTracked(
   Edges edges_{};
   for (std::size_t i = 0; i < vertices.size() - 1; i++) {
     for (std::size_t j = i + 1; j < vertices.size(); j++) {
-      // Auto-wired causal LENGTHS (#639): same-time => spacelike l = sqrt(a),
-      // cross-slice => timelike l = i*sqrt(alpha*a) (l^2 = -alpha*a). Always
-      // Lorentzian — the old signature guard made a non-Lorentzian metric wire
-      // every edge spacelike, which was a Euclidean path (#641).
-      const std::complex<double> len = autoWiredLength(
+      const std::complex<double> z = autoWiredSquaredLength(
           vertices[i]->getTime() != vertices[j]->getTime());
       auto [edge, inserted] =
-        edgeList->tryAdd(vertices[i], vertices[j], len);
+        edgeList->tryAdd(vertices[i], vertices[j], z);
       // Mirror createEdge: register the edge on the endpoints'
       // adjacency lists.  addOutEdge/addInEdge dedupe internally so
       // calling them on a pre-existing edge is a no-op.
@@ -162,12 +158,10 @@ Spacetime::CreateSimplexResult Spacetime::createSimplexTracked(
 }
 
 std::pair<SimplexPtr, bool> Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
-  // The factory speaks LENGTHS (#639): spacelike ℓ = √a is real, timelike
-  // ℓ = i·√(α·a) is imaginary (ℓ² = -α·a). There is no non-Lorentzian branch —
-  // the old "Euclidean: all edges positive" fallback was a Euclidean path and
-  // is gone (#641).
-  const std::complex<double> spacelikeLength = autoWiredLength(false);
-  const std::complex<double> timelikeLength = autoWiredLength(true);
+  const std::complex<double> spacelikeSquaredLength =
+      autoWiredSquaredLength(false);
+  const std::complex<double> timelikeSquaredLength =
+      autoWiredSquaredLength(true);
   TemporalOrientation orientation = {
     std::get<0>(numericOrientation),
     std::get<1>(numericOrientation)
@@ -183,7 +177,7 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(const std::tuple<uint8_t, u
     VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime)});
     for (const auto &existingVertex : vertices) {
       EdgePtr edge = edgeList->
-          add(existingVertex, newVertex, spacelikeLength);
+          add(existingVertex, newVertex, spacelikeSquaredLength);
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
       edges.push_back(edge);
@@ -199,9 +193,9 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(const std::tuple<uint8_t, u
     for (const auto &existingVertex : vertices) {
       EdgePtr edge;
       if (existingVertex->getTime() < newVertex->getTime()) {
-        edge = edgeList->add(existingVertex, newVertex, timelikeLength);
+        edge = edgeList->add(existingVertex, newVertex, timelikeSquaredLength);
       } else {
-        edge = edgeList->add(existingVertex, newVertex, spacelikeLength);
+        edge = edgeList->add(existingVertex, newVertex, spacelikeSquaredLength);
       }
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
@@ -221,7 +215,8 @@ double Spacetime::getA() const noexcept {
 }
 
 std::pair<SimplexPtr, bool> Spacetime::createSimplex(std::size_t k) {
-  const std::complex<double> spacelikeLength = autoWiredLength(false);  // same-time class
+  const std::complex<double> spacelikeSquaredLength =
+      autoWiredSquaredLength(false);
   VertexPtrs vertices = {};
   vertices.reserve(k);
   Edges edges = {};
@@ -230,7 +225,8 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(std::size_t k) {
     // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
     VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime)});
     for (const auto &existingVertex : vertices) {
-      EdgePtr edge = edgeList->add(existingVertex, newVertex, spacelikeLength);
+      EdgePtr edge = edgeList->add(existingVertex, newVertex,
+                                   spacelikeSquaredLength);
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
       edges.push_back(edge);
@@ -279,21 +275,39 @@ EdgePtr Spacetime::createEdge(
 EdgePtr Spacetime::createEdge(
   const VertexPtr &src,
   const VertexPtr &tgt,
-  std::complex<double> length
+  std::complex<double> squaredLength
 ) const noexcept {
-#ifdef TESSERA_ASSERTIONS
-  const std::complex<double> squaredLength = length * length;
-  if (src->getTime() == tgt->getTime() &&
-      !(squaredLength.imag() == 0.0 && squaredLength.real() > 0.0)) {
-    CLOG(INFO_LEVEL, "You attempted to create a same-time (spacelike) edge with non-positive squared length");
-    std::abort();
-  }
-#endif
-  EdgePtr edge = edgeList->add(src, tgt, length);
+  // Vertex time is optional structural metadata, not a selector for a real
+  // section of z.  In particular, this complex-first funnel must accept an
+  // arbitrary complex squared length even when the endpoint times happen to
+  // coincide.
+  EdgePtr edge = edgeList->add(src, tgt, squaredLength);
   src->addOutEdge(edge);
   tgt->addInEdge(edge);
   ++structuralRevision_;                 // a 1-cell appeared without a simplex
   return edge;
+}
+
+std::complex<double> Spacetime::faceHolonomy(
+    const std::vector<std::uint64_t> &orientedTriangle) const {
+  if (orientedTriangle.size() != 3 ||
+      orientedTriangle[0] == orientedTriangle[1] ||
+      orientedTriangle[1] == orientedTriangle[2] ||
+      orientedTriangle[2] == orientedTriangle[0])
+    throw std::invalid_argument(
+        "Spacetime::faceHolonomy requires three distinct oriented vertices");
+  std::complex<double> product{1.0, 0.0};
+  for (std::size_t i = 0; i < 3; ++i) {
+    const auto from = orientedTriangle[i];
+    const auto to = orientedTriangle[(i + 1) % 3];
+    const EdgeKey key(from, to);
+    auto *edge = edgeList->get(key.fingerprint.fingerprint());
+    if (edge == nullptr)
+      throw std::invalid_argument(
+          "Spacetime::faceHolonomy triangle boundary edge is absent");
+    product *= edge->link(from, to);
+  }
+  return product;
 }
 
 // ========================================
@@ -310,6 +324,43 @@ std::shared_ptr<Spacetime> Spacetime::fromCells(
   std::complex<double> phase,
   const std::optional<std::vector<double>> &vertexTimes
 ) {
+  // Explicitly named legacy conversion from the old uniform additive phase.
+  auto st = fromCellsWithFields(
+      dimensions, cells, std::complex<double>{weight, 0.0},
+      std::exp(std::complex<double>{0.0, 1.0} * phase), vertexTimes);
+  if (vertexTimes) {
+    // Preserve the historical tracked-metric behavior of this legacy builder:
+    // the supplied uniform weight/phase was ignored and edges were auto-wired
+    // from the declared time slices. The complex-first builder below has no
+    // such exception: explicit z/U always means explicit z/U.
+    for (auto *edge : st->getEdgeList()->toVector()) {
+      const bool crossSlice =
+          edge->getSource()->getTime() != edge->getTarget()->getTime();
+      edge->setSquaredLength(
+          crossSlice ? std::complex<double>{-1.0, 0.0}
+                     : std::complex<double>{1.0, 0.0});
+      edge->setCanonicalLink({1.0, 0.0});
+    }
+  }
+  return st;
+}
+
+std::shared_ptr<Spacetime> Spacetime::fromCellsWithFields(
+  int dimensions,
+  const std::vector<std::vector<std::uint64_t>> &cells,
+  std::complex<double> squaredLength,
+  std::complex<double> canonicalLink,
+  const std::optional<std::vector<double>> &vertexTimes
+) {
+  if (!std::isfinite(squaredLength.real()) ||
+      !std::isfinite(squaredLength.imag()))
+    throw std::invalid_argument(
+        "Spacetime::fromCellsWithFields requires finite z");
+  if (canonicalLink == std::complex<double>{0.0, 0.0} ||
+      !std::isfinite(canonicalLink.real()) ||
+      !std::isfinite(canonicalLink.imag()))
+    throw std::invalid_argument(
+        "Spacetime::fromCellsWithFields requires finite nonzero U");
   auto metric = std::make_shared<Metric>(
     true, Signature(dimensions, SignatureType::Lorentzian));
   auto st = std::make_shared<Spacetime>(
@@ -347,17 +398,13 @@ std::shared_ptr<Spacetime> Spacetime::fromCells(
     st->createSimplex(verts);
   }
 
-  // Uniform Hermitian pin: overwrite every edge's geometry. Skipped under the
-  // tracked-metric rule, where the auto-wired causal lengths ARE the geometry —
-  // pinning there would overwrite every timelike edge with a spacelike unit
-  // length and hand back a Euclidean complex in disguise (#644; the guard was
-  // found commented out, contradicting both this comment and the causal-sign
-  // tests).
-  if (!vertexTimes) {
-    for (const auto &edge : st->getEdgeList()->toVector()) {
-      edge->setLength(std::sqrt(std::complex<double>{weight, 0.0}));
-      edge->setPhase(phase);
-    }
+  // This is the explicit complex-first builder: the caller-supplied fields
+  // are authoritative even when vertex times are also recorded. Times and
+  // structural coorientation are independent metadata; neither selects a
+  // real section of z.
+  for (const auto &edge : st->getEdgeList()->toVector()) {
+    edge->setSquaredLength(squaredLength);
+    edge->setCanonicalLink(canonicalLink);
   }
   return st;
 }
@@ -582,11 +629,13 @@ double Spacetime::getCurrentTime() const noexcept {
   return static_cast<double>(currentTime);
 }
 
-std::complex<double> Spacetime::autoWiredLength(bool crossSlice) const noexcept {
+std::complex<double> Spacetime::autoWiredSquaredLength(
+    bool crossSlice) const noexcept {
   const double squaredMagnitude = crossSlice ? alpha * a : a;
-  if (balancedEdgeWiring_) return balancedLength(squaredMagnitude);
-  return crossSlice ? std::complex<double>{0.0, std::sqrt(squaredMagnitude)}
-                    : std::complex<double>{std::sqrt(squaredMagnitude), 0.0};
+  if (balancedEdgeWiring_)
+    return {0.0, crossSlice ? -squaredMagnitude : squaredMagnitude};
+  return crossSlice ? std::complex<double>{-squaredMagnitude, 0.0}
+                    : std::complex<double>{squaredMagnitude, 0.0};
 }
 
 std::uint64_t Spacetime::metricRevisionKey() const noexcept {
@@ -904,10 +953,26 @@ void Spacetime::swapVertexLabels(VertexPtr v1, VertexPtr v2) {
       affected.push_back({s, false});
   }
 
+  // Capture every incident edge's old oriented endpoint ids before relabeling.
+  // The canonical link is stored by id order, so an order reversal must invert
+  // that stored representative while preserving the link between endpoint
+  // objects. Include the v1-v2 edge too even though its fingerprint is stable.
+  std::unordered_map<EdgePtr,
+                     std::pair<std::uint64_t, std::uint64_t>> oldEdgeEndpoints;
+  for (const auto edge : v1->getEdges())
+    oldEdgeEndpoints[edge] = {edge->getSource()->getId(),
+                              edge->getTarget()->getId()};
+  for (const auto edge : v2->getEdges())
+    oldEdgeEndpoints[edge] = {edge->getSource()->getId(),
+                              edge->getTarget()->getId()};
+
   // Swap vertex IDs, rekey vertex list
   v1->setId(id2);
   v2->setId(id1);
   vertexList->swapKeys(id1, id2);
+
+  for (const auto &[edge, oldEndpoints] : oldEdgeEndpoints)
+    edge->recanonicalizeLink(oldEndpoints.first, oldEndpoints.second);
 
   // Update edge fingerprints and rekey in EdgeList.
   // Edges incident to exactly one of v1, v2 need fingerprint updates.
@@ -1272,7 +1337,7 @@ Spacetime::getSpectralDimensionOnSkeleton(
       const int ib = idx.at(b);
       const auto key = std::minmax(ia, ib);
       if (!seen.insert({key.first, key.second}).second) continue;
-      const double len = std::abs(e->getLength());  // |l| = sqrt(|l^2|)
+      const double len = std::sqrt(std::abs(e->squaredLength()));
       const double w   = ::tessera::observables::kIMax * std::exp(-len);
       edgeList.emplace_back(ia, ib, w);
     }

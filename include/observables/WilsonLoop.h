@@ -31,7 +31,7 @@ enum class WilsonMode : uint8_t {
     COMBINATORIAL,   ///< Dual-graph topology only (loop length, enclosed hinges)
     DEFICIT_ANGLE,   ///< Uses deficit angles: W = ((d-2)+2cos(ε))/d
     CAUSAL,          ///< CDT causal orientation changes around the loop
-    U1_CONNECTION    ///< U(1) connection holonomy: oriented Σ Edge::phase around a 1-skeleton cycle (mod 2π)
+    U1_CONNECTION    ///< Legacy enum name: direct C* link product on a 1-cycle
 };
 
 /// Which loop-shape generator to use.
@@ -55,34 +55,18 @@ struct WilsonResult {
     /// contributes a cosh, so |value| may exceed 1 and a mixed hinge yields a
     /// genuinely complex character. Real-valued modes fill the real part.
     ///
-    /// In ``U1_CONNECTION`` mode this is a DERIVED VIEW of
-    /// ``connectionAccumulation`` — its ``residualPhase()`` — kept because
-    /// consumers read it as the mod-2π holonomy angle. The datum is the
-    /// accumulation; this is one reading of it.
+    /// In ``U1_CONNECTION`` mode this is the direct multiplicative C* holonomy.
     std::complex<double> value{0.0, 0.0};
 
-    /// The complete gauge-invariant datum of a ``U1_CONNECTION`` read: the
-    /// UNREDUCED complex accumulation \f$ \Sigma_\gamma\varphi \f$ of the
-    /// oriented ``Edge::phase`` around the cycle.
-    ///
-    /// Both components are carried. Around a CLOSED loop a gauge
-    /// transformation \f$ \varphi\mapsto\varphi+d\chi \f$ telescopes to zero,
-    /// so the whole complex sum is gauge-invariant — the imaginary part no
-    /// less than the real one. Of the structure group
-    /// \f$ \mathbb{C}^{*}=U(1)\times\mathbb{R}^{+} \f$ only the compact factor
-    /// has winding, so only \f$ \mathrm{Re} \f$ quantizes; that makes
-    /// \f$ e^{-\mathrm{Im}\Sigma} \f$ a gauge-invariant real rather than a
-    /// quantum number, which is not a reason to discard it. If the
-    /// non-compact direction is inert then \f$ \mathrm{Im}\Sigma\to 0 \f$ and
-    /// the modulus tends to 1 — a cancellation to be OBSERVED, never imposed.
-    ///
-    /// Deliberately NOT reduced modulo 2π at accumulation time: reducing
-    /// destroys the winding irrecoverably. ``holonomy()``,
-    /// ``holonomyModulus()``, ``residualPhase()`` and ``windingNumber()`` are
-    /// derived from this and must never replace it.
-    ///
-    /// NaN outside ``U1_CONNECTION`` mode — unmeasured, never zero.
+    /// Retired additive-phase payload. It remains for record compatibility but
+    /// is NaN for direct-link reads: no logarithm lift is selected.
     std::complex<double> connectionAccumulation{
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::quiet_NaN()};
+
+    /// Branch-free ordered product of the oriented edge links. This is the
+    /// primary connection datum. NaN outside connection mode.
+    std::complex<double> connectionHolonomy{
         std::numeric_limits<double>::quiet_NaN(),
         std::numeric_limits<double>::quiet_NaN()};
 
@@ -94,18 +78,17 @@ struct WilsonResult {
     /// Fold an angle into the principal holonomy interval (−π, π].
     [[nodiscard]] static double principalAngle(double theta);
 
-    /// The holonomy \f$ H(\gamma)=e^{i\Sigma} \f$, derived.
+    /// The direct multiplicative holonomy \f$H(\gamma)\in\mathbb C^*\f$.
     [[nodiscard]] std::complex<double> holonomy() const;
 
-    /// \f$ |H(\gamma)| = e^{-\mathrm{Im}\Sigma} \f$, derived. Exactly 1 when
-    /// the connection is purely compact.
+    /// Presentation certificate \f$|H(\gamma)|\f$; never a normalized field.
     [[nodiscard]] double holonomyModulus() const;
 
-    /// \f$ \mathrm{Re}\Sigma \bmod 2\pi \f$ in (−π, π], derived.
+    /// Presentation-only principal argument of the direct holonomy.
     [[nodiscard]] double residualPhase() const;
 
-    /// The whole \f$ 2\pi \f$ turns in \f$ \mathrm{Re}\Sigma \f$, derived.
-    /// Recoverable only because the accumulation is stored unreduced.
+    /// Always zero for a single product. Winding requires an explicitly
+    /// matched relative path plus a continuously tracked lift.
     [[nodiscard]] long windingNumber() const;
 };
 
@@ -114,10 +97,8 @@ struct WilsonResult {
 /// Computes holonomy-like quantities around closed paths.  The dual-graph
 /// modes (top-simplices as nodes, shared facets as edges) let users choose
 /// between purely combinatorial, curvature-based, and causal-structure
-/// analyses.  The ``U1_CONNECTION`` mode instead accumulates the U(1)
-/// connection (``Edge::phase``) around a cycle on the primal 1-skeleton,
-/// returning the gauge-invariant holonomy (mod 2π) — the Wilson-loop view of
-/// the Stage-1 ``cobordism::HodgeLaplacian`` cycle flux.
+/// analyses. The legacy-named ``U1_CONNECTION`` mode multiplies the full
+/// \f$\mathbb C^*\f$ links around a primal 1-cycle without compactifying them.
 ///
 /// Usage:
 /// @code
@@ -142,19 +123,14 @@ class WilsonLoop {
     [[nodiscard]] WilsonResult evaluateCausal(const LoopPath &loop) const;
 
     /// Connection holonomy around a closed cycle of vertices on the primal
-    /// 1-skeleton.  Accumulates the COMPLEX ``Edge::phase`` oriented along the
-    /// stored source→target direction (``+phase`` forward, ``−phase`` on
-    /// reversal) and carries the total UNREDUCED in
-    /// ``connectionAccumulation`` — the datum. ``value`` is its
-    /// ``residualPhase()``, kept for consumers that read the mod-2π angle;
-    /// ``loopSize`` is the number of edges.
+    /// 1-skeleton. Multiplies direct oriented links in C*. No logarithm,
+    /// argument, or compact projection is used. ``value`` and
+    /// ``connectionHolonomy`` carry the exact product.
     /// Returns an empty result if the cycle has fewer than two vertices or any
     /// consecutive pair is not joined by an edge (an open path).
     ///
-    /// This is the Wilson-loop counterpart of the Stage-1 cycle flux carried
-    /// by the Hermitian-weighted ``cobordism::HodgeLaplacian`` (the same
-    /// oriented phase sum); restricted to phases in {0, π} it reproduces the
-    /// ℤ₂ flux.
+    /// This is the Wilson-loop counterpart of the same direct links consumed
+    /// by the current one-particle operator.
     [[nodiscard]] WilsonResult evaluateU1Connection(
         const std::vector<VertexPtr> &cycle) const;
 

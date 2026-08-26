@@ -64,18 +64,17 @@ using ::tessera::mesh::Edge;
 /// the realized eigenvalue is the Rayleigh quotient \f$ \lambda \f$. A non-unit
 /// \f$ \psi \f$ is normalized internally (the eigenvector condition is
 /// scale-invariant). The Laplacian is reassembled from the **current** edge
-/// weights/phases on every call, so the residual tracks in-place perturbations
-/// of `setWeights` / `setPhases`.
+/// direct z/U fields on every call, so the residual tracks in-place
+/// perturbations of `setSquaredLengths` / `setLinks`.
 ///
 /// ## Parameters
 ///
-/// The tunable parameters are the per-edge squared-length magnitudes
-/// \f$ \{w_{ij}\} \f$ (`Edge::setSquaredLength`) and C* connection phases
-/// \f$ \{\theta_{ij}\} \f$ (`Edge::setPhase`), in a stable edge order fixed at
-/// construction (the `EdgeList` order, restricted to the edges that carry weight
-/// in \f$ L \f$: both endpoints present, no self-loops). `weights()` / `phases()`
-/// read them; `setWeights()` / `setPhases()` write them back in place — no mesh
-/// rebuild. `psi` components are indexed in the same sorted-vertex-id order as
+/// The canonical tunable parameters are the per-edge complex squared lengths
+/// \f$\{z_{ij}\}\f$ and direct nonzero canonical links \f$\{U_{ij}\}\f$, in a
+/// stable edge order. `squaredLengths()` / `links()` read them and
+/// `setSquaredLengths()` / `setLinks()` write them without a root or logarithm.
+/// The weight/phase methods remain legacy optimizer coordinates. `psi`
+/// components are indexed in the same sorted-vertex-id order as
 /// `HodgeLaplacian` (\f$ k=0 \f$), so they align with the operator.
 ///
 /// ## Fixed-boundary interior fill (§5.0)
@@ -146,18 +145,29 @@ class EigenstateSynthesis {
     [[nodiscard]] std::vector<std::complex<double>> apply(
         const std::vector<std::complex<double>> &psi) const;
 
-    /// The edge magnitudes \f$ \{w_{ij}\} \f$ (`Edge::getSquaredLength`) in the
-    /// stable edge order, length `numEdges()`.
+    /// Legacy alias of `squaredLengths()`.
     [[nodiscard]] std::vector<std::complex<double>> weights() const;
+
+    [[nodiscard]] std::vector<std::complex<double>> squaredLengths() const {
+      return weights();
+    }
+
+    /// Canonical multiplicative links in stable edge order.
+    [[nodiscard]] std::vector<std::complex<double>> links() const;
 
     /// The edge connection phases \f$ \{\varphi_{ij}\} \f$ (`Edge::getPhase`) in the
     /// stable edge order, length `numEdges()`. Complex: `Re` is the compact U(1)
     /// angle, `Im` the non-compact \f$\mathbb{R}^{+}\f$ log-scale.
     [[nodiscard]] std::vector<std::complex<double>> phases() const;
 
-    /// Write the edge magnitudes in place (`Edge::setSquaredLength`).
+    /// Legacy real-section setter. Canonical code calls `setSquaredLengths`.
     /// @throws std::runtime_error if `w.size() != numEdges()`.
     void setWeights(const std::vector<double> &w);
+
+    void setSquaredLengths(
+        const std::vector<std::complex<double>> &squaredLengths);
+
+    void setLinks(const std::vector<std::complex<double>> &links);
 
     /// Write the edge connection phases in place (`Edge::setPhase`). A real value
     /// converts implicitly and leaves the non-compact part zero.
@@ -188,6 +198,11 @@ class EigenstateSynthesis {
     /// length `numInteriorEdges()`.
     [[nodiscard]] std::vector<std::complex<double>> interiorWeights() const;
 
+    [[nodiscard]] std::vector<std::complex<double>> interiorSquaredLengths()
+        const { return interiorWeights(); }
+
+    [[nodiscard]] std::vector<std::complex<double>> interiorLinks() const;
+
     /// The interior edge connection phases \f$ \{\varphi_{ij}\} \f$ in interior-edge
     /// order, length `numInteriorEdges()`. Complex; see `phases()`.
     [[nodiscard]] std::vector<std::complex<double>> interiorPhases() const;
@@ -195,6 +210,11 @@ class EigenstateSynthesis {
     /// Write the interior edge magnitudes in place; the boundary edges are left
     /// untouched. @throws std::runtime_error if `w.size() != numInteriorEdges()`.
     void setInteriorWeights(const std::vector<double> &w);
+
+    void setInteriorSquaredLengths(
+        const std::vector<std::complex<double>> &squaredLengths);
+
+    void setInteriorLinks(const std::vector<std::complex<double>> &links);
 
     /// Write the interior edge connection phases in place; the boundary edges are
     /// left untouched.
@@ -532,7 +552,7 @@ class EigenstateSynthesis {
     bool removeInteriorCell(const std::vector<std::uint64_t> &cell);
 
     /// Undo the most recent `removeInteriorCell` (LIFO): re-create the removed top
-    /// cell and the edges it orphaned, restoring their squared-lengths and phases
+    /// cell and the edges it orphaned, restoring their direct z/U fields
     /// bit-exactly, and re-capture. Returns `false` if there is no removal to undo.
     /// The surgery analogue of `detachLastInteriorVertex`.
     bool restoreLastRemoval();
@@ -691,8 +711,8 @@ class EigenstateSynthesis {
     // One removeInteriorCell() record, for exact restore. The removed top cell's
     // sorted vertex tuple (its vertices are kept — only the top simplex and its
     // orphaned edges are deleted), plus each orphaned edge as (u, v, complex
-    // squaredLength, phase) so restoreLastRemoval re-creates them bit-exactly —
-    // the FULL complex ℓ², never its real part alone (#581).
+    // direct squaredLength, oriented link) so restoreLastRemoval re-creates
+    // them bit-exactly.
     struct Removal {
       std::vector<std::uint64_t> cell{};
       std::vector<std::tuple<std::uint64_t, std::uint64_t,

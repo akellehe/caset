@@ -216,10 +216,14 @@ bool RemoveMove::applyPreGeometric() {
   vertexCoords_.clear();
   for (const auto &e : v_->getInEdges())
     deletedEdges_.push_back({e->getSource(), e->getTarget(),
-                             e->getLength(), e->getPhase()});
+                             e->squaredLength(),
+                             e->link(e->getSource()->getId(),
+                                     e->getTarget()->getId())});
   for (const auto &e : v_->getOutEdges())
     deletedEdges_.push_back({e->getSource(), e->getTarget(),
-                             e->getLength(), e->getPhase()});
+                             e->squaredLength(),
+                             e->link(e->getSource()->getId(),
+                                     e->getTarget()->getId())});
 
   // Remove the d+1 incident cells.
   for (const auto &s : incident_) st_->removeSimplex(s);
@@ -272,11 +276,15 @@ bool RemoveMove::apply() {
   // capture EdgePtr — those slots get freed by EdgeList::remove.)
   for (const auto &e : v_->getInEdges()) {
     deletedEdges_.push_back({e->getSource(), e->getTarget(),
-                             e->getLength(), e->getPhase()});
+                             e->squaredLength(),
+                             e->link(e->getSource()->getId(),
+                                     e->getTarget()->getId())});
   }
   for (const auto &e : v_->getOutEdges()) {
     deletedEdges_.push_back({e->getSource(), e->getTarget(),
-                             e->getLength(), e->getPhase()});
+                             e->squaredLength(),
+                             e->link(e->getSource()->getId(),
+                                     e->getTarget()->getId())});
   }
 
   // 2. Remove the 2d incident simplices.
@@ -367,10 +375,10 @@ void RemoveMove::rollback() {
     // value and the U(1) phase are written onto the fresh edge right
     // after creation so the restore is bit-exact (#581).  An edge that
     // already exists was never deleted, so its values are left alone.
-    auto r = st_->getEdgeList()->tryAdd(src, tgt, er.length);
+    auto r = st_->getEdgeList()->tryAdd(src, tgt, er.squaredLength);
     if (r.second) {
-      r.first->setLength(er.length);  // verbatim: branch-exact, no round-trip
-      r.first->setPhase(er.phase);
+      r.first->setSquaredLength(er.squaredLength);
+      r.first->setLink(src->getId(), tgt->getId(), er.link);
     }
     src->addOutEdge(r.first);
     tgt->addInEdge(r.first);

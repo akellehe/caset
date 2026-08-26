@@ -56,7 +56,7 @@ std::shared_ptr<Spacetime> ProtonIngredients::buildMinimalSeed() {
                                           Foliation::PREFERRED, topology);
   host->build();
   for (auto *edge : host->getEdgeList()->toVector())
-    edge->setLength(std::sqrt(complexd(1.0, 0.0)));
+    edge->setSquaredLength(complexd(1.0, 0.0));
   return host;
 }
 

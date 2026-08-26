@@ -604,10 +604,13 @@ std::pair<SimplexPtr, Simplices> Simplex::cone(VertexPtr vertex) {
   for (auto &existing : kPlusOneVertices) {
     if (existing->getTime() == vertex->getTime()) {
       // Spacelike edge (same time slice): ℓ² = a
-      newEdges.push_back(spacetime->createEdge(existing, vertex, std::sqrt(std::complex<double>(spacetime->getA()))));
+      newEdges.push_back(spacetime->createEdge(
+          existing, vertex, std::complex<double>(spacetime->getA())));
     } else {
       // Timelike edge (different time slices): ℓ² = -α·a
-      newEdges.push_back(spacetime->createEdge(existing, vertex, std::sqrt(std::complex<double>(-(spacetime->getAlpha() * spacetime->getA())))));
+      newEdges.push_back(spacetime->createEdge(
+          existing, vertex,
+          std::complex<double>(-(spacetime->getAlpha() * spacetime->getA()))));
     }
   }
   kPlusOneVertices.push_back(vertex);
@@ -703,7 +706,7 @@ std::vector<std::complex<double>> Simplex::localSquaredLengths(
             else if (vid == tid) ti = k;
         }
         if (si >= 0 && ti >= 0) {
-            const std::complex<double> l2 = e->getLength() * e->getLength();
+            const std::complex<double> l2 = e->squaredLength();
             sq[static_cast<std::size_t>(si) * n + ti] = l2;
             sq[static_cast<std::size_t>(ti) * n + si] = l2;
         }
@@ -1180,7 +1183,7 @@ Simplex::deficitAngleHessian() const {
 
 std::complex<double> Simplex::area() const {
     if (edges.size() < 3) return {0.0, 0.0};
-    auto sq = [&](std::size_t k) { return (edges[k]->getLength() * edges[k]->getLength()); };
+    auto sq = [&](std::size_t k) { return edges[k]->squaredLength(); };
     const std::complex<double> a2 = sq(0), b2 = sq(1), c2 = sq(2);
     const std::complex<double> val = 2.0 * (a2 * b2 + b2 * c2 + c2 * a2)
                                      - (a2 * a2 + b2 * b2 + c2 * c2);

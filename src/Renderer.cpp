@@ -654,9 +654,9 @@ bool writeGraphML(const Spacetime &st, const std::string &path) {
          "attr.type=\"double\"/>\n"
       << "  <key id=\"sq_length_im\" for=\"edge\" "
          "attr.name=\"squared_length_im\" attr.type=\"double\"/>\n"
-      << "  <key id=\"phase\" for=\"edge\" attr.name=\"phase\" "
+      << "  <key id=\"link_re\" for=\"edge\" attr.name=\"link_re\" "
          "attr.type=\"double\"/>\n"
-      << "  <key id=\"phase_im\" for=\"edge\" attr.name=\"phase_im\" "
+      << "  <key id=\"link_im\" for=\"edge\" attr.name=\"link_im\" "
          "attr.type=\"double\"/>\n"
       << "  <key id=\"timelike\" for=\"edge\" attr.name=\"timelike\" "
          "attr.type=\"boolean\"/>\n"
@@ -671,18 +671,20 @@ bool writeGraphML(const Spacetime &st, const std::string &path) {
 
     for (std::size_t i = 0; i < edges.size(); ++i) {
         auto *e = edges[i];
-        // Full complex l^2 + C* connection phase (re/im); causal character from the canonical
+        // Full direct complex z + canonical C* link (re/im); the legacy causal
+        // colour is presentation-only and read from the canonical Edge helper.
         // Edge::isTimelike(), not the superseded sign-of-Re test (#581). The
         // Re key keeps its name for compatibility with existing consumers.
-        const std::complex<double> sq = (e->getLength() * e->getLength());
+        const std::complex<double> sq = e->squaredLength();
+        const std::complex<double> link = e->canonicalLink();
         f << "    <edge id=\"e" << i << "\" source=\""
           << e->getSource()->getId() << "\" target=\""
           << e->getTarget()->getId() << "\">\n"
           << "      <data key=\"sq_length\">" << sq.real() << "</data>\n"
           << "      <data key=\"sq_length_im\">" << sq.imag() << "</data>\n"
-          << "      <data key=\"phase\">" << e->getPhase().real()
+          << "      <data key=\"link_re\">" << link.real()
           << "</data>\n"
-          << "      <data key=\"phase_im\">" << e->getPhase().imag()
+          << "      <data key=\"link_im\">" << link.imag()
           << "</data>\n"
           << "      <data key=\"timelike\">"
           << (e->isTimelike() ? "true" : "false") << "</data>\n"
@@ -713,16 +715,17 @@ bool writeDot(const Spacetime &st, const std::string &path) {
           << ", degree=" << v->degree() << "];\n";
 
     for (auto *e : edges) {
-        // Canonical Edge::isTimelike() classification + the full complex l^2
-        // and phase; squared_length stays Re for compatibility (#581).
-        const std::complex<double> sq = (e->getLength() * e->getLength());
+        // Presentation-only causal classification plus full direct z/U;
+        // squared_length stays Re for export compatibility (#581).
+        const std::complex<double> sq = e->squaredLength();
+        const std::complex<double> link = e->canonicalLink();
         const bool tl = e->isTimelike();
         f << "  " << e->getSource()->getId()
           << " -- " << e->getTarget()->getId()
           << " [squared_length=" << sq.real()
           << ", squared_length_im=" << sq.imag()
-          << ", phase=" << e->getPhase().real()
-          << ", phase_im=" << e->getPhase().imag()
+          << ", link_re=" << link.real()
+          << ", link_im=" << link.imag()
           << ", timelike=" << (tl ? "true" : "false")
           << ", color=" << (tl ? "blue" : "red") << "];\n";
     }

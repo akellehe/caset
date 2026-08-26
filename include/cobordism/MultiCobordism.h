@@ -9,6 +9,7 @@
 #include <Eigen/Core>
 
 #include "cobordism/CobordismObjective.h"
+#include "cobordism/Coorientation.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "spacetime/pachner/AddMove.h"
 #include "spacetime/pachner/FlipMove.h"
@@ -50,10 +51,8 @@ using ::tessera::spacetime::Spacetime;
 ///     only if ΔF < 0. Target-conditioned modes may redraw a stalled batch while
 ///     the register is not carried; target-free `JointStationarity` stops that
 ///     stage when no improving sequence is found.
-///   * **Stage 2 (geometric):** relax the full complex squared edge coordinates
-///     \f$z_e=\ell_e^2\f$ along the selected objective's gradient, then map each
-///     accepted \f$z_e\f$ back to the continuous square-root branch of the stored
-///     edge length \f$\ell_e\f$.
+///   * **Stage 2 (geometric):** relax the directly stored full complex squared
+///     edge coordinates \f$z_e\f$ and multiplicative links \f$U_e\f$.
 class MultiCobordism {
  public:
   /// An emergent boundary block of the cobordism — an input OR an output. A block is
@@ -65,6 +64,13 @@ class MultiCobordism {
   struct BoundaryBlock {
     std::set<std::uint64_t> vertices;
     std::vector<std::complex<double>> target;
+    BoundaryRole role{BoundaryRole::Incoming};
+
+    [[nodiscard]] BoundaryBlock reversed() const {
+      BoundaryBlock result = *this;
+      result.role = reverse(role);
+      return result;
+    }
   };
 
   /// `outputTargets` is a LIST of output boundary blocks (the full cobordism
@@ -979,28 +985,17 @@ class MultiCobordism {
   /// reads.
   void runRecursiveAnalysis();
 
-  /// The versioned checkpoint document of the last pass (schema version 5),
+  /// The versioned checkpoint document of the last pass (schema version 6),
   /// as JSON. Empty before the first pass. Unknown /
   /// uncertified values serialize as `null`, never as zero.
   [[nodiscard]] const std::string &checkpointJson() const noexcept {
     return checkpointJson_;
   }
-  /// The schema version this build writes and accepts. Version 5 adds the
-  /// per-edge connection phase to `raw_complex.edges`: an edge carries TWO
-  /// fields, and a version-4 document recorded only the length, so replaying
-  /// one silently rebuilt every edge with a zero phase and dropped a live
-  /// field. Version 4 also split the former `particles.baryons` block in two:
-  /// the bound-supercomponent SEARCH records moved to
-  /// `particles.bound_supercomponents` and `particles.baryons` now carries the
-  /// three-cluster VERDICT itself, one baryon read per binding of exactly
-  /// three certified constituents.
-  ///
-  /// A version-3 document is REJECTED on read rather than reinterpreted — its
-  /// `baryons` entries mean a different thing. A version-4 document is also
-  /// rejected, because its silence about the phase is not evidence the phase
-  /// was zero; `replayPhaseDefault` documents the only reading under which one
-  /// could be accepted.
-  [[nodiscard]] static int checkpointSchemaVersion() noexcept { return 5; }
+  /// Version 6 stores direct complex ``z`` and nonzero canonical ``U`` fields,
+  /// canonical endpoint orientation, structural boundary roles, and
+  /// cooriented cuts. Older length/phase records are never reinterpreted by
+  /// the normal reader.
+  [[nodiscard]] static int checkpointSchemaVersion() noexcept { return 6; }
 
   /// The phase a pre-version-5 document would replay with, were such a document
   /// accepted: exactly zero. This is FAITHFUL to what version 4 recorded — it
@@ -1013,6 +1008,29 @@ class MultiCobordism {
     return {0.0, 0.0};
   }
 
+  /// Structural cuts used by lineage/intersection analysis. They are kept
+  /// independent of the complex metric and round-trip in checkpoints.
+  void setCoorientedCuts(std::vector<CoorientedCut> cuts) {
+    coorientedCuts_ = std::move(cuts);
+  }
+  [[nodiscard]] const std::vector<CoorientedCut> &coorientedCuts() const {
+    return coorientedCuts_;
+  }
+
+  /// Reverse the cobordism structurally: exchange incoming/outgoing boundary
+  /// blocks and reverse every role and cut coorientation. No z/U value is read.
+  void reverseCobordismOrientation() {
+    auto oldInputs = std::move(inputBlocks_);
+    auto oldOutputs = std::move(outputBlocks_);
+    inputBlocks_.clear();
+    outputBlocks_.clear();
+    inputBlocks_.reserve(oldOutputs.size());
+    outputBlocks_.reserve(oldInputs.size());
+    for (const auto &block : oldOutputs) inputBlocks_.push_back(block.reversed());
+    for (const auto &block : oldInputs) outputBlocks_.push_back(block.reversed());
+    for (auto &cut : coorientedCuts_) cut = cut.reversed();
+  }
+
   /// Replay mode: rebuild the raw complex recorded in `checkpoint`, disable
   /// every cache, recompute every derived hierarchy and certificate, and
   /// return the freshly written checkpoint — stamped `"replay"`. The verdicts
@@ -1021,6 +1039,13 @@ class MultiCobordism {
   ///   `schema_version` (a reader never guesses at a version it does not
   ///   know).
   [[nodiscard]] static std::string replayCheckpoint(
+      const std::string &checkpoint);
+
+  /// Explicit one-way migration of a schema-5 ``length + additive phase``
+  /// checkpoint. It records ``z=length*length`` and
+  /// ``U=exp(i*phase)`` in a new schema-6 document. The normal replay reader
+  /// never performs this conversion implicitly.
+  [[nodiscard]] static std::string migrateLegacyCheckpointV5(
       const std::string &checkpoint);
 
   /// The `schema_version` recorded in `checkpoint`.
@@ -1052,10 +1077,15 @@ class MultiCobordism {
   [[nodiscard]] int lastStage1Lookahead() const { return lastStage1LookaheadDepth_; }
 
  private:
+  struct EdgeSnapshot {
+    std::complex<double> squaredLength{0.0, 0.0};
+    /// Link on the canonical min(id)->max(id) orientation.
+    std::complex<double> canonicalLink{1.0, 0.0};
+  };
   using Snapshot =
       std::pair<std::vector<std::vector<std::uint64_t>>,
                 std::map<std::pair<std::uint64_t, std::uint64_t>,
-                         std::complex<double>>>;
+                         EdgeSnapshot>>;
   using MoveSpec = std::pair<std::string, std::vector<std::uint64_t>>;
 
   // ---- the pieces of residualOfTargetStateAgainstHarmonic ----
@@ -1119,7 +1149,8 @@ class MultiCobordism {
   // grown later by growBlockRegions, not here.
   void seedBlocks(const std::vector<std::uint64_t> &seeds,
                   const std::vector<std::vector<std::complex<double>>> &targets,
-                  std::vector<BoundaryBlock> &destinationBlocks);
+                  std::vector<BoundaryBlock> &destinationBlocks,
+                  BoundaryRole role);
 
   [[nodiscard]] Snapshot snapshotOf(const Spacetime &spacetime) const;
   [[nodiscard]] Snapshot snapshot() const;
@@ -1317,6 +1348,7 @@ class MultiCobordism {
   int lastStage1LookaheadDepth_ = 0;
   std::vector<BoundaryBlock> inputBlocks_;
   std::vector<BoundaryBlock> outputBlocks_;
+  std::vector<CoorientedCut> coorientedCuts_;
 
   // ---- #776 state ----
   //
@@ -1358,6 +1390,8 @@ class MultiCobordism {
   /// served from cache.
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>>
       analysisEdgeLengths_{};
+  std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>>
+      analysisEdgeLinks_{};
   /// Set true once `analysisCellSet_` holds a real observation.
   bool analysisCellSetValid_{false};
   /// The #764 analytic cache the overlay reuses ACROSS passes, so a local

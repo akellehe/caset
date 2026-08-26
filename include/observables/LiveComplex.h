@@ -72,7 +72,9 @@ class LiveComplex {
         const std::vector<std::vector<std::uint64_t>> &cells,
         const std::map<std::pair<std::uint64_t, std::uint64_t>,
                        std::complex<double>> &squaredLengths,
-        const std::map<std::uint64_t, double> &vertexTimes, int dimensions);
+        const std::map<std::uint64_t, double> &vertexTimes, int dimensions,
+        const std::map<std::pair<std::uint64_t, std::uint64_t>,
+                       std::complex<double>> &canonicalLinks = {});
 
     /// LOAD (never build) the block-residual sub-complex: `cells` are ambient
     /// top cells already SELECTED by the caller (the strict subset whose vertices

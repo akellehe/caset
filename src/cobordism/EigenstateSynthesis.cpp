@@ -236,7 +236,7 @@ double EigenstateSynthesis::rayleigh(const std::vector<cd> &psi) const {
 std::vector<std::complex<double>> EigenstateSynthesis::weights() const {
   std::vector<std::complex<double>> w;
   w.reserve(edges_.size());
-  for (const auto e : edges_) w.push_back((e->getLength() * e->getLength()));
+  for (const auto e : edges_) w.push_back(e->squaredLength());
   return w;
 }
 
@@ -247,13 +247,38 @@ std::vector<std::complex<double>> EigenstateSynthesis::phases() const {
   return th;
 }
 
+std::vector<std::complex<double>> EigenstateSynthesis::links() const {
+  std::vector<std::complex<double>> result;
+  result.reserve(edges_.size());
+  for (const auto edge : edges_) result.push_back(edge->canonicalLink());
+  return result;
+}
+
 void EigenstateSynthesis::setWeights(const std::vector<double> &w) {
   if (w.size() != edges_.size())
     throw std::runtime_error(
         "EigenstateSynthesis::setWeights: got " + std::to_string(w.size()) +
         " weights, expected " + std::to_string(edges_.size()));
   for (std::size_t i = 0; i < edges_.size(); ++i)
-    edges_[i]->setLength(std::sqrt(std::complex<double>{w[i], 0.0}));
+    edges_[i]->setSquaredLength(std::complex<double>{w[i], 0.0});
+}
+
+void EigenstateSynthesis::setSquaredLengths(
+    const std::vector<std::complex<double>> &squaredLengths) {
+  if (squaredLengths.size() != edges_.size())
+    throw std::runtime_error(
+        "EigenstateSynthesis::setSquaredLengths: wrong number of values");
+  for (std::size_t i = 0; i < edges_.size(); ++i)
+    edges_[i]->setSquaredLength(squaredLengths[i]);
+}
+
+void EigenstateSynthesis::setLinks(
+    const std::vector<std::complex<double>> &links) {
+  if (links.size() != edges_.size())
+    throw std::runtime_error(
+        "EigenstateSynthesis::setLinks: wrong number of values");
+  for (std::size_t i = 0; i < edges_.size(); ++i)
+    edges_[i]->setCanonicalLink(links[i]);
 }
 
 void EigenstateSynthesis::setPhases(
@@ -272,7 +297,7 @@ std::vector<std::complex<double>> EigenstateSynthesis::interiorWeights() const {
   std::vector<std::complex<double>> w;
   w.reserve(interiorEdgeIdx_.size());
   for (const auto i : interiorEdgeIdx_)
-    w.push_back((edges_[i]->getLength() * edges_[i]->getLength()));
+    w.push_back(edges_[i]->squaredLength());
   return w;
 }
 
@@ -283,6 +308,14 @@ std::vector<std::complex<double>> EigenstateSynthesis::interiorPhases() const {
   return th;
 }
 
+std::vector<std::complex<double>> EigenstateSynthesis::interiorLinks() const {
+  std::vector<std::complex<double>> result;
+  result.reserve(interiorEdgeIdx_.size());
+  for (const auto index : interiorEdgeIdx_)
+    result.push_back(edges_[index]->canonicalLink());
+  return result;
+}
+
 void EigenstateSynthesis::setInteriorWeights(const std::vector<double> &w) {
   if (w.size() != interiorEdgeIdx_.size())
     throw std::runtime_error(
@@ -290,7 +323,26 @@ void EigenstateSynthesis::setInteriorWeights(const std::vector<double> &w) {
         std::to_string(w.size()) + " weights, expected " +
         std::to_string(interiorEdgeIdx_.size()));
   for (std::size_t k = 0; k < interiorEdgeIdx_.size(); ++k)
-    edges_[interiorEdgeIdx_[k]]->setLength(std::sqrt(std::complex<double>{w[k], 0.0}));
+    edges_[interiorEdgeIdx_[k]]->setSquaredLength(
+        std::complex<double>{w[k], 0.0});
+}
+
+void EigenstateSynthesis::setInteriorSquaredLengths(
+    const std::vector<std::complex<double>> &squaredLengths) {
+  if (squaredLengths.size() != interiorEdgeIdx_.size())
+    throw std::runtime_error(
+        "EigenstateSynthesis::setInteriorSquaredLengths: wrong number of values");
+  for (std::size_t i = 0; i < interiorEdgeIdx_.size(); ++i)
+    edges_[interiorEdgeIdx_[i]]->setSquaredLength(squaredLengths[i]);
+}
+
+void EigenstateSynthesis::setInteriorLinks(
+    const std::vector<std::complex<double>> &links) {
+  if (links.size() != interiorEdgeIdx_.size())
+    throw std::runtime_error(
+        "EigenstateSynthesis::setInteriorLinks: wrong number of values");
+  for (std::size_t i = 0; i < interiorEdgeIdx_.size(); ++i)
+    edges_[interiorEdgeIdx_[i]]->setCanonicalLink(links[i]);
 }
 
 void EigenstateSynthesis::setInteriorPhases(
@@ -401,7 +453,7 @@ bool EigenstateSynthesis::attachInteriorVertex(
     const std::uint64_t a = edges_[i]->getSource()->getId();
     const std::uint64_t b = edges_[i]->getTarget()->getId();
     boundaryBefore[{std::min(a, b), std::max(a, b)}] = {
-        (edges_[i]->getLength() * edges_[i]->getLength()), edges_[i]->getPhase()};
+        edges_[i]->squaredLength(), edges_[i]->canonicalLink()};
   }
 
   // Fresh interior vertex with the largest id (sorts last; preserves the
@@ -461,8 +513,8 @@ bool EigenstateSynthesis::attachInteriorVertex(
       const auto it =
           boundaryBefore.find({std::min(a, b), std::max(a, b)});
       if (it == boundaryBefore.end() ||
-          it->second.first != (edges_[i]->getLength() * edges_[i]->getLength()) ||
-          it->second.second != edges_[i]->getPhase()) {
+          it->second.first != edges_[i]->squaredLength() ||
+          it->second.second != edges_[i]->canonicalLink()) {
         valid = false;
         break;
       }
@@ -600,8 +652,8 @@ bool EigenstateSynthesis::removeInteriorCell(
       if (covered(u, v)) continue;  // edge survives in another top cell
       const auto it = edgeByPair.find({u, v});
       if (it == edgeByPair.end()) continue;  // already absent
-      rem.removedEdges.emplace_back(u, v, it->second->getLength(),
-                                    it->second->getPhase());
+      rem.removedEdges.emplace_back(u, v, it->second->squaredLength(),
+                                    it->second->link(u, v));
       toRemove.push_back(it->second);
     }
 
@@ -614,7 +666,7 @@ bool EigenstateSynthesis::removeInteriorCell(
     const std::uint64_t a = edges_[i]->getSource()->getId();
     const std::uint64_t b = edges_[i]->getTarget()->getId();
     boundaryBefore[{std::min(a, b), std::max(a, b)}] = {
-        (edges_[i]->getLength() * edges_[i]->getLength()), edges_[i]->getPhase()};
+        edges_[i]->squaredLength(), edges_[i]->canonicalLink()};
   }
 
   // Mutate: drop the top cell, then its orphaned edges.
@@ -638,7 +690,7 @@ bool EigenstateSynthesis::removeInteriorCell(
     const std::uint64_t b = e->getTarget()->getId();
     const std::pair<std::uint64_t, std::uint64_t> key{std::min(a, b),
                                                       std::max(a, b)};
-    liveWeights[key] = {(e->getLength() * e->getLength()), e->getPhase()};
+    liveWeights[key] = {e->squaredLength(), e->canonicalLink()};
   }
   for (const auto &[key, wp] : boundaryBefore) {
     const auto it = liveWeights.find(key);
@@ -685,11 +737,11 @@ bool EigenstateSynthesis::applyRestore(const Removal &rem) {
     const std::uint64_t b = e->getTarget()->getId();
     edgeByPair[{std::min(a, b), std::max(a, b)}] = e;
   }
-  for (const auto &[u, v, w, theta] : rem.removedEdges) {
+  for (const auto &[u, v, z, link] : rem.removedEdges) {
     const auto it = edgeByPair.find({std::min(u, v), std::max(u, v)});
     if (it != edgeByPair.end()) {
-      it->second->setLength(w);  // the recorded complex LENGTH, bit-exact
-      it->second->setPhase(theta);
+      it->second->setSquaredLength(z);
+      it->second->setLink(u, v, link);
     }
   }
   return true;
@@ -763,8 +815,8 @@ std::pair<bool, std::string> EigenstateSynthesis::stellarSubdivideInterior(
   // construction, not by the time-rule coincidence on all-same-time seeds.
   for (const auto e : st_->getEdgeList()->toVector()) {
     if (e == nullptr) continue;
-    e->setLength({1.0, 0.0});  // spacelike unit length
-    e->setPhase(0.0);
+    e->setSquaredLength({1.0, 0.0});
+    e->setCanonicalLink({1.0, 0.0});
   }
   return verdict;  // {true, "ok"}
 }
@@ -1468,7 +1520,7 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>> l2map;
   for (auto *e : edges_)
     l2map[key(e->getSource()->getId(), e->getTarget()->getId())] =
-        (e->getLength() * e->getLength());
+        e->squaredLength();
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::vector<std::size_t>> trisOf;
   for (std::size_t ti = 0; ti < n2; ++ti)
     for (int i = 0; i < 3; ++i)
@@ -1921,11 +1973,12 @@ std::vector<double> EigenstateSynthesis::periodGradientDegreeZero(
     if (srcIt == col.end() || tgtIt == col.end()) continue;
     const Index is = static_cast<Index>(srcIt->second);
     const Index it = static_cast<Index>(tgtIt->second);
-    const cd w = (edge->getLength() * edge->getLength());
+    const cd w = edge->squaredLength();
     // d|w|/d(Re w): Re w / |w| — the real-axis directional derivative (sign w
     // for real w). At the |w| kink (w == 0) take the symmetric subgradient 0.
     const double dAbs = (std::abs(w) > 0.0) ? w.real() / std::abs(w) : 0.0;
-    const cd zPhase = std::exp(cd(0.0, 1.0) * edge->getPhase());
+    const cd zPhase = edge->link(edge->getSource()->getId(),
+                                 edge->getTarget()->getId());
     MatrixXcd dM = MatrixXcd::Zero(N, N);
     dM(is, is) += dAbs;                  // dD_ii
     dM(it, it) += dAbs;                  // dD_jj
@@ -2055,7 +2108,7 @@ std::vector<cd> EigenstateSynthesis::periodGapForLoopsGradient(
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>> l2map;
   for (auto *e : edges_)
     l2map[key(e->getSource()->getId(), e->getTarget()->getId())] =
-        (e->getLength() * e->getLength());
+        e->squaredLength();
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::vector<std::size_t>> trisOf;
   for (std::size_t ti = 0; ti < n2; ++ti)
     for (int i = 0; i < 3; ++i)

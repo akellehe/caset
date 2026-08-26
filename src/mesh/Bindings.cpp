@@ -112,9 +112,8 @@ endpoint vertex IDs, so Edge(v1, v2) == Edge(v2, v1).)doc")
         py::arg("source"),
         py::arg("target"),
         py::arg("squaredLength"),
-        "Create an edge with a specified (possibly complex) squared length l^2, "
-        "stored exactly. The length is derived as its sqrt (real = spacelike, "
-        "imaginary = timelike). A real value is a real l^2, not a length."
+        "Create an edge with a specified complex squared length z_e, stored "
+        "verbatim without choosing a square-root sheet."
       )
       .def("__str__", &Edge::toString)
       .def("__repr__", &Edge::toString)
@@ -123,14 +122,28 @@ endpoint vertex IDs, so Edge(v1, v2) == Edge(v2, v1).)doc")
       .def("getSource", &Edge::getSource, py::return_value_policy::reference,
            "Return the source vertex of this edge.")
       .def("getLength", &Edge::getLength,
-           R"doc(Return the (possibly complex) edge length — the causal DOF.
-
-Real for spacelike, imaginary for timelike, general complex off the
-real-Lorentzian locus. This is the edge's ONE degree of freedom: l^2 is derived
-by squaring and is never stored (#639), so square getLength() where you need it.
-Causal character is the ARGUMENT of l^2 -- see squaredArgument() and the
-predicates below -- never the Euclidean modulus abs(l). Distinct from getPhase()
-(the C* connection).)doc")
+           "Legacy presentation view: the principal square root of z_e. "
+           "Complex-first code uses squaredLength() and never this branch.")
+      .def("squaredLength", &Edge::squaredLength,
+           "Return the exact stored complex squared length z_e.")
+      .def("setSquaredLength", &Edge::setSquaredLength,
+           py::arg("z"),
+           "Store the complex squared length z_e verbatim.")
+      .def("canonicalLink", &Edge::canonicalLink,
+           "Return U_xy on canonical min(id)->max(id) orientation.")
+      .def("link", &Edge::link, py::arg("from_id"), py::arg("to_id"),
+           "Return the multiplicative C* link on an explicit endpoint orientation; "
+           "the reverse orientation is the exact inverse.")
+      .def("setCanonicalLink", &Edge::setCanonicalLink, py::arg("U"),
+           "Set nonzero U_xy on canonical min(id)->max(id) orientation.")
+      .def("setLink", &Edge::setLink, py::arg("from_id"), py::arg("to_id"),
+           py::arg("U"),
+           "Set a nonzero multiplicative link on an explicit orientation.")
+      .def("linkLogTangent", &Edge::linkLogTangent,
+           py::arg("from_id"), py::arg("to_id"), py::arg("delta_U"),
+           "Return the branch-free left-trivialized tangent U^{-1} delta_U.")
+      .def("geometryRevision", &Edge::geometryRevision)
+      .def("linkRevision", &Edge::linkRevision)
       .def("squaredArgument", &Edge::squaredArgument,
            "arg(l^2) in (-pi, pi] -- the MEASURED quantity every causal predicate "
            "classifies. 0 is spacelike, +/-pi/2 lightlike, +/-pi timelike, anything "
@@ -157,32 +170,13 @@ predicates below -- never the Euclidean modulus abs(l). Distinct from getPhase()
            "An ABSENT edge (Euclidean modulus ~ 0), which is not a causal type. "
            "Exactly one of isSpacelike/isTimelike/isNull/isMixed/isDegenerate holds.")
       .def("getPhase", &Edge::getPhase,
-           R"doc(Return the complex C* connection phase carried by this edge.
-
-The SECOND edge field, independent of the geometry. The link variable is
-U = exp(i * phase) in C*, and the reverse orientation carries its INVERSE
-U**-1, not its conjugate (they agree only for a real phase). A gauge
-transformation acts by U_xy -> g_x**-1 U_xy g_y and leaves the length, and
-every metric weight built from it, untouched.
-
-The phase is complex because the structure group is C* = U(1) x R+:
-exp(i*phase) = exp(i*Re(phase)) * exp(-Im(phase)). Re is the compact U(1)
-angle in radians -- the only part with winding, hence the only part that
-quantizes and the only part a Wilson loop reads. Im is the non-compact local
-scale and carries no quantum number.
-
-It twists the hopping of the Aharonov-Bohm operator
-(HodgeLaplacian.connectionLaplacian) and never rescales a metric weight: the
-geometric Hodge laplacian(k) is built from the lengths alone and is blind to
-it at every degree. The default of 0 leaves an untwisted CDT edge unchanged.)doc")
+           "Legacy presentation view: a principal logarithm phase with "
+           "U=exp(i*phase). Complex-first code uses link().")
       .def("setLength", &Edge::setLength, py::arg("length"),
-           "Set the (complex) edge LENGTH: real=spacelike, imaginary=timelike, "
-           "general complex off the real-Lorentzian locus. There is no squared "
-           "setter (#639) -- pass sqrt(l2) and choose the branch explicitly.")
+           "Legacy compatibility: square length and store the result as z_e. "
+           "New code calls setSquaredLength(z_e).")
       .def("setPhase", &Edge::setPhase, py::arg("phase"),
-           "Set the complex C* connection phase carried by this edge: Re is "
-           "the compact U(1) angle in radians, Im the non-compact log-scale. "
-           "A real value converts and leaves the non-compact part zero.")
+           "Legacy compatibility: set U=exp(i*phase). New code calls setLink.")
       .def_static("vanRaamsdonkLength", &Edge::vanRaamsdonkLength,
                   py::arg("I"), py::arg("iMax"), py::arg("epsilon") = 1e-10,
                   "Van Raamsdonk metric law: the spacelike length -log(I/iMax), "
@@ -273,10 +267,11 @@ and containing simplices.)doc")
       .def(py::init<>())
       .def("add", py::overload_cast<const VertexPtr &, const VertexPtr &,
                                     std::complex<double>>(&EdgeList::add),
-           py::arg("source"), py::arg("target"), py::arg("length"),
+           py::arg("source"), py::arg("target"),
+           py::arg("squaredLength"),
            py::return_value_policy::reference,
-           "Add an edge with a specified complex LENGTH (pass sqrt(l2) to give it "
-           "by squared value), or return the existing one if duplicate.")
+           "Add an edge with exact complex squared length z_e, or return the "
+           "existing edge on a duplicate. No square root is taken.")
       .def("add", py::overload_cast<const VertexPtr &, const VertexPtr &>(&EdgeList::add),
            py::arg("source"), py::arg("target"),
            py::return_value_policy::reference,

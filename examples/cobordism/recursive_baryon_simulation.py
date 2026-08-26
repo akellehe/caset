@@ -67,7 +67,7 @@ Printed by ``--help`` and emitted in every run document under
 
 Reused machinery, all merged on main
 ------------------------------------
-``MultiCobordism`` (modes, the analysis overlay, the schema-4 checkpoint,
+``MultiCobordism`` (modes, the analysis overlay, the schema-6 checkpoint,
 ``replay_checkpoint``, ``refinement_decision``/``refine_geometry``),
 ``PersistentModularity``, ``SpectralFiberTracker``/``SpectralFiber``,
 ``RecursiveQuotient`` (static / Feshbach / response network / labeled fiber
@@ -103,7 +103,7 @@ non-zero only when a stored verdict or content hash fails to reproduce.
 Reproducibility, exactly
 ------------------------
 Every emitted document carries its ``config_hash``, ``commit``, seeds and
-sizes, and embeds every schema-4 checkpoint it produced, so
+sizes, and embeds every schema-6 checkpoint it produced, so
 ``MultiCobordism.replay_checkpoint`` reproduces each frame from the record
 alone. #579/#776 measured that the engine's move draw is NOT
 process-deterministic past the first committed move; a fresh rebuild from
@@ -136,9 +136,9 @@ EH = T.ExchangeHolonomy
 QU = T.quantum
 
 #: The schema version of the RUN document this file writes and reads. The
-#: schema-4 CHECKPOINTS it embeds are `MultiCobordism`'s, and are versioned
+#: schema-6 CHECKPOINTS it embeds are `MultiCobordism`'s, and are versioned
 #: independently.
-RUN_SCHEMA_VERSION = 1
+RUN_SCHEMA_VERSION = 2
 
 #: The COMPLETE verdict vocabulary. Not one entry
 #: is a target-dependent success string, and no other string may be emitted.
@@ -350,7 +350,7 @@ def build_neutral_host(n_refine, seed=DECLARED_HOST_SEED):
                      1.0, 1.0, T.PREFERRED, T.SimplexBoundarySphere(4))
     st.build()
     for edge in st.getEdgeList().toVector():
-        edge.setLength(cmath.sqrt(complex(1.0)))
+        edge.setSquaredLength(complex(1.0))
     applied = 0
     for step in range(seed, seed + n_refine * 4):
         move = T.AddMove(st, step, False, T.PachnerMode.PreGeometric, False)
@@ -359,7 +359,7 @@ def build_neutral_host(n_refine, seed=DECLARED_HOST_SEED):
         if applied >= n_refine:
             break
     for index, edge in enumerate(st.getEdgeList().toVector()):
-        edge.setLength(cmath.sqrt(complex(1.0 + 0.01 * (index % 6))))
+        edge.setSquaredLength(complex(1.0 + 0.01 * (index % 6)))
     return st
 
 
@@ -587,7 +587,7 @@ class RecursiveReadout:
     component read (the FIRST accepted one), one derived transport per
     ordered pair of same-degree same-rank candidate bands, the pure Slater
     covariance of each accepted band projector — so that the layers the
-    schema-4 checkpoint does NOT carry (the response hierarchy, the
+    schema-6 checkpoint does NOT carry (the response hierarchy, the
     determinant/projective/center holonomy sectors, the covariance
     matrices) are built on identical evidence. The run
     cross-checks its own quark reads against the checkpoint's and records
@@ -878,9 +878,9 @@ class RecursiveReadout:
 # =====================================================================
 
 def raw_geometry_block(spacetime):
-    """Versioned raw geometry: the top cells and the canonical edge lengths.
+    """Versioned raw geometry: oriented cells and direct canonical z/U fields.
 
-    Serialized in the SAME canonical endpoint order the schema-4 checkpoint
+    Serialized in the SAME canonical endpoint order the schema-6 checkpoint
     uses, so the block is a pure function of the geometry.
     """
     # The vertex tuple is kept in its INTRINSIC stored order — the cell's own
@@ -892,14 +892,18 @@ def raw_geometry_block(spacetime):
     edges = {}
     for edge in spacetime.getEdgeList().toVector():
         a, b = edge.getSource().getId(), edge.getTarget().getId()
-        edges[(min(a, b), max(a, b))] = complex(edge.getLength())
+        edges[(min(a, b), max(a, b))] = (
+            complex(edge.squaredLength()), complex(edge.canonicalLink()))
     return {
         # A top cell of a d-complex has d+1 vertices; that IS the metric
         # dimension `Spacetime.fromCells` wants back.
         "dimensions": (len(cells[0]) - 1) if cells else 0,
         "cells": cells,
-        "edges": [{"a": int(a), "b": int(b), "length": _complex_pair(z)}
-                  for (a, b), z in sorted(edges.items())],
+        "edges": [{"a": int(a), "b": int(b),
+                   "canonical_orientation": [int(a), int(b)],
+                   "z": _complex_pair(fields[0]),
+                   "U": _complex_pair(fields[1])}
+                  for (a, b), fields in sorted(edges.items())],
         "cell_count": len(cells),
         "edge_count": len(edges),
         "vertex_count": len(spacetime.getVertexList().toVector()),
@@ -2307,7 +2311,7 @@ def run_simulation(config, commit=None, sidecar_path=None, progress=False):
                 "the first committed move (#579, re-measured in #776), so a "
                 "fresh rebuild from (config, seed, commit) reproduces the "
                 "first committed move and the whole relaxation but not a "
-                "longer trajectory; the schema-4 CHECKPOINT is the faithful "
+                "longer trajectory; the schema-6 CHECKPOINT is the faithful "
                 "record and `replay` replays it"),
             "deterministic_unit": "one stage-1 update plus one stage-2 "
                                   "relaxation",
@@ -2765,18 +2769,39 @@ def _spacetime_from_raw(raw):
     """Rebuild the complex from the persisted raw geometry.
 
     Uses the SAME entry point the checkpoint replay uses,
-    ``Spacetime.fromCells`` — the faithful rebuild route (#579).
+    ``Spacetime.fromCellsWithFields`` — the faithful branch-free rebuild route.
     """
     cells = [[int(v) for v in cell] for cell in raw["cells"]]
-    spacetime = T.Spacetime.fromCells(int(raw["dimensions"]), cells)
-    lengths = {(int(e["a"]), int(e["b"])): complex(e["length"][0],
-                                                  e["length"][1])
-               for e in raw["edges"]}
+    spacetime = T.Spacetime.fromCellsWithFields(int(raw["dimensions"]), cells)
+    fields = {}
+    for record in raw["edges"]:
+        a, b = int(record["a"]), int(record["b"])
+        if a >= b or list(record.get("canonical_orientation", ())) != [a, b]:
+            raise ValueError("raw edge has missing/inconsistent orientation")
+        if (a, b) in fields:
+            raise ValueError(f"duplicate raw edge record {(a, b)}")
+        if len(record.get("z", ())) != 2 or len(record.get("U", ())) != 2:
+            raise ValueError("raw edge needs complex z and U pairs")
+        z = complex(record["z"][0], record["z"][1])
+        link = complex(record["U"][0], record["U"][1])
+        if not all(math.isfinite(value)
+                   for value in (z.real, z.imag, link.real, link.imag)):
+            raise ValueError("raw z/U components must be finite")
+        if link == 0:
+            raise ValueError("raw canonical link must lie in C*")
+        fields[(a, b)] = (z, link)
+    expected = set()
     for edge in spacetime.getEdgeList().toVector():
         a, b = edge.getSource().getId(), edge.getTarget().getId()
         key = (min(a, b), max(a, b))
-        if key in lengths:
-            edge.setLength(lengths[key])
+        expected.add(key)
+        if key not in fields:
+            raise ValueError(f"raw geometry is missing edge {key}")
+        edge.setSquaredLength(fields[key][0])
+        edge.setCanonicalLink(fields[key][1])
+    extras = set(fields) - expected
+    if extras:
+        raise ValueError(f"raw geometry has extra edges: {sorted(extras)}")
     return spacetime
 
 
@@ -3022,8 +3047,8 @@ def _layout_from_raw(raw):
         a, b = index.get(int(edge["a"])), index.get(int(edge["b"]))
         if a is None or b is None:
             continue
-        length = complex(edge["length"][0], edge["length"][1])
-        w = math.sqrt(max(abs(length ** 2), 1e-6))
+        squared_length = complex(edge["z"][0], edge["z"][1])
+        w = math.sqrt(max(abs(squared_length), 1e-6))
         weights[a, b] = weights[b, a] = min(weights[a, b], w)
     distances = shortest_path(weights, method="D", directed=False)
     finite = np.isfinite(distances)

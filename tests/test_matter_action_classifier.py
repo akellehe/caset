@@ -39,7 +39,7 @@ def _chain_spacetime(step_sq):
         v.setTime(float(t))
         verts.append(v)
     for t, sq in enumerate(step_sq):
-        st.createEdge(verts[t], verts[t + 1], cmath.sqrt(complex(sq)))
+        st.createEdge(verts[t], verts[t + 1], complex(sq))
     return st, verts
 
 
