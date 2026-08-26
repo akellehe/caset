@@ -16,6 +16,12 @@ It distinguishes carrying one input/output pair, identifying boundary transport
 from a complete basis, and promoting a framed bulk-minus-boundary kernel. These
 are separate semantics and are reported separately.
 
+The coupled boundary-value experiment supplies the missing semantics explicitly:
+two disconnected boundary components are prepared as degenerate Laplacian
+eigenspaces, their geometries and state restrictions are fixed, and one shared
+bulk is fitted to a complete set of input/output pairs at a common full-complex
+eigenvalue. Linear combinations of the fitted witnesses then test unseen inputs.
+
 Run:
 
     python examples/cobordism/geometric_operators.py
@@ -383,6 +389,229 @@ def historical_spectral_experiment(
     }
 
 
+class BoundaryPairCobordism:
+    """Two prepared boundary circles joined by a relaxed annular bulk."""
+
+    def __init__(self):
+        base_circle = [[0, 1], [1, 2], [0, 2]]
+        cells = tessera.Spacetime.prismCells(base_circle, 1, {})
+        self.spacetime = tessera.Spacetime.fromCells(
+            2, cells, 1.0, 0.0)
+        for edge in self.spacetime.getEdgeList().toVector():
+            edge.setLength(1.0)
+            edge.setPhase(0.0)
+        self.spacetime.materializeFacets()
+
+        self.input_vertices = {0, 1, 2}
+        self.output_vertices = {3, 4, 5}
+        self.input_cells = [[vertex] for vertex in sorted(
+            self.input_vertices)]
+        self.output_cells = [[vertex] for vertex in sorted(
+            self.output_vertices)]
+        omega = cmath.exp(2j * math.pi / 3.0)
+        self.boundary_basis = np.asarray(
+            [[1.0, omega, omega * omega],
+             [1.0, omega * omega, omega]],
+            dtype=complex,
+        ) / math.sqrt(3.0)
+
+        self.node = cob.MultiCobordism(
+            host=self.spacetime,
+            input_targets=[],
+            output_targets=[],
+            degrees=[0],
+            einstein_hilbert=False,
+        )
+        self.node.declare_pinned_region(
+            "input", self.input_vertices)
+        self.node.declare_pinned_region(
+            "output", self.output_vertices)
+        self.edge_map = {
+            _edge_key(edge): edge
+            for edge in self.spacetime.getEdgeList().toVector()
+        }
+        self.pinned_edges = sorted(
+            edge for edge in self.edge_map
+            if self.node.edge_is_pinned(*edge)
+        )
+        self.free_edges = sorted(
+            set(self.edge_map) - set(self.pinned_edges))
+        if not self.free_edges:
+            raise RuntimeError("annular fixture has no bulk edges")
+        self.boundary_initial = self.boundary_snapshot()
+
+    def boundary_snapshot(self):
+        return {
+            key: (
+                complex(self.edge_map[key].getLength()) ** 2,
+                complex(self.edge_map[key].getPhase()),
+            )
+            for key in self.pinned_edges
+        }
+
+    def relax_operator(
+            self, operator, epsilon=1e-16, boundary_epsilon=1e-12,
+            restarts=4, max_growth=8, seed=0, max_iterations=400,
+            held_out_count=16):
+        operator = np.asarray(operator, dtype=complex)
+        if operator.shape != (2, 2):
+            raise ValueError("boundary-pair fixture requires a 2x2 operator")
+        output_states = operator.T @ self.boundary_basis
+        witness = self.node.relax_boundary_state_pairs(
+            degree=0,
+            input_region="input",
+            input_cells=self.input_cells,
+            input_states=self.boundary_basis.tolist(),
+            output_region="output",
+            output_cells=self.output_cells,
+            output_states=output_states.tolist(),
+            common_eigenvalue=True,
+            epsilon=float(epsilon),
+            boundary_epsilon=float(boundary_epsilon),
+            restarts=int(restarts),
+            max_growth=int(max_growth),
+            seed=int(seed),
+            max_iterations=int(max_iterations),
+        )
+
+        synthesis = cob.EigenstateSynthesis(self.spacetime, 0)
+        cell_index = {
+            tuple(map(int, cell)): index
+            for index, cell in enumerate(synthesis.cellSimplices())
+        }
+        input_indices = [
+            cell_index[tuple(cell)] for cell in witness.input_cells
+        ]
+        output_indices = [
+            cell_index[tuple(cell)] for cell in witness.output_cells
+        ]
+        states = np.asarray(witness.states, dtype=complex)
+        fixed_inputs = np.asarray(witness.input_states, dtype=complex)
+        fixed_outputs = np.asarray(witness.output_states, dtype=complex)
+        measured_inputs = states[:, input_indices]
+        measured_outputs = states[:, output_indices]
+        restriction_error = float(max(
+            np.max(np.abs(measured_inputs - fixed_inputs), initial=0.0),
+            np.max(np.abs(measured_outputs - fixed_outputs), initial=0.0),
+        ))
+
+        input_coefficients = np.column_stack([
+            self.boundary_basis.conj() @ state
+            for state in measured_inputs
+        ])
+        output_coefficients = np.column_stack([
+            self.boundary_basis.conj() @ state
+            for state in measured_outputs
+        ])
+        recovered = output_coefficients @ np.linalg.inv(
+            input_coefficients)
+
+        rng = np.random.default_rng(seed + 1701)
+        held_out_residuals = []
+        held_out_input_errors = []
+        held_out_output_errors = []
+        for _ in range(int(held_out_count)):
+            coefficients = _unit(
+                rng.normal(size=2) + 1j * rng.normal(size=2))
+            combined = coefficients @ states
+            expected_input = coefficients @ fixed_inputs
+            expected_output = coefficients @ fixed_outputs
+            held_out_input_errors.append(float(np.linalg.norm(
+                combined[input_indices] - expected_input)))
+            held_out_output_errors.append(float(np.linalg.norm(
+                combined[output_indices] - expected_output)))
+            held_out_residuals.append(float(synthesis.residual(
+                [complex(value) for value in combined])))
+
+        boundary_final = self.boundary_snapshot()
+        boundary_drift = max((
+            max(abs(boundary_final[key][component]
+                    - self.boundary_initial[key][component])
+                for component in range(2))
+            for key in self.pinned_edges
+        ), default=0.0)
+        state_eigenvalues = np.asarray(
+            witness.state_eigenvalues, dtype=float)
+        return {
+            "converged": bool(witness.converged),
+            "residual": float(witness.residual),
+            "residual_trace": [
+                float(value) for value in witness.residual_trace],
+            "state_residuals": [
+                float(value) for value in witness.state_residuals],
+            "state_eigenvalues": state_eigenvalues.tolist(),
+            "common_eigenvalue": float(witness.eigenvalue),
+            "common_eigenvalue_spread": float(np.max(
+                np.abs(state_eigenvalues - witness.eigenvalue),
+                initial=0.0,
+            )),
+            "growth_steps": int(witness.growth_steps),
+            "free_edge_count": int(witness.free_edge_count),
+            "auxiliary_cell_count": int(
+                witness.auxiliary_cell_count),
+            "input_boundary_residuals": [
+                float(value)
+                for value in witness.input_boundary_residuals
+            ],
+            "output_boundary_residuals": [
+                float(value)
+                for value in witness.output_boundary_residuals
+            ],
+            "boundary_preserved": (
+                boundary_final == self.boundary_initial),
+            "boundary_drift": float(boundary_drift),
+            "restriction_error": restriction_error,
+            "target_operator": _matrix_payload(operator),
+            "recovered_operator": _matrix_payload(recovered),
+            "operator_error": float(np.linalg.norm(
+                recovered - operator)),
+            "held_out_full_residual_max": max(
+                held_out_residuals, default=0.0),
+            "held_out_input_error_max": max(
+                held_out_input_errors, default=0.0),
+            "held_out_output_error_max": max(
+                held_out_output_errors, default=0.0),
+        }
+
+
+def coupled_boundary_experiment(
+        epsilon=1e-16, boundary_epsilon=1e-12, restarts=4,
+        max_growth=8, seed=0, max_iterations=400):
+    full_operator = generic_charge_preserving_operator()
+    operator = logical_operator(full_operator)
+    result = BoundaryPairCobordism().relax_operator(
+        operator,
+        epsilon=epsilon,
+        boundary_epsilon=boundary_epsilon,
+        restarts=restarts,
+        max_growth=max_growth,
+        seed=seed,
+        max_iterations=max_iterations,
+    )
+    result["charge_commutator_error"] = charge_commutator_error(
+        full_operator)
+    result["method"] = {
+        "boundary": (
+            "two disconnected, independently prepared circle components"),
+        "fixed_state_data": (
+            "complete degree-zero cochain restriction on each component"),
+        "fixed_geometry": "every intra-component edge length and phase",
+        "free_geometry": "all non-pinned bulk edge weights and phases",
+        "residual": (
+            "sum_j ||L_W psi_j - lambda_bar psi_j||^2"),
+        "common_eigenvalue": True,
+        "regge": False,
+        "period_constraints": False,
+        "epsilon": float(epsilon),
+        "boundary_epsilon": float(boundary_epsilon),
+        "restarts": int(restarts),
+        "max_growth": int(max_growth),
+        "max_iterations": int(max_iterations),
+        "seed": int(seed),
+    }
+    return result
+
+
 class FrozenBoundaryTransport:
     """Target-free map from input/output restrictions of live ker L_1(W)."""
 
@@ -594,7 +823,7 @@ class PeriodCobordism:
 
 
 class LiveAnimation:
-    """Interactive bulk l^2 and residual diagnostics per accepted step."""
+    """Interactive geometry, period, and coupled-boundary diagnostics."""
 
     def __init__(self, edge_count):
         import matplotlib
@@ -608,22 +837,31 @@ class LiveAnimation:
                 f"--live requires an interactive backend, got {backend}")
         self.plt = plt
         plt.ion()
-        self.figure, (self.geometry_axis, self.residual_axis) = plt.subplots(
-            1, 2, figsize=(11, 4.5))
+        self.figure, (
+            self.geometry_axis,
+            self.residual_axis,
+            self.transfer_axis,
+        ) = plt.subplots(1, 3, figsize=(15, 4.5))
         self.weight_line, = self.geometry_axis.plot(
             np.arange(edge_count), np.zeros(edge_count), marker="o")
         self.r_u_line, = self.residual_axis.plot(
             [], [], marker="o", label="r_U")
         self.gap_line, = self.residual_axis.plot(
             [], [], marker="s", label="hard period gap")
+        self.transfer_line, = self.transfer_axis.plot(
+            [], [], marker="o", color="tab:green")
         self.geometry_axis.set(
             xlabel="free bulk edge index", ylabel="real squared length")
         self.residual_axis.set(
             xlabel="accepted step", ylabel="residual")
+        self.transfer_axis.set(
+            xlabel="interior-growth pass",
+            ylabel="coupled full-W residual")
         self.residual_axis.set_yscale("log")
+        self.transfer_axis.set_yscale("log")
         self.residual_axis.legend()
         self.figure.suptitle(
-            "Residual-only relaxation with the full boundary fixed")
+            "Geometric-operator relaxation with fixed boundaries")
         plt.show(block=False)
 
     def update(self, history, weights):
@@ -640,6 +878,18 @@ class LiveAnimation:
             axis.autoscale_view()
         self.figure.canvas.draw_idle()
         self.plt.pause(0.001)
+
+    def update_transfer(self, residual_trace):
+        tiny = np.finfo(float).tiny
+        residuals = np.maximum(
+            np.asarray(residual_trace, dtype=float), tiny)
+        for stop in range(1, residuals.size + 1):
+            self.transfer_line.set_data(
+                np.arange(stop), residuals[:stop])
+            self.transfer_axis.relim()
+            self.transfer_axis.autoscale_view()
+            self.figure.canvas.draw_idle()
+            self.plt.pause(0.05)
 
     def finish(self):
         self.plt.ioff()
@@ -766,7 +1016,10 @@ def run_experiment(
         iterations=12, alpha=0.05, seed=20260826, live=False,
         spectral_epsilon=_SPECTRAL_EPSILON, spectral_restarts=80,
         spectral_max_growth=4, spectral_max_iterations=300,
-        spectral_seed=0):
+        spectral_seed=0, transfer_epsilon=1e-16,
+        transfer_boundary_epsilon=1e-12, transfer_restarts=4,
+        transfer_max_growth=8, transfer_max_iterations=400,
+        transfer_seed=0):
     if int(iterations) < 1:
         raise ValueError("iterations must be positive")
     if not float(alpha) > 0.0:
@@ -833,6 +1086,16 @@ def run_experiment(
         generic.pin_basis(target)
         animator = (
             LiveAnimation(len(generic.free_edges)) if live else None)
+        coupled = coupled_boundary_experiment(
+            epsilon=transfer_epsilon,
+            boundary_epsilon=transfer_boundary_epsilon,
+            restarts=transfer_restarts,
+            max_growth=transfer_max_growth,
+            seed=transfer_seed,
+            max_iterations=transfer_max_iterations,
+        )
+        if animator is not None:
+            animator.update_transfer(coupled["residual_trace"])
         relaxation = generic.relax(
             iterations, alpha, animator)
         generic_case = {
@@ -887,6 +1150,19 @@ def run_experiment(
                 and bulk_control["unitarity_error"] < 1e-12),
             "choi_amplitude_identity_holds": (
                 bulk_control["choi_duality_error"] < 1e-12),
+            "coupled_boundary_pairs_converge": (
+                coupled["converged"]
+                and coupled["residual"] < transfer_epsilon),
+            "coupled_boundary_data_are_exact": (
+                coupled["boundary_preserved"]
+                and coupled["boundary_drift"] == 0.0
+                and coupled["restriction_error"] == 0.0),
+            "coupled_operator_is_recovered": (
+                coupled["operator_error"] < 1e-12),
+            "coupled_span_generalizes": (
+                coupled["held_out_input_error_max"] < 1e-12
+                and coupled["held_out_output_error_max"] < 1e-12
+                and coupled["held_out_full_residual_max"] < 1e-12),
         }
         if not all(checks.values()):
             failed = [
@@ -900,6 +1176,8 @@ def run_experiment(
             "method": {
                 "primary": (
                     "historical fixed-boundary Rayleigh residual"),
+                "coupled_boundary_value": (
+                    "common-eigenvalue full-W Rayleigh residual"),
                 "later_diagnostic": "ordered-period r_U only",
                 "einstein_hilbert": False,
                 "real_squared_lengths_only": True,
@@ -910,6 +1188,7 @@ def run_experiment(
                 "seed": int(seed),
             },
             "historical_fixed_boundary_spectral": historical,
+            "coupled_boundary_state_transfer": coupled,
             "single_pair_ambiguity": single_case,
             "complete_basis_identity": identity_case,
             "complete_basis_mapping_class": cycle_case,
@@ -923,10 +1202,14 @@ def run_experiment(
                 "geometry; it succeeds for both a charge-preserving "
                 "phase gate and a charge-changing X gate. This does "
                 "not establish charge conservation as a realizability "
-                "criterion, learn U from state pairs, or extract U "
-                "target-free from the bulk. The later period experiment "
-                "still shows that one pair is insufficient and that a "
-                "bulk kernel needs a frame and rank-one restriction."
+                "criterion. The new two-boundary solve does recover a "
+                "generic unitary on a complete prepared basis and extends "
+                "to unseen linear combinations because all witnesses share "
+                "one full-W eigenvalue. That is a boundary-conditioned "
+                "graph-of-U certificate, not yet a target-free bulk-only "
+                "operator: the later period experiment still shows that one "
+                "pair is insufficient and that bulk promotion needs a frame "
+                "and rank-one restriction."
             ),
         }
         if animator is not None:
@@ -955,8 +1238,24 @@ def build_parser():
     parser.add_argument(
         "--spectral-seed", type=int, default=0)
     parser.add_argument(
+        "--transfer-epsilon", type=float, default=1e-16,
+        help="coupled full-W residual threshold")
+    parser.add_argument(
+        "--transfer-boundary-epsilon", type=float, default=1e-12,
+        help="maximum isolated-boundary eigenresidual")
+    parser.add_argument(
+        "--transfer-restarts", type=int, default=4)
+    parser.add_argument(
+        "--transfer-max-growth", type=int, default=8)
+    parser.add_argument(
+        "--transfer-max-iterations", type=int, default=400)
+    parser.add_argument(
+        "--transfer-seed", type=int, default=0)
+    parser.add_argument(
         "--live", action="store_true",
-        help="animate bulk l^2, r_U, and the hard gap")
+        help=(
+            "animate bulk l^2, period residuals, and the coupled "
+            "full-W residual"))
     parser.add_argument(
         "--output", type=Path,
         default=Path(
@@ -979,6 +1278,12 @@ def main(argv=None):
         spectral_max_growth=args.spectral_max_growth,
         spectral_max_iterations=args.spectral_max_iterations,
         spectral_seed=args.spectral_seed,
+        transfer_epsilon=args.transfer_epsilon,
+        transfer_boundary_epsilon=args.transfer_boundary_epsilon,
+        transfer_restarts=args.transfer_restarts,
+        transfer_max_growth=args.transfer_max_growth,
+        transfer_max_iterations=args.transfer_max_iterations,
+        transfer_seed=args.transfer_seed,
     )
     if not args.no_write:
         args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -994,6 +1299,13 @@ def main(argv=None):
         f'{historical["charge_preserving_phase"]["residual"]:.6g},',
         "X",
         f'{historical["charge_changing_x"]["residual"]:.6g}',
+    )
+    coupled = result["coupled_boundary_state_transfer"]
+    print(
+        "coupled boundary transfer:",
+        f'r_W={coupled["residual"]:.6g},',
+        f'operator_error={coupled["operator_error"]:.6g},',
+        f'held_out_r_W={coupled["held_out_full_residual_max"]:.6g}',
     )
     generic = result["generic_charge_preserving"]
     final = generic["relaxation"]["final"]

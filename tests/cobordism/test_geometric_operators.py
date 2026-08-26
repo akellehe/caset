@@ -131,6 +131,98 @@ class HistoricalFixedBoundarySpectralTest(unittest.TestCase):
                 restarts=1, max_growth=0)
 
 
+class CoupledBoundaryStateTransferTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.result = GO.coupled_boundary_experiment()
+
+    def test_complete_pairs_converge_at_one_common_eigenvalue(self):
+        self.assertTrue(self.result["converged"])
+        self.assertLess(self.result["residual"], 1e-15)
+        self.assertLess(
+            self.result["common_eigenvalue_spread"], 1e-7)
+        self.assertEqual(
+            len(self.result["residual_trace"]),
+            self.result["growth_steps"] + 1,
+        )
+        self.assertLess(
+            self.result["residual_trace"][-1],
+            self.result["residual_trace"][0],
+        )
+
+    def test_boundary_geometry_and_state_restrictions_are_exact(self):
+        self.assertTrue(self.result["boundary_preserved"])
+        self.assertEqual(self.result["boundary_drift"], 0.0)
+        self.assertEqual(self.result["restriction_error"], 0.0)
+        self.assertLess(
+            max(self.result["input_boundary_residuals"]), 1e-12)
+        self.assertLess(
+            max(self.result["output_boundary_residuals"]), 1e-12)
+
+    def test_witness_span_recovers_U_on_held_out_inputs(self):
+        self.assertLess(self.result["operator_error"], 1e-12)
+        self.assertLess(
+            self.result["held_out_input_error_max"], 1e-12)
+        self.assertLess(
+            self.result["held_out_output_error_max"], 1e-12)
+        self.assertLess(
+            self.result["held_out_full_residual_max"], 1e-12)
+
+    def test_components_frames_and_prepared_states_are_validated(self):
+        fixture = GO.BoundaryPairCobordism()
+        output = fixture.boundary_basis.copy()
+        output[0] = np.array([1.0, 0.0, 0.0], dtype=complex)
+        with self.assertRaises(ValueError):
+            fixture.node.relax_boundary_state_pairs(
+                0,
+                "input",
+                fixture.input_cells,
+                fixture.boundary_basis.tolist(),
+                "output",
+                fixture.output_cells,
+                output.tolist(),
+                restarts=1,
+                max_growth=0,
+            )
+
+        fixture = GO.BoundaryPairCobordism()
+        fixture.node.declare_pinned_region("input", {0, 1})
+        with self.assertRaises(ValueError):
+            fixture.node.relax_boundary_state_pairs(
+                0,
+                "input",
+                fixture.input_cells,
+                fixture.boundary_basis.tolist(),
+                "output",
+                fixture.output_cells,
+                fixture.boundary_basis.tolist(),
+                restarts=1,
+                max_growth=0,
+            )
+
+    def test_pair_normalization_preserves_operator_amplitudes(self):
+        fixture = GO.BoundaryPairCobordism()
+        input_state = 2.0 * fixture.boundary_basis[0]
+        output_state = 6.0 * fixture.boundary_basis[0]
+        result = fixture.node.relax_boundary_state_pairs(
+            0,
+            "input",
+            fixture.input_cells,
+            [input_state.tolist()],
+            "output",
+            fixture.output_cells,
+            [output_state.tolist()],
+            epsilon=1e-2,
+            restarts=1,
+            max_growth=0,
+            max_iterations=1,
+        )
+        self.assertAlmostEqual(
+            np.linalg.norm(result.input_states[0]), 1.0, places=14)
+        self.assertAlmostEqual(
+            np.linalg.norm(result.output_states[0]), 3.0, places=14)
+
+
 class ResidualOnlyRelaxationTest(unittest.TestCase):
     def test_objective_is_only_r_u(self):
         fill = GO.PeriodCobordism()

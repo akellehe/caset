@@ -1042,6 +1042,72 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
                     &MultiCobordism::FixedBoundaryEigenstateResult::target)
       .def_readonly("state",
                     &MultiCobordism::FixedBoundaryEigenstateResult::state);
+  py::class_<MultiCobordism::BoundaryStateTransferResult>(
+      m, "BoundaryStateTransferResult",
+      "Coupled full-cobordism eigenstate witnesses with exact input/output "
+      "restrictions on two independently prepared, geometrically pinned "
+      "boundary components.")
+      .def_readonly(
+          "converged",
+          &MultiCobordism::BoundaryStateTransferResult::converged)
+      .def_readonly(
+          "common_eigenvalue",
+          &MultiCobordism::BoundaryStateTransferResult::commonEigenvalue)
+      .def_readonly(
+          "residual",
+          &MultiCobordism::BoundaryStateTransferResult::residual)
+      .def_readonly(
+          "eigenvalue",
+          &MultiCobordism::BoundaryStateTransferResult::eigenvalue)
+      .def_readonly("degree",
+                    &MultiCobordism::BoundaryStateTransferResult::degree)
+      .def_readonly(
+          "growth_steps",
+          &MultiCobordism::BoundaryStateTransferResult::growthSteps)
+      .def_readonly(
+          "free_edge_count",
+          &MultiCobordism::BoundaryStateTransferResult::freeEdgeCount)
+      .def_readonly(
+          "auxiliary_cell_count",
+          &MultiCobordism::BoundaryStateTransferResult::auxiliaryCellCount)
+      .def_readonly(
+          "input_region",
+          &MultiCobordism::BoundaryStateTransferResult::inputRegion)
+      .def_readonly(
+          "output_region",
+          &MultiCobordism::BoundaryStateTransferResult::outputRegion)
+      .def_readonly(
+          "input_cells",
+          &MultiCobordism::BoundaryStateTransferResult::inputCells)
+      .def_readonly(
+          "output_cells",
+          &MultiCobordism::BoundaryStateTransferResult::outputCells)
+      .def_readonly(
+          "input_states",
+          &MultiCobordism::BoundaryStateTransferResult::inputStates)
+      .def_readonly(
+          "output_states",
+          &MultiCobordism::BoundaryStateTransferResult::outputStates)
+      .def_readonly(
+          "states",
+          &MultiCobordism::BoundaryStateTransferResult::states)
+      .def_readonly(
+          "state_residuals",
+          &MultiCobordism::BoundaryStateTransferResult::stateResiduals)
+      .def_readonly(
+          "state_eigenvalues",
+          &MultiCobordism::BoundaryStateTransferResult::stateEigenvalues)
+      .def_readonly(
+          "input_boundary_residuals",
+          &MultiCobordism::BoundaryStateTransferResult::
+              inputBoundaryResiduals)
+      .def_readonly(
+          "output_boundary_residuals",
+          &MultiCobordism::BoundaryStateTransferResult::
+              outputBoundaryResiduals)
+      .def_readonly(
+          "residual_trace",
+          &MultiCobordism::BoundaryStateTransferResult::residualTrace);
   py::class_<MultiCobordism::GeometricOperatorReadout>(
       m, "GeometricOperatorReadout",
       "Target-free promotion of a framed bulk-minus-boundary kernel. "
@@ -1187,6 +1253,23 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "every other amplitude, varies only interior geometry, and "
            "minimizes the Rayleigh "
            "residual. It does not run the node's period or Regge objective.")
+      .def("relax_boundary_state_pairs",
+           &MultiCobordism::relaxBoundaryStatePairs,
+           py::arg("degree"), py::arg("input_region"),
+           py::arg("input_cells"), py::arg("input_states"),
+           py::arg("output_region"), py::arg("output_cells"),
+           py::arg("output_states"), py::arg("common_eigenvalue") = true,
+           py::arg("epsilon") = 1e-10,
+           py::arg("boundary_epsilon") = 1e-10,
+           py::arg("restarts") = 64, py::arg("max_growth") = 4,
+           py::arg("seed") = 0, py::arg("max_iterations") = 200,
+           py::call_guard<py::gil_scoped_release>(),
+           "Fit one shared bulk geometry to complete input/output state pairs "
+           "on two independently prepared boundary components. Boundary "
+           "states and all declared pinned geometry remain exact. The "
+           "full-W Rayleigh residual is minimized jointly; by default every "
+           "witness is constrained to one common eigenvalue so their span "
+           "extends linearly to unseen input combinations.")
       .def("geometric_operator", &MultiCobordism::geometricOperator,
            py::arg("state_dimension"),
            py::arg("frame_cells") =

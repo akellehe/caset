@@ -100,6 +100,34 @@ class MultiCobordism {
     std::vector<std::complex<double>> state;
   };
 
+  /// Result of a boundary-value spectral transfer solve. Each witness carries
+  /// one independently prepared input/output pair on two distinct components
+  /// of the boundary of W. Boundary amplitudes and geometry are fixed; only
+  /// bulk geometry and interior cochain amplitudes vary.
+  struct BoundaryStateTransferResult {
+    bool converged{false};
+    bool commonEigenvalue{true};
+    double residual{0.0};
+    double eigenvalue{0.0};
+    int degree{0};
+    int growthSteps{0};
+    std::size_t freeEdgeCount{0};
+    std::size_t auxiliaryCellCount{0};
+    std::string inputRegion;
+    std::string outputRegion;
+    std::vector<std::vector<std::uint64_t>> inputCells;
+    std::vector<std::vector<std::uint64_t>> outputCells;
+    std::vector<std::vector<std::complex<double>>> inputStates;
+    std::vector<std::vector<std::complex<double>>> outputStates;
+    std::vector<std::vector<std::complex<double>>> states;
+    std::vector<double> stateResiduals;
+    std::vector<double> stateEigenvalues;
+    std::vector<double> inputBoundaryResiduals;
+    std::vector<double> outputBoundaryResiduals;
+    /// Best coupled residual after each relaxation/growth pass.
+    std::vector<double> residualTrace;
+  };
+
   /// Target-free Choi promotion of the live metric
   /// \f$\ker L_1(W-\partial W)\f$ restricted to an ordered \f$d^2\f$ frame.
   /// identifiable is true only when that restriction has rank one. A
@@ -221,6 +249,50 @@ class MultiCobordism {
       std::vector<std::vector<std::uint64_t>> supportCells,
       std::vector<std::complex<double>> target, double epsilon = 1e-10,
       int restarts = 64, int maxGrowth = 4, std::uint64_t seed = 0,
+      int maxIterations = 200);
+
+  /// Fit one shared bulk geometry to independently prepared boundary-state
+  /// pairs. `inputRegionName` and `outputRegionName` must name two declared
+  /// pinned regions whose vertex sets are exactly the two connected components
+  /// of \f$\partial W\f$. `inputCells` and `outputCells` must enumerate every
+  /// degree-`degree` cell of the corresponding component; each row of
+  /// `inputStates` is normalized once and its paired output is scaled by the
+  /// same factor, preserving the relative amplitudes of the supplied linear
+  /// map. Both restrictions are then fixed on their ordered cell frames.
+  ///
+  /// Before fitting, every supplied state is required to have isolated-boundary
+  /// eigenresidual below `boundaryEpsilon`. During fitting those boundary
+  /// amplitudes remain exact in the returned, unnormalized witness cochains.
+  /// Every other cochain component is an independent auxiliary amplitude for
+  /// that pair. Edges held by any declared pinned region remain bit-identical;
+  /// all other edge weights and, at degree zero, connection phases may vary.
+  ///
+  /// With `commonEigenvalue=true` (the operator-transfer default), the objective
+  /// is
+  /// \f[
+  ///   R=\sum_j\|L_W\widehat\psi_j-\bar\lambda\widehat\psi_j\|^2,
+  ///   \qquad
+  ///   \bar\lambda=\frac1m\sum_j
+  ///     \langle\widehat\psi_j,L_W\widehat\psi_j\rangle .
+  /// \f]
+  /// A converged witness span is therefore closed under linear combinations:
+  /// attaching a new input in the fitted input span produces the same linear
+  /// combination of the fitted outputs. When false, each pair uses its own
+  /// Rayleigh quotient. No Regge, period, harmonic-eigenvalue, or charge term is
+  /// added. Boundary-preserving stellar growth is retried up to `maxGrowth`.
+  ///
+  /// This method mutates the node's live spacetime in place. Existing relaxation
+  /// modes and constructor defaults are unchanged.
+  [[nodiscard]] BoundaryStateTransferResult relaxBoundaryStatePairs(
+      int degree, std::string inputRegionName,
+      std::vector<std::vector<std::uint64_t>> inputCells,
+      std::vector<std::vector<std::complex<double>>> inputStates,
+      std::string outputRegionName,
+      std::vector<std::vector<std::uint64_t>> outputCells,
+      std::vector<std::vector<std::complex<double>>> outputStates,
+      bool commonEigenvalue = true, double epsilon = 1e-10,
+      double boundaryEpsilon = 1e-10, int restarts = 64,
+      int maxGrowth = 4, std::uint64_t seed = 0,
       int maxIterations = 200);
 
   /// Read a square operator from the target-free live bulk. frameCells is the

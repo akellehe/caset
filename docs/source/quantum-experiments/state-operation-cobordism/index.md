@@ -23,13 +23,18 @@ the topology the gates need. The
 freezes the relaxed geometry, reconstructs its operator without the target,
 and tests unseen states. The additive
 [geometric-operator experiment](geometric-operators.md) reconstructs the
-pre-paper fixed-boundary calculation: direct \(\operatorname{vec}(U)\) pinning,
+pre-paper fixed-boundary calculation: direct $\operatorname{vec}(U)$ pinning,
 free auxiliary amplitudes, and a Rayleigh eigenresidual. It distinguishes that
 target-conditioned Choi synthesis from the later period transport and framed
 bulk-kernel readouts. The historical solver converges for both conserving and
 charge-changing gates; the later prism diagnostic finds that one state does
 not identify an operator and charge conservation is not sufficient on that
-fixed topology. The
+fixed topology. Its additive coupled-boundary control now fits a complete
+input/output basis on two independently prepared, geometrically frozen
+components at one common full-cobordism eigenvalue. The resulting witness span
+recovers the target on unseen linear combinations, while remaining a
+boundary-conditioned graph-of-operator certificate rather than a canonical
+bulk-only readout. The
 Dijkgraaf–Witten layer that scaffolded the method is recorded in
 [earlier work](../earlier-work/dijkgraaf-witten-scaffold.md).
 
