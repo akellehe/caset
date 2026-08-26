@@ -233,6 +233,11 @@ dynamical field:
     projective class; no cube-root lift is silently selected;
   \item complex Regge roots carry a Riemann-sheet label and monodromy whenever
     a squared-volume formulation cannot avoid them;
+  \item if a future amplitude integrates over complex geometric variables
+    instead of evaluating a stationary carrier, its middle-dimensional
+    integration cycle is supplied by the boundary problem and transported by
+    analytic continuation; there is no canonical integral over all of
+    $\mathbb C^N$;
   \item the Lorentzian momentum convention $p^2=m^2$ versus $p^2=-m^2$, the
     unit scale, and $B=N_q/3$ are fixed once as explicit calibrations; and
   \item a quantum $*$-structure is boundary data or an emergence certificate,
@@ -315,7 +320,7 @@ window, not a proof of exactly four.
 A third, more preliminary observation comes from joint Regge--Hodge
 stationarity experiments seeded with the phase pattern
 $\{1,\omega,\omega^{2}\}$, whose singlet diagnostics are evaluated while the
-stationarity objective changes the complex. The construction does not force
+stationarity equations change the complex. The construction does not force
 register holes to appear, and holes have not re-emerged under the unforced
 dynamics. That negative result is useful: the
 proposed quark should therefore not be defined as a hole. It will be sought as
@@ -472,8 +477,56 @@ projection. Since the spectrum and Riesz projectors transform covariantly,
 spectral stationarity is constant along gauge orbits. The variation
 $U^{-1}\delta U$ avoids choosing a logarithm branch during the update.
 
+\paragraph{Holomorphic spectral constraints.}
+The notation for a targeted spectral calculation is fixed explicitly here.
+On an $M$-dimensional one-particle carrier, let
+$h=h_1(z,U):\hh_K\to\hh_K$ be the complex edge-mode operator above. For a
+positive integer $j$, define the power-sum spectral invariant
+\begin{equation*}
+  p_j(h):=\operatorname{tr}(h^j).
+\end{equation*}
+This notation replaces the potentially ambiguous $I_j(h)$, reserving $I$ for
+an identity operator.
+Here $j$ is only the moment index; it is not a simplicial degree. If the
+eigenvalues of $h$, counted with algebraic multiplicity, are
+$\lambda_1,\ldots,\lambda_M$, then
+\begin{equation*}
+  p_j(h)=\sum_{a=1}^{M}\lambda_a^j.
+\end{equation*}
+Thus $p_j$ is invariant under similarity, remains defined for a non-normal or
+defective matrix, and requires neither eigenvalue ordering nor a real
+projection. For a prescribed target multiset
+$\{\lambda_a^\star\}$, set
+\begin{equation*}
+  p_j^\star=\sum_a(\lambda_a^\star)^j .
+\end{equation*}
+A holomorphic constrained action may then be written
+\begin{equation*}
+  \mathcal S_{\mathrm{spec}}
+  =\mathcal S_0(z,U)
+   +\sum_{j=1}^{m}\xi_j\bigl(p_j(h(z,U))-p_j^\star\bigr),
+  \qquad \xi_j\in\mathbb C .
+\end{equation*}
+Here $m\le M$ is the number of imposed moment constraints.
+The variable $\xi_j$ is an independent complex Lagrange multiplier, so
+stationarity in $\xi_j$ imposes the full complex equation
+\begin{equation*}
+  \frac{\partial\mathcal S_{\mathrm{spec}}}{\partial\xi_j}
+  =p_j(h)-p_j^\star=0.
+\end{equation*}
+For the full $M\times M$ operator, $p_1,\ldots,p_M$ determine the
+characteristic polynomial through Newton identities, but not its Jordan
+structure or spectral projectors. Those remain separately certified. For an
+isolated rank-$r$ fiber one instead uses
+$h_C=P_ChP_C|_{\operatorname{Ran}P_C}$ and
+$p_j(h_C)$ for $j=1,\ldots,r$. A numerical root finder may use a declared
+residual norm, but that norm is only a convergence certificate: the equations
+being solved are the complex constraints above. These target multipliers are
+absent in emergence mode and are permitted only in explicitly labeled
+controlled synthesis.
+
 In emergence mode, particle-specific observables below are
-read after optimization and are not inserted as target terms. Controlled
+read after the stationary solve and are not inserted as target terms. Controlled
 synthesis mode may pin a carrier to test realizability, but that is a separate
 experiment. Section~\ref{sec:quasifree} refines the emergence protocol into two
 labeled modes --- strict no-backreaction, and certificates-blind mean-field
@@ -813,8 +866,9 @@ correlations.
 The emergence protocol accordingly splits into two labeled modes, both
 Gaussian-closed: \emph{strict emergence}, in which the state does not act back
 on the geometry at all, and \emph{certificates-blind mean-field backreaction},
-in which the carried state's bilinear action density enters the joint stationarity
-objective while every particle certificate remains firewalled from it. The
+in which the carried state's bilinear action density enters the joint
+stationarity equations while every particle certificate remains firewalled
+from them. The
 certificate firewall of Section~\ref{sec:proton} applies to both modes.
 
 Genuinely non-Gaussian correlations would require at least one of the
@@ -838,6 +892,47 @@ Adopting one of these is an explicit scope decision with its own certificates,
 not a background assumption. Until then, the statement that non-Gaussian
 sectors are representable (Section~\ref{sec:state}) must not be read as a
 statement that they are produced.
+
+Among these possibilities, eliminating geometric fluctuations is the minimal
+mechanism that uses no new particle field. Let
+$x=(x_1,\ldots,x_R)^{\mathsf T}\in\mathbb C^R$ be retained geometric
+fluctuations about a stationary carrier, and suppose on a certified local
+domain that
+\begin{equation*}
+  S_g(x)=\frac12x^{\mathsf T}Ax,
+  \qquad
+  h(x)=h_0+\sum_{a=1}^{R}x_aO_a,
+  \qquad A=A^{\mathsf T},\quad \det A\ne0 .
+\end{equation*}
+For independent left/right Grassmann variables
+$\widetilde\psi,\psi$, define the bilinear geometric currents
+\begin{equation*}
+  J_a=\widetilde\psi^{\mathsf T}O_a\psi .
+\end{equation*}
+The joint complex action is
+\begin{equation*}
+  S(x,\widetilde\psi,\psi)
+  =\frac12x^{\mathsf T}Ax
+   +\widetilde\psi^{\mathsf T}h_0\psi+x^{\mathsf T}J .
+\end{equation*}
+Stationarity in $x$ gives $x=-A^{-1}J$, and exact substitution gives
+\begin{equation*}
+  \boxed{
+  S_{\mathrm{eff}}
+  =\widetilde\psi^{\mathsf T}h_0\psi
+   -\frac12J^{\mathsf T}A^{-1}J .}
+\end{equation*}
+The second term is quartic in the fermionic variables and is generically
+non-Gaussian. No conjugation, real projection, or new microscopic field has
+been introduced. The result is exact when the certified geometric block is
+quadratic and its matter coupling is linear; nonquadratic geometry produces
+higher effective interactions and must carry truncation certificates.
+Replacing $J$ by its expectation before elimination is only mean field and
+does \emph{not} produce this many-body correlation. Computationally, the
+interaction remains factored through the $R\times R$ geometric response
+$A^{-1}$, so sparse solves can be used without constructing a dense four-index
+tensor. This is a proposed next-stage mechanism, not an interaction silently
+enabled in the present emergence runs.
 
 The quasi-free formulation is especially attractive in the complex theory
 because it does not require a positivity projection. For $N$ occupied right
@@ -967,10 +1062,12 @@ $\mathfrak{sl}(3,\mathbb C)$. Thus the triangle carries a fundamental, its
 determinant-twisted dual, a determinant line, and the complex adjoint algebra
 without any conjugation. A coherent trivialization of $\det E$ reduces
 $GL(3,\mathbb C)$ to $SL(3,\mathbb C)$ and identifies
-$\Lambda^2E\simeq E^\vee$. Only a further transport-compatible Hermitian form
-selects the compact real form $SU(3)$ and turns the dual into the usual
-$\overline{\mathbf3}$. Compact color is therefore an emergence certificate,
-not a microscopic restriction.
+$\Lambda^2E\simeq E^\vee$. Only a further transport-compatible
+\emph{positive-definite} Hermitian form selects the compact real form $SU(3)$
+and turns the dual into the usual $\overline{\mathbf3}$. A nondegenerate
+Hermitian form of signature $(p,q)$ would instead select the noncompact real
+form $SU(p,q)$. Compact color is therefore an emergence certificate, not a
+microscopic restriction.
 
 The triplet description of quarks and the three-quark construction of baryons
 originate with the quark model \cite{gellmann1964}; the additional color
@@ -1105,10 +1202,12 @@ $SL(3,\mathbb C)$, with projective quotient
 $PSL(3,\mathbb C)=SL(3,\mathbb C)/\mathbb Z_3$. Selecting
 $M/(\det M)^{1/3}$ independently on each link is forbidden: it chooses one of
 three sheets and discards the determinant transport. If a compatible
-Hermitian form $H_C$ later satisfies
+positive-definite Hermitian form $H_C=H_C^\dagger>0$ later satisfies
 $M_{AB}^{\dagger}H_AM_{AB}=H_B$, the same data admit a compact
-$U(3)$, and with determinant trivialization an $SU(3)$, real form. Compact
-Wilson loops are a certified specialization, not the bulk definition.
+$U(3)$, and with determinant trivialization an $SU(3)$, real form. An
+indefinite preserved Hermitian form gives $U(p,q)$ instead and is reported as
+such. Compact Wilson loops are a certified specialization, not the bulk
+definition.
 
 The determinant line supplies a possible oriented flux readout. For a closed,
 full-rank world-tube family $M(t)$,
@@ -1273,6 +1372,23 @@ baryon $qqq$ & 3 & odd\\
 \caption{Composite exchange parity from constituent counting.}
 \label{tab:parity}
 \end{table}
+
+\paragraph{Odd-rank determinant cross-check (proposed).}
+There is a second geometric parity available at the fiber level. Interchanging
+two complete blocks $E_A$ and $E_B$ of ranks $r_A$ and $r_B$ acts on the
+orientation line of $E_A\oplus E_B$ with determinant
+\begin{equation*}
+  \det P_{AB}=(-1)^{r_Ar_B}.
+\end{equation*}
+Two rank-three color fibers therefore give $(-1)^9=-1$ without extracting a
+sign from a complex amplitude. This identity is exact, but its physical use is
+conditional: it is the determinant of exchanging the \emph{whole fiber
+frames}, not automatically the exchange of one occupied state. Promoting it
+to particle statistics amounts to the falsifiable hypothesis that cluster
+parity is fiber rank modulo two. The core construction continues to use
+occupation parity in $\Lambda^\bullet\hh_K$; simulations may report the
+rank-parity character as an independent cross-check and must not count both
+minus signs in the same exchange.
 
 Pauli exclusion is the exact exterior-algebra statement
 \begin{equation*}
@@ -1523,7 +1639,7 @@ define on each oriented edge
 One orientation is chosen per geometric edge; the inverse-edge convention
 $U_{yx}=U_{xy}^{-1}$ gives $j_{yx}=-j_{xy}$.
 Under the infinitesimal complex gauge variation
-$\delta U_{xy}=(-\xi_x+\xi_y)U_{xy}$, invariance of the full action, including
+$\delta U_{xy}=(-\epsilon_x+\epsilon_y)U_{xy}$, invariance of the full action, including
 the transformed matter frames, gives the discrete Ward identity
 \begin{equation*}
   \partial j=0
@@ -1669,7 +1785,7 @@ accepted covariance-only class is the structural branch point of
 Section~\ref{sec:quasifree}.
 
 None of these conditions should be included as an emergence target. The proton
-is found only if the base geometric optimization produces a component
+is found only if the base geometric stationary search produces a component
 satisfying them. Targeted runs remain valuable as existence and obstruction
 experiments, but must be labeled as synthesis rather than emergence.
 
@@ -1685,7 +1801,7 @@ experiments, but must be labeled as synthesis rather than emergence.
   \draw[flow] (obj) -- (move);
   \draw[flow] (move) -- (accept);
   \draw[flow,dashed] (accept.north) -- ++(0,0.55) -| (geo.north)
-    node[pos=0.25,above,font=\scriptsize\sffamily]{continue optimization};
+    node[pos=0.25,above,font=\scriptsize\sffamily]{continue stationary search};
   % optional backreaction (labeled mode)
   \node[derivbox,text width=44mm] (backr) at (1.7,-2.05)
     {carried-state action density\\ \footnotesize optional labeled mode: certificates-blind mean-field backreaction (Gaussian-closed)};
@@ -1711,7 +1827,7 @@ equations drive the geometric search. In certificates-blind backreaction mode
 the carried state's bilinear action density may enter those equations;
 Section~\ref{sec:quasifree} records that this remains inside the quasi-free
 class. Cluster, fiber, color, exchange, and baryon observables are computed
-from accepted snapshots and cannot feed back into the objective in either
+from accepted snapshots and cannot feed back into the stationary equations in either
 emergence mode. Targeted synthesis is a separate, explicitly labeled mode.}
 \label{fig:firewall}
 \end{figure}
@@ -2025,8 +2141,10 @@ Section~\ref{sec:quasifree}: either an exact covariance-only proton exists, or
 a genuinely non-Gaussian, geometry-mediated interaction is required. Either
 outcome is a result. The first makes the particle layer exactly and
 polynomially certifiable; the second would be the first internal evidence that
-the geometry must supply a true interaction term, through one of the five
-mechanisms this paper names.
+the geometry must supply a true interaction term. The most parsimonious named
+candidate is the exact elimination of a certified quadratic geometric block,
+which produces the factored quartic kernel
+$-\tfrac12J^{\mathsf T}A^{-1}J$ without adding a microscopic particle field.
 
 % ================================================================ refs
 \renewcommand{\refname}{Prior-art references}
