@@ -375,31 +375,22 @@ double WilsonResult::principalAngle(double theta) {
     return r;
 }
 
-// The four derived views of `connectionAccumulation`. Each reads the stored
-// datum; none of them is stored, so no reading can drift from another and the
-// datum can never be reconstructed FROM a view.
-
 std::complex<double> WilsonResult::holonomy() const {
-    return std::exp(std::complex<double>(0.0, 1.0) * connectionAccumulation);
+    return connectionHolonomy;
 }
 
 double WilsonResult::holonomyModulus() const {
-    // |e^{i(a+ib)}| = e^{-b}. Exactly 1 when the connection is purely compact,
-    // which is the emergent cancellation this reading exists to expose.
-    return std::exp(-connectionAccumulation.imag());
+    return std::abs(connectionHolonomy);
 }
 
 double WilsonResult::residualPhase() const {
-    return principalAngle(connectionAccumulation.real());
+    return std::arg(connectionHolonomy);
 }
 
 long WilsonResult::windingNumber() const {
-    constexpr double twoPi = 2.0 * std::numbers::pi;
-    const double re = connectionAccumulation.real();
-    if (!std::isfinite(re)) return 0;
-    // Recoverable ONLY because the accumulation was never reduced: the whole
-    // turns are what a mod-2π fold at accumulation time would have destroyed.
-    return std::lround((re - principalAngle(re)) / twoPi);
+    // A single C* product has no preferred logarithm lift. Relative winding is
+    // supplied by the explicitly closed, sheet-tracked transport construction.
+    return 0;
 }
 
 WilsonResult WilsonLoop::evaluateU1Connection(
@@ -407,49 +398,19 @@ WilsonResult WilsonLoop::evaluateU1Connection(
     const int n = static_cast<int>(cycle.size());
     if (n < 2) return {};  // need at least one edge
 
-    // Each consecutive pair cycle[i] -> cycle[i+1] (mod n) is one directed
-    // traversal step, walked through the shared Edge::walkLoop primitive. The
-    // step Edges carry a dummy unit length; only their endpoints are read. A
-    // small id -> VertexPtr lookup recovers the mesh edge inside the walk.
-    std::vector<Edge> steps;
-    steps.reserve(static_cast<std::size_t>(n));
-    std::unordered_map<std::uint64_t, VertexPtr> byId;
+    std::complex<double> product{1.0, 0.0};
     for (int i = 0; i < n; ++i) {
-        steps.emplace_back(cycle[i], cycle[(i + 1) % n],
-                           std::complex<double>(1.0, 0.0));
-        byId[cycle[i]->getId()] = cycle[i];
+        const auto &from = cycle[i];
+        const auto &to = cycle[(i + 1) % n];
+        EdgePtr edge = edgeBetween(from, to);
+        if (!edge) return {};
+        product *= edge->link(from->getId(), to->getId());
     }
-
-    std::complex<double> total{0.0, 0.0};
-    bool open = false;
-    Edge::walkLoop(steps, [&](std::uint64_t u, std::uint64_t v, double sign) {
-        if (open) return;
-        EdgePtr e = edgeBetween(byId[u], byId[v]);
-        if (!e) { open = true; return; }  // open path — not a closed cycle
-        // +phase along the stored source→target orientation, −phase reversed.
-        // The canonical-orientation `sign` folds the edge's stored orientation
-        // back to the cycle's u->v direction: sign * stored == (forward ? +1 :
-        // -1), so this is algebraically identical to the old forward test.
-        //
-        // The WHOLE complex phase accumulates. Around a closed loop a gauge
-        // transformation telescopes to zero, so both components of the sum are
-        // gauge-invariant; only Re quantizes, which makes e^{-Im} a
-        // gauge-invariant real rather than a quantum number — not grounds for
-        // dropping it. Taking `.real()` here discarded the non-compact
-        // direction and with it any evidence of whether it does anything.
-        const double stored =
-            (e->getSource()->getId() < e->getTarget()->getId()) ? 1.0 : -1.0;
-        total += (sign * stored) * e->getPhase();
-    });
-    if (open) return {};  // open path — not a closed 1-skeleton cycle
 
     WilsonResult r;
     r.loopSize = n;
-    // The datum, unreduced: folding mod 2π here would destroy the winding.
-    r.connectionAccumulation = total;
-    // A derived reading, not a second datum. Re is linear over the sum, so
-    // principalAngle(Re total) == the old principalAngle(sum of Re) exactly.
-    r.value = r.residualPhase();
+    r.connectionHolonomy = product;
+    r.value = product;
     return r;
 }
 

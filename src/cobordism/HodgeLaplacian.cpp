@@ -922,8 +922,7 @@ void HodgeLaplacian::assemble(std::vector<cd> &A, std::vector<double> &D) const 
     const std::size_t j = it->second;
     if (i == j) continue;  // a simplicial complex carries no self-loops
 
-    const cd w = (e->getLength() * e->getLength());  // exact complex squared length l^2
-    const cd phase = e->getPhase();  // C* connection on src->tgt
+    const cd w = e->squaredLength();
 
     // Degree uses the magnitude convention D_ii = sum |squaredLength| over
     // incident edges (phase-independent; keeps L Hermitian and e^{-iLt} unitary
@@ -942,8 +941,8 @@ void HodgeLaplacian::assemble(std::vector<cd> &A, std::vector<double> &D) const 
     // The geometry keeps the conjugate it always had: only the LINK is
     // inverted, so a real phase reproduces the previous Hermitian magnetic
     // operator entry for entry.
-    const cd link = std::exp(cd(0.0, 1.0) * phase);
-    const cd linkInverse = std::exp(cd(0.0, -1.0) * phase);
+    const cd link = e->link(s->getId(), t->getId());
+    const cd linkInverse = e->link(t->getId(), s->getId());
     A[i * N + j] += w * link;
     A[j * N + i] += std::conj(w) * linkInverse;
   }

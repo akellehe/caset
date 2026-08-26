@@ -224,7 +224,7 @@ def _classify(length):
     they build an edge to carry one.
     """
     edge = T.Edge(T.Vertex(1, [0.0, 0.0, 0.0, 0.0]),
-                  T.Vertex(2, [0.0, 0.0, 0.0, 1.0]), complex(length))
+                  T.Vertex(2, [0.0, 0.0, 0.0, 1.0]), complex(length) ** 2)
     return ea.causal_class(edge)
 
 

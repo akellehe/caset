@@ -345,7 +345,7 @@ double ReggeSolver::matterAction() const {
                 if (other->getId() == v2->getId()) {
                     if (e->isTimelike())
                         S -= wl.mass *
-                             std::sqrt(-(e->getLength() * e->getLength())).real();
+                             std::sqrt(-e->squaredLength()).real();
                     break;
                 }
             }
@@ -367,7 +367,7 @@ std::vector<std::complex<double>> ReggeSolver::actionGradient() const {
     auto edges = edgeList->toVector();
     std::vector<std::complex<double>> g(edges.size());
     for (std::size_t i = 0; i < edges.size(); ++i) {
-        const std::complex<double> origSq = (edges[i]->getLength() * edges[i]->getLength());
+        const std::complex<double> origSq = edges[i]->squaredLength();
         const double W = std::abs(origSq);              // |l^2|
         const double h = std::max(W * 1e-4, 1e-8);
         const bool tl = edges[i]->isTimelike();
@@ -377,12 +377,12 @@ std::vector<std::complex<double>> ReggeSolver::actionGradient() const {
         };
         // Central differences in W-space, preserving edge character; perturb l^2
         // exactly and restore the original l^2 exactly (no sqrt round-trip drift).
-        edges[i]->setLength(std::sqrt(sqAtW(W + h)));
+        edges[i]->setSquaredLength(sqAtW(W + h));
         const std::complex<double> Sp = totalAction();
-        edges[i]->setLength(std::sqrt(sqAtW(std::max(W - h, 1e-12))));
+        edges[i]->setSquaredLength(sqAtW(std::max(W - h, 1e-12)));
         const std::complex<double> Sm = totalAction();
         g[i] = (Sp - Sm) / (2.0 * h);
-        edges[i]->setLength(std::sqrt(origSq));
+        edges[i]->setSquaredLength(origSq);
     }
     return g;
 }

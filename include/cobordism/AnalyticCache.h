@@ -35,7 +35,7 @@ class TouchedStar {
   public:
     /// Record a simplex whose geometry or incidence changed.
     void addTouchedSimplex(const std::vector<std::uint64_t> &vertexIds);
-    /// Record an edge whose complex length or phase changed.
+    /// Record an edge whose direct complex z or U field changed.
     void addChangedEdge(std::uint64_t vertexA, std::uint64_t vertexB);
     /// Record a created cell (a combinatorial change).
     void addCreatedCell(const std::vector<std::uint64_t> &vertexIds);
@@ -109,7 +109,7 @@ class AnalyticCache {
 
     /// The bound spacetime's current metric revision
     /// (`Spacetime::metricRevisionKey`): moves on any combinatorial change,
-    /// any `setLength`, any `setPhase`.
+    /// any `setSquaredLength`, any direct link mutation.
     [[nodiscard]] std::uint64_t geometryRevision() const;
 
     /// The bound spacetime's current combinatorial revision

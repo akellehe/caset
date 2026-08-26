@@ -137,10 +137,9 @@ class SurgicalCone {
     /// The d+1 vertex ids of the removed (cone-out) / added (cone-in) top cell.
     std::vector<std::uint64_t> cell;
     /// Edges touched: removed orphans (cone-out, to re-create) / freshly
-    /// inserted edges (cone-in, to drop), each (u, v, l2, phase). The full
-    /// COMPLEX l2 is recorded so the restore is bit-exact on analytically
-    /// continued (Im l2 != 0) geometry too — a Re-only record silently
-    /// projected every rejected probe onto the real axis (#581).
+    /// inserted edges (cone-in, to drop), each ``(u,v,z,U_uv)``.  Both
+    /// complex fields are recorded directly, so rollback makes no root or
+    /// logarithm choice.
     std::vector<
         std::tuple<std::uint64_t, std::uint64_t, std::complex<double>, std::complex<double>>>
         edges;

@@ -66,21 +66,24 @@ enum class EdgeDisposition : uint8_t {
 ///   undirected edges; it's just one of two Vertices that define the Edge.
 /// @param target_If this Edge represents a directed Edge; then this is the Vertex at which the Edge terminates. For
 ///   undirected edges; it's just one of two Vertices that define the Edge.
-/// @param length_ The complex length of the edge according to whatever spacetime metric is
-///   being used. Real for spacelike, imaginary for timelike; the squared length is derived
-///   by squaring it and is never stored (#639).
+/// The microscopic edge fields are stored without choosing a branch:
+///
+/// * ``squaredLength_`` is the complex squared length \f$z_e\in\mathbb C\f$;
+/// * ``canonicalLink_`` is the non-zero multiplicative link
+///   \f$U_{xy}\in\mathbb C^*\f$ on the canonical ``min(id)->max(id)``
+///   orientation.  The reverse link is its inverse, never its conjugate.
+///
+/// A length or additive phase is a legacy/presentation view.  Neither is a
+/// stored bulk field.
 ///
 class Edge {
   public:
-    /// Construct from the (possibly complex) LENGTH \f$l\f$ — real for spacelike,
-    /// imaginary for timelike, general complex off the real-Lorentzian locus. This is
-    /// the edge's one degree of freedom; \f$l^2\f$ is derived by squaring, never stored
-    /// (#639). Callers holding an \f$l^2\f$ pass ``std::sqrt(l2)`` and so choose the
-    /// branch explicitly rather than having one chosen for them.
+    /// Construct from the complex SQUARED length \f$z_e\f$.  The value is
+    /// stored verbatim; no square-root sheet is selected.
     Edge(
       const VertexPtr &source,
       const VertexPtr &target,
-      std::complex<double> length
+      std::complex<double> squaredLength
     );
 
     Edge(
@@ -98,35 +101,58 @@ class Edge {
     /// memory. But seriously, though, `getTarget` gives the vertex on one end, and `getSource` gives the other.
     [[nodiscard]] const VertexPtr &getTarget() const noexcept;
 
-    /// The \f$\mathbb{C}^{*}\f$ connection phase \f$\varphi\f$ carried on this edge's stored
-    /// source->target orientation. It is the SECOND edge field, independent of the geometry:
-    /// the link variable is \f$ U_{xy} = e^{i\varphi} \in \mathbb{C}^{*} \f$ with
-    /// \f$ U_{yx} = U_{xy}^{-1} \f$ (the INVERSE, not the conjugate — the two coincide only
-    /// for real \f$\varphi\f$), and a gauge transformation \f$ g \f$ acts by
-    /// \f$ U_{xy} \mapsto g_x^{-1} U_{xy} g_y \f$, leaving `length_` and every metric weight
-    /// built from it untouched.
-    ///
-    /// \f$\varphi\f$ is COMPLEX because the structure group is
-    /// \f$ \mathbb{C}^{*} = U(1)\times\mathbb{R}^{+} \f$:
-    /// \f$ e^{i\varphi} = e^{i\operatorname{Re}\varphi}\,e^{-\operatorname{Im}\varphi} \f$.
-    /// `Re` is the compact U(1) angle in radians — the only part with winding, hence the only
-    /// part that quantizes and the only part a Wilson loop reads. `Im` is the non-compact
-    /// \f$\mathbb{R}^{+}\f$ local scale and carries no quantum number.
-    ///
-    /// It twists the HOPPING of the Aharonov-Bohm operator (`HodgeLaplacian::connectionLaplacian`)
-    /// and never rescales a metric weight: the geometric Hodge operator `laplacian(k)` is built
-    /// from `length_` alone and is blind to \f$\varphi\f$ at every degree. Writing \f$\varphi\f$
-    /// into the weight would make the metric gauge-variant and destroy the derived form of
-    /// \f$ L_k \f$. The default (`phase = 0`) leaves an ordinary untwisted CDT edge unchanged.
-    ///
-    /// @return The \f$\mathbb{C}^{*}\f$ connection phase; `Re` in radians, `Im` the log-scale.
+    /// LEGACY VIEW: a principal logarithm of the source->target link, defined
+    /// by ``U=exp(i*phase)``.  This chooses a logarithm branch and must not be
+    /// used by complex-first bulk code, cache identities, or replay.
     [[nodiscard]] std::complex<double> getPhase() const noexcept;
 
-    /// The (possibly complex) edge length — the causal DOF, distinct from the
-    /// connection `phase` and from \f$l^2\f$. Real for spacelike, imaginary for timelike, general
-    /// complex for the Picard–Lefschetz saddle. Causal character is the LORENTZIAN
-    /// magnitude of this, \f$\mathrm{Re}(l^2)\f$ — see the predicates below.
+    /// LEGACY VIEW: the principal square root of ``squaredLength()``.  This is
+    /// presentation-only and is never a replay identity.
     [[nodiscard]] std::complex<double> getLength() const noexcept;
+
+    /// The exact branch-free geometric datum \f$z_e\f$.
+    [[nodiscard]] std::complex<double> squaredLength() const noexcept {
+      return squaredLength_;
+    }
+
+    /// Replace \f$z_e\f$ verbatim; no root, sign, or real-section choice.
+    void setSquaredLength(std::complex<double> z) noexcept {
+      squaredLength_ = z;
+      ++geometryRevision_;
+    }
+
+    /// Link on the canonical endpoint orientation ``min(id)->max(id)``.
+    [[nodiscard]] std::complex<double> canonicalLink() const noexcept {
+      return canonicalLink_;
+    }
+
+    /// Link on an explicitly requested endpoint orientation.  ``from`` and
+    /// ``to`` must be this edge's distinct endpoint ids.
+    [[nodiscard]] std::complex<double> link(std::uint64_t from,
+                                             std::uint64_t to) const;
+
+    /// Set the canonical link.  Zero is rejected because the link lives in
+    /// \f$\mathbb C^*\f$.
+    void setCanonicalLink(std::complex<double> nonzeroU);
+
+    /// Set the link on an explicitly requested orientation; storage is
+    /// canonicalized without a logarithm or argument.
+    void setLink(std::uint64_t from, std::uint64_t to,
+                 std::complex<double> nonzeroU);
+
+    /// Left-trivialized tangent coordinate \f$U^{-1}\,\delta U\f$ on an
+    /// explicit orientation. This is a differential coordinate, not a
+    /// logarithm of the resident link, and therefore has no branch.
+    [[nodiscard]] std::complex<double> linkLogTangent(
+        std::uint64_t from, std::uint64_t to,
+        std::complex<double> deltaU) const {
+      return deltaU / link(from, to);
+    }
+
+    /// Re-express the stored canonical link after endpoint identifiers have
+    /// changed.  The oriented link between the endpoint objects is preserved.
+    void recanonicalizeLink(std::uint64_t oldSourceId,
+                            std::uint64_t oldTargetId) noexcept;
 
     /// # Causal character, from the ARGUMENT of \f$ l^2 \f$
     ///
@@ -257,51 +283,34 @@ class Edge {
     /// @returns A tuple of {sourceId, targetId}.
     EdgeKey getKey() const noexcept;
 
-    /// Set the (complex) edge LENGTH \f$l\f$ — the edge's one degree of freedom.
-    /// Real for spacelike, imaginary for timelike, general complex off the
-    /// real-Lorentzian locus.
-    ///
-    /// There is no squared-length setter (#639). \f$l^2\f$ is not stored, so it cannot
-    /// drift out of sync with \f$l\f$, and a caller holding an \f$l^2\f$ writes
-    /// ``setLength(std::sqrt(l2))`` — picking the branch explicitly instead of having
-    /// one picked silently. \f$l\f$ is the right primitive: \f$l \mapsto l^2\f$ is
-    /// two-to-one, so \f$l^2\f$ cannot express which of \f$\pm l\f$ this edge is.
-    ///
-    /// **Cost, accepted:** a geometry SPECIFIED by a squared value (CDT, Van
-    /// Raamsdonk, the backreaction scan) now round-trips through
-    /// \f$\sqrt{\cdot}\f$ and back, so consumers see \f$l^2 \pm 1\f$ ULP rather
-    /// than the exact value the old verbatim store gave them. That matters most in the
-    /// ill-conditioned regime where the Cayley-Menger determinant approaches zero.
+    /// LEGACY MUTATOR: accept a length and store its square.  New code uses
+    /// ``setSquaredLength``.  This direction is branch-free, but it preserves
+    /// the old call shape only while callers are migrated.
     void setLength(std::complex<double> l) noexcept {
-      length_ = l;
-      ++lengthRevision_;
+      setSquaredLength(l * l);
     }
 
-    /// Monotone per-edge write counter, bumped by every ``setLength``.
-    /// ``Simplex``'s length-derived geometry cache keys on the sum of its
-    /// edges' revisions, so an unchanged key proves no incident length changed
-    /// since the cache was filled. ``setPhase`` deliberately does NOT bump it:
-    /// the cache holds only length-derived data (Gram / Cayley-Menger), and
-    /// the connection phase never enters those.
+    /// Legacy spelling of ``geometryRevision``.
     [[nodiscard]] std::uint64_t lengthRevision() const noexcept {
-      return lengthRevision_;
+      return geometryRevision_;
     }
 
-    /// Set the \f$\mathbb{C}^{*}\f$ connection phase: `Re` the compact U(1) angle in radians,
-    /// `Im` the non-compact log-scale. Used by the Aharonov-Bohm operator and its gauge
-    /// transform to re-twist the edge without rebuilding the mesh. A real argument converts
-    /// implicitly and reproduces the untwisted-geometry, real-angle case exactly.
-    void setPhase(std::complex<double> p) noexcept {
-      phase = p;
-      ++phaseRevision_;
+    [[nodiscard]] std::uint64_t geometryRevision() const noexcept {
+      return geometryRevision_;
     }
 
-    /// Monotone ``setPhase`` counter, the phase analogue of ``lengthRevision``.
-    /// The Aharonov-Bohm operator reads phases, so the shared spectrum cache
-    /// keys on BOTH counters; the Simplex geometry cache (Gram/Cayley-Menger)
-    /// keys on lengths alone and deliberately ignores this one.
+    /// LEGACY MUTATOR: convert an additive coordinate with
+    /// ``U=exp(i*phase)``. This conversion is intentionally isolated here;
+    /// direct complex-first code calls ``setLink``/``setCanonicalLink``.
+    void setPhase(std::complex<double> p);
+
+    /// Legacy spelling of ``linkRevision``.
     [[nodiscard]] std::uint64_t phaseRevision() const noexcept {
-      return phaseRevision_;
+      return linkRevision_;
+    }
+
+    [[nodiscard]] std::uint64_t linkRevision() const noexcept {
+      return linkRevision_;
     }
 
     /// Walk a closed loop of ordered directed steps (each Edge's
@@ -317,11 +326,9 @@ class Edge {
       }
     }
 
-    /// The Van Raamsdonk metric law: the spacelike signed squared length for a
-    /// given mutual information ``I`` — the value to store via ``setLength`` on a
-    /// same-time-slice edge. Returns −log(I/iMax), floored at −log(epsilon) (so the
-    /// length stays finite) when I < epsilon·iMax (and when iMax ≤ 0 or I ≤ 0).
-    /// Always real and ≥ 0, i.e. spacelike.
+    /// The Van Raamsdonk length view for a given mutual information ``I``.
+    /// A direct-z caller stores its square with ``setSquaredLength``. Returns
+    /// -log(I/iMax), floored at -log(epsilon) when needed.
     [[nodiscard]] static double
     vanRaamsdonkLength(double I, double iMax,
                        double epsilon = 1e-10) noexcept;
@@ -366,15 +373,13 @@ class Edge {
     VertexPtr source = nullptr;
     VertexPtr target = nullptr;
 
-    /// The complex edge length \f$l\f$ — the edge's ONE stored degree of freedom
-    /// (distinct from the U(1) `phase`). Causal character is `Im(length_)`.
-    /// \f$l^2\f$ is derived by squaring at the point of use, never stored (#639).
-    std::complex<double> length_{};
-    /// Monotone ``setLength`` counter read by ``lengthRevision()``; see there.
-    std::uint64_t lengthRevision_{0};
-    /// Monotone ``setPhase`` counter read by ``phaseRevision()``; see there.
-    std::uint64_t phaseRevision_{0};
-    std::complex<double> phase{0.0, 0.0};
+    /// Exact complex squared length.  This is the geometry, not a selected
+    /// square-root sheet.
+    std::complex<double> squaredLength_{};
+    /// Link on min(endpoint id)->max(endpoint id).  Always non-zero.
+    std::complex<double> canonicalLink_{1.0, 0.0};
+    std::uint64_t geometryRevision_{0};
+    std::uint64_t linkRevision_{0};
 
     Simplices simplices_{};
 };

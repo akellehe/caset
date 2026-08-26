@@ -33,7 +33,7 @@ class TestCobordismScaffold(unittest.TestCase):
         st = tessera.Spacetime()
         V = [st.createVertex(i, [0.0]) for i in range(4)]
         for a, b in itertools.combinations(range(4), 2):
-            st.createEdge(V[a], V[b], cmath.sqrt(complex(1.0)))
+            st.createEdge(V[a], V[b], complex(1.0))
         for combo in itertools.combinations(range(4), 3):
             st.createSimplex([V[i] for i in combo])
         self.assertEqual(cobordism.CombinatorialDimension().compute(st), 2.0)

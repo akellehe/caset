@@ -25,7 +25,9 @@ std::shared_ptr<Spacetime> LiveComplex::load(
     const std::vector<std::vector<std::uint64_t>> &cells,
     const std::map<std::pair<std::uint64_t, std::uint64_t>,
                    std::complex<double>> &squaredLengths,
-    const std::map<std::uint64_t, double> &vertexTimes, int dimensions) {
+    const std::map<std::uint64_t, double> &vertexTimes, int dimensions,
+    const std::map<std::pair<std::uint64_t, std::uint64_t>,
+                   std::complex<double>> &canonicalLinks) {
   if (cells.empty()) {
     throw std::invalid_argument("LiveComplex::load needs at least one top cell");
   }
@@ -55,7 +57,15 @@ std::shared_ptr<Spacetime> LiveComplex::load(
           ") of the loaded complex has no recorded squared length — a partial "
           "metric is never silently defaulted");
     }
-    e->setLength(std::sqrt(it->second));
+    e->setSquaredLength(it->second);
+    if (!canonicalLinks.empty()) {
+      const auto link = canonicalLinks.find(
+          a < b ? std::make_pair(a, b) : std::make_pair(b, a));
+      if (link == canonicalLinks.end())
+        throw std::out_of_range(
+            "LiveComplex::load: edge has no recorded canonical link");
+      e->setCanonicalLink(link->second);
+    }
   }
   // Complete the facet/coface skeleton the dual-volume / deficit reads walk —
   // the honest direct call, never a solver (fromCells leaves only the top
@@ -91,11 +101,14 @@ LiveComplex::Relabeled LiveComplex::relabel(const Spacetime &spacetime,
     cells.push_back(std::move(vids));
   }
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>> edges;
+  std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>> links;
   for (const auto *e : spacetime.getEdgeList()->toVector()) {
     const std::uint64_t a = e->getSource()->getId();
     const std::uint64_t b = e->getTarget()->getId();
     edges[a < b ? std::make_pair(a, b) : std::make_pair(b, a)] =
-        (e->getLength() * e->getLength());
+        e->squaredLength();
+    links[a < b ? std::make_pair(a, b) : std::make_pair(b, a)] =
+        e->canonicalLink();
   }
   std::map<std::uint64_t, double> times;
   const auto &vertexList = spacetime.getVertexList();
@@ -134,17 +147,23 @@ LiveComplex::Relabeled LiveComplex::relabel(const Spacetime &spacetime,
   }
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>>
       permutedEdges;
+  std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>>
+      permutedLinks;
   for (const auto &kv : edges) {
     const std::uint64_t a = perm.at(kv.first.first);
     const std::uint64_t b = perm.at(kv.first.second);
     permutedEdges[a < b ? std::make_pair(a, b) : std::make_pair(b, a)] =
         kv.second;
+    const auto originalLink = links.at(kv.first);
+    permutedLinks[a < b ? std::make_pair(a, b) : std::make_pair(b, a)] =
+        a < b ? originalLink : 1.0 / originalLink;
   }
   std::map<std::uint64_t, double> permutedTimes;
   for (const auto &kv : times) permutedTimes[perm.at(kv.first)] = kv.second;
 
   Relabeled out;
-  out.spacetime = load(permutedCells, permutedEdges, permutedTimes, dimensions);
+  out.spacetime = load(permutedCells, permutedEdges, permutedTimes, dimensions,
+                       permutedLinks);
   out.vertexMap = std::move(perm);
   return out;
 }

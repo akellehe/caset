@@ -1112,29 +1112,23 @@ Args:
       "Result of evaluating a Wilson loop.")
       .def_readonly("value", &WilsonResult::value,
                     "Primary scalar value. In U1_CONNECTION mode this is a "
-                    "DERIVED view of connectionAccumulation (its "
-                    "residualPhase()), not a second datum.")
+                    "direct multiplicative C* holonomy.")
+      .def_readonly("connectionHolonomy",
+                    &WilsonResult::connectionHolonomy,
+                    "Branch-free ordered product of oriented C* edge links.")
       .def_readonly("connectionAccumulation",
                     &WilsonResult::connectionAccumulation,
-                    "U1_CONNECTION mode: the complete gauge-invariant datum -- "
-                    "the UNREDUCED complex accumulation of the oriented edge "
-                    "phase around the cycle. Both components are carried: "
-                    "around a closed loop a gauge transformation telescopes to "
-                    "zero, so the whole complex sum is gauge-invariant. Only Re "
-                    "quantizes, which makes e^{-Im} a gauge-invariant real "
-                    "rather than a quantum number. Never reduced mod 2*pi -- "
-                    "reducing would destroy the winding. NaN in other modes: "
-                    "unmeasured, never zero.")
+                    "Legacy additive-phase view; unmeasured (NaN) for direct "
+                    "multiplicative-link reads.")
       .def("holonomy", &WilsonResult::holonomy,
-           "Derived: the holonomy exp(i * connectionAccumulation).")
+           "Return the direct multiplicative connection holonomy.")
       .def("holonomyModulus", &WilsonResult::holonomyModulus,
-           "Derived: |H| = exp(-Im accumulation). Exactly 1 for a purely "
-           "compact connection -- a cancellation to be observed, not imposed.")
+           "Presentation certificate: modulus of the complex holonomy.")
       .def("residualPhase", &WilsonResult::residualPhase,
-           "Derived: Re(accumulation) mod 2*pi, in (-pi, pi].")
+           "Presentation-only principal argument of the complex holonomy.")
       .def("windingNumber", &WilsonResult::windingNumber,
-           "Derived: whole 2*pi turns in Re(accumulation). Recoverable only "
-           "because the accumulation is stored unreduced.")
+           "Returns 0: winding requires an explicit relative lifted path, not "
+           "a branch choice on one C* product.")
       .def_readonly("loopSize", &WilsonResult::loopSize,
                     "Number of simplices in the loop.")
       .def_readonly("enclosedHinges", &WilsonResult::enclosedHinges,
@@ -1168,13 +1162,9 @@ Four evaluation modes:
 * ``CAUSAL``  — CDT causal-orientation winding. ``causalWindingNumber``
   is the signed net change in foliation index around the loop; non-
   zero values mark loops that cross a CDT slice boundary.
-* ``U1_CONNECTION``  — U(1) connection holonomy. The oriented sum of the
-  ``Edge.phase`` carried on the primal 1-skeleton around a closed vertex
-  cycle (``+phase`` along the stored source->target orientation,
-  ``-phase`` reversed), reduced mod 2*pi. Evaluated via
-  ``evaluateU1Connection(cycle)`` (the connection is a primal-edge, not a
-  dual-graph, quantity); ``value`` carries the holonomy. This is the
-  Wilson-loop view of the Stage-1 ``cobordism.HodgeLaplacian`` cycle flux.
+* ``U1_CONNECTION``  — legacy enum name for the branch-free C* connection
+  holonomy. ``evaluateU1Connection(cycle)`` multiplies the oriented direct
+  links; ``value`` carries the full complex product without normalization.
 
 Three loop-shape generators:
 
@@ -1235,20 +1225,14 @@ the net winding; ``value`` carries the same number as a double.
 )doc")
       .def("evaluateU1Connection", &WilsonLoop::evaluateU1Connection,
            py::arg("cycle"),
-           R"doc(U(1) connection holonomy around a closed vertex cycle.
+           R"doc(Multiplicative C* connection holonomy around a closed vertex cycle.
 
 ``cycle`` is an ordered list of vertices on the primal 1-skeleton whose
-consecutive pairs (with wrap-around) are joined by edges. Accumulates each
-edge's ``phase`` along its stored source->target orientation (``+phase``
-forward, ``-phase`` reversed) and returns the total reduced into the
-principal interval ``(-pi, pi]`` in ``value``; ``loopSize`` is the number of
-edges. Returns an empty result (``loopSize == 0``) for a degenerate (fewer
-than two vertices) or open (a consecutive pair with no joining edge) cycle.
-
-This is the Wilson-loop counterpart of the Stage-1 cycle flux carried by the
-Hermitian-weighted ``cobordism.HodgeLaplacian`` — the same oriented phase
-sum. Restricted to phases in ``{0, pi}`` the holonomy lands in ``{0, pi}``
-and reproduces the Z2 flux.
+consecutive pairs (with wrap-around) are joined by edges. Multiplies each
+direct link on the requested orientation and returns the full complex product
+in ``value`` and ``connectionHolonomy``; ``loopSize`` is the number of edges.
+No logarithm, argument, compact projection, or normalization is used. Returns
+an empty result (``loopSize == 0``) for a degenerate or open cycle.
 )doc")
       .def("hingeLoop", &WilsonLoop::hingeLoop,
            py::arg("hinge"),
@@ -1318,7 +1302,9 @@ its own or re-runs the emergent dynamics (those live in Proton / ProtonIngredien
 ``Spacetime.fromCells``, completing the facet skeleton with ``materializeFacets``.)doc")
       .def_static("load", &LiveComplex::load, py::arg("cells"),
                   py::arg("squared_lengths"), py::arg("vertex_times"),
-                  py::arg("dimensions"),
+                  py::arg("dimensions"), py::arg("canonical_links") =
+                      std::map<std::pair<std::uint64_t, std::uint64_t>,
+                               std::complex<double>>{},
                   "Load a live skeleton-complete complex from cells + per-edge "
                   "complex squared lengths + vertex times (schema-1 dump "
                   "rehydration).")

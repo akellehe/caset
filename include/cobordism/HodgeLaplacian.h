@@ -88,39 +88,26 @@ using namespace ::tessera::spacetime;
 /// vertex carried by no simplex is not a 0-cell and does not appear in
 /// \f$ L_0 \f$.
 ///
-/// ## The U(1) connection Laplacian is a DIFFERENT operator
+/// ## The C* connection compatibility operator is DIFFERENT
 ///
 /// `connectionLaplacian` (with `adjacency`, `degree`, `connectionSpectrum` and
-/// friends) is the **Hermitian U(1)-weighted graph Laplacian**
-/// \f$ L^{U(1)} = D - A \f$ on the 1-skeleton, assembled from each `Edge`'s
-/// complex weight \f$ \text{squaredLength}\cdot e^{i\,\text{phase}} \f$:
+/// friends) is the historical graph operator \f$L^{\mathbb C^*}=D-A\f$ on the
+/// 1-skeleton, now assembled from each edge's direct complex squared length
+/// \f$z_e\f$ and direct oriented link \f$U_{ij}\f$:
 ///
-/// - Adjacency \f$ A_{ij} = \sum_{(i,j)} \text{squaredLength}\cdot e^{i\,\text{phase}} \f$,
-///   summed over edges between \f$ i \f$ and \f$ j \f$; the stored source→target
-///   orientation carries \f$ +\text{phase} \f$, the reverse carries
-///   \f$ -\text{phase} \f$, so \f$ A = A^\dagger \f$ (Hermitian).
-/// - Degree \f$ D_{ii} = \sum |\text{squaredLength}| \f$ over incident edges —
-///   the **magnitude** convention, which keeps \f$ L^{U(1)} \f$ Hermitian and
-///   \f$ e^{-iL^{U(1)}t} \f$ unitary for complex weights, and makes it
-///   diagonally dominant with a non-negative diagonal, hence positive
-///   semidefinite by Gershgorin.
+/// - \f$A_{ij}=\sum z_eU_{ij}\f$ on the stored orientation;
+/// - \f$U_{ji}=U_{ij}^{-1}\f$, derived without a logarithm or conjugation;
+/// - the legacy diagonal remains \f$D_{ii}=\sum|z_e|\f$.
 ///
-/// It is NOT \f$ L_0 \f$ and is not of the derived form for any weight: on a
-/// Lorentzian complex a timelike edge has \f$ l^2 < 0 \f$, so the magnitude
-/// diagonal and the signed off-diagonal disagree and the row sums do not
-/// vanish. It carries the Aharonov--Bohm content that \f$ L_0 \f$ cannot —
-/// a nonzero U(1) flux lifts its zero mode, whereas \f$ \ker L_0 \f$ is always
-/// \f$ b_0 \f$ — and it is indexed over the FULL sorted vertex-id order
-/// (\f$ 0..N-1 \f$), including any lone vertex `ChainComplex` omits. Its
-/// consumers are named: `observables::SpectralGap`,
-/// `observables::HarmonicDimension`, `KuennethProduct::productCertificate`, and
-/// the degree-zero `EigenstateSynthesis` register readout.
+/// It is NOT \f$L_0\f$ and the magnitude diagonal is not the complex-bilinear
+/// Hodge weight. Generic complex \f$z/U\f$ makes this operator non-normal; the
+/// compact-real Hermitian case is a specialization to verify, never an
+/// assembly assumption. It is indexed over the full sorted vertex-id order,
+/// including vertices the `ChainComplex` omits.
 ///
-/// This class is the *operator* only: it does not compute fluxes, cycle bases,
-/// or Betti numbers (those are `WilsonLoop` / `ChainComplex`'s job), and it does
-/// not gauge-transform the mesh (gauge invariance is exercised by rephasing the
-/// edges and rebuilding). The connection operator's Hermitian eigendecomposition
-/// is lazily computed (Eigen `SelfAdjointEigenSolver<MatrixXcd>`) and cached.
+/// This class is the *operator* only: fluxes, cycle bases, and Betti numbers
+/// belong to `WilsonLoop` / `ChainComplex`. Direct link products require no
+/// resident additive phase or branch choice.
 class HodgeLaplacian {
   public:
     /// Which quantity the diagonal inner-product weight \f$ W_k \f$ is built from.

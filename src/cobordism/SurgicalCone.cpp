@@ -154,8 +154,8 @@ std::pair<bool, std::string> SurgicalCone::coneOut(
       if (covered(u, v)) continue;
       const auto it = eidx.find({std::min(u, v), std::max(u, v)});
       if (it == eidx.end()) continue;  // already absent
-      m.edges.emplace_back(u, v, it->second->getLength(),
-                           it->second->getPhase());
+      m.edges.emplace_back(u, v, it->second->squaredLength(),
+                           it->second->link(u, v));
       toRemove.push_back(it->second);
     }
 
@@ -254,16 +254,17 @@ std::pair<bool, std::string> SurgicalCone::coneIn(
         // to the unbranched form landed on +1 — kTimelikeSquaredLength is
         // already negative — which is exactly the spacelike auto-wiring value,
         // so a timelike cone-in produced edges identical to a spacelike one.
-        e->setLength(st_->balancedEdgeWiring()
-                         ? ::tessera::spacetime::Spacetime::balancedLength(
-                               kTimelikeSquaredLength, /*timelikeBranch=*/true)
-                         : std::sqrt(std::complex<double>(
-                               kTimelikeSquaredLength, 0.0)));
+        e->setSquaredLength(
+            st_->balancedEdgeWiring()
+                ? std::complex<double>(0.0, -std::abs(kTimelikeSquaredLength))
+                : std::complex<double>(kTimelikeSquaredLength, 0.0));
   }
   for (const auto &e : r.newEdges)
     if (e != nullptr && e->getSource() != nullptr && e->getTarget() != nullptr)
       m.edges.emplace_back(e->getSource()->getId(), e->getTarget()->getId(),
-                           (e->getLength() * e->getLength()), e->getPhase());
+                           e->squaredLength(),
+                           e->link(e->getSource()->getId(),
+                                   e->getTarget()->getId()));
 
   const auto verdict = validate();
   if (!verdict.first) {
@@ -294,11 +295,11 @@ void SurgicalCone::undoConeOut(const Move &m) {
   const auto restored = st_->createSimplexTracked(verts);
 
   auto eidx = edgeIndex(st_);
-  for (const auto &[u, v, w, theta] : m.edges) {
+  for (const auto &[u, v, z, link] : m.edges) {
     const auto it = eidx.find({std::min(u, v), std::max(u, v)});
     if (it != eidx.end()) {
-      it->second->setLength(w);  // the recorded complex LENGTH, bit-exact
-      it->second->setPhase(theta);
+      it->second->setSquaredLength(z);
+      it->second->setLink(u, v, link);
     }
   }
 

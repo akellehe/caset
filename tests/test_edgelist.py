@@ -21,6 +21,6 @@ class TestEdgeList(unittest.TestCase):
         self.assertEqual(len(el.toVector()), 1)
         self.assertEqual(el.size(), 1)
         self.assertEqual(len(el.toVector()), 1)
-        el.add(v1, v2, cmath.sqrt(complex(3.)))
+        el.add(v1, v2, complex(3.0))
         self.assertEqual(el.size(), 1)
         self.assertEqual(len(el.toVector()), 1)

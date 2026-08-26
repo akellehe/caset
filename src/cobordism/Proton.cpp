@@ -71,9 +71,8 @@ std::shared_ptr<Spacetime> Proton::buildMinimalSeed(bool balancedEdges) {
   // uniform |l^2| = 1 edges honor it too (balanced: l = sqrt(1/2)*(1+i)).
   host->setBalancedEdgeWiring(balancedEdges);
   for (auto *edge : host->getEdgeList()->toVector())
-    edge->setLength(balancedEdges
-                        ? ::tessera::spacetime::Spacetime::balancedLength(1.0)
-                        : std::sqrt(complexd(1.0, 0.0)));
+    edge->setSquaredLength(balancedEdges ? complexd(0.0, 1.0)
+                                         : complexd(1.0, 0.0));
   return host;
 }
 

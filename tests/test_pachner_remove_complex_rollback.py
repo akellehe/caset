@@ -1,4 +1,4 @@
-"""RemoveMove rollback restores the full complex l^2 AND the U(1) phase (#581).
+"""RemoveMove rollback restores direct complex z and U fields (#581, #882).
 
 ``RemoveMove::EdgeRecord`` was a plain double: rollback re-created the deleted
 vertex's edges with ``Re(l^2)`` only and phase 0, silently projecting
@@ -20,7 +20,6 @@ round trip on the CDT toroid extends the hinge-exactness contract.
 import unittest
 
 import pytest
-import cmath
 
 try:
     import tessera
@@ -37,16 +36,18 @@ def _seed_complex_geometry(st):
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
         lo, hi = min(a, b), max(a, b)
-        e.setLength(cmath.sqrt(complex(complex(1.0 + 0.001 * lo, 0.02 + 0.001 * hi))))
-        e.setPhase(0.05 + 0.002 * (lo * 7 + hi))
+        e.setSquaredLength(complex(1.0 + 0.001 * lo,
+                                   0.02 + 0.001 * hi))
+        e.setCanonicalLink(complex(1.05 + 0.001 * lo,
+                                   0.15 + 0.002 * (lo * 7 + hi)))
 
 
 def _edge_state(st):
     out = {}
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
-        out[(min(a, b), max(a, b))] = (complex(e.getLength()**2),
-                                       e.getPhase())
+        out[(min(a, b), max(a, b))] = (complex(e.squaredLength()),
+                                       complex(e.canonicalLink()))
     return out
 
 
@@ -59,10 +60,11 @@ def _assert_state_equal(before, after):
     assert set(before) == set(after), (
         f"edge set drifted: only-before={set(before) - set(after)} "
         f"only-after={set(after) - set(before)}")
-    for k, (sq, ph) in after.items():
-        sq0, ph0 = before[k]
+    for k, (sq, link) in after.items():
+        sq0, link0 = before[k]
         assert sq == sq0, f"edge {k}: l^2 {sq0!r} -> {sq!r} (not bit-exact)"
-        assert ph == ph0, f"edge {k}: phase {ph0!r} -> {ph!r} (not bit-exact)"
+        assert link == link0, (
+            f"edge {k}: canonical U {link0!r} -> {link!r} (not bit-exact)")
 
 
 def _grown_cdt_with_removable_vertex(d=4, n_simplices=60,

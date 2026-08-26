@@ -277,7 +277,7 @@ PersistentModularity PersistentModularity::fromSpacetime(const Spacetime &st,
         w.push_back(1.0);
         break;
       case WeightMap::ExpNegAbsLength:
-        w.push_back(std::exp(-std::abs(e->getLength())));
+        w.push_back(std::exp(-std::sqrt(std::abs(e->squaredLength()))));
         break;
     }
   }

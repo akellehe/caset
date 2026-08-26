@@ -45,8 +45,8 @@ enum class SpacetimeType : uint8_t {
   REGGE_PACHNER = 3,
   GFT_SPIN_FOAM = 4,
   RICCI_FLOW_DISCRETIZATION = 5,
-  // Variable complex edge weights (squaredLength * e^{i*phase}) for a
-  // Hermitian-weighted complex, unlike CDT's fixed real edge lengths.
+  // Variable direct complex squared lengths z and independent C* links U.
+  // The historical enum spelling is retained for compatibility.
   HERMITIAN_WEIGHTED = 6
 };
 
@@ -240,21 +240,27 @@ class Spacetime {
     /// Creates an edge \f$ e = (v_s, v_t) \f$ as a NULL edge: \f$ \ell^2 = 0 \f$,
     /// explicitly — no metric evaluation happens (#581; the doc previously
     /// claimed a metric-computed length). Callers that want a geometric length
-    /// use the explicit-length overload or set it afterwards (``Edge::setLength``).
+    /// use the explicit-squared-length overload or set it afterwards.
     /// @param src The source vertex \f$ v_s \f$
     /// @param tgt The target vertex \f$ v_t \f$
     /// @return Shared pointer to the created (null) edge
     [[nodiscard]] EdgePtr createEdge(const VertexPtr &src, const VertexPtr &tgt) const noexcept;
 
-    /// Creates an edge \f$ e = (v_s, v_t) \f$ with an explicit complex LENGTH.
-    /// A caller holding an \f$\ell^2\f$ passes ``std::sqrt(l2)`` and so chooses the
-    /// branch explicitly (#639); this used to be a ``double`` funnel that could only
-    /// express a real \f$\ell^2\f$.
+    /// Creates an edge \f$ e = (v_s, v_t) \f$ with an explicit complex
+    /// squared length \f$z_e\f$, stored verbatim without a root choice.
     /// @param src The source vertex \f$ v_s \f$
     /// @param tgt The target vertex \f$ v_t \f$
-    /// @param length The complex length \f$ \ell \f$ of the edge
+    /// @param squaredLength The complex squared length \f$z_e\f$
     /// @return Shared pointer to the created edge
-    [[nodiscard]] EdgePtr createEdge(const VertexPtr &src, const VertexPtr &tgt, std::complex<double> length) const noexcept;
+    [[nodiscard]] EdgePtr createEdge(const VertexPtr &src, const VertexPtr &tgt,
+                                     std::complex<double> squaredLength) const noexcept;
+
+    /// Ordered multiplicative holonomy around an oriented triangle
+    /// ``(v0,v1,v2)``:
+    /// ``U(v0,v1) U(v1,v2) U(v2,v0)``. Reversing the order returns its exact
+    /// inverse. No logarithm or phase branch is used.
+    [[nodiscard]] std::complex<double> faceHolonomy(
+        const std::vector<std::uint64_t> &orientedTriangle) const;
 
     // ========================================
     // Complex Building Methods
@@ -267,7 +273,7 @@ class Spacetime {
     /// @param numSimplices The number of simplices to add to the initial complex
     void build(int numSimplices=3);
 
-    /// Factory: build a pre-geometric simplicial complex from an explicit list
+    /// Legacy factory: build a pre-geometric simplicial complex from an explicit list
     /// of top \p cells (each a vertex-id tuple) — the cells-to-Spacetime
     /// builder the register/fill examples share. Creates a coordinate-free
     /// Lorentzian \f$ d \f$-dimensional CDT Spacetime, one vertex per distinct
@@ -276,7 +282,8 @@ class Spacetime {
     /// explicit rules:
     ///
     ///   - **Uniform Hermitian pin** (when \p vertexTimes is absent): every
-    ///     edge is pinned to squared length \p weight and phase \p phase. The
+    ///     edge is pinned to squared length \p weight and the explicitly
+    ///     converted link ``U=exp(i*phase)``. The
     ///     pre-geometric register/bulk surfaces use this.
     ///   - **Tracked metric** (when \p vertexTimes is present): each vertex
     ///     \f$ v \f$ is created carrying the single time coordinate
@@ -306,6 +313,17 @@ class Spacetime {
         const std::vector<std::vector<std::uint64_t>> &cells,
         double weight = 1.0,
         std::complex<double> phase = 0.0,
+        const std::optional<std::vector<double>> &vertexTimes = std::nullopt);
+
+    /// Complex-first cells builder. ``squaredLength`` and ``canonicalLink``
+    /// are direct microscopic fields; no root, logarithm, argument, or
+    /// normalization is performed. The link is stored on the canonical
+    /// ``min(id)->max(id)`` orientation.
+    [[nodiscard]] static std::shared_ptr<Spacetime> fromCellsWithFields(
+        int dimensions,
+        const std::vector<std::vector<std::uint64_t>> &cells,
+        std::complex<double> squaredLength = {1.0, 0.0},
+        std::complex<double> canonicalLink = {1.0, 0.0},
         const std::optional<std::vector<double>> &vertexTimes = std::nullopt);
 
     /// The dimension-generic staircase ("prism") triangulation of
@@ -564,9 +582,9 @@ class Spacetime {
       subBettiCache_[vertexSetKey] = {structuralRevision_, std::move(numbers)};
     }
 
-    /// Monotone METRIC revision: the structural revision plus the sum of every
-    /// edge's length and phase revisions. Any combinatorial change, any
-    /// ``setLength``, and any ``setPhase`` strictly increases it, so an
+    /// Monotone edge-field revision: the structural revision plus the sum of
+    /// every edge's geometry and link revisions. Any combinatorial change,
+    /// ``setSquaredLength``, or link mutation strictly increases it, so an
     /// unchanged value proves the operators built from this spacetime's
     /// geometry (the Hodge Laplacians and their spectra) are unchanged.
     /// O(#edges) walk per call — trivial beside the O(n³) work it gates.
@@ -589,22 +607,21 @@ class Spacetime {
       spectralSlotRevision_ = metricRevisionKey();
     }
 
-    /// Balanced (causally undecided) edge-wiring mode (#690). OFF (default):
-    /// new edges are wired on the causal axes — same-time ℓ = (√a, 0),
-    /// cross-slice ℓ = (0, √(α·a)). ON: every auto-wired edge gets EQUAL real
-    /// and imaginary components with the same per-class magnitude —
-    /// ℓ = √(a/2)·(1+i) resp. √(α·a/2)·(1+i) — so ℓ² is purely imaginary
-    /// (Re ℓ² = 0: born exactly on the null locus) and stage-2 relaxation
-    /// must choose each edge's causal character. Creation-time convention
-    /// only; existing edges are never rewritten by toggling this.
+    /// Legacy balanced edge-wiring proposal (#690). OFF (default): new edges
+    /// receive z=+a within a slice and z=-alpha*a across slices. ON: the same
+    /// structural proposal is placed on opposite imaginary axes,
+    /// z=+i*a and z=-i*alpha*a. This is a named initializer only: it is not a
+    /// generic interpretation of complex z, and existing edges are never
+    /// rewritten by toggling it.
     void setBalancedEdgeWiring(bool balanced) noexcept {
       balancedEdgeWiring_ = balanced;
     }
     [[nodiscard]] bool balancedEdgeWiring() const noexcept {
       return balancedEdgeWiring_;
     }
-    /// The balanced length of a given squared magnitude m: ℓ = √(m/2)·(1+i),
-    /// so |ℓ|² = m and ℓ² = i·m.
+    /// Legacy principal-root view of a balanced squared magnitude. New bulk
+    /// code stores z directly and does not call this helper.
+    /// The returned length is ℓ = √(m/2)·(1+i), so ℓ² = i·m.
     /// `timelikeBranch` selects the OTHER square root: `c(1 - i)` instead of
     /// `c(1 + i)`, i.e. `l^2 = -i|m|` instead of `+i|m|`. Both sit on the
     /// balanced convention (`Re l^2 = 0`, causally undecided at birth) and both
@@ -633,7 +650,8 @@ class Spacetime {
     /// The auto-wiring rule for a new edge, honoring the wiring mode:
     /// `crossSlice` = the endpoints sit on different time slices (the
     /// timelike class, scale α·a); same-slice edges use scale a.
-    [[nodiscard]] std::complex<double> autoWiredLength(bool crossSlice) const noexcept;
+    [[nodiscard]] std::complex<double> autoWiredSquaredLength(
+        bool crossSlice) const noexcept;
 
     /// Unregister every *orphaned* sub-simplex: a non-top simplex (size < d+1)
     /// that is no longer a face of any current top cell. Lazy facet/hinge

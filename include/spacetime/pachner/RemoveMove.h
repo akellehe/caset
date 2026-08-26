@@ -96,19 +96,13 @@ private:
 
   // Captured by apply() — for rollback
   bool applied_ = false;
-  // Edge data captured before deletion: (sourcePtr, targetPtr, the full
-  // COMPLEX length — recorded as the LENGTH, not l^2: the sqrt/square
-  // round-trip is not bit-exact and loses the branch (#639) — and the U(1)
-  // phase) so rollback restores the
-  // edge bit-exactly — a Re-only record silently projected analytically
-  // continued geometry onto the real axis and dropped the connection
-  // phase on every rejected move (#581).  EdgePtr alone is not enough
-  // because EdgeList::remove invalidates the slot.
+  // Direct branch-free edge fields captured before deletion. ``link`` is on
+  // the recorded source->target orientation.
   struct EdgeRecord {
     VertexPtr source;
     VertexPtr target;
-    std::complex<double> length;
-    std::complex<double> phase;
+    std::complex<double> squaredLength;
+    std::complex<double> link;
   };
   std::vector<EdgeRecord> deletedEdges_;
   // Vertex tuples of the 2 replacement simplices we actually created in

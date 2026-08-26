@@ -252,7 +252,7 @@ def assemble_cell(mi: dict, epsilon: float):
         sq = d * d
         if kind == "timelike":
             sq = -sq
-        st.createEdge(vert[u], vert[v], cmath.sqrt(complex(sq)))
+        st.createEdge(vert[u], vert[v], complex(sq))
 
     # An edge whose MI fell below the floor is infinitely long: the cell is
     # disconnected and has no Gram determinant.

@@ -878,12 +878,9 @@ std::string MultiCobordism::rawComplexJson(
   // raw complex a checkpoint records is then a pure function of the geometry,
   // so two runs that reached the same complex write the same bytes even when
   // their internal edge lists were built in different orders.
-  // Both edge fields are recorded. The length is orientation-free, but the
-  // connection phase is NOT: the link on the reverse orientation is the
-  // inverse, so a phase written against the canonical min->max direction must
-  // be negated whenever the live edge stores target->source. Recording the
-  // canonical-direction phase keeps the document a pure function of the
-  // geometry, exactly as the endpoint sort does for the cell order.
+  // Both microscopic fields are recorded directly. z is orientation-free and
+  // U is already stored on canonical min->max, so serialization makes no root,
+  // logarithm, argument, or center-branch choice.
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::pair<complexd, complexd>>
       edgesByEndpoints;
   for (const auto *edge : spacetime->getEdgeList()->toVector()) {
@@ -892,10 +889,8 @@ std::string MultiCobordism::rawComplexJson(
       continue;
     const auto a = edge->getSource()->getId();
     const auto b = edge->getTarget()->getId();
-    const complexd canonicalPhase =
-        (a < b) ? edge->getPhase() : -edge->getPhase();
-    edgesByEndpoints[{std::min(a, b), std::max(a, b)}] = {edge->getLength(),
-                                                         canonicalPhase};
+    edgesByEndpoints[{std::min(a, b), std::max(a, b)}] = {
+        edge->squaredLength(), edge->canonicalLink()};
   }
   std::string edgeText = "[";
   bool firstEdge = true;
@@ -905,15 +900,55 @@ std::string MultiCobordism::rawComplexJson(
     edgeText += Json::object({
         {"a", Json::integer(static_cast<long long>(entry.first.first))},
         {"b", Json::integer(static_cast<long long>(entry.first.second))},
-        {"length", Json::complexPair(entry.second.first)},
-        {"phase", Json::complexPair(entry.second.second)},
+        {"canonical_orientation",
+         Json::idArray({entry.first.first, entry.first.second})},
+        {"z", Json::complexPair(entry.second.first)},
+        {"U", Json::complexPair(entry.second.second)},
     });
   }
   edgeText += "]";
+
+  const auto blockJson = [](const BoundaryBlock &block) {
+    std::vector<std::uint64_t> vertices(block.vertices.begin(),
+                                        block.vertices.end());
+    return Json::object({
+        {"role", Json::str(block.role == BoundaryRole::Incoming
+                                ? "incoming" : "outgoing")},
+        {"vertices", Json::idArray(vertices)},
+        {"target", Json::array(block.target, [](const complexd &value) {
+           return Json::complexPair(value);
+         })},
+    });
+  };
+  std::vector<BoundaryBlock> boundaryBlocks;
+  boundaryBlocks.reserve(inputBlocks_.size() + outputBlocks_.size());
+  boundaryBlocks.insert(boundaryBlocks.end(), inputBlocks_.begin(),
+                        inputBlocks_.end());
+  boundaryBlocks.insert(boundaryBlocks.end(), outputBlocks_.begin(),
+                        outputBlocks_.end());
+  const std::string boundaryText =
+      Json::array(boundaryBlocks, blockJson);
+
+  const std::string cutText = Json::array(
+      coorientedCuts_, [](const CoorientedCut &cut) {
+        const std::string simplexText = Json::array(
+            cut.orientedSimplices,
+            [](const std::vector<std::uint64_t> &simplex) {
+              return Json::idArray(simplex);
+            });
+        return Json::object({
+            {"id", Json::str(cut.id)},
+            {"coorientation",
+             Json::integer(coorientationSign(cut.coorientation))},
+            {"oriented_simplices", simplexText},
+        });
+      });
   return Json::object({
       {"dimensions", Json::integer(spacetime->getDimensions())},
       {"cells", cellText},
       {"edges", edgeText},
+      {"boundary_components", boundaryText},
+      {"cooriented_cuts", cutText},
   });
 }
 
@@ -949,13 +984,16 @@ void MultiCobordism::runRecursiveAnalysisOn(
   for (const auto &topSimplex : spacetime->getTopSimplices())
     cellSet.insert(topSimplex->topTuple());
   std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> edgeLengths;
+  std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> edgeLinks;
   for (const auto *edge : spacetime->getEdgeList()->toVector()) {
     if (edge == nullptr || edge->getSource() == nullptr ||
         edge->getTarget() == nullptr)
       continue;
     const auto a = edge->getSource()->getId();
     const auto b = edge->getTarget()->getId();
-    edgeLengths[{std::min(a, b), std::max(a, b)}] = edge->getLength();
+    const auto key = std::make_pair(std::min(a, b), std::max(a, b));
+    edgeLengths[key] = edge->squaredLength();
+    edgeLinks[key] = edge->canonicalLink();
   }
   TouchedStar star;
   std::vector<std::uint64_t> touchedCells;
@@ -966,14 +1004,18 @@ void MultiCobordism::runRecursiveAnalysisOn(
       if (!cellSet.count(cell)) star.addDeletedCell(cell);
     for (const auto &entry : edgeLengths) {
       const auto previous = analysisEdgeLengths_.find(entry.first);
+      const auto previousLink = analysisEdgeLinks_.find(entry.first);
       if (previous == analysisEdgeLengths_.end() ||
-          previous->second != entry.second)
+          previous->second != entry.second ||
+          previousLink == analysisEdgeLinks_.end() ||
+          previousLink->second != edgeLinks.at(entry.first))
         star.addChangedEdge(entry.first.first, entry.first.second);
     }
     for (const auto vertexId : star.vertices()) touchedCells.push_back(vertexId);
   }
   analysisCellSet_ = cellSet;
   analysisEdgeLengths_ = edgeLengths;
+  analysisEdgeLinks_ = edgeLinks;
   analysisCellSetValid_ = true;
 
   // The cache survives ACROSS passes while the complex object does, so a
@@ -1646,6 +1688,97 @@ int MultiCobordism::checkpointVersionOf(const std::string &checkpoint) {
   return static_cast<int>(Json::asNumber(version));
 }
 
+std::string MultiCobordism::migrateLegacyCheckpointV5(
+    const std::string &checkpoint) {
+  if (checkpointVersionOf(checkpoint) != 5)
+    throw std::invalid_argument(
+        "MultiCobordism legacy migration: expected schema version 5");
+  const std::string rawComplex = Json::topLevelValue(checkpoint, "raw_complex");
+  if (rawComplex.empty())
+    throw std::invalid_argument(
+        "MultiCobordism legacy migration: no raw_complex");
+  const int dimensions = static_cast<int>(
+      Json::asNumber(Json::topLevelValue(rawComplex, "dimensions")));
+  std::vector<std::vector<std::uint64_t>> cells;
+  for (const auto &cellText :
+       Json::elements(Json::topLevelValue(rawComplex, "cells"))) {
+    std::vector<std::uint64_t> cell;
+    for (const auto &idText : Json::elements(cellText))
+      cell.push_back(static_cast<std::uint64_t>(Json::asNumber(idText)));
+    cells.push_back(std::move(cell));
+  }
+  auto spacetime = Spacetime::fromCellsWithFields(
+      dimensions, cells, complexd{1.0, 0.0}, complexd{1.0, 0.0});
+  std::map<std::pair<std::uint64_t, std::uint64_t>,
+           std::pair<complexd, complexd>> fields;
+  for (const auto &edgeText :
+       Json::elements(Json::topLevelValue(rawComplex, "edges"))) {
+    const auto a = static_cast<std::uint64_t>(
+        Json::asNumber(Json::topLevelValue(edgeText, "a")));
+    const auto b = static_cast<std::uint64_t>(
+        Json::asNumber(Json::topLevelValue(edgeText, "b")));
+    if (a >= b)
+      throw std::invalid_argument(
+          "MultiCobordism legacy migration: endpoints are not canonical");
+    const auto lengthParts =
+        Json::elements(Json::topLevelValue(edgeText, "length"));
+    const auto phaseParts =
+        Json::elements(Json::topLevelValue(edgeText, "phase"));
+    if (lengthParts.size() != 2 || phaseParts.size() != 2)
+      throw std::invalid_argument(
+          "MultiCobordism legacy migration: edge needs length and phase");
+    const complexd length{Json::asNumber(lengthParts[0]),
+                          Json::asNumber(lengthParts[1])};
+    const complexd phase{Json::asNumber(phaseParts[0]),
+                         Json::asNumber(phaseParts[1])};
+    if (fields.count({a, b}) != 0)
+      throw std::invalid_argument(
+          "MultiCobordism legacy migration: duplicate edge record");
+    fields[{a, b}] = {
+        length * length,
+        std::exp(complexd{0.0, 1.0} * phase),
+    };
+  }
+  for (auto *edge : spacetime->getEdgeList()->toVector()) {
+    const auto a = edge->getSource()->getId();
+    const auto b = edge->getTarget()->getId();
+    const auto key = std::make_pair(std::min(a, b), std::max(a, b));
+    const auto found = fields.find(key);
+    if (found == fields.end())
+      throw std::invalid_argument(
+          "MultiCobordism legacy migration: missing edge record");
+    edge->setSquaredLength(found->second.first);
+    edge->setCanonicalLink(found->second.second);
+    fields.erase(found);
+  }
+  if (!fields.empty())
+    throw std::invalid_argument(
+        "MultiCobordism legacy migration: extra edge record");
+
+  const std::string provenance = Json::topLevelValue(checkpoint, "provenance");
+  const std::uint64_t seed =
+      provenance.empty()
+          ? 0
+          : static_cast<std::uint64_t>(
+                Json::asNumber(Json::topLevelValue(provenance, "seed")));
+  MultiCobordism migrated(spacetime, {}, {}, {1}, 1.0, seed);
+  migrated.setObjective(std::make_shared<JointStationarityObjective>());
+  migrated.setSimulationMode(SimulationMode::Replay);
+  AnalysisConfig config;
+  config.enabled = true;
+  config.coldCaches = true;
+  migrated.setAnalysisConfig(config);
+  migrated.runRecursiveAnalysis();
+  const std::string marker = Json::object({
+      {"source_schema", Json::integer(5)},
+      {"length_to_z", Json::str("z=length*length")},
+      {"phase_to_link", Json::str("U=exp(i*phase)")},
+      {"square_root_sheet_selected", Json::boolean(false)},
+  });
+  const std::string converted = migrated.checkpointJson();
+  return "{\"legacy_migration\": " + marker + ", " + converted.substr(1);
+}
+
 std::string MultiCobordism::replayCheckpoint(const std::string &checkpoint) {
   const int version = checkpointVersionOf(checkpoint);
   if (version != checkpointSchemaVersion())
@@ -1668,25 +1801,44 @@ std::string MultiCobordism::replayCheckpoint(const std::string &checkpoint) {
       cell.push_back(static_cast<std::uint64_t>(Json::asNumber(idText)));
     cells.push_back(std::move(cell));
   }
-  auto spacetime = Spacetime::fromCells(dimensions, cells, 1.0,
-                                        replayPhaseDefault());
-  std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> lengths;
-  std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> phases;
+  auto spacetime = Spacetime::fromCellsWithFields(
+      dimensions, cells, complexd{1.0, 0.0}, complexd{1.0, 0.0});
+  std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> squaredLengths;
+  std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> canonicalLinks;
   for (const auto &edgeText :
        Json::elements(Json::topLevelValue(rawComplex, "edges"))) {
     const auto a = static_cast<std::uint64_t>(
         Json::asNumber(Json::topLevelValue(edgeText, "a")));
     const auto b = static_cast<std::uint64_t>(
         Json::asNumber(Json::topLevelValue(edgeText, "b")));
-    const auto parts = Json::elements(Json::topLevelValue(edgeText, "length"));
-    if (parts.size() != 2) continue;
-    lengths[{std::min(a, b), std::max(a, b)}] =
-        complexd{Json::asNumber(parts[0]), Json::asNumber(parts[1])};
-    const auto phaseParts =
-        Json::elements(Json::topLevelValue(edgeText, "phase"));
-    if (phaseParts.size() == 2)
-      phases[{std::min(a, b), std::max(a, b)}] = complexd{
-          Json::asNumber(phaseParts[0]), Json::asNumber(phaseParts[1])};
+    const auto orientation = Json::elements(
+        Json::topLevelValue(edgeText, "canonical_orientation"));
+    if (a >= b || orientation.size() != 2 ||
+        static_cast<std::uint64_t>(Json::asNumber(orientation[0])) != a ||
+        static_cast<std::uint64_t>(Json::asNumber(orientation[1])) != b)
+      throw std::invalid_argument(
+          "MultiCobordism checkpoint: missing or inconsistent canonical "
+          "edge orientation");
+    const auto zParts = Json::elements(Json::topLevelValue(edgeText, "z"));
+    const auto uParts = Json::elements(Json::topLevelValue(edgeText, "U"));
+    if (zParts.size() != 2 || uParts.size() != 2)
+      throw std::invalid_argument(
+          "MultiCobordism checkpoint: each edge needs complex z and U pairs");
+    const auto key = std::make_pair(a, b);
+    if (squaredLengths.count(key) != 0)
+      throw std::invalid_argument(
+          "MultiCobordism checkpoint: duplicate edge record");
+    const complexd z{Json::asNumber(zParts[0]), Json::asNumber(zParts[1])};
+    const complexd U{Json::asNumber(uParts[0]), Json::asNumber(uParts[1])};
+    if (!std::isfinite(z.real()) || !std::isfinite(z.imag()))
+      throw std::invalid_argument(
+          "MultiCobordism checkpoint: edge z must be finite and complex");
+    if (U == complexd{0.0, 0.0} || !std::isfinite(U.real()) ||
+        !std::isfinite(U.imag()))
+      throw std::invalid_argument(
+          "MultiCobordism checkpoint: edge U must be finite and non-zero");
+    squaredLengths[key] = z;
+    canonicalLinks[key] = U;
   }
   for (auto *edge : spacetime->getEdgeList()->toVector()) {
     if (edge == nullptr || edge->getSource() == nullptr ||
@@ -1694,14 +1846,82 @@ std::string MultiCobordism::replayCheckpoint(const std::string &checkpoint) {
       continue;
     const auto a = edge->getSource()->getId();
     const auto b = edge->getTarget()->getId();
-    const auto found = lengths.find({std::min(a, b), std::max(a, b)});
-    if (found != lengths.end()) edge->setLength(found->second);  // branch-exact
-    const auto foundPhase = phases.find({std::min(a, b), std::max(a, b)});
-    if (foundPhase != phases.end())
-      // The document records the phase on the canonical min->max direction;
-      // an edge stored the other way round carries the inverse link, so the
-      // phase is negated back onto its own orientation.
-      edge->setPhase((a < b) ? foundPhase->second : -foundPhase->second);
+    const auto key = std::make_pair(std::min(a, b), std::max(a, b));
+    const auto foundZ = squaredLengths.find(key);
+    const auto foundU = canonicalLinks.find(key);
+    if (foundZ == squaredLengths.end() || foundU == canonicalLinks.end())
+      throw std::invalid_argument(
+          "MultiCobordism checkpoint: missing edge field record");
+    edge->setSquaredLength(foundZ->second);
+    edge->setCanonicalLink(foundU->second);
+    squaredLengths.erase(foundZ);
+    canonicalLinks.erase(foundU);
+  }
+  if (!squaredLengths.empty() || !canonicalLinks.empty())
+    throw std::invalid_argument(
+        "MultiCobordism checkpoint: edge record is not in the complex");
+
+  const std::string boundaryComponents =
+      Json::topLevelValue(rawComplex, "boundary_components");
+  if (boundaryComponents.empty())
+    throw std::invalid_argument(
+        "MultiCobordism checkpoint: missing structural boundary metadata");
+  const std::string coorientedCuts =
+      Json::topLevelValue(rawComplex, "cooriented_cuts");
+  if (coorientedCuts.empty())
+    throw std::invalid_argument(
+        "MultiCobordism checkpoint: missing coorientation metadata");
+
+  std::vector<BoundaryBlock> replayInputs;
+  std::vector<BoundaryBlock> replayOutputs;
+  for (const auto &blockText : Json::elements(boundaryComponents)) {
+    const auto roleText =
+        Json::asString(Json::topLevelValue(blockText, "role"));
+    BoundaryBlock block;
+    if (roleText == "incoming")
+      block.role = BoundaryRole::Incoming;
+    else if (roleText == "outgoing")
+      block.role = BoundaryRole::Outgoing;
+    else
+      throw std::invalid_argument(
+          "MultiCobordism checkpoint: unknown boundary role");
+    for (const auto &idText :
+         Json::elements(Json::topLevelValue(blockText, "vertices")))
+      block.vertices.insert(
+          static_cast<std::uint64_t>(Json::asNumber(idText)));
+    for (const auto &valueText :
+         Json::elements(Json::topLevelValue(blockText, "target"))) {
+      const auto parts = Json::elements(valueText);
+      if (parts.size() != 2)
+        throw std::invalid_argument(
+            "MultiCobordism checkpoint: boundary target must be complex");
+      block.target.emplace_back(Json::asNumber(parts[0]),
+                                Json::asNumber(parts[1]));
+    }
+    (block.role == BoundaryRole::Incoming ? replayInputs : replayOutputs)
+        .push_back(std::move(block));
+  }
+
+  std::vector<CoorientedCut> replayCuts;
+  for (const auto &cutText : Json::elements(coorientedCuts)) {
+    CoorientedCut cut;
+    cut.id = Json::asString(Json::topLevelValue(cutText, "id"));
+    const int sign = static_cast<int>(Json::asNumber(
+        Json::topLevelValue(cutText, "coorientation")));
+    if (sign != -1 && sign != 1)
+      throw std::invalid_argument(
+          "MultiCobordism checkpoint: cut coorientation must be +/-1");
+    cut.coorientation = sign > 0 ? Coorientation::Positive
+                                 : Coorientation::Negative;
+    for (const auto &simplexText : Json::elements(
+             Json::topLevelValue(cutText, "oriented_simplices"))) {
+      std::vector<std::uint64_t> simplex;
+      for (const auto &idText : Json::elements(simplexText))
+        simplex.push_back(
+            static_cast<std::uint64_t>(Json::asNumber(idText)));
+      cut.orientedSimplices.push_back(std::move(simplex));
+    }
+    replayCuts.push_back(std::move(cut));
   }
 
   // Rebuild the node the checkpoint describes and recompute EVERYTHING cold.
@@ -1729,6 +1949,9 @@ std::string MultiCobordism::replayCheckpoint(const std::string &checkpoint) {
   if (resolutions.empty()) resolutions.push_back(1.0);
 
   MultiCobordism replayed(spacetime, {}, {}, {degrees.back()}, 1.0, seed);
+  replayed.inputBlocks_ = std::move(replayInputs);
+  replayed.outputBlocks_ = std::move(replayOutputs);
+  replayed.coorientedCuts_ = std::move(replayCuts);
   replayed.setObjective(std::make_shared<JointStationarityObjective>());
   replayed.setSimulationMode(SimulationMode::Replay);
   AnalysisConfig config;

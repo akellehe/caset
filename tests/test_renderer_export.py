@@ -1,10 +1,11 @@
-"""GraphML/DOT export carries the full complex l^2 + phase and classifies
+"""GraphML/DOT export carries the full direct complex z/U fields and classifies
 via the canonical Edge helpers (#581 scope item 5).
 
 The exporters used the superseded sign-of-Re classifier (contradicting the
 same file's PNG path, which already used ``Edge::isTimelike()``) and had no
-key for ``Im l^2`` or the U(1) phase at all.  Now: ``squared_length`` stays
-Re (compatibility), ``squared_length_im`` and ``phase`` are new keys, and
+key for ``Im z`` or the multiplicative connection at all. Now:
+``squared_length`` stays Re (compatibility), ``squared_length_im`` plus
+``link_re``/``link_im`` carry the direct fields, and
 ``timelike`` is ``Edge::isTimelike()``.
 """
 
@@ -13,7 +14,6 @@ import re
 import xml.etree.ElementTree as ET
 
 import pytest
-import cmath
 
 try:
     import tessera
@@ -26,21 +26,21 @@ pytestmark = pytest.mark.skipif(not _IMPORT_OK, reason="tessera not built")
 
 def _host():
     """A triangle carrying one timelike edge, one Im l^2 != 0 edge, and a
-    genuinely COMPLEX connection phase on the spacelike edge, so the exporter's
+    genuinely complex C* link on the spacelike edge, so the exporter's
     non-compact component is exercised too."""
     sig = tessera.Signature(2, tessera.Lorentzian)
     metric = tessera.Metric(True, sig)
     st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
                            tessera.PREFERRED, tessera.SolidSimplex(2))
     st.build()
-    values = {(0, 1): (-2.0 + 0.0j, 0.0),              # timelike
-              (0, 2): (1.0 + 0.25j, 0.0),              # analytically continued
-              (1, 2): (1.5 + 0.0j, complex(0.7, -0.3))}  # spacelike, twisted
+    values = {(0, 1): (-2.0 + 0.0j, 1.0 + 0.0j),
+              (0, 2): (1.0 + 0.25j, 0.9 + 0.2j),
+              (1, 2): (1.5 + 0.0j, complex(0.7, -0.3))}
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
-        sq, ph = values[(min(a, b), max(a, b))]
-        e.setLength(cmath.sqrt(complex(sq)))
-        e.setPhase(ph)
+        sq, link = values[(min(a, b), max(a, b))]
+        e.setSquaredLength(sq)
+        e.setCanonicalLink(link)
     return st, values
 
 
@@ -62,7 +62,7 @@ def test_graphml_export_roundtrip(tmp_path):
     ns = {"g": tree.getroot().tag.split("}")[0].strip("{")}
     # key declarations exist for the new attributes
     key_names = {k.get("attr.name") for k in tree.getroot().findall("g:key", ns)}
-    assert {"squared_length", "squared_length_im", "phase", "phase_im",
+    assert {"squared_length", "squared_length_im", "link_re", "link_im",
             "timelike"} <= key_names
 
     seen = {}
@@ -72,12 +72,12 @@ def test_graphml_export_roundtrip(tmp_path):
         seen[(min(a, b), max(a, b))] = data
     assert set(seen) == set(values)
 
-    for k, (sq, ph) in values.items():
+    for k, (sq, link) in values.items():
         d = seen[k]
         assert math.isclose(float(d["sq_length"]), sq.real, abs_tol=1e-12)
         assert math.isclose(float(d["sq_length_im"]), sq.imag, abs_tol=1e-12)
-        assert math.isclose(float(d["phase"]), complex(ph).real, abs_tol=1e-12)
-        assert math.isclose(float(d["phase_im"]), complex(ph).imag,
+        assert math.isclose(float(d["link_re"]), link.real, abs_tol=1e-12)
+        assert math.isclose(float(d["link_im"]), link.imag,
                             abs_tol=1e-12)
         assert (d["timelike"] == "true") == canon[k], (
             f"edge {k}: exported timelike={d['timelike']} disagrees with "
@@ -101,12 +101,12 @@ def test_dot_export_roundtrip(tmp_path):
     path = str(tmp_path / "host.dot")
     st.save(path)
 
-    # The connection phase is complex, so it exports as a real/imag pair
+    # The direct link is complex, so it exports as a real/imag pair
     # exactly as the squared length does.
     pat = re.compile(
         r"^\s*(\d+)\s*--\s*(\d+)\s*\[squared_length=([-\d.e+]+), "
-        r"squared_length_im=([-\d.e+]+), phase=([-\d.e+]+), "
-        r"phase_im=([-\d.e+]+), timelike=(true|false)", re.M)
+        r"squared_length_im=([-\d.e+]+), link_re=([-\d.e+]+), "
+        r"link_im=([-\d.e+]+), timelike=(true|false)", re.M)
     with open(path) as f:
         text = f.read()
     seen = {}
@@ -115,12 +115,12 @@ def test_dot_export_roundtrip(tmp_path):
         seen[(min(a, b), max(a, b))] = m
     assert set(seen) == set(values), text
 
-    for k, (sq, ph) in values.items():
+    for k, (sq, link) in values.items():
         m = seen[k]
         assert math.isclose(float(m.group(3)), sq.real, abs_tol=1e-12)
         assert math.isclose(float(m.group(4)), sq.imag, abs_tol=1e-12)
-        assert math.isclose(float(m.group(5)), complex(ph).real, abs_tol=1e-12)
-        assert math.isclose(float(m.group(6)), complex(ph).imag, abs_tol=1e-12)
+        assert math.isclose(float(m.group(5)), link.real, abs_tol=1e-12)
+        assert math.isclose(float(m.group(6)), link.imag, abs_tol=1e-12)
         assert (m.group(7) == "true") == canon[k]
 
 

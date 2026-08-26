@@ -27,8 +27,11 @@ from tessera import Vertex, Edge
 
 
 def _edge(length):
+    # This legacy classifier is specified in terms of a selected length view;
+    # the direct Edge constructor accepts z, so square explicitly at the
+    # compatibility boundary.
     return Edge(Vertex(1, [0.0, 0.0, 0.0, 0.0]),
-                Vertex(2, [0.0, 0.0, 0.0, 1.0]), complex(length))
+                Vertex(2, [0.0, 0.0, 0.0, 1.0]), complex(length) ** 2)
 
 
 def _cases(edge):

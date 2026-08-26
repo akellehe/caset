@@ -350,25 +350,29 @@ Uses the topology's builder (e.g. Toroid staircase triangulation) to
 create the initial simplicial complex.  The actual number of simplices
 may differ slightly due to slab quantization.)doc")
       .def("metricRevisionKey", &Spacetime::metricRevisionKey,
-           "Monotone metric revision: structural revision + every live edge's "
-           "length and phase revision counters. Strictly increases under any "
-           "mutation (creation, setLength, setPhase, simplex register/"
+           "Monotone edge-field revision: structural revision + every live "
+           "edge's geometry and link revisions. Strictly increases under any "
+           "mutation (creation, setSquaredLength, direct link mutation, simplex register/"
            "unregister, edge removal), so it can key caches and assert "
            "invariants (#692).")
+      .def("faceHolonomy", &Spacetime::faceHolonomy,
+           py::arg("oriented_triangle"),
+           "Return U_01 U_12 U_20 for three oriented vertex ids. Reversal "
+           "returns the inverse; no logarithm or phase branch is used.")
       .def_static("fromCells", &Spacetime::fromCells,
            py::arg("dimensions"), py::arg("cells"),
            py::arg("weight") = 1.0,
            py::arg("phase") = std::complex<double>{0.0, 0.0},
            py::arg("vertexTimes") = std::optional<std::vector<double>>{},
-           R"doc(Build a pre-geometric complex from an explicit list of top cells.
+           R"doc(Legacy builder from an explicit list of top cells.
 
 The cells-to-Spacetime factory the register/fill builders share. Creates a
 coordinate-free Lorentzian ``dimensions``-D CDT spacetime, one vertex per
 distinct id, one top simplex per cell (edges auto-wired), and sets the edge
 geometry by one of two explicit rules:
 
-  - Uniform Hermitian pin (vertexTimes=None): every edge is pinned to squared
-    length ``weight`` and phase ``phase``.
+  - Uniform pin (vertexTimes=None): every edge is pinned to squared length
+    ``weight`` and the explicitly converted link ``U=exp(i*phase)``.
   - Tracked metric (vertexTimes given): each vertex ``v`` carries the single
     time coordinate ``vertexTimes[v]``, so the tracked metric rule assigns
     spacelike (equal-time) and timelike (differing-time) edges automatically.
@@ -387,6 +391,16 @@ Args:
         given).
     vertexTimes: Optional per-vertex time indexed by vertex id; its presence
         selects the tracked-metric rule. Must index every vertex id in cells.)doc")
+      .def_static("fromCellsWithFields", &Spacetime::fromCellsWithFields,
+           py::arg("dimensions"), py::arg("cells"),
+           py::arg("squaredLength") = std::complex<double>{1.0, 0.0},
+           py::arg("canonicalLink") = std::complex<double>{1.0, 0.0},
+           py::arg("vertexTimes") = std::optional<std::vector<double>>{},
+           R"doc(Build a complex from direct branch-free complex edge fields.
+
+``squaredLength`` is the exact complex z_e placed on every edge and
+``canonicalLink`` is the exact nonzero U_xy on min(id)->max(id). No square
+root, logarithm, argument, compact projection, or normalization is used.)doc")
       .def_static("prismCells", &Spacetime::prismCells,
            py::arg("cells"), py::arg("layers") = 1,
            py::arg("twist") =
@@ -502,12 +516,13 @@ the materialization without the boundary scan.)doc")
       .def("createEdge",
            static_cast<EdgePtr (Spacetime::*)(const VertexPtr &, const VertexPtr &,
                                               std::complex<double>) const>(&
-             Spacetime::createEdge),
+           Spacetime::createEdge),
            py::arg("source"),
            py::arg("target"),
-           py::arg("length"),
+           py::arg("squaredLength"),
            py::return_value_policy::reference,
-           "Create an edge between two vertices with a specified complex LENGTH (pass sqrt(l2) to give it by squared value)!")
+           "Create an edge with exact complex squared length z_e; the value "
+           "is stored verbatim and no square-root sheet is selected.")
       .def("createVertex",
            static_cast<VertexPtr (Spacetime::*)(const std::uint64_t) const noexcept>(
              &Spacetime::createVertex),

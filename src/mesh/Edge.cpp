@@ -33,18 +33,17 @@ class Simplex;
     Edge::Edge(
       const VertexPtr &source_,
       const VertexPtr &target_,
-      std::complex<double> length
-    ) : source(source_), target(target_), length_(length),
-        phase(0.0), fingerprint({source_->getId(), target_->getId()}) {
+      std::complex<double> squaredLength
+    ) : source(source_), target(target_), squaredLength_(squaredLength),
+        fingerprint({source_->getId(), target_->getId()}) {
     }
 
     Edge::Edge(
       const VertexPtr &source_,
       const VertexPtr &target_
-    ) : source(source_), target(target_), phase(0.0), fingerprint({source_->getId(), target_->getId()}) {
-      // Fallback (CDT always provides explicit edge lengths): a random real,
-      // i.e. spacelike, length.
-      length_ = {random_uniform(), 0.0};
+    ) : source(source_), target(target_), fingerprint({source_->getId(), target_->getId()}) {
+      // Fallback only.  Production complex-first paths provide z explicitly.
+      squaredLength_ = {random_uniform(), 0.0};
     }
 
     [[nodiscard]] const VertexPtr &Edge::getSource() const noexcept {
@@ -56,30 +55,82 @@ class Simplex;
     }
 
     [[nodiscard]] std::complex<double> Edge::getPhase() const noexcept {
-      return phase;
+      // Legacy principal-log view: phase = -i Log(U_source,target).
+      return std::complex<double>(0.0, -1.0) *
+             std::log(link(source->getId(), target->getId()));
     }
 
     [[nodiscard]] std::complex<double> Edge::getLength() const noexcept {
-      return length_;
+      // Legacy principal-root view.  Direct geometry reads squaredLength().
+      return std::sqrt(squaredLength_);
+    }
+
+    [[nodiscard]] std::complex<double> Edge::link(
+        std::uint64_t from, std::uint64_t to) const {
+      const auto sourceId = source->getId();
+      const auto targetId = target->getId();
+      if (from == to ||
+          !((from == sourceId && to == targetId) ||
+            (from == targetId && to == sourceId))) {
+        throw std::invalid_argument(
+            "Edge::link orientation does not name this edge's endpoints");
+      }
+      return from < to ? canonicalLink_ : 1.0 / canonicalLink_;
+    }
+
+    void Edge::setCanonicalLink(std::complex<double> nonzeroU) {
+      if (nonzeroU == std::complex<double>{0.0, 0.0} ||
+          !std::isfinite(nonzeroU.real()) ||
+          !std::isfinite(nonzeroU.imag()))
+        throw std::invalid_argument("Edge link must be non-zero (C*)");
+      canonicalLink_ = nonzeroU;
+      ++linkRevision_;
+    }
+
+    void Edge::setLink(std::uint64_t from, std::uint64_t to,
+                       std::complex<double> nonzeroU) {
+      const auto sourceId = source->getId();
+      const auto targetId = target->getId();
+      if (from == to ||
+          !((from == sourceId && to == targetId) ||
+            (from == targetId && to == sourceId))) {
+        throw std::invalid_argument(
+            "Edge::setLink orientation does not name this edge's endpoints");
+      }
+      if (nonzeroU == std::complex<double>{0.0, 0.0})
+        throw std::invalid_argument("Edge link must be non-zero (C*)");
+      setCanonicalLink(from < to ? nonzeroU : 1.0 / nonzeroU);
+    }
+
+    void Edge::setPhase(std::complex<double> p) {
+      // Legacy conversion is named and isolated here.  New paths store U.
+      setLink(source->getId(), target->getId(),
+              std::exp(std::complex<double>(0.0, 1.0) * p));
+    }
+
+    void Edge::recanonicalizeLink(std::uint64_t oldSourceId,
+                                  std::uint64_t oldTargetId) noexcept {
+      const bool oldCanonicalForward = oldSourceId < oldTargetId;
+      const bool newCanonicalForward = source->getId() < target->getId();
+      if (oldCanonicalForward != newCanonicalForward) {
+        canonicalLink_ = 1.0 / canonicalLink_;
+        ++linkRevision_;
+      }
     }
 
     [[nodiscard]] double Edge::squaredArgument() const noexcept {
-      const auto l = getLength();
-      return std::arg(l * l);  // in (-pi, pi]
+      return std::arg(squaredLength_);  // legacy presentation in (-pi, pi]
     }
 
     [[nodiscard]] double Edge::lorentzianMagnitude() const noexcept {
-      // Re(l^2) = x^2 - t^2 for l = x + i t. Formed from the parts rather than as
-      // (l*l).real() so the subtraction is the only cancellation step. Carried for
-      // consumers that want the interval; it does not decide the disposition alone.
-      const auto l = getLength();
-      return l.real() * l.real() - l.imag() * l.imag();
+      return squaredLength_.real();
     }
 
     [[nodiscard]] bool Edge::isDegenerate() const noexcept {
       // The EUCLIDEAN modulus, and the one place it is the right norm: an edge with
       // no extent at all is ABSENT, not lightlike.
-      return std::abs(getLength()) <= kDegenerateEpsilon;
+      return std::abs(squaredLength_) <=
+             kDegenerateEpsilon * kDegenerateEpsilon;
     }
 
     [[nodiscard]] bool Edge::isSpacelike() const noexcept {
@@ -126,17 +177,23 @@ class Simplex;
 #endif
 
     void Edge::replaceSourceVertex(const VertexPtr &newSource) {
+      const auto oldSourceId = source->getId();
+      const auto oldTargetId = target->getId();
       fingerprint.removeId(source->getId());
       source = newSource;
       fingerprint.addId(newSource->getId());
       fingerprint.refresh();
+      recanonicalizeLink(oldSourceId, oldTargetId);
     }
 
     void Edge::replaceTargetVertex(const VertexPtr &newTarget) {
+      const auto oldSourceId = source->getId();
+      const auto oldTargetId = target->getId();
       fingerprint.removeId(target->getId());
       target = newTarget;
       fingerprint.addId(newTarget->getId());
       fingerprint.refresh();
+      recanonicalizeLink(oldSourceId, oldTargetId);
     }
 
     bool Edge::hasVertex(std::uint64_t vertexId) const {
@@ -204,4 +261,3 @@ double Edge::vanRaamsdonkLengthFor(double I, double iMax,
 }
 
 }
-

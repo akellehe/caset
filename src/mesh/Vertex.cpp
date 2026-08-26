@@ -136,8 +136,9 @@ Vertex::moveEdgesToImpl(
     // the pool slot and createEdge reuses freed slots, so oldEdge can alias the
     // NEW edge afterwards — reading through it then returns the new edge's own
     // fresh state, not the moved edge's (#597).
-    const std::complex<double> movedLength = oldEdge->getLength();
-    const std::complex<double> movedPhase = oldEdge->getPhase();
+    const std::complex<double> movedSquaredLength = oldEdge->squaredLength();
+    const std::complex<double> movedLink =
+        oldEdge->link(sourceVertex->getId(), targetVertex->getId());
 
     spacetime->absorbRemovedEdgeRevisions(oldEdge);
     spacetime->getEdgeList()->remove(oldEdge);
@@ -145,13 +146,13 @@ Vertex::moveEdgesToImpl(
     // For inEdges: redirect edge to point TO the new vertex (new source = vertex)
     // For outEdges: redirect edge to point FROM the new vertex (new target = vertex)
     const auto &newEdge = (direction == EdgeDirection::In)
-                            ? spacetime->createEdge(sourceVertex, recipient, movedLength)
-                            : spacetime->createEdge(recipient, targetVertex, movedLength);
-    // Re-apply the exact edge state (the RemoveMove/SurgicalCone restore idiom,
-    // #597): the complex LENGTH verbatim — no sqrt/square round-trip, so the
-    // branch (which of ±l this edge carried) survives — and the connection phase.
-    newEdge->setLength(movedLength);
-    newEdge->setPhase(movedPhase);
+                            ? spacetime->createEdge(sourceVertex, recipient,
+                                                    movedSquaredLength)
+                            : spacetime->createEdge(recipient, targetVertex,
+                                                    movedSquaredLength);
+    newEdge->setSquaredLength(movedSquaredLength);
+    newEdge->setLink(newEdge->getSource()->getId(),
+                     newEdge->getTarget()->getId(), movedLink);
 
     newEdges.insert(newEdge);
   }

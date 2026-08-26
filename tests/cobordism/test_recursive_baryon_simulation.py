@@ -165,7 +165,7 @@ class NeutralHostTest(unittest.TestCase):
 
     def test_the_metric_is_the_declared_mild_non_uniform_one(self):
         host = rbs.build_neutral_host(2)
-        squared = sorted({round(abs(complex(edge.getLength()) ** 2), 9)
+        squared = sorted({round(abs(complex(edge.squaredLength())), 9)
                           for edge in host.getEdgeList().toVector()})
         for value in squared:
             self.assertLessEqual(abs(value - 1.0), 0.0500001)
@@ -207,7 +207,7 @@ class FastPathTest(unittest.TestCase):
                 self.document["verdict"]["library_classification"]],
             self.document["verdict"]["verdict"])
 
-    def test_the_run_persists_every_schema_three_checkpoint(self):
+    def test_the_run_persists_every_current_checkpoint_schema(self):
         self.assertEqual(len(self.document["checkpoints"]),
                          self.document["config"]["drive_steps"])
         for checkpoint in self.document["checkpoints"]:
@@ -504,6 +504,25 @@ class ReplayTest(unittest.TestCase):
         self.assertEqual(again["cells"], raw["cells"])
         self.assertEqual(again["edges"], raw["edges"])
 
+    def test_raw_geometry_uses_direct_complex_z_u_and_requires_orientation(self):
+        raw = copy.deepcopy(self.document["raw_geometry"])
+        self.assertTrue(raw["edges"])
+        for edge in raw["edges"]:
+            self.assertEqual(edge["canonical_orientation"],
+                             [edge["a"], edge["b"]])
+            self.assertIsInstance(complex(*edge["z"]), complex)
+            self.assertIsInstance(complex(*edge["U"]), complex)
+
+        missing = copy.deepcopy(raw)
+        missing["edges"][0].pop("canonical_orientation")
+        with self.assertRaises(ValueError):
+            rbs._spacetime_from_raw(missing)
+
+        zero = copy.deepcopy(raw)
+        zero["edges"][0]["U"] = [0.0, 0.0]
+        with self.assertRaises(ValueError):
+            rbs._spacetime_from_raw(zero)
+
 
 # =====================================================================
 # the exactness fixtures, against independent references
@@ -740,9 +759,14 @@ def _relabel(raw, permutation):
     edges = {}
     for edge in raw["edges"]:
         a, b = permutation[int(edge["a"])], permutation[int(edge["b"])]
-        edges[(min(a, b), max(a, b))] = edge["length"]
-    relabelled["edges"] = [{"a": a, "b": b, "length": length}
-                           for (a, b), length in sorted(edges.items())]
+        U = complex(edge["U"][0], edge["U"][1])
+        if a > b:
+            U = 1 / U
+        edges[(min(a, b), max(a, b))] = (edge["z"], [U.real, U.imag])
+    relabelled["edges"] = [
+        {"a": a, "b": b, "canonical_orientation": [a, b],
+         "z": fields[0], "U": fields[1]}
+        for (a, b), fields in sorted(edges.items())]
     return relabelled
 
 
