@@ -17,10 +17,14 @@ Lorentzian Regge action as a mediator and sweep its coupling β, showing
 the realizable set contract as a strong gravitational prior prices out
 the topology the gates need. The
 [intrinsic operator-transfer experiment](intrinsic-operator-transfer.md)
-then freezes the relaxed geometry, reconstructs its operator without the
-target, and tests unseen states. It validates identity and mapping-class
-transport but finds that charge conservation is not sufficient on the fixed
-prism topology and that the causal chart does not certify H3. The
+freezes the relaxed geometry, reconstructs its operator without the target,
+and tests unseen states. The additive
+[geometric-operator experiment](geometric-operators.md) then pins the full
+boundary, minimizes only the historical quantum residual, and tests both
+target-free boundary transport and framed bulk Choi promotion. It validates
+identity and mapping-class transport but finds that one state does not
+identify an operator and charge conservation is not sufficient on the fixed
+prism topology. The
 Dijkgraaf–Witten layer that scaffolded the method is recorded in
 [earlier work](../earlier-work/dijkgraaf-witten-scaffold.md).
 
@@ -31,4 +35,5 @@ cobordism
 cobordism-results
 regge-mediated-results
 intrinsic-operator-transfer
+geometric-operators
 ```

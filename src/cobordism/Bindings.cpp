@@ -796,17 +796,15 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "cobordism (all boundary, no interior bulk).")
       .def("bulkMinusBoundaryHarmonicMatrix",
            &EigenstateSynthesis::bulkMinusBoundaryHarmonicMatrix,
-           py::arg("tol") = 1e-9,
-           "ker L1(W - dW): the harmonic 1-forms of the combinatorial "
-           "(unit-weight, signature-blind) Hodge Laplacian L1 of the bulk with "
-           "the full dW subcomplex deleted (the subcomplex induced on the "
-           "interior vertices). Restricts the integer boundary maps d1, d2 to "
-           "the interior cells and eigendecomposes L1 = d1^T d1 + d2 d2^T, "
-           "returning the |lambda| < tol eigenvectors stacked as the ROWS of a "
-           "flat row-major (dim ker L1) x len(bulkMinusBoundaryCells()) complex "
-           "array (ascending eigenvalue). The geometry the discovered operator "
-           "is read from -- surgery must first grow the interior so this is "
-           "nonzero. Read fresh from the live complex.")
+           py::arg("tol") = 1e-9, py::arg("metric") = false,
+           "ker L1(W - dW) after deleting the full boundary subcomplex. "
+           "metric=False preserves the combinatorial unit-weight operator. "
+           "metric=True restricts the live signed Hodge weights and takes the "
+           "right nullspace of the generally non-normal Lorentzian operator. "
+           "The null vectors are stacked as rows of a flat row-major "
+           "(dim ker L1) x len(bulkMinusBoundaryCells()) complex array. "
+           "Use metric=True for relaxed-geometry claims; metric=False is "
+           "topology-only. Read fresh from the live complex.")
       // ----- Surgery: the topology-changing interior remove move (#196) -----
       .def("interiorTopCells", &EigenstateSynthesis::interiorTopCells,
            "The interior top cells (all-interior vertices, on no dW face) as "
@@ -1009,6 +1007,36 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
                              [](const MultiCobordism::BoundaryBlock &block) {
                                return block.target;
                              });
+  py::class_<MultiCobordism::GeometricOperatorReadout>(
+      m, "GeometricOperatorReadout",
+      "Target-free promotion of a framed bulk-minus-boundary kernel. "
+      "identifiable is false unless the framed kernel has rank one.")
+      .def_readonly("identifiable",
+                    &MultiCobordism::GeometricOperatorReadout::identifiable)
+      .def_readonly("obstruction",
+                    &MultiCobordism::GeometricOperatorReadout::obstruction)
+      .def_readonly("state_dimension",
+                    &MultiCobordism::GeometricOperatorReadout::stateDimension)
+      .def_readonly("metric", &MultiCobordism::GeometricOperatorReadout::metric)
+      .def_readonly("bulk_cell_count",
+                    &MultiCobordism::GeometricOperatorReadout::bulkCellCount)
+      .def_readonly("kernel_dimension",
+                    &MultiCobordism::GeometricOperatorReadout::kernelDimension)
+      .def_readonly("frame_rank",
+                    &MultiCobordism::GeometricOperatorReadout::frameRank)
+      .def_readonly("unitarity_error",
+                    &MultiCobordism::GeometricOperatorReadout::unitarityError)
+      .def_readonly(
+          "frame_singular_values",
+          &MultiCobordism::GeometricOperatorReadout::frameSingularValues)
+      .def_readonly("bulk_cells",
+                    &MultiCobordism::GeometricOperatorReadout::bulkCells)
+      .def_readonly("frame_cells",
+                    &MultiCobordism::GeometricOperatorReadout::frameCells)
+      .def_readonly("choi_state",
+                    &MultiCobordism::GeometricOperatorReadout::choiState)
+      .def_readonly("operator_matrix",
+                    &MultiCobordism::GeometricOperatorReadout::operatorMatrix);
   auto multiCobordismClass =
       py::class_<MultiCobordism, std::shared_ptr<MultiCobordism>>(m, "MultiCobordism",
       "The fully-emergent MultiCobordism merge optimizer (#491): merge as a "
@@ -1025,7 +1053,7 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
                     std::vector<std::vector<std::complex<double>>>,
                     std::vector<std::vector<std::complex<double>>>,
                     std::vector<int>, double, std::uint64_t, int, bool, bool,
-                    bool, bool, bool, bool>(),
+                    bool, bool, bool, bool, bool>(),
            py::arg("host"), py::arg("input_targets"), py::arg("output_targets"),
            py::arg("degrees") = std::vector<int>{3}, py::arg("gamma") = 1.0,
            py::arg("seed") = 0, py::arg("precone") = 0,
@@ -1034,7 +1062,8 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("precone_alternate") = false,
            py::arg("balanced_edge_wiring") = false,
            py::arg("singular_value_ratio") = false,
-           py::arg("einstein_hilbert") = true)
+           py::arg("einstein_hilbert") = true,
+           py::arg("real_squared_lengths_only") = false)
       .def_static("betti", &MultiCobordism::betti, py::arg("st"))
       .def_static("emergent_holes", &MultiCobordism::emergentHoles,
                   py::arg("st"), py::arg("k"))
@@ -1082,6 +1111,48 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def_static("r_state", &MultiCobordism::residualOfTargetStateAgainstHarmonic,
                   py::arg("st"), py::arg("k"), py::arg("target"))
       .def("r_u", &MultiCobordism::rU, py::arg("st"))
+      .def("declare_register_constraint",
+           [](MultiCobordism &self, const std::string &name, int degree,
+              const std::vector<std::vector<std::uint64_t>> &holes,
+              const std::vector<std::complex<double>> &target) {
+             self.declareRegisterConstraint({name, degree, holes, target});
+           },
+           py::arg("name"), py::arg("degree"), py::arg("holes"),
+           py::arg("target"),
+           "Declare an ordered exact-period r_U constraint. target[i] is "
+           "matched to holes[i] with no component permutation; reusing a name "
+           "replaces that constraint.")
+      .def("register_constraints",
+           [](const MultiCobordism &self) {
+             py::list records;
+             for (const auto &constraint : self.registerConstraints()) {
+               py::dict record;
+               record["name"] = constraint.name;
+               record["degree"] = constraint.degree;
+               record["holes"] = constraint.holes;
+               record["target"] = constraint.target;
+               records.append(std::move(record));
+             }
+             return records;
+           },
+           "The ordered explicit register constraints as dictionaries.")
+      .def("clear_register_constraints",
+           &MultiCobordism::clearRegisterConstraints,
+           "Remove explicit register constraints without changing emergent "
+           "targets or geometric pins.")
+      .def("geometric_operator", &MultiCobordism::geometricOperator,
+           py::arg("state_dimension"),
+           py::arg("frame_cells") =
+               std::vector<std::vector<std::uint64_t>>{},
+           py::arg("tol") = 1e-9, py::arg("metric") = true,
+           "Target-free Choi promotion of ker L1(W-dW). The ordered frame must "
+           "contain d^2 interior edges (or may be omitted when the bulk has "
+           "exactly d^2 edges). Promotion succeeds only for a rank-one framed "
+           "kernel; otherwise the result carries a specific obstruction.")
+      .def_property_readonly("einstein_hilbert_enabled",
+           &MultiCobordism::einsteinHilbertEnabled)
+      .def_property_readonly("real_squared_lengths_only",
+           &MultiCobordism::realSquaredLengthsOnly)
       .def("spacetime", &MultiCobordism::spacetime,
            "The node's LIVE complex. Stage 1 REPLACES the node's spacetime "
            "whenever it commits a move, so a caller holding the shared_ptr it "

@@ -485,23 +485,25 @@ class EigenstateSynthesis {
     [[nodiscard]] std::vector<std::vector<std::uint64_t>> bulkMinusBoundaryCells()
         const;
 
-    /// \f$ \ker L_1(W - \partial W) \f$ — the harmonic 1-forms of the
-    /// **combinatorial** (unit-weight, signature-blind) Hodge Laplacian
-    /// \f$ L_1 \f$ of the bulk with the **full \f$ \partial W \f$ subcomplex
-    /// deleted**: the subcomplex induced on the interior vertices (the bulk
-    /// "with the boundary removed"). Restricts the integer boundary maps
-    /// \f$ \partial_1, \partial_2 \f$ (`ChainComplex`) to the interior cells and
-    /// eigendecomposes \f$ L_1 = \partial_1^{\top}\partial_1 +
-    /// \partial_2\partial_2^{\top} \f$, returning the \f$ |\lambda| < \text{tol} \f$
-    /// eigenvectors stacked as the **rows** of a flat row-major
-    /// \f$ \dim\ker L_1 \times |\text{interior } C_1| \f$ complex array
-    /// (ascending-eigenvalue order), columns in `bulkMinusBoundaryCells()` order.
-    /// This is the geometry the **discovered operator** is read from: surgery
-    /// must first grow the interior so this is nonzero (a bare cobordism with
-    /// only a handful of interior vertices carries 0). Read fresh from the live
-    /// complex — surgery between calls moves it.
+    /// \f$\ker L_1(W - \partial W)\f$ — the harmonic 1-forms of the bulk with
+    /// the **full \f$\partial W\f$ subcomplex deleted**: restrict
+    /// \f$\partial_1,\partial_2\f$ to cells whose vertices are all interior.
+    ///
+    /// metric=false (the backwards-compatible default) uses the combinatorial
+    /// unit-weight operator \f$L_1=\partial_1^\top\partial_1+
+    /// \partial_2\partial_2^\top\f$. metric=true restricts the live signed
+    /// Hodge weights as well and uses
+    /// \f$W_1^{-1}\partial_1^\top W_0\partial_1+
+    /// \partial_2W_2^{-1}\partial_2^\top W_1\f$. Its right kernel is obtained
+    /// by SVD because the Lorentzian operator is generally non-normal.
+    ///
+    /// Both modes return null vectors stacked as the **rows** of a flat row-major
+    /// \f$\dim\ker L_1\times|\text{interior }C_1|\f$ array, with columns in
+    /// bulkMinusBoundaryCells() order. The metric mode must be used when the
+    /// readout is claimed to retain information from relaxation; the
+    /// combinatorial mode is topology-only. Read fresh from the live complex.
     [[nodiscard]] std::vector<std::complex<double>> bulkMinusBoundaryHarmonicMatrix(
-        double tol = 1e-9) const;
+        double tol = 1e-9, bool metric = false) const;
 
     // === Surgery: the topology-changing interior remove move (#196) ===
 

@@ -25,6 +25,7 @@
 #include "mesh/Simplex.h"
 #include "mesh/Vertex.h"
 #include "mesh/VertexList.h"
+#include "quantum/ChoiJamiolkowski.h"
 #include "simulations/ReggeSolver.h"
 #include "spacetime/Spacetime.h"
 #include "spacetime/pachner/AddMove.h"
@@ -78,7 +79,7 @@ MultiCobordism::MultiCobordism(
     const std::vector<int> &degrees, double gamma, std::uint64_t seed,
     int precone, bool shouldProposeDispositions, bool preconeTimelike,
     bool preconeAlternate, bool balancedEdgeWiring, bool singularValueRatio,
-    bool einsteinHilbert)
+    bool einsteinHilbert, bool realSquaredLengthsOnly)
     : spacetime_(std::move(host)),
       inputTargets_(inputTargets),
       outputTargets_(outputTargets),
@@ -92,6 +93,7 @@ MultiCobordism::MultiCobordism(
       balancedEdgeWiring_(balancedEdgeWiring),
       singularValueRatio_(singularValueRatio),
       einsteinHilbert_(einsteinHilbert),
+      realSquaredLengthsOnly_(realSquaredLengthsOnly),
       randomNumberGenerator_(seed) {
   // The wiring mode must reach the host BEFORE any precone growth below wires
   // its first edge (#690).
@@ -390,6 +392,13 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
   // records each register's winning matching and withholds it from the ones after.
   std::set<std::vector<int>> claimedMatchings;
   double totalResidual = 0.0;
+  // Explicit constraints are already framed: their hole and target ordering is
+  // fixed by the caller, so they bypass emergent-hole relabeling entirely. This
+  // is still the existing exact-period r_U; only the frame is no longer guessed.
+  for (const auto &constraint : registerConstraints_)
+    totalResidual += EigenstateSynthesis(spacetime, constraint.degree)
+                         .residualForPeriods(constraint.holes,
+                                             constraint.target);
   for (const auto &inputBlock : inputBlocks_)
     totalResidual += inputResidualWeight_ *
                      residualForBoundaryBlockWithDistinctMatchings(inputBlock, spacetime,
@@ -978,6 +987,160 @@ void MultiCobordism::declarePinnedRegion(PinnedRegion region) {
 }
 
 void MultiCobordism::clearPinnedRegions() { pinnedRegions_.clear(); }
+
+void MultiCobordism::declareRegisterConstraint(RegisterConstraint constraint) {
+  if (constraint.name.empty())
+    throw std::invalid_argument(
+        "MultiCobordism::declareRegisterConstraint: name is empty");
+  if (constraint.degree < 0)
+    throw std::invalid_argument(
+        "MultiCobordism::declareRegisterConstraint: degree is negative");
+  if (constraint.holes.size() != constraint.target.size())
+    throw std::invalid_argument(
+        "MultiCobordism::declareRegisterConstraint: hole/target size mismatch");
+  const std::size_t expectedWidth =
+      static_cast<std::size_t>(constraint.degree) + 2;
+  for (auto &hole : constraint.holes) {
+    if (hole.size() != expectedWidth)
+      throw std::invalid_argument(
+          "MultiCobordism::declareRegisterConstraint: malformed hole");
+    std::sort(hole.begin(), hole.end());
+    if (std::adjacent_find(hole.begin(), hole.end()) != hole.end())
+      throw std::invalid_argument(
+          "MultiCobordism::declareRegisterConstraint: repeated hole vertex");
+  }
+  for (auto &existing : registerConstraints_)
+    if (existing.name == constraint.name) {
+      existing = std::move(constraint);
+      return;
+    }
+  registerConstraints_.push_back(std::move(constraint));
+}
+
+void MultiCobordism::clearRegisterConstraints() {
+  registerConstraints_.clear();
+}
+
+MultiCobordism::GeometricOperatorReadout MultiCobordism::geometricOperator(
+    int stateDimension, std::vector<std::vector<std::uint64_t>> frameCells,
+    double tol, bool metric) const {
+  GeometricOperatorReadout result;
+  result.stateDimension = stateDimension;
+  result.metric = metric;
+  const auto obstruct = [&](std::string reason) {
+    result.identifiable = false;
+    result.obstruction = std::move(reason);
+    result.choiState.clear();
+    result.operatorMatrix.clear();
+    return result;
+  };
+  if (!spacetime_)
+    return obstruct("the cobordism has no spacetime");
+  if (stateDimension <= 0)
+    return obstruct("state dimension must be positive");
+  if (!(tol > 0.0) || !std::isfinite(tol))
+    return obstruct("kernel tolerance must be finite and positive");
+
+  const std::size_t d = static_cast<std::size_t>(stateDimension);
+  if (d > std::numeric_limits<std::size_t>::max() / d)
+    return obstruct("state dimension overflows the Choi width");
+  const std::size_t choiWidth = d * d;
+  EigenstateSynthesis synthesis(spacetime_, 1);
+  result.bulkCells = synthesis.bulkMinusBoundaryCells();
+  result.bulkCellCount = result.bulkCells.size();
+  if (result.bulkCells.empty())
+    return obstruct("bulk-minus-boundary has no interior 1-cells");
+
+  if (frameCells.empty()) {
+    if (result.bulkCells.size() != choiWidth)
+      return obstruct(
+          "an ordered d^2 Choi frame is required when the bulk width differs");
+    frameCells = result.bulkCells;
+  }
+  if (frameCells.size() != choiWidth)
+    return obstruct("the Choi frame must contain exactly d^2 interior 1-cells");
+  std::map<std::vector<std::uint64_t>, std::size_t> bulkIndex;
+  for (std::size_t i = 0; i < result.bulkCells.size(); ++i)
+    bulkIndex[result.bulkCells[i]] = i;
+  std::set<std::vector<std::uint64_t>> usedFrameCells;
+  std::vector<std::size_t> frameColumns;
+  frameColumns.reserve(frameCells.size());
+  for (auto &cell : frameCells) {
+    std::sort(cell.begin(), cell.end());
+    if (cell.size() != 2 || cell[0] == cell[1])
+      return obstruct("a Choi frame entry is not an edge");
+    const auto found = bulkIndex.find(cell);
+    if (found == bulkIndex.end())
+      return obstruct("a Choi frame edge is not in the bulk-minus-boundary");
+    if (!usedFrameCells.insert(cell).second)
+      return obstruct("the Choi frame repeats an interior edge");
+    frameColumns.push_back(found->second);
+  }
+  result.frameCells = frameCells;
+
+  const std::vector<complexd> flat =
+      synthesis.bulkMinusBoundaryHarmonicMatrix(tol, metric);
+  if (flat.size() % result.bulkCells.size() != 0)
+    return obstruct("bulk harmonic matrix has an inconsistent shape");
+  result.kernelDimension = flat.size() / result.bulkCells.size();
+  if (result.kernelDimension == 0)
+    return obstruct("bulk-minus-boundary kernel is empty");
+
+  Eigen::MatrixXcd restricted(static_cast<Eigen::Index>(result.kernelDimension),
+                              static_cast<Eigen::Index>(choiWidth));
+  for (std::size_t row = 0; row < result.kernelDimension; ++row)
+    for (std::size_t column = 0; column < choiWidth; ++column)
+      restricted(static_cast<Eigen::Index>(row),
+                 static_cast<Eigen::Index>(column)) =
+          flat[row * result.bulkCells.size() + frameColumns[column]];
+  if (!restricted.allFinite())
+    return obstruct("the framed bulk kernel is non-finite");
+
+  Eigen::JacobiSVD<Eigen::MatrixXcd> svd(restricted, Eigen::ComputeThinU |
+                                                         Eigen::ComputeThinV);
+  const Eigen::VectorXd &singularValues = svd.singularValues();
+  result.frameSingularValues.reserve(
+      static_cast<std::size_t>(singularValues.size()));
+  for (Eigen::Index i = 0; i < singularValues.size(); ++i)
+    result.frameSingularValues.push_back(singularValues[i]);
+  const double leading = singularValues.size() == 0 ? 0.0 : singularValues[0];
+  const double cutoff = tol * std::max(1.0, leading);
+  for (Eigen::Index i = 0; i < singularValues.size(); ++i)
+    if (singularValues[i] > cutoff)
+      ++result.frameRank;
+  if (result.frameRank == 0)
+    return obstruct("the framed bulk kernel carries no Choi component");
+  if (result.frameRank != 1)
+    return obstruct("the framed bulk kernel has rank " +
+                    std::to_string(result.frameRank) +
+                    "; no unique Choi ray exists");
+
+  // A = U Sigma V^H: the direct row-state spanning A is conj(V.col(0)). This
+  // remains invariant under a change of basis among the bulk kernel rows.
+  Eigen::VectorXcd choi = svd.matrixV().col(0).conjugate();
+  for (Eigen::Index i = 0; i < choi.size(); ++i)
+    if (std::abs(choi[i]) > cutoff) {
+      choi *= std::conj(choi[i]) / std::abs(choi[i]);
+      break;
+    }
+  result.choiState.assign(choi.data(), choi.data() + choi.size());
+
+  result.operatorMatrix =
+      ::tessera::quantum::ChoiJamiolkowski::operatorFromChoiState(
+          result.choiState, stateDimension);
+  Eigen::MatrixXcd U(stateDimension, stateDimension);
+  for (int row = 0; row < stateDimension; ++row)
+    for (int column = 0; column < stateDimension; ++column)
+      U(row, column) = result.operatorMatrix[static_cast<std::size_t>(row) * d +
+                                             static_cast<std::size_t>(column)];
+  result.unitarityError =
+      (U.adjoint() * U -
+       Eigen::MatrixXcd::Identity(stateDimension, stateDimension))
+          .norm();
+  result.identifiable = true;
+  result.obstruction.clear();
+  return result;
+}
 
 std::set<std::uint64_t> MultiCobordism::pinnedVertices() const {
   std::set<std::uint64_t> united;
@@ -1728,16 +1891,56 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
           evaluateAt(squaredLengths(edgeIndex) + coordinateStep);
       const double realMinus =
           evaluateAt(squaredLengths(edgeIndex) - coordinateStep);
-      const double imaginaryPlus =
-          evaluateAt(squaredLengths(edgeIndex) +
-                     complexd{0.0, coordinateStep});
-      const double imaginaryMinus =
-          evaluateAt(squaredLengths(edgeIndex) -
-                     complexd{0.0, coordinateStep});
+      double imaginaryDerivative = 0.0;
+      if (!realSquaredLengthsOnly_) {
+        const double imaginaryPlus =
+            evaluateAt(squaredLengths(edgeIndex) +
+                       complexd{0.0, coordinateStep});
+        const double imaginaryMinus =
+            evaluateAt(squaredLengths(edgeIndex) -
+                       complexd{0.0, coordinateStep});
+        imaginaryDerivative =
+            (imaginaryPlus - imaginaryMinus) / (2.0 * coordinateStep);
+      }
       edges[edgeIndex]->setLength(lengths(edgeIndex));
       ascent(edgeIndex) = complexd{
           (realPlus - realMinus) / (2.0 * coordinateStep),
-          (imaginaryPlus - imaginaryMinus) / (2.0 * coordinateStep)};
+          imaginaryDerivative};
+    }
+    return ascent;
+  };
+
+  // Explicit fixed-hole constraints already have an exact analytic r_U
+  // gradient. When they are the whole residual and the run stays on real l^2,
+  // use it instead of evaluating r_U twice per edge. Mixed or complex-locus
+  // objectives retain the general numerical path.
+  const bool explicitConstraintsAreWholeResidual =
+      !registerConstraints_.empty() && inputTargets_.empty() &&
+      outputTargets_.empty() && inputBlocks_.empty() && outputBlocks_.empty();
+  const auto explicitConstraintAscentDirection = [&]() {
+    Eigen::VectorXcd ascent = Eigen::VectorXcd::Zero(edgeCount);
+    std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> edgeIndices;
+    for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+      edgeIndices[edgeKey(edges[edgeIndex])] = edgeIndex;
+    const auto oneCells =
+        ChainComplex::fromSpacetime(*spacetime_).kSimplexVertices(1);
+    for (const auto &constraint : registerConstraints_) {
+      EigenstateSynthesis synthesis(spacetime_, constraint.degree);
+      const std::vector<double> gradient = synthesis.residualForPeriodsGradient(
+          constraint.holes, constraint.target);
+      if (gradient.size() != oneCells.size())
+        throw std::runtime_error(
+            "MultiCobordism: explicit r_U gradient has wrong edge count");
+      for (std::size_t i = 0; i < oneCells.size(); ++i) {
+        const auto &cell = oneCells[i];
+        if (cell.size() != 2)
+          continue;
+        const auto found = edgeIndices.find(
+            {std::min(cell[0], cell[1]), std::max(cell[0], cell[1])});
+        if (found != edgeIndices.end())
+          ascent[static_cast<Eigen::Index>(found->second)] +=
+              complexd{gradient[i], 0.0};
+      }
     }
     return ascent;
   };
@@ -1783,10 +1986,15 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
     const double numericalResidualWeight =
         objectiveSpec_->numericalRegisterResidualWeight(
             directionContext.scalar);
-    if (numericalResidualWeight != 0.0)
-      descentDirection += numericalResidualWeight *
-                          scalarAscentDirection(
-                              [&]() { return rU(spacetime_); });
+    if (numericalResidualWeight != 0.0) {
+      if (explicitConstraintsAreWholeResidual && realSquaredLengthsOnly_)
+        descentDirection += numericalResidualWeight *
+                            explicitConstraintAscentDirection();
+      else
+        descentDirection += numericalResidualWeight *
+                            scalarAscentDirection(
+                                [&]() { return rU(spacetime_); });
+    }
 
     // The pinned-region objective's direction adds on top of the bulk's, the
     // same way its terms add on top of the bulk's terms. Its own declared scope
@@ -1813,11 +2021,23 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
       const double pinnedNumericalWeight =
           pinnedObjectiveSpec_->numericalRegisterResidualWeight(
               pinnedContext.scalar);
-      if (pinnedNumericalWeight != 0.0)
-        descentDirection += pinnedNumericalWeight *
-                            scalarAscentDirection(
-                                [&]() { return rU(spacetime_); });
+      if (pinnedNumericalWeight != 0.0) {
+        if (explicitConstraintsAreWholeResidual && realSquaredLengthsOnly_)
+          descentDirection += pinnedNumericalWeight *
+                              explicitConstraintAscentDirection();
+        else
+          descentDirection += pinnedNumericalWeight *
+                              scalarAscentDirection(
+                                  [&]() { return rU(spacetime_); });
+      }
     }
+
+    // A real-locus run varies Re(l^2) only. Analytic objectives encode both
+    // real derivatives in the complex direction, so remove the imaginary
+    // coordinate after every contribution has been assembled.
+    if (realSquaredLengthsOnly_)
+      for (Eigen::Index i = 0; i < descentDirection.size(); ++i)
+        descentDirection[i] = complexd{descentDirection[i].real(), 0.0};
 
     restoreEdgeLengths();
     // Pinning enters HERE and only here: a pinned edge keeps its resident squared
