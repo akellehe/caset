@@ -15,8 +15,13 @@ charge-conservation criterion) and the per-output gallery. The
 [Regge-mediated results](regge-mediated-results.md) then add the dual
 Lorentzian Regge action as a mediator and sweep its coupling β, showing
 the realizable set contract as a strong gravitational prior prices out
-the topology the gates need. The Dijkgraaf–Witten layer that scaffolded
-the method is recorded in
+the topology the gates need. The
+[intrinsic operator-transfer experiment](intrinsic-operator-transfer.md)
+then freezes the relaxed geometry, reconstructs its operator without the
+target, and tests unseen states. It validates identity and mapping-class
+transport but finds that charge conservation is not sufficient on the fixed
+prism topology and that the causal chart does not certify H3. The
+Dijkgraaf–Witten layer that scaffolded the method is recorded in
 [earlier work](../earlier-work/dijkgraaf-witten-scaffold.md).
 
 ```{toctree}
@@ -25,4 +30,5 @@ the method is recorded in
 cobordism
 cobordism-results
 regge-mediated-results
+intrinsic-operator-transfer
 ```
