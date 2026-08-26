@@ -1,13 +1,23 @@
-# Geometric operators under residual-only relaxation
+# Fixed-boundary spectral Choi synthesis and geometric operators
 
-Issue [#899](https://github.com/akellehe/tessera/issues/899) tests the
-operator interpretation using the machinery present at report commit
-5482829. The correction is important: the full simplicial boundary is fixed,
-the bulk is free, and the only optimized scalar is the historical quantum
-residual \(r_U\). No Regge-stationarity condition is imposed.
+Issue [#899](https://github.com/akellehe/tessera/issues/899) reconstructs the
+semantics that existed when report commit `5482829` was written. The audit
+found that the initial implementation and the later period machinery had been
+conflated:
 
-The result separates period fitting, boundary transport, and bulk Choi
-promotion. They are not equivalent.
+- `78de485` introduced direct Choi-state synthesis through
+  `RealizabilityOracle`;
+- `165f8af` recorded the successful realizability experiment;
+- `be3f7e7` later introduced carried-register period residuals;
+- `5482829` presented a theoretical program and explicitly left the bridge
+  from action-relaxed geometry to \(Z(W)\) open.
+
+The successful pre-paper calculation fixed the relative amplitudes of selected
+components to \(\operatorname{vec}(U)\), optimized all remaining state
+amplitudes together with interior geometry, and minimized a Rayleigh
+eigenresidual. It did not fit input/output pairs, impose charge conservation,
+require a harmonic state, or include Regge stationarity. The newer period
+experiment remains available as a separate diagnostic.
 
 ## Claims under test
 
@@ -43,7 +53,42 @@ identity
 
 That identity alone does not identify the geometric readout with \(Z(W)\).
 
-## Residual-only construction
+## Historical construction: direct spectral Choi synthesis
+
+For a supplied \(d\times d\) operator, define
+
+\[
+|J_U\rangle=\frac{\operatorname{vec}(U)}
+                  {\|\operatorname{vec}(U)\|}.
+\]
+
+An explicit ordered set \(F\) of \(d^2\) cochain components is fixed to this
+target before global normalization. Every component outside \(F\) is an
+auxiliary complex amplitude. Thus the normalized full cochain restricts to the
+target ray on \(F\); its support norm is not fixed. The relaxation varies only
+interior edge weights and, at degree zero, interior connection phases, while
+minimizing
+
+\[
+r_{\mathrm{eig}}(W,\psi)
+=\left\|L_W\psi-
+ \langle\psi,L_W\psi\rangle\psi\right\|^2.
+\]
+
+The eigenvalue is free. If the residual does not converge, the implementation
+performs a boundary-preserving stellar subdivision and retries. Boundary edge
+lengths and phases remain bit-identical. This is the numerical structure of
+the old `RealizabilityOracle`, now exposed additively through
+`MultiCobordism.relax_fixed_boundary_eigenstate` with explicit support cells
+instead of the old fragile first-component convention.
+
+Unvectorizing the normalized restriction \(\psi|_F\) returns \(U\), and then
+applying that matrix to new states returns the corresponding outputs. This is
+valid Choi algebra, but it is target-conditioned by construction: the same
+\(\operatorname{vec}(U)\) being recovered was pinned during the fit. It is not
+operator learning from state pairs or target-free extraction from the bulk.
+
+## Later construction: ordered period residuals
 
 The boundary register is the charge-zero plane
 
@@ -65,10 +110,9 @@ r_{\mathrm{period}}\bigl(
   (x_j,Ux_j);W\bigr).
 \]
 
-MultiCobordism now accepts these explicit constraints without permuting their
-hole-to-target assignment. The experiment constructs the historical
-pair-of-pants prism, declares every boundary facet as a pinned region, and
-runs Stage 2 with
+MultiCobordism accepts these explicit constraints without permuting their
+hole-to-target assignment. This later experiment constructs a pair-of-pants
+prism, declares every boundary facet as a pinned region, and runs Stage 2 with
 
 - einstein_hilbert=False;
 - real_squared_lengths_only=True;
@@ -87,10 +131,10 @@ g_U(W)=\sum_j
  \left\|\operatorname{per}(h)-(x_j,Ux_j)\right\|^2 .
 \]
 
-At finite geometry, \(g_U=0\) is the direct realizability test. The historical
-\(r_U\) has the same exact zero set, but its magnitude also depends on the
-non-harmonic representative and can become small while the target remains a
-fixed distance from the harmonic period subspace.
+At finite geometry, \(g_U=0\) is the direct period-realizability test. The
+later \(r_U\) has the same exact zero set, but its magnitude also depends on
+the non-harmonic representative and can become small while the target remains
+a fixed distance from the harmonic period subspace.
 
 ## Two target-free readouts
 
@@ -150,22 +194,37 @@ An arbitrary kernel basis vector is never reshaped into an operator.
 
 ## Deterministic results
 
-The default command uses 12 one-step residual updates with
-\(\alpha=0.05\).
+The historical mode uses seed 0, 80 restarts, at most four subdivisions, and
+requests \(r_{\mathrm{eig}}<10^{-24}\).
+
+| directly pinned Choi target | \(\|[U,Q]\|_F\) | residual | growth | boundary drift | held-out error |
+|---|---:|---:|---:|---:|---:|
+| phase gate \(\operatorname{diag}(1,e^{0.41i})\) | 0 | \(7.09\times10^{-28}\) | 3 | 0 | \(3.19\times10^{-16}\) |
+| charge-changing \(X\) | 1.41421 | \(2.77\times10^{-27}\) | 2 | 0 | \(2.72\times10^{-16}\) |
+
+Both targets converge. Charge conservation is therefore neither encoded nor
+necessary in the historical inverse-eigenvector problem. The held-out column
+is an algebraic check after unvectorizing the pinned support, not evidence that
+the geometry learned an operator from examples. Because the reported residual
+is squared, the corresponding defect norms are \(2.66\times10^{-14}\) and
+\(5.26\times10^{-14}\); relative to \(\|L\psi\|\), both are approximately
+\(4.2\times10^{-15}\), the relevant floating-point-scale statement.
+
+The later period mode uses 12 one-step updates with \(\alpha=0.05\).
 
 | case | initial \(r_U\) | final \(r_U\) | hard gap | target-free error |
 |---|---:|---:|---:|---:|
-| one reflection pair | \(1.23\times10^{-27}\) | unchanged | \(3.51\times10^{-29}\) | unseen input: \(2.0\) |
-| complete identity basis | \(3.29\times10^{-27}\) | unchanged | \(1.56\times10^{-28}\) | \(8.47\times10^{-15}\) |
-| complete mapping-class basis | \(9.63\times10^{-27}\) | unchanged | \(5.79\times10^{-28}\) | \(1.76\times10^{-14}\) |
+| one reflection pair | \(2.67\times10^{-27}\) | unchanged | \(1.55\times10^{-28}\) | unseen input: \(2.0\) |
+| complete identity basis | \(3.51\times10^{-27}\) | unchanged | \(1.68\times10^{-28}\) | \(1.09\times10^{-14}\) |
+| complete mapping-class basis | \(1.53\times10^{-26}\) | unchanged | \(9.60\times10^{-28}\) | \(2.48\times10^{-14}\) |
 | generic charge-preserving basis | \(2.04983\) | \(0.0193518\) | \(0.135345\) | \(0.520279\) |
 | charge-leaking basis | \(2.23710\) | not relaxed | \(0.177925\) | charge commutator: \(0.589544\) |
 
 The one-pair reflection and identity constraints agree to
-\(1.57\times10^{-16}\). Both are therefore fitted to machine precision by the
-same geometry, whose frozen transport is the identity. Attaching the unseen
-second basis state distinguishes them with error \(2\). A single pair does not
-identify an operator.
+\(1.57\times10^{-16}\). Both therefore have tiny period residuals on the same
+geometry, whose frozen transport is the identity. Attaching the unseen second
+basis state distinguishes them with error \(2\). A single pair does not identify
+an operator.
 
 For the generic unitary,
 
@@ -213,31 +272,33 @@ From the repository root:
     python examples/cobordism/geometric_operators.py --live
     python -m pytest tests/cobordism/test_geometric_operators.py -q
 
-The --live option animates the 24 free real squared lengths and, on a
-logarithmic axis, both \(r_U\) and the hard gap after every accepted update.
-The non-live and live paths use the same one-step update loop. The default
-machine-readable record is
+The --live option retains the later period diagnostic's animation of the 24
+free real squared lengths and, on a logarithmic axis, both \(r_U\) and the hard
+gap after every accepted update. The historical solve runs first and is
+reported in the same record. The default machine-readable record is
 /tmp/cobordism/geometric_operators.json; it is not committed.
 
 ## Scientific assessment
 
 The experiment supports these statements:
 
-1. a fixed cobordism can carry selected boundary periods;
-2. a complete basis can identify its target-free boundary transport;
-3. a uniquely framed rank-one bulk kernel can be promoted to a Choi state;
-4. charge leakage is an obstruction.
+1. a pinned Choi block can be extended to a full Laplacian eigenstate by
+   relaxing interior geometry and auxiliary amplitudes;
+2. the tested geometric boundary remains exactly fixed during that solve;
+3. a complete period basis can identify target-free boundary transport;
+4. a uniquely framed rank-one bulk kernel can be promoted to a Choi state.
 
-It falsifies the proposed sufficiency statement on the tested topology:
-charge conservation alone does not imply geometric realizability. It also
-shows that a one-pair machine-precision fit does not identify an operator and
-that the historical \(r_U\) magnitude is not a reliable convergence
-certificate without the hard gap.
+The historical mode disproves charge conservation as the numerical
+realizability criterion: a charge-changing gate converges equally well. The
+later period mode separately falsifies charge conservation as a sufficient
+condition on the tested prism. It also shows that a one-pair machine-precision
+fit does not identify an operator and that the period-residual magnitude is
+not a reliable convergence certificate without the hard gap.
 
 This is not a global no-go theorem over other topologies, refinements, or
-geometric fields. A positive universal paper is therefore not scientifically
-supported by the current machinery. A narrower paper on identifiability,
-topology-specific obstructions, and the rank-one framed-kernel criterion is
-defensible and non-trivial if it adds a theorem or a systematic topology
-classification; the present experiment alone is better treated as a rigorous
-negative result and foundation for that paper.
+geometric fields. The current evidence does not establish a map
+\(U\mapsto W\) that can be read without the pinned target, nor a TQFT functor
+\(Z\). A paper claiming a universal charge-conserving geometric operator is
+therefore not supported. A narrower paper on target-conditioned spectral
+extension, identifiability, and framed bulk-kernel obstructions is defensible
+if it includes a theorem or systematic topology classification.

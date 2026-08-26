@@ -16,6 +16,7 @@
 #include "cobordism/ChainComplex.h"
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/HodgeLaplacian.h"
+#include "cobordism/LevenbergMarquardt.h"
 #include "cobordism/SurgicalCone.h"
 #include "matter/MatterConfiguration.h"
 #include "mesh/Edge.h"
@@ -1019,6 +1020,235 @@ void MultiCobordism::declareRegisterConstraint(RegisterConstraint constraint) {
 
 void MultiCobordism::clearRegisterConstraints() {
   registerConstraints_.clear();
+}
+
+MultiCobordism::FixedBoundaryEigenstateResult
+MultiCobordism::relaxFixedBoundaryEigenstate(
+    int degree, std::vector<std::vector<std::uint64_t>> supportCells,
+    std::vector<complexd> target, double epsilon, int restarts, int maxGrowth,
+    std::uint64_t seed, int maxIterations) {
+  constexpr double kPi = 3.14159265358979323846;
+  constexpr double kWeightMinimum = 0.1;
+  constexpr double kWeightMaximum = 10.0;
+  constexpr double kPhaseBound = 2.0 * kPi;
+  constexpr double kAuxiliaryBound = 5.0;
+
+  if (!spacetime_)
+    throw std::invalid_argument(
+        "MultiCobordism::relaxFixedBoundaryEigenstate: null spacetime");
+  if (degree < 0)
+    throw std::invalid_argument(
+        "MultiCobordism::relaxFixedBoundaryEigenstate: degree is negative");
+  if (supportCells.empty() || supportCells.size() != target.size())
+    throw std::invalid_argument(
+        "MultiCobordism::relaxFixedBoundaryEigenstate: support/target size "
+        "mismatch or empty support");
+  if (!(epsilon > 0.0) || !std::isfinite(epsilon))
+    throw std::invalid_argument(
+        "MultiCobordism::relaxFixedBoundaryEigenstate: epsilon must be finite "
+        "and positive");
+  if (restarts <= 0 || maxGrowth < 0 || maxIterations <= 0)
+    throw std::invalid_argument(
+        "MultiCobordism::relaxFixedBoundaryEigenstate: invalid search budget");
+
+  const std::size_t expectedCellWidth = static_cast<std::size_t>(degree) + 1;
+  std::set<std::vector<std::uint64_t>> uniqueSupport;
+  for (auto &cell : supportCells) {
+    if (cell.size() != expectedCellWidth)
+      throw std::invalid_argument(
+          "MultiCobordism::relaxFixedBoundaryEigenstate: malformed support "
+          "cell");
+    std::sort(cell.begin(), cell.end());
+    if (std::adjacent_find(cell.begin(), cell.end()) != cell.end() ||
+        !uniqueSupport.insert(cell).second)
+      throw std::invalid_argument(
+          "MultiCobordism::relaxFixedBoundaryEigenstate: repeated support "
+          "cell");
+  }
+
+  double targetNormSquared = 0.0;
+  for (const complexd value : target) targetNormSquared += std::norm(value);
+  if (!(targetNormSquared > 0.0) || !std::isfinite(targetNormSquared))
+    throw std::invalid_argument(
+        "MultiCobordism::relaxFixedBoundaryEigenstate: target must be finite "
+        "and nonzero");
+  const double inverseTargetNorm = 1.0 / std::sqrt(targetNormSquared);
+  for (complexd &value : target) value *= inverseTargetNorm;
+
+  std::map<std::vector<std::uint64_t>, complexd> pinnedByCell;
+  for (std::size_t index = 0; index < supportCells.size(); ++index)
+    pinnedByCell.emplace(supportCells[index], target[index]);
+
+  EigenstateSynthesis synthesis(spacetime_, degree);
+  std::vector<complexd> witness;
+  std::size_t auxiliaryCellCount = 0;
+
+  const auto optimizePass = [&](std::uint64_t passSeed) {
+    const bool usePhases = degree == 0;
+    const std::size_t order = synthesis.order();
+    const std::size_t interiorEdgeCount = synthesis.numInteriorEdges();
+    const auto &cells = synthesis.cellSimplices();
+
+    std::vector<complexd> pinnedValues(order, complexd(0.0, 0.0));
+    std::vector<std::size_t> auxiliaryIndices;
+    std::size_t matchedSupportCount = 0;
+    for (std::size_t index = 0; index < order; ++index) {
+      const auto pinned = pinnedByCell.find(cells[index]);
+      if (pinned != pinnedByCell.end()) {
+        pinnedValues[index] = pinned->second;
+        ++matchedSupportCount;
+      } else {
+        auxiliaryIndices.push_back(index);
+      }
+    }
+    if (matchedSupportCount != pinnedByCell.size())
+      throw std::invalid_argument(
+          "MultiCobordism::relaxFixedBoundaryEigenstate: support cell is not "
+          "present in the live complex");
+
+    auxiliaryCellCount = auxiliaryIndices.size();
+    const std::size_t weightCount = interiorEdgeCount;
+    const std::size_t phaseCount = usePhases ? interiorEdgeCount : 0;
+    const std::size_t parameterCount =
+        weightCount + phaseCount + 2 * auxiliaryIndices.size();
+
+    const auto buildState =
+        [&pinnedValues, &auxiliaryIndices, weightCount,
+         phaseCount](const Eigen::VectorXd &parameters) {
+          std::vector<complexd> state = pinnedValues;
+          for (std::size_t index = 0; index < auxiliaryIndices.size(); ++index) {
+            const Eigen::Index realIndex = static_cast<Eigen::Index>(
+                weightCount + phaseCount + 2 * index);
+            state[auxiliaryIndices[index]] =
+                complexd(parameters[realIndex], parameters[realIndex + 1]);
+          }
+          return state;
+        };
+
+    const auto normalize = [](std::vector<complexd> state) {
+      double normSquared = 0.0;
+      for (const complexd value : state) normSquared += std::norm(value);
+      if (normSquared > 0.0) {
+        const double inverseNorm = 1.0 / std::sqrt(normSquared);
+        for (complexd &value : state) value *= inverseNorm;
+      }
+      return state;
+    };
+
+    const auto residual =
+        [&synthesis, &buildState, &normalize, interiorEdgeCount, weightCount,
+         usePhases, order](const Eigen::VectorXd &parameters) {
+          if (interiorEdgeCount > 0) {
+            std::vector<double> weights(interiorEdgeCount);
+            for (std::size_t index = 0; index < interiorEdgeCount; ++index)
+              weights[index] = parameters[static_cast<Eigen::Index>(index)];
+            synthesis.setInteriorWeights(weights);
+            if (usePhases) {
+              std::vector<complexd> phases(interiorEdgeCount);
+              for (std::size_t index = 0; index < interiorEdgeCount; ++index)
+                phases[index] = parameters[static_cast<Eigen::Index>(
+                    weightCount + index)];
+              synthesis.setInteriorPhases(phases);
+            }
+          }
+
+          const std::vector<complexd> state =
+              normalize(buildState(parameters));
+          const std::vector<complexd> applied = synthesis.apply(state);
+          complexd rayleigh(0.0, 0.0);
+          for (std::size_t index = 0; index < order; ++index)
+            rayleigh += std::conj(state[index]) * applied[index];
+          Eigen::VectorXd values(static_cast<Eigen::Index>(2 * order));
+          for (std::size_t index = 0; index < order; ++index) {
+            const complexd difference =
+                applied[index] - rayleigh.real() * state[index];
+            values[static_cast<Eigen::Index>(index)] = difference.real();
+            values[static_cast<Eigen::Index>(order + index)] =
+                difference.imag();
+          }
+          return values;
+        };
+
+    const auto clamp = [weightCount, phaseCount, &auxiliaryIndices,
+                        kWeightMinimum, kWeightMaximum, kPhaseBound,
+                        kAuxiliaryBound](const Eigen::VectorXd &parameters) {
+      Eigen::VectorXd clamped = parameters;
+      for (std::size_t index = 0; index < weightCount; ++index)
+        clamped[static_cast<Eigen::Index>(index)] = std::clamp(
+            clamped[static_cast<Eigen::Index>(index)], kWeightMinimum,
+            kWeightMaximum);
+      for (std::size_t index = 0; index < phaseCount; ++index) {
+        const Eigen::Index phaseIndex =
+            static_cast<Eigen::Index>(weightCount + index);
+        clamped[phaseIndex] =
+            std::clamp(clamped[phaseIndex], -kPhaseBound, kPhaseBound);
+      }
+      for (std::size_t index = 0; index < 2 * auxiliaryIndices.size(); ++index) {
+        const Eigen::Index auxiliaryIndex = static_cast<Eigen::Index>(
+            weightCount + phaseCount + index);
+        clamped[auxiliaryIndex] = std::clamp(
+            clamped[auxiliaryIndex], -kAuxiliaryBound, kAuxiliaryBound);
+      }
+      return clamped;
+    };
+
+    std::uniform_real_distribution<double> weightDistribution(
+        kWeightMinimum, kWeightMaximum);
+    std::uniform_real_distribution<double> phaseDistribution(-kPi, kPi);
+    std::uniform_real_distribution<double> auxiliaryDistribution(-1.0, 1.0);
+    const auto sample =
+        [weightCount, phaseCount, &auxiliaryIndices, weightDistribution,
+         phaseDistribution,
+         auxiliaryDistribution](std::mt19937_64 &randomEngine) mutable {
+          Eigen::VectorXd parameters(static_cast<Eigen::Index>(
+              weightCount + phaseCount + 2 * auxiliaryIndices.size()));
+          for (std::size_t index = 0; index < weightCount; ++index)
+            parameters[static_cast<Eigen::Index>(index)] =
+                weightDistribution(randomEngine);
+          for (std::size_t index = 0; index < phaseCount; ++index)
+            parameters[static_cast<Eigen::Index>(weightCount + index)] =
+                phaseDistribution(randomEngine);
+          for (std::size_t index = 0; index < 2 * auxiliaryIndices.size();
+               ++index)
+            parameters[static_cast<Eigen::Index>(weightCount + phaseCount +
+                                                  index)] =
+                auxiliaryDistribution(randomEngine);
+          return parameters;
+        };
+
+    const LevenbergMarquardt solver(maxIterations, epsilon);
+    const auto best = solver.multiRestart(residual, clamp, sample,
+                                          parameterCount, restarts, passSeed,
+                                          epsilon);
+    (void)residual(best.parameters);
+    witness = normalize(buildState(best.parameters));
+    return synthesis.residual(witness);
+  };
+
+  double residual = std::numeric_limits<double>::infinity();
+  int growthSteps = 0;
+  for (int pass = 0;; ++pass) {
+    residual = optimizePass(seed + static_cast<std::uint64_t>(pass));
+    if (residual < epsilon || growthSteps >= maxGrowth) break;
+    if (!synthesis.growInterior(seed + 1000u +
+                                static_cast<std::uint64_t>(pass)))
+      break;
+    ++growthSteps;
+  }
+
+  FixedBoundaryEigenstateResult result;
+  result.converged = residual < epsilon;
+  result.residual = residual;
+  result.eigenvalue = synthesis.rayleigh(witness);
+  result.degree = degree;
+  result.growthSteps = growthSteps;
+  result.interiorVertexCount = synthesis.interiorVertexCount();
+  result.interiorEdgeCount = synthesis.numInteriorEdges();
+  result.auxiliaryCellCount = auxiliaryCellCount;
+  result.supportCells = std::move(supportCells);
+  result.target = std::move(target);
+  result.state = std::move(witness);
+  return result;
 }
 
 MultiCobordism::GeometricOperatorReadout MultiCobordism::geometricOperator(

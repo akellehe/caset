@@ -85,6 +85,52 @@ class ExplicitConstraintTest(unittest.TestCase):
                 "bad", 1, [[0, 1]], [0j])
 
 
+class HistoricalFixedBoundarySpectralTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.result = GO.historical_spectral_experiment(
+            epsilon=1e-10,
+            restarts=1,
+            max_growth=4,
+            seed=0,
+            max_iterations=200,
+        )
+
+    def test_rayleigh_residual_converges_with_boundary_fixed(self):
+        phase = self.result["cases"]["charge_preserving_phase"]
+        self.assertTrue(phase["converged"])
+        self.assertLess(phase["residual"], 1e-10)
+        self.assertAlmostEqual(
+            phase["residual"], phase["residual_cross_check"], places=20)
+        self.assertLess(phase["eigenvector_defect"], 1e-5)
+        self.assertGreater(phase["growth_steps"], 0)
+        self.assertTrue(phase["boundary_preserved"])
+        self.assertEqual(phase["boundary_drift"], 0.0)
+
+    def test_pinned_choi_ray_promotes_and_applies_to_held_out_states(self):
+        for case in self.result["cases"].values():
+            self.assertGreater(case["support_choi_overlap"], 1.0 - 1e-12)
+            self.assertLess(case["operator_error"], 1e-12)
+            self.assertLess(case["held_out_error_max"], 1e-12)
+
+    def test_charge_conservation_is_not_part_of_historical_solver(self):
+        phase = self.result["cases"]["charge_preserving_phase"]
+        changing = self.result["cases"]["charge_changing_x"]
+        self.assertLess(phase["charge_commutator_error"], 1e-12)
+        self.assertGreater(changing["charge_commutator_error"], 1.0)
+        self.assertLess(changing["residual"], 1e-10)
+
+    def test_support_cells_are_explicit_and_validated(self):
+        fixture = GO.SpectralChoiCobordism()
+        with self.assertRaises(ValueError):
+            fixture.node.relax_fixed_boundary_eigenstate(
+                0, [[99]], [1.0 + 0.0j], restarts=1, max_growth=0)
+        with self.assertRaises(ValueError):
+            fixture.node.relax_fixed_boundary_eigenstate(
+                0, [[0], [0]], [1.0 + 0.0j, 0.0j],
+                restarts=1, max_growth=0)
+
+
 class ResidualOnlyRelaxationTest(unittest.TestCase):
     def test_objective_is_only_r_u(self):
         fill = GO.PeriodCobordism()
@@ -125,13 +171,14 @@ class BoundaryTransportIdentifiabilityTest(unittest.TestCase):
         cls.cycle = GO.PeriodCobordism(twist=GO._GAMMA)
         cls.cycle.pin_basis(GO.cycle_operator())
 
-    def test_one_pair_is_machine_exact_but_not_an_operator(self):
+    def test_one_pair_has_tiny_residual_but_not_an_operator(self):
         reflection = GO.lift_sector_operator(
             np.diag([1.0, -1.0]))
         fill = GO.PeriodCobordism()
         selected = np.array([1.0, 0.0], dtype=complex)
         fill.pin_state("selected", reflection, selected)
-        self.assertLess(fill.snapshot()["r_u"], GO._MACHINE_TOL)
+        self.assertLess(
+            fill.snapshot()["r_u"], GO._TINY_PERIOD_RESIDUAL)
 
         transport = fill.read_transport()
         unseen = np.array([0.0, 1.0], dtype=complex)

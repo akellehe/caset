@@ -1,16 +1,20 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
 
-"""Residual-only geometric-operator identifiability experiment.
+"""Fixed-boundary spectral Choi synthesis and operator identifiability.
 
-The full simplicial boundary is pinned facet by facet. Stage 2 varies only real
-bulk squared lengths and minimizes the historical quantum residual r_U; the
-Einstein-Hilbert term is disabled.
+The primary experiment reproduces the method that existed when the 2026-06-24
+report was written. It fixes the relative amplitudes of an explicit normalized
+``vec(U)`` block, frees all other cochain amplitudes, varies only interior
+geometry, and minimizes the eigenvalue-agnostic Rayleigh residual. The complete
+cochain is normalized during evaluation, so the fixed block specifies a ray.
+Boundary geometry is bit-identical; no Regge, period, harmonic, or charge
+constraint enters that relaxation.
 
-The experiment distinguishes carrying one input/output pair, identifying a
-linear boundary transport from a complete basis, and promoting the
-boundary-deleted bulk to a framed Choi state. The last operation is rejected
-unless an ordered d^2 frame sees rank exactly one.
+The second experiment retains the later period-based ``r_U`` implementation.
+It distinguishes carrying one input/output pair, identifying boundary transport
+from a complete basis, and promoting a framed bulk-minus-boundary kernel. These
+are separate semantics and are reported separately.
 
 Run:
 
@@ -36,7 +40,8 @@ cob = tessera.cobordism
 choi = tessera.quantum.ChoiJamiolkowski
 
 _TOL = 1e-9
-_MACHINE_TOL = 1e-20
+_TINY_PERIOD_RESIDUAL = 1e-20
+_SPECTRAL_EPSILON = 1e-24
 _CHARGE = np.ones(3, dtype=complex) / math.sqrt(3.0)
 _CHARGE_PROJECTOR = np.outer(_CHARGE, _CHARGE.conj())
 _SECTOR_BASIS = np.array(
@@ -170,6 +175,212 @@ def charge_commutator_error(operator):
     operator = np.asarray(operator, dtype=complex)
     return float(np.linalg.norm(
         operator @ _CHARGE_PROJECTOR - _CHARGE_PROJECTOR @ operator))
+
+
+def number_charge_commutator_error(operator):
+    """Q=diag(0,1) charge-sector test for the historical qubit fixture."""
+    operator = np.asarray(operator, dtype=complex)
+    charge = np.diag([0.0, 1.0]).astype(complex)
+    return float(np.linalg.norm(operator @ charge - charge @ operator))
+
+
+class SpectralChoiCobordism:
+    """Historical direct ``vec(U)`` inverse-eigenvector synthesis."""
+
+    def __init__(self):
+        self.spacetime = tessera.Spacetime.fromCells(
+            2, [[0, 1, 2], [0, 1, 3]], 1.0, 0.0)
+        for edge in self.spacetime.getEdgeList().toVector():
+            edge.setLength(1.0)
+            edge.setPhase(0.0)
+        self.spacetime.materializeFacets()
+        synthesis = cob.EigenstateSynthesis(self.spacetime, 0)
+        self.support_cells = [[0], [1], [2], [3]]
+        self.boundary_edges = {
+            tuple(map(int, edge)) for edge in synthesis.boundaryEdges()
+        }
+        self.boundary_initial = self._boundary_snapshot()
+        self.node = cob.MultiCobordism(
+            host=self.spacetime,
+            input_targets=[],
+            output_targets=[],
+            degrees=[0],
+            einstein_hilbert=False,
+        )
+
+    def _boundary_snapshot(self):
+        edge_map = {
+            _edge_key(edge): edge
+            for edge in self.spacetime.getEdgeList().toVector()
+        }
+        return {
+            key: (
+                complex(edge_map[key].getLength()) ** 2,
+                complex(edge_map[key].getPhase()),
+            )
+            for key in self.boundary_edges
+        }
+
+    def relax_operator(
+            self, operator, epsilon=_SPECTRAL_EPSILON, restarts=80,
+            max_growth=4, seed=0, max_iterations=300,
+            held_out_count=16):
+        operator = np.asarray(operator, dtype=complex)
+        if operator.shape != (2, 2):
+            raise ValueError("historical fixture requires a 2x2 operator")
+        target = np.asarray(choi.choiState(
+            [complex(value) for value in operator.ravel()], 2),
+            dtype=complex,
+        )
+        witness = self.node.relax_fixed_boundary_eigenstate(
+            degree=0,
+            support_cells=self.support_cells,
+            target=[complex(value) for value in target],
+            epsilon=float(epsilon),
+            restarts=int(restarts),
+            max_growth=int(max_growth),
+            seed=int(seed),
+            max_iterations=int(max_iterations),
+        )
+
+        synthesis = cob.EigenstateSynthesis(self.spacetime, 0)
+        cell_index = {
+            tuple(map(int, cell)): index
+            for index, cell in enumerate(synthesis.cellSimplices())
+        }
+        state = np.asarray(witness.state, dtype=complex)
+        support_state = _unit(np.asarray([
+            state[cell_index[tuple(cell)]]
+            for cell in self.support_cells
+        ]))
+        recovered = np.asarray(choi.operatorFromChoiState(
+            [complex(value) for value in support_state], 2),
+            dtype=complex,
+        ).reshape(2, 2)
+        phase = complex(np.vdot(operator.ravel(), recovered.ravel()))
+        phase_aligned = (
+            recovered * np.conj(phase / abs(phase))
+            if abs(phase) > 0.0 else recovered
+        )
+
+        rng = np.random.default_rng(seed + 991)
+        held_out_errors = []
+        for _ in range(int(held_out_count)):
+            input_state = _unit(
+                rng.normal(size=2) + 1j * rng.normal(size=2))
+            held_out_errors.append(float(np.linalg.norm(
+                phase_aligned @ input_state - operator @ input_state)))
+
+        boundary_final = self._boundary_snapshot()
+        boundary_cells_final = {
+            tuple(map(int, edge))
+            for edge in synthesis.boundaryEdges()
+        }
+        boundary_drift = max((
+            max(abs(boundary_final[key][component]
+                    - self.boundary_initial[key][component])
+                for component in range(2))
+            for key in self.boundary_edges
+        ), default=0.0)
+        residual_cross_check = float(synthesis.residual(
+            [complex(value) for value in state]))
+        applied = np.asarray(synthesis.apply(
+            [complex(value) for value in state]), dtype=complex)
+        eigenvector_defect = float(math.sqrt(residual_cross_check))
+        relative_eigenvector_defect = float(
+            eigenvector_defect
+            / max(float(np.linalg.norm(applied)), np.finfo(float).tiny)
+        )
+        return {
+            "converged": bool(witness.converged),
+            "residual": float(witness.residual),
+            "residual_cross_check": residual_cross_check,
+            "eigenvector_defect": eigenvector_defect,
+            "relative_eigenvector_defect": relative_eigenvector_defect,
+            "eigenvalue": float(witness.eigenvalue),
+            "growth_steps": int(witness.growth_steps),
+            "interior_vertex_count": int(
+                witness.interior_vertex_count),
+            "interior_edge_count": int(witness.interior_edge_count),
+            "auxiliary_cell_count": int(witness.auxiliary_cell_count),
+            "boundary_preserved": (
+                boundary_cells_final == self.boundary_edges
+                and boundary_final == self.boundary_initial),
+            "boundary_drift": float(boundary_drift),
+            "charge_commutator_error": (
+                number_charge_commutator_error(operator)),
+            "target_operator": _matrix_payload(operator),
+            "recovered_operator": _matrix_payload(phase_aligned),
+            "operator_error": float(np.linalg.norm(
+                phase_aligned - operator)),
+            "support_choi_overlap": float(abs(np.vdot(
+                target, support_state))),
+            "held_out_error_max": max(held_out_errors, default=0.0),
+            "held_out_error_mean": (
+                float(np.mean(held_out_errors))
+                if held_out_errors else 0.0),
+        }
+
+
+def historical_spectral_experiment(
+        epsilon=_SPECTRAL_EPSILON, restarts=80, max_growth=4,
+        seed=0, max_iterations=300):
+    phase_gate = np.diag([1.0, cmath.exp(0.41j)]).astype(complex)
+    charge_changing = np.array(
+        [[0.0, 1.0], [1.0, 0.0]], dtype=complex)
+    cases = {}
+    for offset, (name, operator) in enumerate((
+            ("charge_preserving_phase", phase_gate),
+            ("charge_changing_x", charge_changing))):
+        cases[name] = SpectralChoiCobordism().relax_operator(
+            operator,
+            epsilon=epsilon,
+            restarts=restarts,
+            max_growth=max_growth,
+            seed=seed + offset,
+            max_iterations=max_iterations,
+        )
+    checks = {
+        "phase_gate_reaches_requested_precision": (
+            cases["charge_preserving_phase"]["residual"] < epsilon),
+        "charge_changing_gate_also_converges": (
+            cases["charge_changing_x"]["residual"] < epsilon),
+        "boundary_geometry_is_bit_identical": all(
+            case["boundary_preserved"] for case in cases.values()),
+        "support_recovers_each_choi_ray": all(
+            case["support_choi_overlap"] > 1.0 - 1e-12
+            for case in cases.values()),
+        "held_out_application_matches": all(
+            case["held_out_error_max"] < 1e-12
+            for case in cases.values()),
+    }
+    return {
+        "method": {
+            "target": (
+                "normalized vec(U) ray fixed on explicit 0-cells"),
+            "free_state": "all non-support amplitudes",
+            "free_geometry": "interior edges only",
+            "residual": "||L psi - <psi,L psi> psi||^2",
+            "regge": False,
+            "period_constraints": False,
+            "harmonic_eigenvalue": False,
+            "charge_constraint": False,
+            "epsilon": float(epsilon),
+            "restarts": int(restarts),
+            "max_growth": int(max_growth),
+            "max_iterations": int(max_iterations),
+            "seed": int(seed),
+        },
+        "cases": cases,
+        "checks": checks,
+        "interpretation": (
+            "The historical inverse-eigenvector solver realizes the pinned "
+            "Choi ray. Held-out application follows after unvectorizing that "
+            "same pinned ray; it is not process learning or a target-free "
+            "bulk readout. Charge conservation is neither encoded nor "
+            "necessary for this numerical construction."
+        ),
+    }
 
 
 class FrozenBoundaryTransport:
@@ -552,11 +763,29 @@ def square_cycle_choi_control():
 
 
 def run_experiment(
-        iterations=12, alpha=0.05, seed=20260826, live=False):
+        iterations=12, alpha=0.05, seed=20260826, live=False,
+        spectral_epsilon=_SPECTRAL_EPSILON, spectral_restarts=80,
+        spectral_max_growth=4, spectral_max_iterations=300,
+        spectral_seed=0):
     if int(iterations) < 1:
         raise ValueError("iterations must be positive")
     if not float(alpha) > 0.0:
         raise ValueError("alpha must be positive")
+
+    historical = historical_spectral_experiment(
+        epsilon=spectral_epsilon,
+        restarts=spectral_restarts,
+        max_growth=spectral_max_growth,
+        seed=spectral_seed,
+        max_iterations=spectral_max_iterations,
+    )
+    if not all(historical["checks"].values()):
+        failed = [
+            name for name, passed in historical["checks"].items()
+            if not passed
+        ]
+        raise RuntimeError(
+            "failed historical spectral checks: " + ", ".join(failed))
 
     with squared_content_weights():
         reflection = lift_sector_operator(np.diag([1.0, -1.0]))
@@ -628,9 +857,9 @@ def run_experiment(
 
         bulk_control = square_cycle_choi_control()
         checks = {
-            "single_pair_reaches_machine_precision": (
+            "single_pair_has_tiny_period_residual": (
                 single_case["diagnostics"]["r_u"]
-                < _MACHINE_TOL),
+                < _TINY_PERIOD_RESIDUAL),
             "single_pair_does_not_identify_operator": (
                 single_case["unseen_reflection_error"] > 1.0),
             "complete_identity_generalizes": (
@@ -669,7 +898,9 @@ def run_experiment(
 
         result = {
             "method": {
-                "objective": "r_U only",
+                "primary": (
+                    "historical fixed-boundary Rayleigh residual"),
+                "later_diagnostic": "ordered-period r_U only",
                 "einstein_hilbert": False,
                 "real_squared_lengths_only": True,
                 "boundary": (
@@ -678,6 +909,7 @@ def run_experiment(
                 "alpha": float(alpha),
                 "seed": int(seed),
             },
+            "historical_fixed_boundary_spectral": historical,
             "single_pair_ambiguity": single_case,
             "complete_basis_identity": identity_case,
             "complete_basis_mapping_class": cycle_case,
@@ -686,14 +918,15 @@ def run_experiment(
             "rank_one_bulk_choi_control": bulk_control,
             "checks": checks,
             "scientific_conclusion": (
-                "A fixed pair can satisfy r_U to machine precision "
-                "without identifying an operator. Complete-basis "
-                "constraints identify the topology's boundary "
-                "transport, but charge conservation does not make a "
-                "generic operator realizable on this prism. A bulk "
-                "kernel is promotable only with a d^2 frame and a "
-                "rank-one restriction; this pair-of-pants prism has "
-                "no boundary-deleted bulk."
+                "The pre-paper method directly realizes a pinned Choi "
+                "ray as a Laplacian eigenstate with frozen boundary "
+                "geometry; it succeeds for both a charge-preserving "
+                "phase gate and a charge-changing X gate. This does "
+                "not establish charge conservation as a realizability "
+                "criterion, learn U from state pairs, or extract U "
+                "target-free from the bulk. The later period experiment "
+                "still shows that one pair is insufficient and that a "
+                "bulk kernel needs a frame and rank-one restriction."
             ),
         }
         if animator is not None:
@@ -709,6 +942,18 @@ def build_parser():
     parser.add_argument("--alpha", type=float, default=0.05)
     parser.add_argument(
         "--seed", type=int, default=20260826)
+    parser.add_argument(
+        "--spectral-epsilon", type=float,
+        default=_SPECTRAL_EPSILON,
+        help="historical Rayleigh-residual threshold")
+    parser.add_argument(
+        "--spectral-restarts", type=int, default=80)
+    parser.add_argument(
+        "--spectral-max-growth", type=int, default=4)
+    parser.add_argument(
+        "--spectral-max-iterations", type=int, default=300)
+    parser.add_argument(
+        "--spectral-seed", type=int, default=0)
     parser.add_argument(
         "--live", action="store_true",
         help="animate bulk l^2, r_U, and the hard gap")
@@ -729,6 +974,11 @@ def main(argv=None):
         alpha=args.alpha,
         seed=args.seed,
         live=args.live,
+        spectral_epsilon=args.spectral_epsilon,
+        spectral_restarts=args.spectral_restarts,
+        spectral_max_growth=args.spectral_max_growth,
+        spectral_max_iterations=args.spectral_max_iterations,
+        spectral_seed=args.spectral_seed,
     )
     if not args.no_write:
         args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -737,6 +987,14 @@ def main(argv=None):
                 result, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+    historical = result["historical_fixed_boundary_spectral"]["cases"]
+    print(
+        "historical spectral:",
+        "phase",
+        f'{historical["charge_preserving_phase"]["residual"]:.6g},',
+        "X",
+        f'{historical["charge_changing_x"]["residual"]:.6g}',
+    )
     generic = result["generic_charge_preserving"]
     final = generic["relaxation"]["final"]
     print(

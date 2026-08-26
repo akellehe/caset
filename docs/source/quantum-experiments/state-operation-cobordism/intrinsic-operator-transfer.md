@@ -6,10 +6,12 @@ the proposed universal statement on the fixed prism topology, while validating
 target-independent transport for the identity and mapping-class controls.
 
 The method under test is the stationary-action objective and anchored value
-readout documented at report commit `5482829`. At that commit the harmonic
-operator used symmetric coordinates and the value code used their Euclidean
-pairing. Current `main` returns unwhitened cochains of the signed Hodge
-operator, so the equivalent live pairing used here is explicitly
+readout proposed at report commit `5482829`. It is not the earlier successful
+`RealizabilityOracle` calculation, which directly pinned
+\(\operatorname{vec}(U)\) and minimized a Rayleigh eigenresidual. At the report
+commit the harmonic operator used symmetric coordinates and the value code used
+their Euclidean pairing. Current `main` returns unwhitened cochains of the signed
+Hodge operator, so the equivalent live pairing used here is explicitly
 \(h^\dagger W_1k\). This coordinate correction does not involve the target.
 
 ## Question and construction
@@ -37,8 +39,8 @@ harmonic matrix and boundary orientations, but no target operator. A new
 logical input \(x\in V\) is attached after relaxation and produces
 \(T_Wx\).
 
-The target is used only in the fitting objective. Instead of the historical
-single selected state, the pin includes the complete basis
+The target is used only in the fitting objective. Instead of one selected
+state, this later period experiment pins the complete basis
 
 \[
 r_U(W)=\sum_{j=1}^{2}
@@ -68,7 +70,7 @@ r_{\mathrm{gap}}=
 \sum_j\min_h\|\operatorname{periods}(h)-(e_j,Ue_j)\|^2.
 \]
 
-It has the same finite-geometry zero set as the historical residual but cannot
+It has the same finite-geometry zero set as the period residual but cannot
 appear to improve merely because the non-harmonic leaked representative is
 rescaled.
 
@@ -131,7 +133,7 @@ relaxation steps, and 16 unseen complex unit inputs per case.
 | generic charge-preserving SU(2) block | \(1.36\times10^{-16}\) | \(8.38\times10^{-3}\) | 0.135345 | 0.520279 | 0.367893 | 1.44187 |
 | charge-leaking unitary | 0.589544 | 2.23710 | 0.177925 | 0.091034 projected | 0.423477 | 0.262576 |
 
-For the generic charge-preserving target, relaxation reduced the historical
+For the generic charge-preserving target, relaxation reduced the period
 residual from 2.04983 to 0.00838458. Nevertheless:
 
 - the hard period gap remained 0.1353453088;

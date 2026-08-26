@@ -1007,6 +1007,41 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
                              [](const MultiCobordism::BoundaryBlock &block) {
                                return block.target;
                              });
+  py::class_<MultiCobordism::FixedBoundaryEigenstateResult>(
+      m, "FixedBoundaryEigenstateResult",
+      "Witness from the historical fixed-boundary Rayleigh-residual "
+      "relaxation. This is direct eigenstate synthesis, not a period r_U "
+      "constraint or target-free operator readout.")
+      .def_readonly(
+          "converged",
+          &MultiCobordism::FixedBoundaryEigenstateResult::converged)
+      .def_readonly(
+          "residual",
+          &MultiCobordism::FixedBoundaryEigenstateResult::residual)
+      .def_readonly(
+          "eigenvalue",
+          &MultiCobordism::FixedBoundaryEigenstateResult::eigenvalue)
+      .def_readonly("degree",
+                    &MultiCobordism::FixedBoundaryEigenstateResult::degree)
+      .def_readonly(
+          "growth_steps",
+          &MultiCobordism::FixedBoundaryEigenstateResult::growthSteps)
+      .def_readonly(
+          "interior_vertex_count",
+          &MultiCobordism::FixedBoundaryEigenstateResult::interiorVertexCount)
+      .def_readonly(
+          "interior_edge_count",
+          &MultiCobordism::FixedBoundaryEigenstateResult::interiorEdgeCount)
+      .def_readonly(
+          "auxiliary_cell_count",
+          &MultiCobordism::FixedBoundaryEigenstateResult::auxiliaryCellCount)
+      .def_readonly(
+          "support_cells",
+          &MultiCobordism::FixedBoundaryEigenstateResult::supportCells)
+      .def_readonly("target",
+                    &MultiCobordism::FixedBoundaryEigenstateResult::target)
+      .def_readonly("state",
+                    &MultiCobordism::FixedBoundaryEigenstateResult::state);
   py::class_<MultiCobordism::GeometricOperatorReadout>(
       m, "GeometricOperatorReadout",
       "Target-free promotion of a framed bulk-minus-boundary kernel. "
@@ -1140,6 +1175,18 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            &MultiCobordism::clearRegisterConstraints,
            "Remove explicit register constraints without changing emergent "
            "targets or geometric pins.")
+      .def("relax_fixed_boundary_eigenstate",
+           &MultiCobordism::relaxFixedBoundaryEigenstate,
+           py::arg("degree"), py::arg("support_cells"), py::arg("target"),
+           py::arg("epsilon") = 1e-10, py::arg("restarts") = 64,
+           py::arg("max_growth") = 4, py::arg("seed") = 0,
+           py::arg("max_iterations") = 200,
+           py::call_guard<py::gil_scoped_release>(),
+           "Historical fixed-boundary inverse-eigenvector relaxation. "
+           "Pins the relative amplitudes of the named cochain block, frees "
+           "every other amplitude, varies only interior geometry, and "
+           "minimizes the Rayleigh "
+           "residual. It does not run the node's period or Regge objective.")
       .def("geometric_operator", &MultiCobordism::geometricOperator,
            py::arg("state_dimension"),
            py::arg("frame_cells") =

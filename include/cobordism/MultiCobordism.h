@@ -79,6 +79,27 @@ class MultiCobordism {
     std::vector<std::complex<double>> target;
   };
 
+  /// Result of the historical fixed-boundary spectral relaxation. This is a
+  /// direct inverse-eigenvector synthesis: selected cochain components have the
+  /// fixed relative amplitudes `target`, all other amplitudes are free, and only
+  /// interior edge geometry varies. The assembled cochain is globally
+  /// normalized before evaluation, so the selected block represents a ray, not
+  /// an absolute norm. This is distinct from the later period-based `rU`
+  /// objective.
+  struct FixedBoundaryEigenstateResult {
+    bool converged{false};
+    double residual{0.0};
+    double eigenvalue{0.0};
+    int degree{0};
+    int growthSteps{0};
+    std::size_t interiorVertexCount{0};
+    std::size_t interiorEdgeCount{0};
+    std::size_t auxiliaryCellCount{0};
+    std::vector<std::vector<std::uint64_t>> supportCells;
+    std::vector<std::complex<double>> target;
+    std::vector<std::complex<double>> state;
+  };
+
   /// Target-free Choi promotion of the live metric
   /// \f$\ker L_1(W-\partial W)\f$ restricted to an ordered \f$d^2\f$ frame.
   /// identifiable is true only when that restriction has rank one. A
@@ -177,6 +198,30 @@ class MultiCobordism {
   /// Remove every explicit register constraint. Emergent input/output targets
   /// are unaffected.
   void clearRegisterConstraints();
+
+  /// Run the fixed-boundary inverse-eigenvector relaxation used by the
+  /// pre-paper realizability report. Before global state normalization,
+  /// `supportCells[i]` is pinned to `target[i]`; every other cochain component
+  /// is an optimized auxiliary amplitude. Thus the normalized witness restricts
+  /// to the target ray, while its support norm may be smaller than one. The
+  /// target block is normalized once before optimization.
+  ///
+  /// Only `EigenstateSynthesis` interior weights and, at degree zero, interior
+  /// U(1) phases are varied. The full geometric boundary is therefore held
+  /// fixed. If the Rayleigh residual
+  /// \f$\|L\psi-\langle\psi,L\psi\rangle\psi\|^2\f$ does not fall below
+  /// `epsilon`, a boundary-preserving stellar subdivision is attempted and the
+  /// relaxation repeats, up to `maxGrowth` times. No Regge term, period
+  /// residual, charge constraint, or harmonic condition enters this mode.
+  ///
+  /// This method mutates the node's live spacetime in place. The ordinary
+  /// `run`/`buildStep` implementations and their objectives are unchanged.
+  [[nodiscard]] FixedBoundaryEigenstateResult relaxFixedBoundaryEigenstate(
+      int degree,
+      std::vector<std::vector<std::uint64_t>> supportCells,
+      std::vector<std::complex<double>> target, double epsilon = 1e-10,
+      int restarts = 64, int maxGrowth = 4, std::uint64_t seed = 0,
+      int maxIterations = 200);
 
   /// Read a square operator from the target-free live bulk. frameCells is the
   /// ordered row-major Choi frame and must contain exactly stateDimension^2
