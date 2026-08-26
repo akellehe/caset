@@ -823,21 +823,26 @@ EigenstateSynthesis::bulkMinusBoundaryCells() const {
   return out;
 }
 
-std::vector<cd> EigenstateSynthesis::bulkMinusBoundaryHarmonicMatrix(
-    double tol) const {
+
+std::vector<cd>
+EigenstateSynthesis::bulkMinusBoundaryHarmonicMatrix(double tol,
+                                                     bool metric) const {
   using Eigen::Index;
-  using Eigen::MatrixXd;
-  if (!st_) return {};
+  using Eigen::MatrixXcd;
+  using Eigen::VectorXcd;
+  if (!st_)
+    return {};
 
   // W − ∂W is the subcomplex induced on the interior vertices (the ones on no
-  // ∂W face); a cell belongs to it iff all of its vertices are interior. This is
-  // the ticket's "boundary removed" — and ties to its measured "3 interior
+  // ∂W face); a cell belongs to it iff all of its vertices are interior. This
+  // is the ticket's "boundary removed" — and ties to its measured "3 interior
   // vertices carry nothing" (too few interior vertices ⇒ no interior 1-cycle).
   const std::unordered_set<std::uint64_t> bverts(
       boundaryVertexIdsSorted_.begin(), boundaryVertexIdsSorted_.end());
   const auto interiorCell = [&](const std::vector<std::uint64_t> &c) {
     for (const std::uint64_t v : c)
-      if (bverts.count(v)) return false;
+      if (bverts.count(v))
+        return false;
     return true;
   };
 
@@ -846,48 +851,103 @@ std::vector<cd> EigenstateSynthesis::bulkMinusBoundaryHarmonicMatrix(
   const auto v1 = cc.kSimplexVertices(1);
   const auto v2 = cc.kSimplexVertices(2);
   const std::size_t n0 = v0.size(), n1 = v1.size(), n2 = v2.size();
-  if (n1 == 0) return {};
+  if (n1 == 0)
+    return {};
 
   // The interior-cell index lists into the full C_k orderings.
   std::vector<Index> i0, i1, i2;
   for (std::size_t i = 0; i < n0; ++i)
-    if (interiorCell(v0[i])) i0.push_back(static_cast<Index>(i));
+    if (interiorCell(v0[i]))
+      i0.push_back(static_cast<Index>(i));
   for (std::size_t i = 0; i < n1; ++i)
-    if (interiorCell(v1[i])) i1.push_back(static_cast<Index>(i));
+    if (interiorCell(v1[i]))
+      i1.push_back(static_cast<Index>(i));
   for (std::size_t i = 0; i < n2; ++i)
-    if (interiorCell(v2[i])) i2.push_back(static_cast<Index>(i));
+    if (interiorCell(v2[i]))
+      i2.push_back(static_cast<Index>(i));
   const Index m1 = static_cast<Index>(i1.size());
-  if (m1 == 0) return {};
+  if (m1 == 0)
+    return {};
 
-  // Restrict ∂₁ (n0×n1) and ∂₂ (n1×n2) to the interior rows/columns, then the
-  // combinatorial L₁ = ∂₁ᵀ∂₁ + ∂₂∂₂ᵀ (unit weights — the magnitude,
-  // signature-blind register the merge reads with harmonicMatrix(1,·,False)).
+  // Restrict the boundary maps to the interior rows and columns once. The
+  // combinatorial and metric modes differ only in the weights wrapped around
+  // these same incidence matrices.
   const std::vector<long> &d1 = cc.boundaryMatrix(1);
   const std::vector<long> &d2 = cc.boundaryMatrix(2);
-  MatrixXd D1 = MatrixXd::Zero(static_cast<Index>(i0.size()), m1);
+  MatrixXcd D1 = MatrixXcd::Zero(static_cast<Index>(i0.size()), m1);
   for (Index r = 0; r < static_cast<Index>(i0.size()); ++r)
     for (Index c = 0; c < m1; ++c)
-      D1(r, c) = static_cast<double>(
-          d1[static_cast<std::size_t>(i0[r]) * n1 + static_cast<std::size_t>(i1[c])]);
-  MatrixXd L = D1.transpose() * D1;
-  if (!i2.empty()) {
-    MatrixXd D2 = MatrixXd::Zero(m1, static_cast<Index>(i2.size()));
-    for (Index r = 0; r < m1; ++r)
-      for (Index c = 0; c < static_cast<Index>(i2.size()); ++c)
-        D2(r, c) = static_cast<double>(
-            d2[static_cast<std::size_t>(i1[r]) * n2 + static_cast<std::size_t>(i2[c])]);
-    L += D2 * D2.transpose();
+      D1(r, c) = static_cast<double>(d1[static_cast<std::size_t>(i0[r]) * n1 +
+                                        static_cast<std::size_t>(i1[c])]);
+  MatrixXcd D2 = MatrixXcd::Zero(m1, static_cast<Index>(i2.size()));
+  for (Index r = 0; r < m1; ++r)
+    for (Index c = 0; c < static_cast<Index>(i2.size()); ++c)
+      D2(r, c) = static_cast<double>(d2[static_cast<std::size_t>(i1[r]) * n2 +
+                                        static_cast<std::size_t>(i2[c])]);
+
+  MatrixXcd L = D1.transpose() * D1 + D2 * D2.transpose();
+  if (metric) {
+    const HodgeLaplacian hodge(st_);
+    const auto fullW0 = hodge.weights(0);
+    const auto fullW1 = hodge.weights(1);
+    const auto fullW2 = hodge.weights(2);
+    if (fullW0.size() != n0 || fullW1.size() != n1 ||
+        (!i2.empty() && fullW2.size() != n2))
+      return {};
+
+    const auto selectWeights = [](const std::vector<cd> &full,
+                                  const std::vector<Index> &indices) {
+      VectorXcd selected(static_cast<Index>(indices.size()));
+      for (Index i = 0; i < selected.size(); ++i)
+        selected[i] = full[static_cast<std::size_t>(
+            indices[static_cast<std::size_t>(i)])];
+      return selected;
+    };
+    const VectorXcd w0 = selectWeights(fullW0, i0);
+    const VectorXcd w1 = selectWeights(fullW1, i1);
+    const VectorXcd w2 = selectWeights(fullW2, i2);
+    if (!w0.allFinite() || !w1.allFinite() || !w2.allFinite())
+      return {};
+    for (Index i = 0; i < w1.size(); ++i)
+      if (std::abs(w1[i]) <= std::numeric_limits<double>::min())
+        return {};
+    for (Index i = 0; i < w2.size(); ++i)
+      if (std::abs(w2[i]) <= std::numeric_limits<double>::min())
+        return {};
+
+    L = w1.cwiseInverse().asDiagonal() * D1.transpose() * w0.asDiagonal() * D1;
+    if (!i2.empty())
+      L += D2 * w2.cwiseInverse().asDiagonal() * D2.transpose() *
+           w1.asDiagonal();
+    if (!L.allFinite())
+      return {};
+
+    // The signed metric operator is generally non-normal. Its right nullspace
+    // is the span of the right singular vectors with sigma < tol.
+    Eigen::BDCSVD<MatrixXcd> svd(L, Eigen::ComputeFullV);
+    const Eigen::VectorXd &sigma = svd.singularValues(); // descending
+    const MatrixXcd &V = svd.matrixV();
+    std::vector<cd> out;
+    for (Index offset = 0; offset < sigma.size(); ++offset) {
+      const Index j = sigma.size() - 1 - offset; // smallest first
+      if (sigma[j] >= tol)
+        continue;
+      for (Index i = 0; i < m1; ++i)
+        out.push_back(V(i, j));
+    }
+    return out;
   }
 
-  // ker L₁ ≅ H₁ of the interior: the |λ| < tol eigenvectors, stacked as rows in
-  // ascending-eigenvalue order (matching HodgeLaplacian::harmonicMatrix).
-  Eigen::SelfAdjointEigenSolver<MatrixXd> eig(L);
+  // Combinatorial ker L₁ ≅ H₁ of the interior, in ascending eigenvalue order.
+  Eigen::SelfAdjointEigenSolver<MatrixXcd> eig(L);
   const Eigen::VectorXd &lam = eig.eigenvalues();
-  const MatrixXd &V = eig.eigenvectors();
+  const MatrixXcd &V = eig.eigenvectors();
   std::vector<cd> out;
   for (Index j = 0; j < lam.size(); ++j) {
-    if (std::abs(lam[j]) >= tol) continue;
-    for (Index i = 0; i < m1; ++i) out.push_back(cd(V(i, j), 0.0));
+    if (std::abs(lam[j]) >= tol)
+      continue;
+    for (Index i = 0; i < m1; ++i)
+      out.push_back(V(i, j));
   }
   return out;
 }

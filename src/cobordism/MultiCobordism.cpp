@@ -5,8 +5,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
+#include <map>
 #include <numeric>
+#include <random>
 #include <set>
 #include <stdexcept>
 
@@ -16,6 +19,7 @@
 #include "cobordism/ChainComplex.h"
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/HodgeLaplacian.h"
+#include "cobordism/LevenbergMarquardt.h"
 #include "cobordism/SurgicalCone.h"
 #include "matter/MatterConfiguration.h"
 #include "mesh/Edge.h"
@@ -25,6 +29,7 @@
 #include "mesh/Simplex.h"
 #include "mesh/Vertex.h"
 #include "mesh/VertexList.h"
+#include "quantum/ChoiJamiolkowski.h"
 #include "simulations/ReggeSolver.h"
 #include "spacetime/Spacetime.h"
 #include "spacetime/pachner/AddMove.h"
@@ -69,6 +74,391 @@ std::set<std::vector<std::uint64_t>> boundaryFacetSet(const Spacetime &spacetime
   return facets;
 }
 
+using Cell = std::vector<std::uint64_t>;
+using FixedCochainTarget = std::map<Cell, complexd>;
+
+struct BoundaryComponentData {
+  std::vector<Cell> facets;
+  std::set<std::uint64_t> vertices;
+};
+
+std::vector<BoundaryComponentData> boundaryComponents(
+    const Spacetime &spacetime) {
+  std::vector<Cell> facets;
+  for (auto facet : spacetime.getBoundary()) {
+    std::sort(facet.begin(), facet.end());
+    if (facet.empty() ||
+        std::adjacent_find(facet.begin(), facet.end()) != facet.end())
+      throw std::invalid_argument(
+          "MultiCobordism::relaxBoundaryStatePairs: malformed boundary "
+          "facet");
+    facets.push_back(std::move(facet));
+  }
+  std::sort(facets.begin(), facets.end());
+  facets.erase(std::unique(facets.begin(), facets.end()), facets.end());
+  if (facets.empty()) return {};
+
+  const std::size_t facetWidth = facets.front().size();
+  for (const auto &facet : facets)
+    if (facet.size() != facetWidth)
+      throw std::invalid_argument(
+          "MultiCobordism::relaxBoundaryStatePairs: non-pure boundary");
+
+  auto boundary = Spacetime::fromCells(
+      spacetime.getDimensions() - 1, facets, 1.0, 0.0);
+  std::vector<BoundaryComponentData> components;
+  std::map<std::uint64_t, std::size_t> componentByVertex;
+  for (const auto &vertices : boundary->getConnectedComponents()) {
+    const std::size_t componentIndex = components.size();
+    BoundaryComponentData component;
+    for (const auto *vertex : vertices) {
+      const std::uint64_t vertexId = vertex->getId();
+      if (!componentByVertex.emplace(vertexId, componentIndex).second)
+        throw std::logic_error(
+            "MultiCobordism::relaxBoundaryStatePairs: boundary vertex "
+            "belongs to multiple components");
+      component.vertices.insert(vertexId);
+    }
+    components.push_back(std::move(component));
+  }
+  for (const auto &facet : facets) {
+    const auto owner = componentByVertex.find(facet.front());
+    if (owner == componentByVertex.end())
+      throw std::logic_error(
+          "MultiCobordism::relaxBoundaryStatePairs: boundary facet has no "
+          "component");
+    for (const std::uint64_t vertexId : facet) {
+      const auto component = componentByVertex.find(vertexId);
+      if (component == componentByVertex.end() ||
+          component->second != owner->second)
+        throw std::logic_error(
+            "MultiCobordism::relaxBoundaryStatePairs: boundary facet spans "
+            "multiple components");
+    }
+    components[owner->second].facets.push_back(facet);
+  }
+  for (auto &component : components)
+    std::sort(component.facets.begin(), component.facets.end());
+  std::sort(components.begin(), components.end(),
+            [](const BoundaryComponentData &left,
+               const BoundaryComponentData &right) {
+              return left.facets < right.facets;
+            });
+  return components;
+}
+
+std::set<Cell> componentCells(const BoundaryComponentData &component,
+                              int degree) {
+  const std::size_t width = static_cast<std::size_t>(degree) + 1;
+  std::set<Cell> cells;
+  for (const auto &facet : component.facets) {
+    if (width > facet.size()) continue;
+    Cell cell;
+    cell.reserve(width);
+    const std::function<void(std::size_t, std::size_t)> enumerate =
+        [&](std::size_t start, std::size_t remaining) {
+          if (remaining == 0) {
+            cells.insert(cell);
+            return;
+          }
+          for (std::size_t index = start;
+               index + remaining <= facet.size(); ++index) {
+            cell.push_back(facet[index]);
+            enumerate(index + 1, remaining - 1);
+            cell.pop_back();
+          }
+        };
+    enumerate(0, width);
+  }
+  return cells;
+}
+
+bool finiteComplex(complexd value) {
+  return std::isfinite(value.real()) && std::isfinite(value.imag());
+}
+
+std::vector<complexd> normalized(std::vector<complexd> state) {
+  double normSquared = 0.0;
+  for (const complexd value : state) normSquared += std::norm(value);
+  if (!(normSquared > 0.0) || !std::isfinite(normSquared))
+    throw std::invalid_argument(
+        "MultiCobordism: cochain state must be finite and nonzero");
+  const double inverseNorm = 1.0 / std::sqrt(normSquared);
+  for (complexd &value : state) value *= inverseNorm;
+  return state;
+}
+
+struct BoundaryStateEvaluation {
+  std::vector<double> residuals;
+};
+
+BoundaryStateEvaluation evaluateBoundaryStates(
+    const std::shared_ptr<Spacetime> &spacetime,
+    const BoundaryComponentData &component, int degree,
+    const std::vector<Cell> &orderedCells,
+    const std::vector<std::vector<complexd>> &states) {
+  auto boundary = Spacetime::fromCells(spacetime->getDimensions() - 1,
+                                       component.facets, 1.0, 0.0);
+  std::map<std::pair<std::uint64_t, std::uint64_t>,
+           ::tessera::mesh::Edge *>
+      parentEdges;
+  for (auto *edge : spacetime->getEdgeList()->toVector())
+    parentEdges.emplace(edgeKey(edge), edge);
+  for (auto *edge : boundary->getEdgeList()->toVector()) {
+    const auto parent = parentEdges.find(edgeKey(edge));
+    if (parent == parentEdges.end())
+      throw std::logic_error(
+          "MultiCobordism::relaxBoundaryStatePairs: boundary edge is absent "
+          "from the live cobordism");
+    edge->setLength(parent->second->getLength());
+    edge->setPhase(parent->second->getPhase());
+  }
+
+  EigenstateSynthesis synthesis(boundary, degree);
+  std::map<Cell, std::size_t> suppliedIndex;
+  for (std::size_t index = 0; index < orderedCells.size(); ++index)
+    suppliedIndex.emplace(orderedCells[index], index);
+
+  BoundaryStateEvaluation evaluation;
+  evaluation.residuals.reserve(states.size());
+  for (const auto &state : states) {
+    std::vector<complexd> canonical(synthesis.order());
+    for (std::size_t index = 0; index < synthesis.order(); ++index) {
+      const auto supplied =
+          suppliedIndex.find(synthesis.cellSimplices()[index]);
+      if (supplied == suppliedIndex.end())
+        throw std::logic_error(
+            "MultiCobordism::relaxBoundaryStatePairs: boundary cell frame "
+            "does not match the isolated boundary");
+      canonical[index] = state[supplied->second];
+    }
+    evaluation.residuals.push_back(synthesis.residual(canonical));
+  }
+  return evaluation;
+}
+
+struct FixedCochainOptimization {
+  double residual{std::numeric_limits<double>::infinity()};
+  double eigenvalue{0.0};
+  std::size_t freeEdgeCount{0};
+  std::size_t auxiliaryCellCount{0};
+  std::vector<std::vector<complexd>> states;
+  std::vector<double> stateResiduals;
+  std::vector<double> stateEigenvalues;
+};
+
+FixedCochainOptimization optimizeFixedCochainTargets(
+    const std::shared_ptr<Spacetime> &spacetime,
+    EigenstateSynthesis &synthesis,
+    const std::vector<FixedCochainTarget> &fixedTargets,
+    const std::function<bool(std::uint64_t, std::uint64_t)> &edgeIsFree,
+    bool commonEigenvalue, double epsilon, int restarts, std::uint64_t seed,
+    int maxIterations) {
+  constexpr double kPi = 3.14159265358979323846;
+  constexpr double kWeightMinimum = 0.1;
+  constexpr double kWeightMaximum = 10.0;
+  constexpr double kPhaseBound = 2.0 * kPi;
+  constexpr double kAuxiliaryBound = 5.0;
+
+  const bool usePhases = synthesis.degree() == 0;
+  const std::size_t order = synthesis.order();
+  const auto &cells = synthesis.cellSimplices();
+
+  std::vector<::tessera::mesh::Edge *> freeEdges;
+  for (auto *edge : spacetime->getEdgeList()->toVector()) {
+    const auto [a, b] = edgeKey(edge);
+    if (edgeIsFree(a, b)) freeEdges.push_back(edge);
+  }
+
+  std::vector<std::vector<complexd>> fixedValues(
+      fixedTargets.size(), std::vector<complexd>(order, complexd(0.0, 0.0)));
+  std::vector<std::vector<std::size_t>> auxiliaryIndices(fixedTargets.size());
+  std::vector<std::size_t> auxiliaryOffsets(fixedTargets.size(), 0);
+  std::size_t totalAuxiliaryCount = 0;
+  for (std::size_t stateIndex = 0; stateIndex < fixedTargets.size();
+       ++stateIndex) {
+    std::size_t matchedCount = 0;
+    for (std::size_t cellIndex = 0; cellIndex < order; ++cellIndex) {
+      const auto fixed = fixedTargets[stateIndex].find(cells[cellIndex]);
+      if (fixed != fixedTargets[stateIndex].end()) {
+        fixedValues[stateIndex][cellIndex] = fixed->second;
+        ++matchedCount;
+      } else {
+        auxiliaryIndices[stateIndex].push_back(cellIndex);
+      }
+    }
+    if (matchedCount != fixedTargets[stateIndex].size())
+      throw std::invalid_argument(
+          "MultiCobordism: a fixed cochain cell is absent from the live "
+          "complex");
+    auxiliaryOffsets[stateIndex] = totalAuxiliaryCount;
+    totalAuxiliaryCount += auxiliaryIndices[stateIndex].size();
+  }
+
+  const std::size_t weightCount = freeEdges.size();
+  const std::size_t phaseCount = usePhases ? freeEdges.size() : 0;
+  const std::size_t parameterCount =
+      weightCount + phaseCount + 2 * totalAuxiliaryCount;
+
+  const auto buildStates =
+      [&fixedValues, &auxiliaryIndices, &auxiliaryOffsets, weightCount,
+       phaseCount](const Eigen::VectorXd &parameters) {
+        std::vector<std::vector<complexd>> states = fixedValues;
+        for (std::size_t stateIndex = 0; stateIndex < states.size();
+             ++stateIndex) {
+          for (std::size_t auxiliaryIndex = 0;
+               auxiliaryIndex < auxiliaryIndices[stateIndex].size();
+               ++auxiliaryIndex) {
+            const Eigen::Index parameterIndex = static_cast<Eigen::Index>(
+                weightCount + phaseCount +
+                2 * (auxiliaryOffsets[stateIndex] + auxiliaryIndex));
+            states[stateIndex][auxiliaryIndices[stateIndex][auxiliaryIndex]] =
+                complexd(parameters[parameterIndex],
+                         parameters[parameterIndex + 1]);
+          }
+        }
+        return states;
+      };
+
+  const auto writeGeometry =
+      [&freeEdges, weightCount, phaseCount](const Eigen::VectorXd &parameters) {
+        for (std::size_t index = 0; index < weightCount; ++index)
+          freeEdges[index]->setLength(std::sqrt(complexd{
+              parameters[static_cast<Eigen::Index>(index)], 0.0}));
+        for (std::size_t index = 0; index < phaseCount; ++index)
+          freeEdges[index]->setPhase(complexd{
+              parameters[static_cast<Eigen::Index>(weightCount + index)],
+              0.0});
+      };
+
+  const auto residual =
+      [&synthesis, &buildStates, &writeGeometry, commonEigenvalue,
+       order](const Eigen::VectorXd &parameters) {
+        writeGeometry(parameters);
+        std::vector<std::vector<complexd>> states = buildStates(parameters);
+        std::vector<std::vector<complexd>> applied(states.size());
+        std::vector<double> eigenvalues(states.size(), 0.0);
+        for (std::size_t stateIndex = 0; stateIndex < states.size();
+             ++stateIndex) {
+          states[stateIndex] = normalized(std::move(states[stateIndex]));
+          applied[stateIndex] = synthesis.apply(states[stateIndex]);
+          complexd rayleigh(0.0, 0.0);
+          for (std::size_t index = 0; index < order; ++index)
+            rayleigh += std::conj(states[stateIndex][index]) *
+                        applied[stateIndex][index];
+          eigenvalues[stateIndex] = rayleigh.real();
+        }
+        const double sharedEigenvalue =
+            std::accumulate(eigenvalues.begin(), eigenvalues.end(), 0.0) /
+            static_cast<double>(eigenvalues.size());
+        Eigen::VectorXd values(static_cast<Eigen::Index>(
+            2 * order * states.size()));
+        for (std::size_t stateIndex = 0; stateIndex < states.size();
+             ++stateIndex) {
+          const double eigenvalue =
+              commonEigenvalue ? sharedEigenvalue : eigenvalues[stateIndex];
+          const Eigen::Index base =
+              static_cast<Eigen::Index>(2 * order * stateIndex);
+          for (std::size_t index = 0; index < order; ++index) {
+            const complexd difference =
+                applied[stateIndex][index] -
+                eigenvalue * states[stateIndex][index];
+            values[base + static_cast<Eigen::Index>(index)] =
+                difference.real();
+            values[base + static_cast<Eigen::Index>(order + index)] =
+                difference.imag();
+          }
+        }
+        return values;
+      };
+
+  const auto clamp =
+      [weightCount, phaseCount,
+       totalAuxiliaryCount, kWeightMinimum, kWeightMaximum, kPhaseBound,
+       kAuxiliaryBound](const Eigen::VectorXd &parameters) {
+        Eigen::VectorXd clamped = parameters;
+        for (std::size_t index = 0; index < weightCount; ++index)
+          clamped[static_cast<Eigen::Index>(index)] = std::clamp(
+              clamped[static_cast<Eigen::Index>(index)], kWeightMinimum,
+              kWeightMaximum);
+        for (std::size_t index = 0; index < phaseCount; ++index) {
+          const Eigen::Index phaseIndex =
+              static_cast<Eigen::Index>(weightCount + index);
+          clamped[phaseIndex] =
+              std::clamp(clamped[phaseIndex], -kPhaseBound, kPhaseBound);
+        }
+        for (std::size_t index = 0; index < 2 * totalAuxiliaryCount; ++index) {
+          const Eigen::Index auxiliaryIndex = static_cast<Eigen::Index>(
+              weightCount + phaseCount + index);
+          clamped[auxiliaryIndex] =
+              std::clamp(clamped[auxiliaryIndex], -kAuxiliaryBound,
+                         kAuxiliaryBound);
+        }
+        return clamped;
+      };
+
+  std::uniform_real_distribution<double> weightDistribution(
+      kWeightMinimum, kWeightMaximum);
+  std::uniform_real_distribution<double> phaseDistribution(-kPi, kPi);
+  std::uniform_real_distribution<double> auxiliaryDistribution(-1.0, 1.0);
+  const auto sample =
+      [weightCount, phaseCount, totalAuxiliaryCount, weightDistribution,
+       phaseDistribution,
+       auxiliaryDistribution](std::mt19937_64 &randomEngine) mutable {
+        Eigen::VectorXd parameters(static_cast<Eigen::Index>(
+            weightCount + phaseCount + 2 * totalAuxiliaryCount));
+        for (std::size_t index = 0; index < weightCount; ++index)
+          parameters[static_cast<Eigen::Index>(index)] =
+              weightDistribution(randomEngine);
+        for (std::size_t index = 0; index < phaseCount; ++index)
+          parameters[static_cast<Eigen::Index>(weightCount + index)] =
+              phaseDistribution(randomEngine);
+        for (std::size_t index = 0; index < 2 * totalAuxiliaryCount; ++index)
+          parameters[static_cast<Eigen::Index>(weightCount + phaseCount +
+                                                index)] =
+              auxiliaryDistribution(randomEngine);
+        return parameters;
+      };
+
+  const LevenbergMarquardt solver(maxIterations, epsilon);
+  const auto best = solver.multiRestart(residual, clamp, sample,
+                                        parameterCount, restarts, seed,
+                                        epsilon);
+  (void)residual(best.parameters);
+
+  FixedCochainOptimization result;
+  result.freeEdgeCount = freeEdges.size();
+  result.auxiliaryCellCount = totalAuxiliaryCount;
+  result.states = buildStates(best.parameters);
+  result.stateEigenvalues.reserve(result.states.size());
+  std::vector<std::vector<complexd>> unitStates;
+  unitStates.reserve(result.states.size());
+  for (const auto &state : result.states) {
+    unitStates.push_back(normalized(state));
+    result.stateEigenvalues.push_back(synthesis.rayleigh(state));
+  }
+  result.eigenvalue =
+      std::accumulate(result.stateEigenvalues.begin(),
+                      result.stateEigenvalues.end(), 0.0) /
+      static_cast<double>(result.stateEigenvalues.size());
+  result.stateResiduals.reserve(result.states.size());
+  result.residual = 0.0;
+  for (std::size_t stateIndex = 0; stateIndex < result.states.size();
+       ++stateIndex) {
+    const auto applied = synthesis.apply(unitStates[stateIndex]);
+    const double eigenvalue =
+        commonEigenvalue ? result.eigenvalue
+                         : result.stateEigenvalues[stateIndex];
+    double stateResidual = 0.0;
+    for (std::size_t index = 0; index < order; ++index)
+      stateResidual += std::norm(
+          applied[index] - eigenvalue * unitStates[stateIndex][index]);
+    result.stateResiduals.push_back(stateResidual);
+    result.residual += stateResidual;
+  }
+  return result;
+}
+
 }  // namespace
 
 MultiCobordism::MultiCobordism(
@@ -78,7 +468,7 @@ MultiCobordism::MultiCobordism(
     const std::vector<int> &degrees, double gamma, std::uint64_t seed,
     int precone, bool shouldProposeDispositions, bool preconeTimelike,
     bool preconeAlternate, bool balancedEdgeWiring, bool singularValueRatio,
-    bool einsteinHilbert)
+    bool einsteinHilbert, bool realSquaredLengthsOnly)
     : spacetime_(std::move(host)),
       inputTargets_(inputTargets),
       outputTargets_(outputTargets),
@@ -92,6 +482,7 @@ MultiCobordism::MultiCobordism(
       balancedEdgeWiring_(balancedEdgeWiring),
       singularValueRatio_(singularValueRatio),
       einsteinHilbert_(einsteinHilbert),
+      realSquaredLengthsOnly_(realSquaredLengthsOnly),
       randomNumberGenerator_(seed) {
   // The wiring mode must reach the host BEFORE any precone growth below wires
   // its first edge (#690).
@@ -390,6 +781,13 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
   // records each register's winning matching and withholds it from the ones after.
   std::set<std::vector<int>> claimedMatchings;
   double totalResidual = 0.0;
+  // Explicit constraints are already framed: their hole and target ordering is
+  // fixed by the caller, so they bypass emergent-hole relabeling entirely. This
+  // is still the existing exact-period r_U; only the frame is no longer guessed.
+  for (const auto &constraint : registerConstraints_)
+    totalResidual += EigenstateSynthesis(spacetime, constraint.degree)
+                         .residualForPeriods(constraint.holes,
+                                             constraint.target);
   for (const auto &inputBlock : inputBlocks_)
     totalResidual += inputResidualWeight_ *
                      residualForBoundaryBlockWithDistinctMatchings(inputBlock, spacetime,
@@ -978,6 +1376,478 @@ void MultiCobordism::declarePinnedRegion(PinnedRegion region) {
 }
 
 void MultiCobordism::clearPinnedRegions() { pinnedRegions_.clear(); }
+
+void MultiCobordism::declareRegisterConstraint(RegisterConstraint constraint) {
+  if (constraint.name.empty())
+    throw std::invalid_argument(
+        "MultiCobordism::declareRegisterConstraint: name is empty");
+  if (constraint.degree < 0)
+    throw std::invalid_argument(
+        "MultiCobordism::declareRegisterConstraint: degree is negative");
+  if (constraint.holes.size() != constraint.target.size())
+    throw std::invalid_argument(
+        "MultiCobordism::declareRegisterConstraint: hole/target size mismatch");
+  const std::size_t expectedWidth =
+      static_cast<std::size_t>(constraint.degree) + 2;
+  for (auto &hole : constraint.holes) {
+    if (hole.size() != expectedWidth)
+      throw std::invalid_argument(
+          "MultiCobordism::declareRegisterConstraint: malformed hole");
+    std::sort(hole.begin(), hole.end());
+    if (std::adjacent_find(hole.begin(), hole.end()) != hole.end())
+      throw std::invalid_argument(
+          "MultiCobordism::declareRegisterConstraint: repeated hole vertex");
+  }
+  for (auto &existing : registerConstraints_)
+    if (existing.name == constraint.name) {
+      existing = std::move(constraint);
+      return;
+    }
+  registerConstraints_.push_back(std::move(constraint));
+}
+
+void MultiCobordism::clearRegisterConstraints() {
+  registerConstraints_.clear();
+}
+
+MultiCobordism::FixedBoundaryEigenstateResult
+MultiCobordism::relaxFixedBoundaryEigenstate(
+    int degree, std::vector<std::vector<std::uint64_t>> supportCells,
+    std::vector<complexd> target, double epsilon, int restarts, int maxGrowth,
+    std::uint64_t seed, int maxIterations) {
+  if (!spacetime_)
+    throw std::invalid_argument(
+        "MultiCobordism::relaxFixedBoundaryEigenstate: null spacetime");
+  if (degree < 0)
+    throw std::invalid_argument(
+        "MultiCobordism::relaxFixedBoundaryEigenstate: degree is negative");
+  if (supportCells.empty() || supportCells.size() != target.size())
+    throw std::invalid_argument(
+        "MultiCobordism::relaxFixedBoundaryEigenstate: support/target size "
+        "mismatch or empty support");
+  if (!(epsilon > 0.0) || !std::isfinite(epsilon))
+    throw std::invalid_argument(
+        "MultiCobordism::relaxFixedBoundaryEigenstate: epsilon must be finite "
+        "and positive");
+  if (restarts <= 0 || maxGrowth < 0 || maxIterations <= 0)
+    throw std::invalid_argument(
+        "MultiCobordism::relaxFixedBoundaryEigenstate: invalid search budget");
+
+  const std::size_t expectedCellWidth = static_cast<std::size_t>(degree) + 1;
+  std::set<std::vector<std::uint64_t>> uniqueSupport;
+  for (auto &cell : supportCells) {
+    if (cell.size() != expectedCellWidth)
+      throw std::invalid_argument(
+          "MultiCobordism::relaxFixedBoundaryEigenstate: malformed support "
+          "cell");
+    std::sort(cell.begin(), cell.end());
+    if (std::adjacent_find(cell.begin(), cell.end()) != cell.end() ||
+        !uniqueSupport.insert(cell).second)
+      throw std::invalid_argument(
+          "MultiCobordism::relaxFixedBoundaryEigenstate: repeated support "
+          "cell");
+  }
+
+  double targetNormSquared = 0.0;
+  for (const complexd value : target) targetNormSquared += std::norm(value);
+  if (!(targetNormSquared > 0.0) || !std::isfinite(targetNormSquared))
+    throw std::invalid_argument(
+        "MultiCobordism::relaxFixedBoundaryEigenstate: target must be finite "
+        "and nonzero");
+  const double inverseTargetNorm = 1.0 / std::sqrt(targetNormSquared);
+  for (complexd &value : target) value *= inverseTargetNorm;
+
+  std::map<std::vector<std::uint64_t>, complexd> pinnedByCell;
+  for (std::size_t index = 0; index < supportCells.size(); ++index)
+    pinnedByCell.emplace(supportCells[index], target[index]);
+
+  EigenstateSynthesis synthesis(spacetime_, degree);
+  FixedCochainOptimization best;
+  int growthSteps = 0;
+  for (int pass = 0;; ++pass) {
+    const auto interiorEdges = synthesis.interiorEdges();
+    const std::set<std::pair<std::uint64_t, std::uint64_t>> freeEdgeKeys(
+        interiorEdges.begin(), interiorEdges.end());
+    best = optimizeFixedCochainTargets(
+        spacetime_, synthesis, {pinnedByCell},
+        [&freeEdgeKeys](std::uint64_t a, std::uint64_t b) {
+          return freeEdgeKeys.count({std::min(a, b), std::max(a, b)}) != 0;
+        },
+        false, epsilon, restarts, seed + static_cast<std::uint64_t>(pass),
+        maxIterations);
+    if (best.residual < epsilon || growthSteps >= maxGrowth) break;
+    if (!synthesis.growInterior(seed + 1000u +
+                                static_cast<std::uint64_t>(pass)))
+      break;
+    ++growthSteps;
+  }
+
+  FixedBoundaryEigenstateResult result;
+  result.converged = best.residual < epsilon;
+  result.residual = best.residual;
+  result.state = normalized(std::move(best.states.front()));
+  result.eigenvalue = synthesis.rayleigh(result.state);
+  result.degree = degree;
+  result.growthSteps = growthSteps;
+  result.interiorVertexCount = synthesis.interiorVertexCount();
+  result.interiorEdgeCount = synthesis.numInteriorEdges();
+  result.auxiliaryCellCount = best.auxiliaryCellCount;
+  result.supportCells = std::move(supportCells);
+  result.target = std::move(target);
+  return result;
+}
+
+MultiCobordism::BoundaryStateTransferResult
+MultiCobordism::relaxBoundaryStatePairs(
+    int degree, std::string inputRegionName,
+    std::vector<std::vector<std::uint64_t>> inputCells,
+    std::vector<std::vector<complexd>> inputStates,
+    std::string outputRegionName,
+    std::vector<std::vector<std::uint64_t>> outputCells,
+    std::vector<std::vector<complexd>> outputStates, bool commonEigenvalue,
+    double epsilon, double boundaryEpsilon, int restarts, int maxGrowth,
+    std::uint64_t seed, int maxIterations) {
+  const std::string prefix =
+      "MultiCobordism::relaxBoundaryStatePairs: ";
+  if (!spacetime_)
+    throw std::invalid_argument(prefix + "null spacetime");
+  if (degree < 0 || degree >= spacetime_->getDimensions())
+    throw std::invalid_argument(
+        prefix + "degree must index a cell of the boundary");
+  if (inputRegionName.empty() || outputRegionName.empty() ||
+      inputRegionName == outputRegionName)
+    throw std::invalid_argument(
+        prefix + "input and output region names must be distinct and nonempty");
+  if (inputStates.empty() || inputStates.size() != outputStates.size())
+    throw std::invalid_argument(
+        prefix + "input/output state-pair count mismatch or empty states");
+  if (!(epsilon > 0.0) || !std::isfinite(epsilon) ||
+      !(boundaryEpsilon > 0.0) || !std::isfinite(boundaryEpsilon))
+    throw std::invalid_argument(
+        prefix + "residual tolerances must be finite and positive");
+  if (restarts <= 0 || maxGrowth < 0 || maxIterations <= 0)
+    throw std::invalid_argument(prefix + "invalid search budget");
+
+  const PinnedRegion *inputRegion = nullptr;
+  const PinnedRegion *outputRegion = nullptr;
+  for (const auto &region : pinnedRegions_) {
+    if (region.name == inputRegionName) inputRegion = &region;
+    if (region.name == outputRegionName) outputRegion = &region;
+  }
+  if (!inputRegion || !outputRegion)
+    throw std::invalid_argument(
+        prefix + "both named pinned regions must be declared");
+
+  const auto components = boundaryComponents(*spacetime_);
+  if (components.size() != 2)
+    throw std::invalid_argument(
+        prefix + "the live cobordism boundary must have exactly two "
+                 "connected components");
+  const BoundaryComponentData *inputComponent = nullptr;
+  const BoundaryComponentData *outputComponent = nullptr;
+  for (const auto &component : components) {
+    if (component.vertices == inputRegion->vertices)
+      inputComponent = &component;
+    if (component.vertices == outputRegion->vertices)
+      outputComponent = &component;
+  }
+  if (!inputComponent || !outputComponent ||
+      inputComponent == outputComponent)
+    throw std::invalid_argument(
+        prefix + "each named region must equal one distinct boundary "
+                 "component");
+
+  const std::size_t cellWidth = static_cast<std::size_t>(degree) + 1;
+  const auto canonicalizeFrame =
+      [&prefix, cellWidth](std::vector<Cell> &frame,
+                           const std::string &label) {
+        std::set<Cell> unique;
+        for (auto &cell : frame) {
+          if (cell.size() != cellWidth)
+            throw std::invalid_argument(
+                prefix + label + " contains a malformed cell");
+          std::sort(cell.begin(), cell.end());
+          if (std::adjacent_find(cell.begin(), cell.end()) != cell.end() ||
+              !unique.insert(cell).second)
+            throw std::invalid_argument(
+                prefix + label + " contains a repeated cell");
+        }
+        return unique;
+      };
+  const auto suppliedInputCells =
+      canonicalizeFrame(inputCells, "input cell frame");
+  const auto suppliedOutputCells =
+      canonicalizeFrame(outputCells, "output cell frame");
+  const auto expectedInputCells = componentCells(*inputComponent, degree);
+  const auto expectedOutputCells = componentCells(*outputComponent, degree);
+  if (suppliedInputCells.empty() ||
+      suppliedInputCells != expectedInputCells)
+    throw std::invalid_argument(
+        prefix + "input cell frame must enumerate the complete degree-k "
+                 "boundary component");
+  if (suppliedOutputCells.empty() ||
+      suppliedOutputCells != expectedOutputCells)
+    throw std::invalid_argument(
+        prefix + "output cell frame must enumerate the complete degree-k "
+                 "boundary component");
+
+  for (std::size_t stateIndex = 0; stateIndex < inputStates.size();
+       ++stateIndex) {
+    if (inputStates[stateIndex].size() != inputCells.size())
+      throw std::invalid_argument(
+          prefix + "input state width does not match its cell frame");
+    if (outputStates[stateIndex].size() != outputCells.size())
+      throw std::invalid_argument(
+          prefix + "output state width does not match its cell frame");
+    double inputNormSquared = 0.0;
+    double outputNormSquared = 0.0;
+    for (const complexd value : inputStates[stateIndex]) {
+      if (!finiteComplex(value))
+        throw std::invalid_argument(
+            prefix + "input state must contain only finite amplitudes");
+      inputNormSquared += std::norm(value);
+    }
+    for (const complexd value : outputStates[stateIndex]) {
+      if (!finiteComplex(value))
+        throw std::invalid_argument(
+            prefix + "output state must contain only finite amplitudes");
+      outputNormSquared += std::norm(value);
+    }
+    if (!(inputNormSquared > 0.0) || !std::isfinite(inputNormSquared))
+      throw std::invalid_argument(
+          prefix + "input states must be nonzero");
+    if (!(outputNormSquared > 0.0) || !std::isfinite(outputNormSquared))
+      throw std::invalid_argument(
+          prefix + "output states must be nonzero");
+    const double inverseInputNorm = 1.0 / std::sqrt(inputNormSquared);
+    for (complexd &value : inputStates[stateIndex])
+      value *= inverseInputNorm;
+    for (complexd &value : outputStates[stateIndex])
+      value *= inverseInputNorm;
+  }
+
+  const auto inputBoundary = evaluateBoundaryStates(
+      spacetime_, *inputComponent, degree, inputCells, inputStates);
+  const auto outputBoundary = evaluateBoundaryStates(
+      spacetime_, *outputComponent, degree, outputCells, outputStates);
+  for (const double residual : inputBoundary.residuals)
+    if (!(residual < boundaryEpsilon))
+      throw std::invalid_argument(
+          prefix + "an input state is not an isolated-boundary eigenstate");
+  for (const double residual : outputBoundary.residuals)
+    if (!(residual < boundaryEpsilon))
+      throw std::invalid_argument(
+          prefix + "an output state is not an isolated-boundary eigenstate");
+
+  EigenstateSynthesis synthesis(spacetime_, degree);
+  for (const auto &[a, b] : synthesis.boundaryEdges())
+    if (!edgeIsPinned(a, b))
+      throw std::invalid_argument(
+          prefix + "every geometric boundary edge must be held by a declared "
+                   "pinned region");
+
+  using Geometry = std::pair<complexd, complexd>;
+  std::map<std::pair<std::uint64_t, std::uint64_t>, Geometry> pinnedGeometry;
+  for (auto *edge : spacetime_->getEdgeList()->toVector()) {
+    const auto key = edgeKey(edge);
+    if (edgeIsPinned(key.first, key.second))
+      pinnedGeometry.emplace(
+          key, Geometry{edge->getLength(), edge->getPhase()});
+  }
+
+  std::vector<FixedCochainTarget> fixedTargets(inputStates.size());
+  for (std::size_t stateIndex = 0; stateIndex < inputStates.size();
+       ++stateIndex) {
+    for (std::size_t cellIndex = 0; cellIndex < inputCells.size();
+         ++cellIndex)
+      fixedTargets[stateIndex].emplace(
+          inputCells[cellIndex], inputStates[stateIndex][cellIndex]);
+    for (std::size_t cellIndex = 0; cellIndex < outputCells.size();
+         ++cellIndex)
+      fixedTargets[stateIndex].emplace(
+          outputCells[cellIndex], outputStates[stateIndex][cellIndex]);
+  }
+
+  FixedCochainOptimization best;
+  std::vector<double> residualTrace;
+  int growthSteps = 0;
+  for (int pass = 0;; ++pass) {
+    best = optimizeFixedCochainTargets(
+        spacetime_, synthesis, fixedTargets,
+        [this](std::uint64_t a, std::uint64_t b) {
+          return !edgeIsPinned(a, b);
+        },
+        commonEigenvalue, epsilon, restarts,
+        seed + static_cast<std::uint64_t>(pass), maxIterations);
+    residualTrace.push_back(best.residual);
+    if (best.residual < epsilon || growthSteps >= maxGrowth) break;
+    if (!synthesis.growInterior(seed + 1000u +
+                                static_cast<std::uint64_t>(pass)))
+      break;
+    ++growthSteps;
+  }
+
+  std::map<std::pair<std::uint64_t, std::uint64_t>, Geometry>
+      finalPinnedGeometry;
+  for (auto *edge : spacetime_->getEdgeList()->toVector()) {
+    const auto key = edgeKey(edge);
+    if (edgeIsPinned(key.first, key.second))
+      finalPinnedGeometry.emplace(
+          key, Geometry{edge->getLength(), edge->getPhase()});
+  }
+  if (finalPinnedGeometry != pinnedGeometry)
+    throw std::logic_error(
+        prefix + "pinned geometry changed during boundary-state relaxation");
+
+  const auto finalInputBoundary = evaluateBoundaryStates(
+      spacetime_, *inputComponent, degree, inputCells, inputStates);
+  const auto finalOutputBoundary = evaluateBoundaryStates(
+      spacetime_, *outputComponent, degree, outputCells, outputStates);
+
+  BoundaryStateTransferResult result;
+  result.converged = best.residual < epsilon;
+  result.commonEigenvalue = commonEigenvalue;
+  result.residual = best.residual;
+  result.eigenvalue = best.eigenvalue;
+  result.degree = degree;
+  result.growthSteps = growthSteps;
+  result.freeEdgeCount = best.freeEdgeCount;
+  result.auxiliaryCellCount = best.auxiliaryCellCount;
+  result.inputRegion = std::move(inputRegionName);
+  result.outputRegion = std::move(outputRegionName);
+  result.inputCells = std::move(inputCells);
+  result.outputCells = std::move(outputCells);
+  result.inputStates = std::move(inputStates);
+  result.outputStates = std::move(outputStates);
+  result.states = std::move(best.states);
+  result.stateResiduals = std::move(best.stateResiduals);
+  result.stateEigenvalues = std::move(best.stateEigenvalues);
+  result.inputBoundaryResiduals = finalInputBoundary.residuals;
+  result.outputBoundaryResiduals = finalOutputBoundary.residuals;
+  result.residualTrace = std::move(residualTrace);
+  return result;
+}
+
+MultiCobordism::GeometricOperatorReadout MultiCobordism::geometricOperator(
+    int stateDimension, std::vector<std::vector<std::uint64_t>> frameCells,
+    double tol, bool metric) const {
+  GeometricOperatorReadout result;
+  result.stateDimension = stateDimension;
+  result.metric = metric;
+  const auto obstruct = [&](std::string reason) {
+    result.identifiable = false;
+    result.obstruction = std::move(reason);
+    result.choiState.clear();
+    result.operatorMatrix.clear();
+    return result;
+  };
+  if (!spacetime_)
+    return obstruct("the cobordism has no spacetime");
+  if (stateDimension <= 0)
+    return obstruct("state dimension must be positive");
+  if (!(tol > 0.0) || !std::isfinite(tol))
+    return obstruct("kernel tolerance must be finite and positive");
+
+  const std::size_t d = static_cast<std::size_t>(stateDimension);
+  if (d > std::numeric_limits<std::size_t>::max() / d)
+    return obstruct("state dimension overflows the Choi width");
+  const std::size_t choiWidth = d * d;
+  EigenstateSynthesis synthesis(spacetime_, 1);
+  result.bulkCells = synthesis.bulkMinusBoundaryCells();
+  result.bulkCellCount = result.bulkCells.size();
+  if (result.bulkCells.empty())
+    return obstruct("bulk-minus-boundary has no interior 1-cells");
+
+  if (frameCells.empty()) {
+    if (result.bulkCells.size() != choiWidth)
+      return obstruct(
+          "an ordered d^2 Choi frame is required when the bulk width differs");
+    frameCells = result.bulkCells;
+  }
+  if (frameCells.size() != choiWidth)
+    return obstruct("the Choi frame must contain exactly d^2 interior 1-cells");
+  std::map<std::vector<std::uint64_t>, std::size_t> bulkIndex;
+  for (std::size_t i = 0; i < result.bulkCells.size(); ++i)
+    bulkIndex[result.bulkCells[i]] = i;
+  std::set<std::vector<std::uint64_t>> usedFrameCells;
+  std::vector<std::size_t> frameColumns;
+  frameColumns.reserve(frameCells.size());
+  for (auto &cell : frameCells) {
+    std::sort(cell.begin(), cell.end());
+    if (cell.size() != 2 || cell[0] == cell[1])
+      return obstruct("a Choi frame entry is not an edge");
+    const auto found = bulkIndex.find(cell);
+    if (found == bulkIndex.end())
+      return obstruct("a Choi frame edge is not in the bulk-minus-boundary");
+    if (!usedFrameCells.insert(cell).second)
+      return obstruct("the Choi frame repeats an interior edge");
+    frameColumns.push_back(found->second);
+  }
+  result.frameCells = frameCells;
+
+  const std::vector<complexd> flat =
+      synthesis.bulkMinusBoundaryHarmonicMatrix(tol, metric);
+  if (flat.size() % result.bulkCells.size() != 0)
+    return obstruct("bulk harmonic matrix has an inconsistent shape");
+  result.kernelDimension = flat.size() / result.bulkCells.size();
+  if (result.kernelDimension == 0)
+    return obstruct("bulk-minus-boundary kernel is empty");
+
+  Eigen::MatrixXcd restricted(static_cast<Eigen::Index>(result.kernelDimension),
+                              static_cast<Eigen::Index>(choiWidth));
+  for (std::size_t row = 0; row < result.kernelDimension; ++row)
+    for (std::size_t column = 0; column < choiWidth; ++column)
+      restricted(static_cast<Eigen::Index>(row),
+                 static_cast<Eigen::Index>(column)) =
+          flat[row * result.bulkCells.size() + frameColumns[column]];
+  if (!restricted.allFinite())
+    return obstruct("the framed bulk kernel is non-finite");
+
+  Eigen::JacobiSVD<Eigen::MatrixXcd> svd(restricted, Eigen::ComputeThinU |
+                                                         Eigen::ComputeThinV);
+  const Eigen::VectorXd &singularValues = svd.singularValues();
+  result.frameSingularValues.reserve(
+      static_cast<std::size_t>(singularValues.size()));
+  for (Eigen::Index i = 0; i < singularValues.size(); ++i)
+    result.frameSingularValues.push_back(singularValues[i]);
+  const double leading = singularValues.size() == 0 ? 0.0 : singularValues[0];
+  const double cutoff = tol * std::max(1.0, leading);
+  for (Eigen::Index i = 0; i < singularValues.size(); ++i)
+    if (singularValues[i] > cutoff)
+      ++result.frameRank;
+  if (result.frameRank == 0)
+    return obstruct("the framed bulk kernel carries no Choi component");
+  if (result.frameRank != 1)
+    return obstruct("the framed bulk kernel has rank " +
+                    std::to_string(result.frameRank) +
+                    "; no unique Choi ray exists");
+
+  // A = U Sigma V^H: the direct row-state spanning A is conj(V.col(0)). This
+  // remains invariant under a change of basis among the bulk kernel rows.
+  Eigen::VectorXcd choi = svd.matrixV().col(0).conjugate();
+  for (Eigen::Index i = 0; i < choi.size(); ++i)
+    if (std::abs(choi[i]) > cutoff) {
+      choi *= std::conj(choi[i]) / std::abs(choi[i]);
+      break;
+    }
+  result.choiState.assign(choi.data(), choi.data() + choi.size());
+
+  result.operatorMatrix =
+      ::tessera::quantum::ChoiJamiolkowski::operatorFromChoiState(
+          result.choiState, stateDimension);
+  Eigen::MatrixXcd U(stateDimension, stateDimension);
+  for (int row = 0; row < stateDimension; ++row)
+    for (int column = 0; column < stateDimension; ++column)
+      U(row, column) = result.operatorMatrix[static_cast<std::size_t>(row) * d +
+                                             static_cast<std::size_t>(column)];
+  result.unitarityError =
+      (U.adjoint() * U -
+       Eigen::MatrixXcd::Identity(stateDimension, stateDimension))
+          .norm();
+  result.identifiable = true;
+  result.obstruction.clear();
+  return result;
+}
 
 std::set<std::uint64_t> MultiCobordism::pinnedVertices() const {
   std::set<std::uint64_t> united;
@@ -1728,16 +2598,56 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
           evaluateAt(squaredLengths(edgeIndex) + coordinateStep);
       const double realMinus =
           evaluateAt(squaredLengths(edgeIndex) - coordinateStep);
-      const double imaginaryPlus =
-          evaluateAt(squaredLengths(edgeIndex) +
-                     complexd{0.0, coordinateStep});
-      const double imaginaryMinus =
-          evaluateAt(squaredLengths(edgeIndex) -
-                     complexd{0.0, coordinateStep});
+      double imaginaryDerivative = 0.0;
+      if (!realSquaredLengthsOnly_) {
+        const double imaginaryPlus =
+            evaluateAt(squaredLengths(edgeIndex) +
+                       complexd{0.0, coordinateStep});
+        const double imaginaryMinus =
+            evaluateAt(squaredLengths(edgeIndex) -
+                       complexd{0.0, coordinateStep});
+        imaginaryDerivative =
+            (imaginaryPlus - imaginaryMinus) / (2.0 * coordinateStep);
+      }
       edges[edgeIndex]->setLength(lengths(edgeIndex));
       ascent(edgeIndex) = complexd{
           (realPlus - realMinus) / (2.0 * coordinateStep),
-          (imaginaryPlus - imaginaryMinus) / (2.0 * coordinateStep)};
+          imaginaryDerivative};
+    }
+    return ascent;
+  };
+
+  // Explicit fixed-hole constraints already have an exact analytic r_U
+  // gradient. When they are the whole residual and the run stays on real l^2,
+  // use it instead of evaluating r_U twice per edge. Mixed or complex-locus
+  // objectives retain the general numerical path.
+  const bool explicitConstraintsAreWholeResidual =
+      !registerConstraints_.empty() && inputTargets_.empty() &&
+      outputTargets_.empty() && inputBlocks_.empty() && outputBlocks_.empty();
+  const auto explicitConstraintAscentDirection = [&]() {
+    Eigen::VectorXcd ascent = Eigen::VectorXcd::Zero(edgeCount);
+    std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> edgeIndices;
+    for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+      edgeIndices[edgeKey(edges[edgeIndex])] = edgeIndex;
+    const auto oneCells =
+        ChainComplex::fromSpacetime(*spacetime_).kSimplexVertices(1);
+    for (const auto &constraint : registerConstraints_) {
+      EigenstateSynthesis synthesis(spacetime_, constraint.degree);
+      const std::vector<double> gradient = synthesis.residualForPeriodsGradient(
+          constraint.holes, constraint.target);
+      if (gradient.size() != oneCells.size())
+        throw std::runtime_error(
+            "MultiCobordism: explicit r_U gradient has wrong edge count");
+      for (std::size_t i = 0; i < oneCells.size(); ++i) {
+        const auto &cell = oneCells[i];
+        if (cell.size() != 2)
+          continue;
+        const auto found = edgeIndices.find(
+            {std::min(cell[0], cell[1]), std::max(cell[0], cell[1])});
+        if (found != edgeIndices.end())
+          ascent[static_cast<Eigen::Index>(found->second)] +=
+              complexd{gradient[i], 0.0};
+      }
     }
     return ascent;
   };
@@ -1783,10 +2693,15 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
     const double numericalResidualWeight =
         objectiveSpec_->numericalRegisterResidualWeight(
             directionContext.scalar);
-    if (numericalResidualWeight != 0.0)
-      descentDirection += numericalResidualWeight *
-                          scalarAscentDirection(
-                              [&]() { return rU(spacetime_); });
+    if (numericalResidualWeight != 0.0) {
+      if (explicitConstraintsAreWholeResidual && realSquaredLengthsOnly_)
+        descentDirection += numericalResidualWeight *
+                            explicitConstraintAscentDirection();
+      else
+        descentDirection += numericalResidualWeight *
+                            scalarAscentDirection(
+                                [&]() { return rU(spacetime_); });
+    }
 
     // The pinned-region objective's direction adds on top of the bulk's, the
     // same way its terms add on top of the bulk's terms. Its own declared scope
@@ -1813,11 +2728,23 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
       const double pinnedNumericalWeight =
           pinnedObjectiveSpec_->numericalRegisterResidualWeight(
               pinnedContext.scalar);
-      if (pinnedNumericalWeight != 0.0)
-        descentDirection += pinnedNumericalWeight *
-                            scalarAscentDirection(
-                                [&]() { return rU(spacetime_); });
+      if (pinnedNumericalWeight != 0.0) {
+        if (explicitConstraintsAreWholeResidual && realSquaredLengthsOnly_)
+          descentDirection += pinnedNumericalWeight *
+                              explicitConstraintAscentDirection();
+        else
+          descentDirection += pinnedNumericalWeight *
+                              scalarAscentDirection(
+                                  [&]() { return rU(spacetime_); });
+      }
     }
+
+    // A real-locus run varies Re(l^2) only. Analytic objectives encode both
+    // real derivatives in the complex direction, so remove the imaginary
+    // coordinate after every contribution has been assembled.
+    if (realSquaredLengthsOnly_)
+      for (Eigen::Index i = 0; i < descentDirection.size(); ++i)
+        descentDirection[i] = complexd{descentDirection[i].real(), 0.0};
 
     restoreEdgeLengths();
     // Pinning enters HERE and only here: a pinned edge keeps its resident squared

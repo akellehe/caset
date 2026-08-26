@@ -67,6 +67,93 @@ class MultiCobordism {
     std::vector<std::complex<double>> target;
   };
 
+  /// An ordered, explicit period constraint evaluated by the existing
+  /// EigenstateSynthesis::residualForPeriods residual. Unlike emergent target
+  /// matching, no component permutation is permitted: target[i] belongs to
+  /// holes[i]. This is the fixed input/output state pin used by operator
+  /// experiments on a caller-supplied topology.
+  struct RegisterConstraint {
+    std::string name;
+    int degree{1};
+    std::vector<std::vector<std::uint64_t>> holes;
+    std::vector<std::complex<double>> target;
+  };
+
+  /// Result of the historical fixed-boundary spectral relaxation. This is a
+  /// direct inverse-eigenvector synthesis: selected cochain components have the
+  /// fixed relative amplitudes `target`, all other amplitudes are free, and only
+  /// interior edge geometry varies. The assembled cochain is globally
+  /// normalized before evaluation, so the selected block represents a ray, not
+  /// an absolute norm. This is distinct from the later period-based `rU`
+  /// objective.
+  struct FixedBoundaryEigenstateResult {
+    bool converged{false};
+    double residual{0.0};
+    double eigenvalue{0.0};
+    int degree{0};
+    int growthSteps{0};
+    std::size_t interiorVertexCount{0};
+    std::size_t interiorEdgeCount{0};
+    std::size_t auxiliaryCellCount{0};
+    std::vector<std::vector<std::uint64_t>> supportCells;
+    std::vector<std::complex<double>> target;
+    std::vector<std::complex<double>> state;
+  };
+
+  /// Result of a boundary-value spectral transfer solve. Each witness carries
+  /// one independently prepared input/output pair on two distinct components
+  /// of the boundary of W. Boundary amplitudes and geometry are fixed; only
+  /// bulk geometry and interior cochain amplitudes vary.
+  struct BoundaryStateTransferResult {
+    bool converged{false};
+    bool commonEigenvalue{true};
+    double residual{0.0};
+    double eigenvalue{0.0};
+    int degree{0};
+    int growthSteps{0};
+    std::size_t freeEdgeCount{0};
+    std::size_t auxiliaryCellCount{0};
+    std::string inputRegion;
+    std::string outputRegion;
+    std::vector<std::vector<std::uint64_t>> inputCells;
+    std::vector<std::vector<std::uint64_t>> outputCells;
+    std::vector<std::vector<std::complex<double>>> inputStates;
+    std::vector<std::vector<std::complex<double>>> outputStates;
+    std::vector<std::vector<std::complex<double>>> states;
+    std::vector<double> stateResiduals;
+    std::vector<double> stateEigenvalues;
+    std::vector<double> inputBoundaryResiduals;
+    std::vector<double> outputBoundaryResiduals;
+    /// Best coupled residual after each relaxation/growth pass.
+    std::vector<double> residualTrace;
+  };
+
+  /// Target-free Choi promotion of the live metric
+  /// \f$\ker L_1(W-\partial W)\f$ restricted to an ordered \f$d^2\f$ frame.
+  /// identifiable is true only when that restriction has rank one. A
+  /// multidimensional restriction is an operator family, not a Choi state, and
+  /// is returned as an explicit obstruction rather than by reshaping an
+  /// arbitrary kernel basis vector.
+  struct GeometricOperatorReadout {
+    bool identifiable{false};
+    std::string obstruction;
+    int stateDimension{0};
+    bool metric{true};
+    std::size_t bulkCellCount{0};
+    std::size_t kernelDimension{0};
+    std::size_t frameRank{0};
+    double unitarityError{0.0};
+    std::vector<double> frameSingularValues;
+    std::vector<std::vector<std::uint64_t>> bulkCells;
+    std::vector<std::vector<std::uint64_t>> frameCells;
+    /// Unit-norm, phase-fixed Choi state. Empty unless identifiable.
+    std::vector<std::complex<double>> choiState;
+    /// \f$\sqrt d\,\operatorname{unvec}(|J\rangle)\f$, row-major. This is the
+    /// unitary Choi normalization; unitarityError reports whether the inferred
+    /// ray actually satisfies that assumption. Empty unless identifiable.
+    std::vector<std::complex<double>> operatorMatrix;
+  };
+
   /// `outputTargets` is a LIST of output boundary blocks (the full cobordism
   /// `∂W = inputs ⊔ outputs`, #491): a merge has one, a 2→2 recombination has two
   /// (diquark ⊔ antidiquark). Each output — like each input — is an emergent
@@ -95,6 +182,10 @@ class MultiCobordism {
   /// objective mode. False removes that term: JointStationarity becomes Hodge
   /// entropy stationarity alone, MediatedCorrespondence becomes `rU`, and Legacy
   /// becomes `gamma*rU`. Stage 2 differentiates the remaining scalar objective.
+  /// realSquaredLengthsOnly (default false) restricts stage 2 to the real
+  /// \f$\ell^2\f$ locus. It is intended for fixed-signature residual-only
+  /// experiments; the default retains the complexified relaxation used by the
+  /// general simulator.
   ///
   /// `singularValueRatio` swaps the WHOLE-COMPLEX term of `rU` — both regimes:
   /// the single-output period residual and its `nearKernelResidual`
@@ -111,8 +202,113 @@ class MultiCobordism {
       bool preconeAlternate = false,
                  bool balancedEdgeWiring = false,
                  bool singularValueRatio = false,
-                 bool einsteinHilbert = true);
+                 bool einsteinHilbert = true,
+                 bool realSquaredLengthsOnly = false);
 
+  [[nodiscard]] bool einsteinHilbertEnabled() const noexcept {
+    return einsteinHilbert_;
+  }
+  [[nodiscard]] bool realSquaredLengthsOnly() const noexcept {
+    return realSquaredLengthsOnly_;
+  }
+
+  /// Declare an ordered exact-period constraint, replacing a constraint with
+  /// the same name. Every hole must contain degree + 2 distinct vertices and
+  /// the hole count must equal the target width.
+  /// @throws std::invalid_argument on malformed input.
+  void declareRegisterConstraint(RegisterConstraint constraint);
+
+  [[nodiscard]] const std::vector<RegisterConstraint> &registerConstraints()
+      const noexcept {
+    return registerConstraints_;
+  }
+
+  /// Remove every explicit register constraint. Emergent input/output targets
+  /// are unaffected.
+  void clearRegisterConstraints();
+
+  /// Run the fixed-boundary inverse-eigenvector relaxation used by the
+  /// pre-paper realizability report. Before global state normalization,
+  /// `supportCells[i]` is pinned to `target[i]`; every other cochain component
+  /// is an optimized auxiliary amplitude. Thus the normalized witness restricts
+  /// to the target ray, while its support norm may be smaller than one. The
+  /// target block is normalized once before optimization.
+  ///
+  /// Only `EigenstateSynthesis` interior weights and, at degree zero, interior
+  /// U(1) phases are varied. The full geometric boundary is therefore held
+  /// fixed. If the Rayleigh residual
+  /// \f$\|L\psi-\langle\psi,L\psi\rangle\psi\|^2\f$ does not fall below
+  /// `epsilon`, a boundary-preserving stellar subdivision is attempted and the
+  /// relaxation repeats, up to `maxGrowth` times. No Regge term, period
+  /// residual, charge constraint, or harmonic condition enters this mode.
+  ///
+  /// This method mutates the node's live spacetime in place. The ordinary
+  /// `run`/`buildStep` implementations and their objectives are unchanged.
+  [[nodiscard]] FixedBoundaryEigenstateResult relaxFixedBoundaryEigenstate(
+      int degree,
+      std::vector<std::vector<std::uint64_t>> supportCells,
+      std::vector<std::complex<double>> target, double epsilon = 1e-10,
+      int restarts = 64, int maxGrowth = 4, std::uint64_t seed = 0,
+      int maxIterations = 200);
+
+  /// Fit one shared bulk geometry to independently prepared boundary-state
+  /// pairs. `inputRegionName` and `outputRegionName` must name two declared
+  /// pinned regions whose vertex sets are exactly the two connected components
+  /// of \f$\partial W\f$. `inputCells` and `outputCells` must enumerate every
+  /// degree-`degree` cell of the corresponding component; each row of
+  /// `inputStates` is normalized once and its paired output is scaled by the
+  /// same factor, preserving the relative amplitudes of the supplied linear
+  /// map. Both restrictions are then fixed on their ordered cell frames.
+  ///
+  /// Before fitting, every supplied state is required to have isolated-boundary
+  /// eigenresidual below `boundaryEpsilon`. During fitting those boundary
+  /// amplitudes remain exact in the returned, unnormalized witness cochains.
+  /// Every other cochain component is an independent auxiliary amplitude for
+  /// that pair. Edges held by any declared pinned region remain bit-identical;
+  /// all other edge weights and, at degree zero, connection phases may vary.
+  ///
+  /// With `commonEigenvalue=true` (the operator-transfer default), the objective
+  /// is
+  /// \f[
+  ///   R=\sum_j\|L_W\widehat\psi_j-\bar\lambda\widehat\psi_j\|^2,
+  ///   \qquad
+  ///   \bar\lambda=\frac1m\sum_j
+  ///     \langle\widehat\psi_j,L_W\widehat\psi_j\rangle .
+  /// \f]
+  /// A converged witness span is therefore closed under linear combinations:
+  /// attaching a new input in the fitted input span produces the same linear
+  /// combination of the fitted outputs. When false, each pair uses its own
+  /// Rayleigh quotient. No Regge, period, harmonic-eigenvalue, or charge term is
+  /// added. Boundary-preserving stellar growth is retried up to `maxGrowth`.
+  ///
+  /// This method mutates the node's live spacetime in place. Existing relaxation
+  /// modes and constructor defaults are unchanged.
+  [[nodiscard]] BoundaryStateTransferResult relaxBoundaryStatePairs(
+      int degree, std::string inputRegionName,
+      std::vector<std::vector<std::uint64_t>> inputCells,
+      std::vector<std::vector<std::complex<double>>> inputStates,
+      std::string outputRegionName,
+      std::vector<std::vector<std::uint64_t>> outputCells,
+      std::vector<std::vector<std::complex<double>>> outputStates,
+      bool commonEigenvalue = true, double epsilon = 1e-10,
+      double boundaryEpsilon = 1e-10, int restarts = 64,
+      int maxGrowth = 4, std::uint64_t seed = 0,
+      int maxIterations = 200);
+
+  /// Read a square operator from the target-free live bulk. frameCells is the
+  /// ordered row-major Choi frame and must contain exactly stateDimension^2
+  /// interior edges. It may be empty only when the bulk itself has exactly that
+  /// many edges, in which case canonical bulk-cell order is used.
+  ///
+  /// Promotion succeeds only when the framed restriction of
+  /// \f$\ker L_1(W-\partial W)\f$ has rank one. No target or constraint is read.
+  /// The returned Choi vector is unit-normalized and phase-fixed; the operator
+  /// uses conventional unitary scaling \f$\sqrt d\f$ and reports its unitarity
+  /// error rather than assuming it passed.
+  [[nodiscard]] GeometricOperatorReadout geometricOperator(
+      int stateDimension,
+      std::vector<std::vector<std::uint64_t>> frameCells = {},
+      double tol = 1e-9, bool metric = true) const;
   /// Move-kind names. Named rather than spelled as string literals at each site:
   /// every kind is written in the draw and compared in the apply, and a typo in
   /// either place would not fail to compile — it would silently misroute or
@@ -1224,6 +1420,10 @@ class MultiCobordism {
   /// a plain combinatorial declaration that constrains the geometry rather than
   /// gating any move.
   std::vector<PinnedRegion> pinnedRegions_;
+  /// Ordered exact-period state constraints. These are explicit fixtures over a
+  /// caller-supplied topology, separate from emergent block matching and from
+  /// geometric pinning.
+  std::vector<RegisterConstraint> registerConstraints_;
   /// #690: propagated to every spacetime this node constructs
   /// (host before precone, and each candidate snapshot rebuild).
   bool balancedEdgeWiring_{false};
@@ -1232,6 +1432,9 @@ class MultiCobordism {
   bool singularValueRatio_{false};
   /// #724: false drops `‖∇S_Regge‖²` from every objective site (see the ctor).
   bool einsteinHilbert_{true};
+  /// Restrict stage-2 updates to real squared lengths. False preserves the
+  /// general complexified geometry.
+  bool realSquaredLengthsOnly_{false};
   /// The injected functional, and the only record of what this node descends.
   /// Never null: the constructor installs `LegacyObjective`, so a caller that
   /// never injects one gets exactly the objective it got before this became
