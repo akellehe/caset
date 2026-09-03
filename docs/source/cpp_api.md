@@ -230,6 +230,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} LorentzianFamily.h
 ```
+```{doxygenfile} CovariantChainHodge.h
+```
 
 ## Reinforcement Learning
 
