@@ -59,6 +59,81 @@ def _random_allowable(K, rng, scale=0.05):
     return [complex(1.0 + scale * rng.normal(), scale * rng.normal()) for _ in range(n)]
 
 
+def _blade_dot(table, e, f):
+    """<u_e, u_f> for edge vectors u_(a,b) = x_b - x_a, by polarization."""
+    def S(a, b):
+        return 0.0 if a == b else table[(min(a, b), max(a, b))]
+    a, b = e
+    c, d = f
+    return 0.5 * (S(b, c) + S(a, d) - S(b, d) - S(a, c))
+
+
+def _grassmann_reference(K, s, k):
+    """Dense port of the specification oracle's metric(): multiplicity o blade pairing."""
+    table = dict(zip(_edges(K), s))
+    cells = [tuple(int(v) for v in c) for c in K.kSimplexVertices(k)]
+    idx = {c: i for i, c in enumerate(cells)}
+    n = len(cells)
+    Gam = np.zeros((n, n), dtype=complex)
+    mult = np.zeros((n, n))
+    seen = set()
+
+    def blade(sig, tau):
+        if k == 0:
+            return 1.0 + 0j
+        A = np.array([[_blade_dot(table, (sig[0], sig[i]), (tau[0], tau[j]))
+                       for j in range(1, k + 1)] for i in range(1, k + 1)], dtype=complex)
+        return np.linalg.det(A) / (math.factorial(k) ** 2)
+
+    for kk in range(k, K.dimension() + 1):
+        for rho in K.kSimplexVertices(kk):
+            rho = tuple(int(v) for v in rho)
+            faces = list(itertools.combinations(rho, k + 1))
+            for a in faces:
+                for b in faces:
+                    i, j = idx[a], idx[b]
+                    mult[i, j] += 1.0
+                    if (i, j) not in seen:
+                        Gam[i, j] = blade(a, b)
+                        seen.add((i, j))
+    return mult * Gam
+
+
+def _whitney_reference_d2(K, s, k):
+    """Dense port of the specification oracle's whitney_mass() for d = 2, principal branch."""
+    table = dict(zip(_edges(K), s))
+    d = K.dimension()
+    assert d == 2
+    cells = [tuple(int(v) for v in c) for c in K.kSimplexVertices(k)]
+    idx = {c: i for i, c in enumerate(cells)}
+    n = len(cells)
+    M = np.zeros((n, n), dtype=complex)
+    for T in K.orientedTopSimplices():
+        T = tuple(int(v) for v in T)
+        g = np.array([[_blade_dot(table, (T[0], T[i]), (T[0], T[j])) for j in range(1, 3)]
+                      for i in range(1, 3)], dtype=complex)
+        vol = np.sqrt(np.linalg.det(g) + 0j) / 2.0
+        if k == 0:
+            for a in T:
+                for b in T:
+                    M[idx[(a,)], idx[(b,)]] += vol * (1 + (a == b)) / 12.0
+        elif k == 1:
+            ginv = np.linalg.inv(g)
+            Gam = np.zeros((3, 3), dtype=complex)
+            Gam[1:, 1:] = ginv
+            Gam[0, 1:] = -ginv.sum(axis=0)
+            Gam[1:, 0] = -ginv.sum(axis=1)
+            Gam[0, 0] = ginv.sum()
+            for (i, j) in itertools.combinations(range(3), 2):
+                for (kk, l) in itertools.combinations(range(3), 2):
+                    val = vol / 12.0 * ((1 + (i == kk)) * Gam[j, l] - (1 + (i == l)) * Gam[j, kk]
+                                        - (1 + (j == kk)) * Gam[i, l] + (1 + (j == l)) * Gam[i, kk])
+                    M[idx[(T[i], T[j])], idx[(T[kk], T[l])]] += val
+        else:
+            M[idx[T], idx[T]] = 1.0 / vol
+    return M
+
+
 FIXTURES = {
     "2-complex": [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3], [2, 3, 4]],
     "3-complex": [[0, 1, 2, 3], [1, 2, 3, 4]],
@@ -233,19 +308,38 @@ class TestAllowability:
         assert vol == pytest.approx(math.sqrt(0.5) / 6.0)  # unit regular tetrahedron: sqrt(2)/12
         assert not ambiguous
 
-    def test_grassmann_preset_is_branch_free_and_polynomial(self):
+    def test_grassmann_preset_matches_dense_reference(self):
+        """assembleGrassmann equals multiplicity o blade pairing (the CH §6 oracle),
+        is real on real data, and each face's own blade block has rank two."""
         K, s = _torus33()
-        G1 = WM.assembleGrassmann(K, s, 1).toarray()
-        assert np.max(np.abs(G1.imag)) == 0.0
-        np.testing.assert_allclose(G1, G1.T, atol=1e-15)
+        for k in range(3):
+            G = WM.assembleGrassmann(K, s, k).toarray()
+            np.testing.assert_allclose(G, _grassmann_reference(K, s, k), atol=1e-14)
+            assert np.max(np.abs(G.imag)) == 0.0
+            np.testing.assert_allclose(G, G.T, atol=1e-15)
         G1p = WM.assemblePreset(K, s, 1, ch.Preset.GRASSMANN_ALL).toarray()
-        np.testing.assert_allclose(G1, G1p, atol=1e-15)
-        # Per-face block of the Grassmann metric has rank two (§4.4).
-        t = list(K.orientedTopSimplices()[0])
-        edges = _edges(K)
-        idx = [edges.index(e) for e in itertools.combinations(sorted(t), 2)]
-        blk = G1[np.ix_(idx, idx)]
-        assert np.linalg.matrix_rank(blk, tol=1e-12) == 2
+        np.testing.assert_allclose(G1p, WM.assembleGrassmann(K, s, 1).toarray(), atol=1e-15)
+        # The per-face blade block (three edge vectors of one triangle) has rank two (§4.4).
+        table = dict(zip(_edges(K), s))
+        for t in K.orientedTopSimplices():
+            es = list(itertools.combinations(sorted(int(v) for v in t), 2))
+            blk = np.array([[_blade_dot(table, a, b) for b in es] for a in es])
+            assert np.linalg.matrix_rank(blk, tol=1e-12) == 2
+
+    def test_whitney_matches_dense_reference_d2(self):
+        """The sparse assembly equals the dense Whitney mass matrix of the
+        specification's oracle at d = 2, on the Lorentzian torus and on random
+        complex allowable data."""
+        rng = np.random.default_rng(23)
+        K, s = _torus33()
+        for k in range(3):
+            M = WM.assemble(K, s, k, ch.Branch.KontsevichSegal).toarray()
+            np.testing.assert_allclose(M, _whitney_reference_d2(K, s, k), atol=1e-13)
+        K2 = cob.ChainComplex.fromTopCells(FIXTURES["2-complex"])
+        s2 = _random_allowable(K2, rng, scale=0.3)
+        for k in range(3):
+            M = WM.assemble(K2, s2, k).toarray()
+            np.testing.assert_allclose(M, _whitney_reference_d2(K2, s2, k), atol=1e-13)
 
     def test_errors(self):
         K = cob.ChainComplex.fromTopCells([[0, 1, 2]])

@@ -219,6 +219,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} RecursiveQuotient.h
 ```
+```{doxygenfile} LevenbergMarquardt.h
+```
 
 ## Chain-level Whitney Hodge pencil
 
