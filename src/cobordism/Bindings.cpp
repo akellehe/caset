@@ -6,6 +6,8 @@
 // in the Python dependency. This translation unit is always added to
 // _tessera's sources (see CMakeLists.txt, TESSERA_PYBIND_SOURCES).
 
+#include <optional>
+
 #include <pybind11/complex.h>
 #include <pybind11/eigen.h>
 #include <pybind11/numpy.h>
@@ -142,6 +144,8 @@ Spacetime's declared metric dimension.)doc")
 Boundary maps ∂_k over ℤ plus the homology invariants derived from them — Betti
 numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and the
 ∂²=0 sanity check. Purely combinatorial (built from vertex sets; no geometry).)doc")
+      .def("orientationSigns", &ChainComplex::orientationSigns,
+           "Per-degree +/-1 signs relating stored cell orientations to the reference (ascending id) orientation.")
       .def_static("fromTopCells", &ChainComplex::fromTopCells, py::arg("top_cells"),
            "Build from top cells (vertex-id tuples) alone, oriented by ascending vertex id; no geometry.")
       .def_static("fromSpacetime", &ChainComplex::fromSpacetime, py::arg("spacetime"),
@@ -296,6 +300,14 @@ eigenvector Cochain).)doc")
            "The i-th eigenvector Cochain. Raises IndexError if out of range.");
 
   // ----- Hodge Laplacian: k=0 Hermitian graph (#90), k>=1 metric Hodge (#104) -----
+  py::enum_<HodgeLaplacian::MetricSource>(m, "HodgeMetricSource",
+      R"doc(Where a Hodge operator's metric comes from: DiagonalWeights (the historical
+per-simplex diagonal weights of HodgeWeightConvention, the process default) or
+WhitneyPencil (the chain-level Whitney Hodge pencil of tessera.chainhodge, dressed at
+every degree by the edge-phase links; MultiCobordism's default).)doc")
+      .value("DiagonalWeights", HodgeLaplacian::MetricSource::DiagonalWeights)
+      .value("WhitneyPencil", HodgeLaplacian::MetricSource::WhitneyPencil);
+
   py::enum_<HodgeLaplacian::WeightConvention>(m, "HodgeWeightConvention",
       R"doc(Which quantity the diagonal inner-product weight W_k is built from.
 
@@ -379,6 +391,22 @@ ChainComplex omits.)doc")
            "Build the Hodge Laplacian operator over a triangulation. `weights` "
            "selects which quantity the diagonal W_k is built from -- the "
            "k-content or its square (the default). See HodgeWeightConvention.")
+      .def(py::init<std::shared_ptr<Spacetime>, HodgeLaplacian::WeightConvention,
+                    HodgeLaplacian::MetricSource>(),
+           py::arg("spacetime"), py::arg("weights"), py::arg("metric_source"),
+           "Build with an explicit metric source (see HodgeMetricSource).")
+      .def_static("defaultMetricSource", &HodgeLaplacian::defaultMetricSource,
+           "The process-wide default HodgeMetricSource (ships as DiagonalWeights).")
+      .def_static("setDefaultMetricSource", &HodgeLaplacian::setDefaultMetricSource,
+           py::arg("source"), "Flip the process-wide default metric source ONCE at startup.")
+      .def("metricSource", &HodgeLaplacian::metricSource, "This operator's metric source.")
+      .def("laplacianPhaseGradient", &HodgeLaplacian::laplacianPhaseGradient,
+           py::arg("k"), py::arg("ea"), py::arg("eb"),
+           "Whitney pencil: the analytic dL_k/dphi_e of the link on edge (ea, eb), flat "
+           "row-major; identically zero under DiagonalWeights.")
+      .def_static("kontsevichSegalMargin", &HodgeLaplacian::kontsevichSegalMargin,
+           py::arg("spacetime"),
+           "min over top simplices of pi - sum_i |arg lambda_i(g_T)| of the current geometry.")
       .def_static("defaultWeightConvention",
            &HodgeLaplacian::defaultWeightConvention,
            "The process-wide default HodgeWeightConvention, read by every "
@@ -607,6 +635,9 @@ exposes that fixed set). growInterior() cones a fresh interior vertex via the
 boundary-fixed pre-geometric Pachner add (#112), enriching the interior with dW
 untouched; interiorVertexCount / numInteriorEdges report the interior complexity
 reached. On a 1-complex there is no boundary — every edge is interior.)doc")
+      .def(py::init<std::shared_ptr<Spacetime>, int, HodgeLaplacian::MetricSource>(),
+           py::arg("spacetime"), py::arg("k"), py::arg("metric_source"),
+           "Build with an explicit metric source (HodgeMetricSource).")
       .def(py::init<std::shared_ptr<Spacetime>, int>(), py::arg("spacetime"),
            py::arg("k") = 0,
            "Build the synthesizer over a fixed triangulation at Hodge degree k "
@@ -615,6 +646,8 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "synthesis). Raises if k < 0.")
       .def("degree", &EigenstateSynthesis::degree,
            "The cochain degree k of L_k this synthesizer scores against.")
+      .def("metricSource", &EigenstateSynthesis::metricSource,
+           "Where this synthesizer's operator takes its metric from (HodgeMetricSource).")
       .def("order", &EigenstateSynthesis::order,
            "Operator dimension N — the required length of any psi (|V| at k=0, "
            "else |C_k|, the number of k-cells).")
@@ -1167,22 +1200,57 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("singular_value_ratio") = false,
            py::arg("einstein_hilbert") = true,
            py::arg("real_squared_lengths_only") = false)
+      // Explicit metric source. Without it the C++ default argument reads the
+      // process-wide HodgeLaplacian.defaultMetricSource() at CALL time (a
+      // pybind11 default would capture it at import).
+      .def(py::init<std::shared_ptr<Spacetime>,
+                    std::vector<std::vector<std::complex<double>>>,
+                    std::vector<std::vector<std::complex<double>>>,
+                    std::vector<int>, double, std::uint64_t, int, bool, bool,
+                    bool, bool, bool, bool, bool, HodgeLaplacian::MetricSource>(),
+           py::arg("host"), py::arg("input_targets"), py::arg("output_targets"),
+           py::arg("degrees") = std::vector<int>{3}, py::arg("gamma") = 1.0,
+           py::arg("seed") = 0, py::arg("precone") = 0,
+           py::arg("should_propose_dispositions") = true,
+           py::arg("precone_timelike") = false,
+           py::arg("precone_alternate") = false,
+           py::arg("balanced_edge_wiring") = false,
+           py::arg("singular_value_ratio") = false,
+           py::arg("einstein_hilbert") = true,
+           py::arg("real_squared_lengths_only") = false,
+           py::arg("metric_source"))
+      .def("metricSource", &MultiCobordism::metricSource,
+           "Where every Hodge operator this node scores takes its metric from.")
+      .def("geometryAdmissible", &MultiCobordism::geometryAdmissible, py::arg("spacetime"),
+           "Whitney pencil: whether the geometry lies in the closure of the Kontsevich-Segal "
+           "allowable domain (margin >= 0); always true under DiagonalWeights.")
       .def_static("betti", &MultiCobordism::betti, py::arg("st"))
       .def_static("emergent_holes", &MultiCobordism::emergentHoles,
                   py::arg("st"), py::arg("k"))
       .def_static("regge_action_gradient", &MultiCobordism::reggeActionGradient, py::arg("st"))
       .def_static("nearKernelResidualGradient",
-           &MultiCobordism::nearKernelResidualGradient,
+           [](const std::shared_ptr<Spacetime> &st, int k, std::size_t n,
+              std::optional<HodgeLaplacian::MetricSource> source) {
+             return MultiCobordism::nearKernelResidualGradient(
+                 st, k, n, source.value_or(HodgeLaplacian::defaultMetricSource()));
+           },
            py::arg("st"), py::arg("register_degree"),
            py::arg("expected_register_count"),
+           py::arg("metric_source") = py::none(),
            "Exact COMPLEX gradient of nearKernelResidual per edge, in "
            "ChainComplex 1-cell order: g = dr/d(Re l^2) - i dr/d(Im l^2), so "
            "Re(g) and -Im(g) are the two directional derivatives and conj(g) is "
            "the steepest-ascent direction. Certified by the scale-invariance "
            "Euler identity sum l^2 g = 0 in both parts.")
-      .def_static("nearKernelResidual", &MultiCobordism::nearKernelResidual,
+      .def_static("nearKernelResidual",
+           [](const std::shared_ptr<Spacetime> &st, int k, std::size_t n,
+              std::optional<HodgeLaplacian::MetricSource> source) {
+             return MultiCobordism::nearKernelResidual(
+                 st, k, n, source.value_or(HodgeLaplacian::defaultMetricSource()));
+           },
            py::arg("st"), py::arg("register_degree"),
            py::arg("expected_register_count"),
+           py::arg("metric_source") = py::none(),
            "The pre-topological register signal: the normalized sum of the "
            "expected_register_count smallest squared SINGULAR values of the "
            "METRIC L_k (n * sum_m sigma^2 / sum_all sigma^2; range [0, m]; "
@@ -1197,8 +1265,13 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "The count comes from the TARGETS (one register per target "
            "component), never a constant.")
       .def_static("singularValueHalfSumRatio",
-           &MultiCobordism::singularValueHalfSumRatio,
+           [](const std::shared_ptr<Spacetime> &st, int k,
+              std::optional<HodgeLaplacian::MetricSource> source) {
+             return MultiCobordism::singularValueHalfSumRatio(
+                 st, k, source.value_or(HodgeLaplacian::defaultMetricSource()));
+           },
            py::arg("st"), py::arg("register_degree"),
+           py::arg("metric_source") = py::none(),
            "The scale-invariant spectral-shape term the singular_value_ratio "
            "mode scores as rU's whole-complex contribution, replacing both the "
            "single-output period residual and nearKernelResidual: the sum of "
@@ -1211,8 +1284,15 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def("expectedRegisterCount", &MultiCobordism::expectedRegisterCount,
            "The number of registers the targets ask for: the largest component "
            "count over every input and output target vector.")
-      .def_static("r_state", &MultiCobordism::residualOfTargetStateAgainstHarmonic,
-                  py::arg("st"), py::arg("k"), py::arg("target"))
+      .def_static("r_state",
+                  [](const std::shared_ptr<Spacetime> &st, int k,
+                     const std::vector<std::complex<double>> &target,
+                     std::optional<HodgeLaplacian::MetricSource> source) {
+                    return MultiCobordism::residualOfTargetStateAgainstHarmonic(
+                        st, k, target, source.value_or(HodgeLaplacian::defaultMetricSource()));
+                  },
+                  py::arg("st"), py::arg("k"), py::arg("target"),
+                  py::arg("metric_source") = py::none())
       .def("r_u", &MultiCobordism::rU, py::arg("st"))
       .def("declare_register_constraint",
            [](MultiCobordism &self, const std::string &name, int degree,

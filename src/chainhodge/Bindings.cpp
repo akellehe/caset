@@ -272,8 +272,8 @@ normalized or conjugated.)doc")
 inverse chain metric dressed by U_{b(sigma) b(tau)} and the incidences twisted by
 U_{b(tau) b(sigma)}, b(sigma) = min sigma, with the dressed pencil (A~_k^U, M_k^U) on
 images and the exact properties of Prop. 5.1 measured on every instance.)doc")
-      .def(py::init<const ChainHodge &, Connection, std::uint64_t>(), py::arg("base"),
-           py::arg("connection"), py::arg("gauge_seed") = 7)
+      .def(py::init<const ChainHodge &, Connection, std::uint64_t, bool>(), py::arg("base"),
+           py::arg("connection"), py::arg("gauge_seed") = 7, py::arg("measure_certificate") = true)
       .def("base", &CovariantChainHodge::base, py::return_value_policy::reference_internal)
       .def("connection", &CovariantChainHodge::connection, py::return_value_policy::reference_internal)
       .def("dimension", &CovariantChainHodge::dimension)
@@ -288,6 +288,11 @@ images and the exact properties of Prop. 5.1 measured on every instance.)doc")
       .def("applyMinv", &CovariantChainHodge::applyMinv, py::arg("k"), py::arg("c"))
       .def("applyH", &CovariantChainHodge::applyH, py::arg("k"), py::arg("c"))
       .def("covariantOperator", &CovariantChainHodge::covariantOperator, py::arg("k"))
+      .def("covariantOperatorDerivative", &CovariantChainHodge::covariantOperatorDerivative,
+           py::arg("k"), py::arg("edge_index"), "dh_k/ds_e for the canonical edge index, dense.")
+      .def("covariantOperatorPhaseDerivative", &CovariantChainHodge::covariantOperatorPhaseDerivative,
+           py::arg("k"), py::arg("edge_index"),
+           "dh_k/dphi_e for the multiplicative link variation U_e = e^{i phi_e}, dense.")
       .def("pencil", &CovariantChainHodge::pencil, py::arg("k"))
       .def("pencilAux", &CovariantChainHodge::pencilAux, py::arg("k"))
       .def("spectrum", &CovariantChainHodge::spectrum, py::arg("k"))

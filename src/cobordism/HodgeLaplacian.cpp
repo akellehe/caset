@@ -3,9 +3,14 @@
 
 #include "cobordism/HodgeLaplacian.h"
 
+#include "chainhodge/ChainHodge.h"
+#include "chainhodge/CovariantChainHodge.h"
+#include "chainhodge/WhitneyMass.h"
+
 #include <Eigen/Dense>
 
 #include <algorithm>
+#include <unordered_map>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -825,9 +830,105 @@ ConnectionEntropyData connectionEntropyData(const std::vector<cd> &flat) {
 HodgeLaplacian::WeightConvention HodgeLaplacian::defaultWeightConvention_ =
     HodgeLaplacian::WeightConvention::SquaredContent;
 
+HodgeLaplacian::MetricSource HodgeLaplacian::defaultMetricSource_ =
+    HodgeLaplacian::MetricSource::DiagonalWeights;
+
+// The Whitney pencil of the current geometry: rebuilt whenever the structural
+// revision or any edge's length/phase revision moved since the last build.
+struct HodgeLaplacian::WhitneyState {
+  std::uint64_t stamp{0};
+  cobordism::ChainComplex complex;
+  std::vector<std::vector<std::uint64_t>> edges;
+  std::unordered_map<std::uint64_t, std::size_t> edgeIndex;  // key(a,b) -> canonical edge
+  std::shared_ptr<chainhodge::CovariantChainHodge> op;
+  std::shared_ptr<chainhodge::ChainHodge> base;
+  chainhodge::InstanceCertificate certificate;
+  // D_k: stored orientation relative to the reference orientation, per degree.
+  // Every operator of the pencil is reported in the STORED basis, D L^ref D.
+  std::vector<Eigen::VectorXd> signs;
+  [[nodiscard]] Eigen::MatrixXcd toStored(int k, const Eigen::MatrixXcd &ref) const {
+    if (k < 0 || k >= static_cast<int>(signs.size()) || ref.rows() == 0) return ref;
+    const Eigen::VectorXd &d = signs[static_cast<std::size_t>(k)];
+    return d.asDiagonal() * ref * d.asDiagonal();
+  }
+};
+
+namespace {
+std::uint64_t geometryStamp(const Spacetime &st) {
+  std::uint64_t stamp = st.structuralRevision() * 0x9e3779b97f4a7c15ULL;
+  if (st.getEdgeList())
+    for (const auto &e : st.getEdgeList()->toVector())
+      if (e != nullptr) stamp += 3 * e->lengthRevision() + 7 * e->phaseRevision() + 11;
+  return stamp;
+}
+std::uint64_t edgeKeyOf(std::uint64_t a, std::uint64_t b) {
+  if (a > b) std::swap(a, b);
+  return (a << 32) ^ b;
+}
+}  // namespace
+
+const HodgeLaplacian::WhitneyState &HodgeLaplacian::whitneyState() const {
+  if (!st_) throw std::runtime_error("HodgeLaplacian: no spacetime bound");
+  const std::uint64_t stamp = geometryStamp(*st_);
+  if (whitney_ && whitney_->stamp == stamp) return *whitney_;
+  auto w = std::make_shared<WhitneyState>();
+  w->stamp = stamp;
+  w->complex = chainhodge::WhitneyMass::complexOf(*st_);
+  // The pencil is in the reference orientation (ascending vertex id); every
+  // consumer of this operator indexes cells by ChainComplex::fromSpacetime's
+  // basis, so the two boundary maps must coincide. Refused by name otherwise.
+  const ChainComplex stored = ChainComplex::fromSpacetime(*st_);
+  if (stored.dimension() != w->complex.dimension())
+    throw std::runtime_error("HodgeLaplacian: WhitneyPencil — the spacetime's chain complex and the "
+                             "reference-oriented complex differ in dimension");
+  for (int k = 0; k <= stored.dimension(); ++k)
+    if (stored.kSimplexVertices(k) != w->complex.kSimplexVertices(k))
+      throw std::runtime_error(
+          "HodgeLaplacian: WhitneyPencil — the spacetime's cell order differs from the canonical "
+          "order at degree " + std::to_string(k));
+  // The stored orientations may differ from the reference (ascending id) ones
+  // by a sign per cell (cells created by surgery keep their creation order);
+  // orientationSigns derives and VERIFIES those signs from the stored maps.
+  const auto signs = stored.orientationSigns();
+  w->signs.reserve(signs.size());
+  for (const auto &sk : signs) {
+    Eigen::VectorXd d(static_cast<Eigen::Index>(sk.size()));
+    for (std::size_t j = 0; j < sk.size(); ++j) d(static_cast<Eigen::Index>(j)) = static_cast<double>(sk[j]);
+    w->signs.push_back(std::move(d));
+  }
+  w->edges = w->complex.kSimplexVertices(1);
+  for (std::size_t j = 0; j < w->edges.size(); ++j)
+    w->edgeIndex[edgeKeyOf(w->edges[j][0], w->edges[j][1])] = j;
+  const chainhodge::SquaredLengths s = chainhodge::WhitneyMass::squaredLengthsOf(*st_, w->complex);
+  w->base = std::make_shared<chainhodge::ChainHodge>(
+      w->complex, s, chainhodge::Preset::L2, chainhodge::Branch::Continuation,
+      std::numeric_limits<int>::max());
+  w->certificate = w->base->certificate();
+  const chainhodge::Connection U = chainhodge::Connection::fromSpacetime(*st_, w->complex);
+  w->op = std::make_shared<chainhodge::CovariantChainHodge>(*w->base, U, 7, /*measureCertificate=*/false);
+  whitney_ = std::move(w);
+  return *whitney_;
+}
+
+Eigen::MatrixXcd HodgeLaplacian::operatorMatrix(int k, bool metric) const {
+  if (metricSource_ == MetricSource::WhitneyPencil && metric) {
+    const WhitneyState &w = whitneyState();
+    if (k > w.complex.dimension()) return Eigen::MatrixXcd();
+    return w.toStored(k, w.op->covariantOperator(k));
+  }
+  return laplacianMatrix(*st_, k, metric, weightConvention_);
+}
+
+double HodgeLaplacian::kontsevichSegalMargin(const Spacetime &st) {
+  const ChainComplex K = chainhodge::WhitneyMass::complexOf(st);
+  if (K.dimension() < 0) return std::numeric_limits<double>::infinity();
+  return chainhodge::WhitneyMass::allowabilityMargin(
+      K, chainhodge::WhitneyMass::squaredLengthsOf(st, K));
+}
+
 HodgeLaplacian::HodgeLaplacian(std::shared_ptr<Spacetime> st,
-                               WeightConvention weights)
-    : st_(std::move(st)), weightConvention_(weights) {
+                               WeightConvention weights, MetricSource source)
+    : st_(std::move(st)), weightConvention_(weights), metricSource_(source) {
   if (!st_) {
     sharedSpectra_ = std::make_shared<SharedSpectrumMap>();
     return;
@@ -972,7 +1073,7 @@ std::vector<cd> HodgeLaplacian::laplacian(int k, bool metric) const {
   // off-diagonal; that operator survives under its own name,
   // connectionLaplacian(), and is no longer called L_0.
   if (!st_) return {};
-  const Eigen::MatrixXcd L = laplacianMatrix(*st_, k, metric, weightConvention_);
+  const Eigen::MatrixXcd L = operatorMatrix(k, metric);
   const int nk = static_cast<int>(L.rows());
   std::vector<cd> out(static_cast<std::size_t>(nk) * nk, cd(0.0, 0.0));
   for (int i = 0; i < nk; ++i)
@@ -1013,11 +1114,45 @@ std::vector<std::complex<double>> HodgeLaplacian::weights(int k) const {
 std::vector<std::complex<double>> HodgeLaplacian::laplacianGradient(
     int k, std::uint64_t ea, std::uint64_t eb) const {
   if (k < 0 || !st_) return {};
-  const LaplacianDerivativeWorkspace workspace(*st_, k, weightConvention_);
-  const Eigen::MatrixXcd dL = workspace.gradient(ea, eb);
+  Eigen::MatrixXcd dL;
+  if (metricSource_ == MetricSource::WhitneyPencil) {
+    const WhitneyState &w = whitneyState();
+    const auto it = w.edgeIndex.find(edgeKeyOf(ea, eb));
+    if (it == w.edgeIndex.end() || k > w.complex.dimension()) {
+      const int nk = static_cast<int>(w.complex.numSimplices(k));
+      return std::vector<std::complex<double>>(static_cast<std::size_t>(nk) * nk,
+                                               std::complex<double>{0.0, 0.0});
+    }
+    dL = w.toStored(k, w.op->covariantOperatorDerivative(k, it->second));
+  } else {
+    const LaplacianDerivativeWorkspace workspace(*st_, k, weightConvention_);
+    dL = workspace.gradient(ea, eb);
+  }
   const int nk = static_cast<int>(dL.rows());
   std::vector<std::complex<double>> out(static_cast<std::size_t>(nk) * nk,
                                         std::complex<double>{0.0, 0.0});
+  for (int i = 0; i < nk; ++i)
+    for (int j = 0; j < nk; ++j)
+      out[static_cast<std::size_t>(i) * nk + j] = dL(i, j);
+  return out;
+}
+
+std::vector<std::complex<double>> HodgeLaplacian::laplacianPhaseGradient(
+    int k, std::uint64_t ea, std::uint64_t eb) const {
+  if (k < 0 || !st_) return {};
+  if (metricSource_ != MetricSource::WhitneyPencil) {
+    const ChainComplex cc = ChainComplex::fromSpacetime(*st_);
+    const int nk = (k <= cc.dimension()) ? static_cast<int>(cc.numSimplices(k)) : 0;
+    return std::vector<std::complex<double>>(static_cast<std::size_t>(nk) * nk,
+                                             std::complex<double>{0.0, 0.0});
+  }
+  const WhitneyState &w = whitneyState();
+  const int nk = (k <= w.complex.dimension()) ? static_cast<int>(w.complex.numSimplices(k)) : 0;
+  std::vector<std::complex<double>> out(static_cast<std::size_t>(nk) * nk,
+                                        std::complex<double>{0.0, 0.0});
+  const auto it = w.edgeIndex.find(edgeKeyOf(ea, eb));
+  if (it == w.edgeIndex.end() || nk == 0) return out;
+  const Eigen::MatrixXcd dL = w.toStored(k, w.op->covariantOperatorPhaseDerivative(k, it->second));
   for (int i = 0; i < nk; ++i)
     for (int j = 0; j < nk; ++j)
       out[static_cast<std::size_t>(i) * nk + j] = dL(i, j);
@@ -1335,15 +1470,16 @@ const HodgeLaplacian::SpectrumCache &HodgeLaplacian::ensureSpectrum(
   // (k, metric, weight convention): the map is shared across instances (#688)
   // whose conventions may differ, so the convention is part of the key.
   const long long key =
-      (static_cast<long long>(k) * 2 + (metric ? 1 : 0)) * 2 +
-      (weightConvention_ == WeightConvention::SquaredContent ? 1 : 0);
+      ((static_cast<long long>(k) * 2 + (metric ? 1 : 0)) * 2 +
+       (weightConvention_ == WeightConvention::SquaredContent ? 1 : 0)) * 2 +
+      (metricSource_ == MetricSource::WhitneyPencil ? 1 : 0);
   auto &spectrumCache_ = sharedSpectra_->map;
   const auto cached = spectrumCache_.find(key);
   if (cached != spectrumCache_.end()) return cached->second;
 
   SpectrumCache sp;
   if (st_) {
-    const Eigen::MatrixXcd L = laplacianMatrix(*st_, k, metric, weightConvention_);
+    const Eigen::MatrixXcd L = operatorMatrix(k, metric);
     const int nk = static_cast<int>(L.rows());
     sp.dim = nk;
     sp.evals.assign(static_cast<std::size_t>(nk), cd(0.0, 0.0));

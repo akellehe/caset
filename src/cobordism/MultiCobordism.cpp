@@ -196,7 +196,8 @@ BoundaryStateEvaluation evaluateBoundaryStates(
     const std::shared_ptr<Spacetime> &spacetime,
     const BoundaryComponentData &component, int degree,
     const std::vector<Cell> &orderedCells,
-    const std::vector<std::vector<complexd>> &states) {
+    const std::vector<std::vector<complexd>> &states,
+    HodgeLaplacian::MetricSource metricSource) {
   auto boundary = Spacetime::fromCells(spacetime->getDimensions() - 1,
                                        component.facets, 1.0, 0.0);
   std::map<std::pair<std::uint64_t, std::uint64_t>,
@@ -214,7 +215,7 @@ BoundaryStateEvaluation evaluateBoundaryStates(
     edge->setPhase(parent->second->getPhase());
   }
 
-  EigenstateSynthesis synthesis(boundary, degree);
+  EigenstateSynthesis synthesis(boundary, degree, metricSource);
   std::map<Cell, std::size_t> suppliedIndex;
   for (std::size_t index = 0; index < orderedCells.size(); ++index)
     suppliedIndex.emplace(orderedCells[index], index);
@@ -468,7 +469,8 @@ MultiCobordism::MultiCobordism(
     const std::vector<int> &degrees, double gamma, std::uint64_t seed,
     int precone, bool shouldProposeDispositions, bool preconeTimelike,
     bool preconeAlternate, bool balancedEdgeWiring, bool singularValueRatio,
-    bool einsteinHilbert, bool realSquaredLengthsOnly)
+    bool einsteinHilbert, bool realSquaredLengthsOnly,
+    HodgeLaplacian::MetricSource metricSource)
     : spacetime_(std::move(host)),
       inputTargets_(inputTargets),
       outputTargets_(outputTargets),
@@ -483,6 +485,7 @@ MultiCobordism::MultiCobordism(
       singularValueRatio_(singularValueRatio),
       einsteinHilbert_(einsteinHilbert),
       realSquaredLengthsOnly_(realSquaredLengthsOnly),
+      metricSource_(metricSource),
       randomNumberGenerator_(seed) {
   // The wiring mode must reach the host BEFORE any precone growth below wires
   // its first edge (#690).
@@ -597,8 +600,8 @@ Eigen::MatrixXcd MultiCobordism::holePeriodMatrix(
     const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
     int degreeBettiNumber,
     const std::vector<std::vector<std::uint64_t>> &cycleHoles,
-    std::size_t targetDimension) {
-  EigenstateSynthesis eigenstateSynthesis(spacetime, registerDegree);
+    std::size_t targetDimension, HodgeLaplacian::MetricSource metricSource) {
+  EigenstateSynthesis eigenstateSynthesis(spacetime, registerDegree, metricSource);
   const auto flattenedCyclePeriods =
       eigenstateSynthesis.cyclePeriods(cycleHoles);  // rank x m, row-major
   const std::size_t holeCount = cycleHoles.size();
@@ -674,18 +677,20 @@ MultiCobordism::RelabelingMatch MultiCobordism::bestRelabelingOfTarget(
 
 double MultiCobordism::residualOfTargetStateAgainstHarmonic(
     const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
-    const std::vector<complexd> &targetState) {
+    const std::vector<complexd> &targetState,
+    HodgeLaplacian::MetricSource metricSource) {
   // No other register to collide with: an empty claim set excludes nothing, so this
   // is the unconstrained min over the relabelings (`r_state`, the reference read-out).
   std::set<std::vector<int>> claimedMatchings;
   return residualOfTargetStateAgainstHarmonicWithDistinctMatching(
-      spacetime, registerDegree, targetState, claimedMatchings);
+      spacetime, registerDegree, targetState, claimedMatchings, metricSource);
 }
 
 double MultiCobordism::residualOfTargetStateAgainstHarmonicWithDistinctMatching(
     const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
     const std::vector<complexd> &targetState,
-    std::set<std::vector<int>> &claimedMatchings) {
+    std::set<std::vector<int>> &claimedMatchings,
+    HodgeLaplacian::MetricSource metricSource) {
   const Eigen::VectorXcd targetVector = targetStateVector(targetState);
   const double fullLeakResidual = targetVector.squaredNorm();  // zero-filled leak
 
@@ -704,7 +709,7 @@ double MultiCobordism::residualOfTargetStateAgainstHarmonicWithDistinctMatching(
   if (cycleHoles.empty()) return fullLeakResidual;
   const Eigen::MatrixXcd periodMatrixTransposed =
       holePeriodMatrix(spacetime, registerDegree, degreeBettiNumber, cycleHoles,
-                       targetState.size());
+                       targetState.size(), metricSource);
   // The matrix is bounded by the NUMERIC harmonic rank (see holePeriodMatrix,
   // #636): zero usable harmonics on a geometrically extreme candidate means the
   // register carries nothing — the full leak — not an SVD of a 0-column matrix.
@@ -785,7 +790,7 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
   // fixed by the caller, so they bypass emergent-hole relabeling entirely. This
   // is still the existing exact-period r_U; only the frame is no longer guessed.
   for (const auto &constraint : registerConstraints_)
-    totalResidual += EigenstateSynthesis(spacetime, constraint.degree)
+    totalResidual += EigenstateSynthesis(spacetime, constraint.degree, metricSource_)
                          .residualForPeriods(constraint.holes,
                                              constraint.target);
   for (const auto &inputBlock : inputBlocks_)
@@ -828,7 +833,7 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
     // seed (no topological threshold) and keeps pressing after the holes open
     // (the lower half keeps collapsing past the exact kernel).
     for (int registerDegree : registerDegrees_)
-      totalResidual += singularValueHalfSumRatio(spacetime, registerDegree);
+      totalResidual += singularValueHalfSumRatio(spacetime, registerDegree, metricSource_);
     return totalResidual;
   }
   // The pre-topological register signal (#644): the period residuals above are
@@ -840,7 +845,7 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
   if (expectedRegisters > 0)
     for (int registerDegree : registerDegrees_)
       totalResidual += nearKernelResidual(spacetime, registerDegree,
-                                          expectedRegisters);
+                                          expectedRegisters, metricSource_);
   return totalResidual;
 }
 
@@ -855,9 +860,9 @@ std::size_t MultiCobordism::expectedRegisterCount() const {
 
 double MultiCobordism::nearKernelResidual(
     const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
-    std::size_t expectedRegisterCount) {
+    std::size_t expectedRegisterCount, HodgeLaplacian::MetricSource metricSource) {
   if (expectedRegisterCount == 0) return 0.0;
-  cobordism::HodgeLaplacian laplacian(spacetime);
+  cobordism::HodgeLaplacian laplacian(spacetime, HodgeLaplacian::defaultWeightConvention(), metricSource);
   // METRIC operator, deliberately: the term must feel the continuously-valued
   // edge lengths, so stage 2 can tune the CAUSAL STRUCTURE toward null
   // directions and open near-kernels with no holes at all — that channel is
@@ -905,7 +910,7 @@ double MultiCobordism::nearKernelResidual(
 
 std::vector<std::complex<double>> MultiCobordism::nearKernelResidualGradient(
     const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
-    std::size_t expectedRegisterCount) {
+    std::size_t expectedRegisterCount, HodgeLaplacian::MetricSource metricSource) {
   // d/dl^2 of  r = n * (sum of the m smallest sigma^2) / (sum of all sigma^2).
   //
   // The sigma^2 are the eigenvalues of the Hermitian H = L^dagger L, so first-order
@@ -926,7 +931,7 @@ std::vector<std::complex<double>> MultiCobordism::nearKernelResidualGradient(
   std::vector<complexd> gradient(oneCells.size(), complexd(0.0, 0.0));
   if (expectedRegisterCount == 0) return gradient;   // value is the constant 0
 
-  cobordism::HodgeLaplacian laplacian(spacetime);
+  cobordism::HodgeLaplacian laplacian(spacetime, HodgeLaplacian::defaultWeightConvention(), metricSource);
   const std::vector<complexd> flat =
       laplacian.laplacian(registerDegree, /*metric=*/true);
   const std::size_t n = static_cast<std::size_t>(
@@ -987,8 +992,9 @@ std::vector<std::complex<double>> MultiCobordism::nearKernelResidualGradient(
 }
 
 double MultiCobordism::singularValueHalfSumRatio(
-    const std::shared_ptr<Spacetime> &spacetime, int registerDegree) {
-  cobordism::HodgeLaplacian laplacian(spacetime);
+    const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
+    HodgeLaplacian::MetricSource metricSource) {
+  cobordism::HodgeLaplacian laplacian(spacetime, HodgeLaplacian::defaultWeightConvention(), metricSource);
   // The SAME operator nearKernelResidual reads (metric, signed, generally
   // non-normal — see its comment); the two terms are alternatives for the one
   // whole-complex slot in rU, so they must see the same spectrum.
@@ -1032,7 +1038,7 @@ double MultiCobordism::hodgeEntropy() const {
   // would report a number that is not any degree's entropy.
   double entropy = 0.0;
   for (int degree : hodgeDegrees_)
-    entropy += HodgeLaplacian(spacetime_).spectralEntropy(
+    entropy += HodgeLaplacian(spacetime_, HodgeLaplacian::defaultWeightConvention(), metricSource_).spectralEntropy(
         degree, hodgeEntropyPhaseMode_);
   return entropy;
 }
@@ -1051,7 +1057,7 @@ double MultiCobordism::hodgeEntropyStationarity() const {
     const double weight = index < hodgeDegreeWeights_.size()
                               ? hodgeDegreeWeights_[index]
                               : 1.0;
-    residual += weight * HodgeLaplacian(spacetime_).spectralEntropyGradientNorm(
+    residual += weight * HodgeLaplacian(spacetime_, HodgeLaplacian::defaultWeightConvention(), metricSource_).spectralEntropyGradientNorm(
                              hodgeDegrees_[index], hodgeEntropyPhaseMode_);
   }
   return residual;
@@ -1461,7 +1467,7 @@ MultiCobordism::relaxFixedBoundaryEigenstate(
   for (std::size_t index = 0; index < supportCells.size(); ++index)
     pinnedByCell.emplace(supportCells[index], target[index]);
 
-  EigenstateSynthesis synthesis(spacetime_, degree);
+  EigenstateSynthesis synthesis(spacetime_, degree, metricSource_);
   FixedCochainOptimization best;
   int growthSteps = 0;
   for (int pass = 0;; ++pass) {
@@ -1627,9 +1633,9 @@ MultiCobordism::relaxBoundaryStatePairs(
   }
 
   const auto inputBoundary = evaluateBoundaryStates(
-      spacetime_, *inputComponent, degree, inputCells, inputStates);
+      spacetime_, *inputComponent, degree, inputCells, inputStates, metricSource_);
   const auto outputBoundary = evaluateBoundaryStates(
-      spacetime_, *outputComponent, degree, outputCells, outputStates);
+      spacetime_, *outputComponent, degree, outputCells, outputStates, metricSource_);
   for (const double residual : inputBoundary.residuals)
     if (!(residual < boundaryEpsilon))
       throw std::invalid_argument(
@@ -1639,7 +1645,7 @@ MultiCobordism::relaxBoundaryStatePairs(
       throw std::invalid_argument(
           prefix + "an output state is not an isolated-boundary eigenstate");
 
-  EigenstateSynthesis synthesis(spacetime_, degree);
+  EigenstateSynthesis synthesis(spacetime_, degree, metricSource_);
   for (const auto &[a, b] : synthesis.boundaryEdges())
     if (!edgeIsPinned(a, b))
       throw std::invalid_argument(
@@ -1700,9 +1706,9 @@ MultiCobordism::relaxBoundaryStatePairs(
         prefix + "pinned geometry changed during boundary-state relaxation");
 
   const auto finalInputBoundary = evaluateBoundaryStates(
-      spacetime_, *inputComponent, degree, inputCells, inputStates);
+      spacetime_, *inputComponent, degree, inputCells, inputStates, metricSource_);
   const auto finalOutputBoundary = evaluateBoundaryStates(
-      spacetime_, *outputComponent, degree, outputCells, outputStates);
+      spacetime_, *outputComponent, degree, outputCells, outputStates, metricSource_);
 
   BoundaryStateTransferResult result;
   result.converged = best.residual < epsilon;
@@ -1752,7 +1758,7 @@ MultiCobordism::GeometricOperatorReadout MultiCobordism::geometricOperator(
   if (d > std::numeric_limits<std::size_t>::max() / d)
     return obstruct("state dimension overflows the Choi width");
   const std::size_t choiWidth = d * d;
-  EigenstateSynthesis synthesis(spacetime_, 1);
+  EigenstateSynthesis synthesis(spacetime_, 1, metricSource_);
   result.bulkCells = synthesis.bulkMinusBoundaryCells();
   result.bulkCellCount = result.bulkCells.size();
   if (result.bulkCells.empty())
@@ -2019,9 +2025,20 @@ bool MultiCobordism::applyMoveSpecification(
   // Manifold validity is the whole gate. A move that removes a pinned vertex is
   // accepted when what it leaves is a valid manifold in its own right: pinning
   // constrains the geometry, it does not veto a topology change.
-  return EigenstateSynthesis(spacetime, dualComplexGateDegree_)
-      .dualComplexValid()
-      .first;
+  if (!EigenstateSynthesis(spacetime, dualComplexGateDegree_, metricSource_)
+           .dualComplexValid()
+           .first)
+    return false;
+  // Under the Whitney pencil the configuration space is the closure of the
+  // Kontsevich–Segal allowable domain; a proposal outside it is not a member.
+  return geometryAdmissible(spacetime);
+}
+
+bool MultiCobordism::geometryAdmissible(const std::shared_ptr<Spacetime> &spacetime) const {
+  if (metricSource_ != HodgeLaplacian::MetricSource::WhitneyPencil) return true;
+  if (!spacetime) return false;
+  constexpr double kBoundaryTolerance = 1e-12;
+  return HodgeLaplacian::kontsevichSegalMargin(*spacetime) >= -kBoundaryTolerance;
 }
 
 double MultiCobordism::deltaF(
@@ -2632,7 +2649,7 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
     const auto oneCells =
         ChainComplex::fromSpacetime(*spacetime_).kSimplexVertices(1);
     for (const auto &constraint : registerConstraints_) {
-      EigenstateSynthesis synthesis(spacetime_, constraint.degree);
+      EigenstateSynthesis synthesis(spacetime_, constraint.degree, metricSource_);
       const std::vector<double> gradient = synthesis.residualForPeriodsGradient(
           constraint.holes, constraint.target);
       if (gradient.size() != oneCells.size())
@@ -2793,6 +2810,14 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
       // paid for, and the accepted state would not be a descent of the whole
       // objective.
       setPhases(phases - trialStepScale * phaseDescentDirection);
+      if (!geometryAdmissible(spacetime_)) {
+        // Outside the closure of the allowable domain: not a configuration,
+        // so it is not scored; the step is shortened exactly as a non-improving
+        // trial is.
+        CLOG(INFO_LEVEL, "Trial geometry not Kontsevich-Segal admissible; shortening the step.");
+        trialStepScale *= 0.5;
+        continue;
+      }
       const double trialObjective = fullObjective();
       CLOG(INFO_LEVEL, "-----------------------------------");
       CLOG(INFO_LEVEL, "Trial objective: ", trialObjective);

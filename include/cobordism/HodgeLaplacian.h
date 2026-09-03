@@ -5,6 +5,8 @@
 #define TESSERA_COBORDISM_HODGELAPLACIAN_H
 
 #include <complex>
+
+#include <Eigen/Core>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -149,6 +151,26 @@ class HodgeLaplacian {
     /// `SquaredContent` keeps the weights real-signed and restores one.
     enum class WeightConvention { Content, SquaredContent };
 
+    /// Where the operator's metric comes from.
+    ///
+    /// * `DiagonalWeights` — the diagonal per-simplex weights of `WeightConvention`
+    ///   (the historical path; every existing consumer and default).
+    /// * `WhitneyPencil` — the chain-level Whitney Hodge pencil of
+    ///   `chainhodge::ChainHodge`: the sparse inverse chain metrics \f$ M_k \f$
+    ///   assembled from the complex squared edge lengths, dressed at EVERY
+    ///   degree by the \f$ \mathbb{C}^* \f$ links read from the edge phases
+    ///   (`chainhodge::Connection::fromSpacetime`). `laplacian(k)` is then the
+    ///   dense covariant operator \f$ h_k(s,U) \f$ on chains,
+    ///   `laplacianGradient` its analytic \f$ \partial h_k/\partial s_e \f$, and
+    ///   `laplacianPhaseGradient` its analytic \f$ \partial h_k/\partial\varphi_e \f$.
+    ///   The reference orientation of the pencil (ascending vertex id) is
+    ///   checked against `ChainComplex::fromSpacetime`'s boundary maps on
+    ///   every assembly and refused by name if they differ. `weights(k)` keeps
+    ///   returning the diagonal weights of the convention: the pencil's chain
+    ///   metric is not diagonal, and consumers of that metric read it from
+    ///   `chainhodge` directly.
+    enum class MetricSource { DiagonalWeights, WhitneyPencil };
+
     /// Whether spectral-entropy diagnostics retain the complex entries of
     /// \f$L_k\f$ or perform a phase-blind ablation first.
     ///
@@ -167,7 +189,35 @@ class HodgeLaplacian {
     ///   on real signed \f$ \ell^2 \f$, polynomial in the squared edge lengths so
     ///   it carries no branch, and it preserves genuine null kernel directions.
     explicit HodgeLaplacian(std::shared_ptr<Spacetime> st,
-                            WeightConvention weights = defaultWeightConvention());
+                            WeightConvention weights = defaultWeightConvention(),
+                            MetricSource source = defaultMetricSource());
+
+    /// The process-wide default `MetricSource`, read by the constructor's
+    /// default argument at the call site exactly like `defaultWeightConvention`.
+    /// Ships as `DiagonalWeights`, so every historical consumer is unchanged;
+    /// `MultiCobordism` selects `WhitneyPencil` for its own operators.
+    [[nodiscard]] static MetricSource defaultMetricSource() noexcept {
+      return defaultMetricSource_;
+    }
+    static void setDefaultMetricSource(MetricSource source) noexcept {
+      defaultMetricSource_ = source;
+    }
+    [[nodiscard]] MetricSource metricSource() const noexcept { return metricSource_; }
+
+    /// Whitney pencil only: the analytic \f$ \partial L_k/\partial\varphi_e \f$ for
+    /// the multiplicative variation \f$ U_e = e^{i\varphi_e} \f$ of the link on
+    /// the edge \f$ (e_a, e_b) \f$, flat row-major \f$ |C_k|^2 \f$. Under
+    /// `DiagonalWeights` the operator carries no phase above degree zero and
+    /// the result is identically zero.
+    [[nodiscard]] std::vector<std::complex<double>> laplacianPhaseGradient(
+        int k, std::uint64_t ea, std::uint64_t eb) const;
+
+    /// The Kontsevich–Segal allowability margin
+    /// \f$ \min_T (\pi - \sum_i |\arg\lambda_i(g_T)|) \f$ of the spacetime's
+    /// current squared lengths (positive: allowable; zero: on the boundary, the
+    /// real Lorentzian case; negative: not allowable). Measures the geometry
+    /// only; independent of the metric source.
+    [[nodiscard]] static double kontsevichSegalMargin(const Spacetime &st);
 
     /// The process-wide default `WeightConvention`, read by the constructor's
     /// default argument AT THE CALL SITE — so every internally-constructed
@@ -518,6 +568,14 @@ class HodgeLaplacian {
     std::shared_ptr<Spacetime> st_;
     WeightConvention weightConvention_{WeightConvention::SquaredContent};
     static WeightConvention defaultWeightConvention_;
+    MetricSource metricSource_{MetricSource::DiagonalWeights};
+    static MetricSource defaultMetricSource_;
+    // The Whitney pencil state (chain complex, squared lengths, connection,
+    // dressed operator), built lazily and rebuilt when the geometry stamp moves.
+    struct WhitneyState;
+    mutable std::shared_ptr<WhitneyState> whitney_{};
+    [[nodiscard]] const WhitneyState &whitneyState() const;
+    [[nodiscard]] Eigen::MatrixXcd operatorMatrix(int k, bool metric) const;
 
     // Stable vertex order: ids_[idx] = vertex id, idToIndex_[id] = idx. Built
     // once in the constructor (the vertex set is fixed for the operator's life;
