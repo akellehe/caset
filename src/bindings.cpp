@@ -52,6 +52,7 @@ void register_spacetime(py::module_ m);
 void register_observables(py::module_ m);
 void register_simulations(py::module_ m);
 void register_cobordism(py::module_ m);
+void register_chainhodge(py::module_ m);
 
 PYBIND11_MODULE(_tessera, m) {
   m.doc() = R"doc(
@@ -100,6 +101,9 @@ References:
   auto m_cobordism   = m.def_submodule("cobordism",
       "Cobordisms between PL manifolds: characteristic numbers, verification, "
       "reconstruction.");
+  auto m_chainhodge  = m.def_submodule("chainhodge",
+      "Chain-level Whitney Hodge pencil: sparse inverse chain metrics, "
+      "branches, and instance certificates.");
 
   // --- Per-subsystem bindings (one file per subsystem) ---
   register_mesh(m_mesh);
@@ -107,6 +111,7 @@ References:
   register_observables(m_observables);
   register_simulations(m_simulations);
   register_cobordism(m_cobordism);
+  register_chainhodge(m_chainhodge);
 
   // ========================================
   // MatterConfiguration

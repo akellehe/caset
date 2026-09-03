@@ -26,6 +26,7 @@ from tessera._tessera import (                              # noqa: F401
     observables,
     simulations,
     cobordism,
+    chainhodge,
 )
 
 # The ``quantum`` submodule (Schwinger model / DMRG, ITensor-backed) is

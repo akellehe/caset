@@ -34,6 +34,19 @@ class ChainComplex {
     /// sets only; no coordinates/geometry required.
     [[nodiscard]] static ChainComplex fromSpacetime(const Spacetime &K);
 
+    /// Build the chain complex of a pure simplicial complex from its top cells
+    /// alone, as vertex-id tuples, with **no geometry and no mesh**: the face
+    /// closure is every subset of every top cell, each simplex is oriented by
+    /// **ascending vertex id** (the reference orientation), and
+    /// \f$ \partial[v_0<\dots<v_k] = \sum_i (-1)^i [v_0<\dots\widehat{v_i}\dots<v_k] \f$.
+    /// The cell order is the same canonical (lexicographic on sorted tuples)
+    /// order `fromSpacetime` produces. Vertex order within a supplied cell is
+    /// irrelevant; a cell with a repeated vertex or a size differing from the
+    /// others is refused.
+    /// @throws std::invalid_argument on an impure cell list or a degenerate cell.
+    [[nodiscard]] static ChainComplex fromTopCells(
+        const std::vector<std::vector<std::uint64_t>> &topCells);
+
     /// Top dimension n (largest k with a k-simplex), or -1 if empty.
     [[nodiscard]] int dimension() const noexcept { return dimension_; }
 
