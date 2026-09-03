@@ -1,12 +1,15 @@
 // Copyright (c) 2026 Twin Vector Labs LLC.
 // All rights reserved.
 
+#include <limits>
+
 #include <pybind11/complex.h>
 #include <pybind11/eigen.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
 #include "chainhodge/ChainHodge.h"
+#include "chainhodge/LorentzianFamily.h"
 #include "chainhodge/WhitneyMass.h"
 #include "cobordism/ChainComplex.h"
 #include "spacetime/Spacetime.h"
@@ -155,10 +158,11 @@ Hodge pencil, assembled per top simplex from the complex squared edge lengths al
 pencil and its auxiliary form, harmonic chains H_k = M_k ker S, rank conditions R1-R4,
 exact Betti numbers, and the dense spectrum below the crossover. The adjoint is the
 transpose; no conjugation enters any operator.)doc")
-      .def(py::init<ChainComplex, SquaredLengths, Preset, Branch, int>(),
+      .def(py::init<ChainComplex, SquaredLengths, Preset, Branch, int, double>(),
            py::arg("complex"), py::arg("squared_lengths"), py::arg("preset") = Preset::L2,
            py::arg("branch") = Branch::Continuation,
-           py::arg("crossover_dimension") = ChainHodge::kDefaultCrossoverDimension)
+           py::arg("crossover_dimension") = ChainHodge::kDefaultCrossoverDimension,
+           py::arg("epsilon") = std::numeric_limits<double>::quiet_NaN())
       .def("complex", &ChainHodge::complex, py::return_value_policy::reference_internal)
       .def("squaredLengths", &ChainHodge::squaredLengths)
       .def("dimension", &ChainHodge::dimension)
@@ -186,4 +190,51 @@ transpose; no conjugation enters any operator.)doc")
            "The rank conditions (R1)-(R4) at degree k.")
       .def("betti", &ChainHodge::betti, "Betti numbers over Q, exact.")
       .def("spectrum", &ChainHodge::spectrum, py::arg("k"), "Dense spectrum of the degree-k pencil.");
+  py::enum_<CausalType>(m, "CausalType",
+      "Declared causal type of an edge (an input, never inferred from a squared length).")
+      .value("Spacelike", CausalType::Spacelike)
+      .value("Timelike", CausalType::Timelike)
+      .value("Null", CausalType::Null);
+
+  py::class_<LorentzianRead>(m, "LorentzianRead",
+      "One member of the epsilon family: allowability, margin, the harmonic read with its "
+      "gap, and the dense spectrum when requested.")
+      .def_readonly("epsilon", &LorentzianRead::epsilon)
+      .def_readonly("allowable", &LorentzianRead::allowable)
+      .def_readonly("margin", &LorentzianRead::margin)
+      .def_readonly("degree", &LorentzianRead::degree)
+      .def_readonly("harmonic", &LorentzianRead::harmonic)
+      .def_readonly("eigenvalues", &LorentzianRead::eigenvalues);
+
+  py::class_<LorentzianExtrapolation>(m, "LorentzianExtrapolation",
+      "A labeled least-squares extrapolation of reads at epsilon > 0 to epsilon -> 0.")
+      .def_readonly("epsilons", &LorentzianExtrapolation::epsilons)
+      .def_readonly("values", &LorentzianExtrapolation::values)
+      .def_readonly("order", &LorentzianExtrapolation::order)
+      .def_readonly("extrapolated", &LorentzianExtrapolation::extrapolated)
+      .def_readonly("residual", &LorentzianExtrapolation::residual)
+      .def_readonly("label", &LorentzianExtrapolation::label);
+
+  py::class_<LorentzianFamily>(m, "LorentzianFamily",
+      R"doc(The Lorentzian protocol (specification §10): the family s_e(epsilon) with the
+timelike squared lengths rotated by e^{-2 i epsilon} at reported epsilon > 0; reads at
+epsilon = 0 exist only inside a family and carry their gap; extrapolation to
+epsilon -> 0 is a separate, labeled step.)doc")
+      .def_static("rotate", &LorentzianFamily::rotate, py::arg("squared_lengths"),
+           py::arg("causal_types"), py::arg("epsilon"),
+           "Timelike entries times e^{-2 i epsilon}; others unchanged.")
+      .def_static("instance", &LorentzianFamily::instance, py::arg("complex"),
+           py::arg("squared_lengths"), py::arg("causal_types"), py::arg("epsilon"),
+           py::arg("preset") = Preset::L2, py::arg("branch") = Branch::Continuation,
+           py::arg("crossover_dimension") = ChainHodge::kDefaultCrossoverDimension,
+           "The ChainHodge at epsilon, with epsilon on its certificate.")
+      .def_static("sweep", &LorentzianFamily::sweep, py::arg("complex"), py::arg("squared_lengths"),
+           py::arg("causal_types"), py::arg("epsilons"), py::arg("degree"),
+           py::arg("preset") = Preset::L2, py::arg("branch") = Branch::Continuation,
+           py::arg("kappa") = 10.0, py::arg("with_spectrum") = false,
+           py::arg("crossover_dimension") = ChainHodge::kDefaultCrossoverDimension,
+           "Reads at every epsilon of the family at one degree.")
+      .def_static("extrapolateToZero", &LorentzianFamily::extrapolateToZero, py::arg("epsilons"),
+           py::arg("values"), py::arg("order") = 2,
+           "Labeled polynomial extrapolation of reads at epsilon > 0 to epsilon -> 0.");
 }

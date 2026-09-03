@@ -152,9 +152,12 @@ class ChainHodge {
   /// squared lengths \p s (canonical edge order), assembling every degree's
   /// sparse metric on the declared branch and the instance certificate.
   /// @throws std::invalid_argument as `WhitneyMass::assemble`.
+  /// \p epsilon, when given, is the Lorentzian-protocol rotation the squared
+  /// lengths were computed at; it is recorded on the certificate.
   ChainHodge(cobordism::ChainComplex K, SquaredLengths s, Preset preset = Preset::L2,
              Branch branch = Branch::Continuation,
-             int crossoverDimension = kDefaultCrossoverDimension);
+             int crossoverDimension = kDefaultCrossoverDimension,
+             double epsilon = std::numeric_limits<double>::quiet_NaN());
 
   [[nodiscard]] const cobordism::ChainComplex &complex() const noexcept { return K_; }
   [[nodiscard]] const SquaredLengths &squaredLengths() const noexcept { return s_; }
