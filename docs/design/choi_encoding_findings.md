@@ -88,14 +88,32 @@ The four-witness common-eigenvalue fit did not converge in any probed configurat
 Parameter counts (real unknowns vs real equations) are not the limit: at 5 and 6 layers
 the slack is positive before any growth.
 
-| bulk | budget | best residual | eigenvalue | growth | free edges | source |
-|---|---|---|---|---|---|---|
-| 3 layers | 4 × 8 × 400 | 2.45e-4 | 3.362 | 8 | 48 | `run-diagonal.json` |
-| 3 layers, pairs only (no readout) | 8 × 8 × 1000 (probe, growth ≤ 24) | see `probe-pairs.log` | | | | |
-| 3 layers | 8 × 24 × 1000 | see `probe-readout.log` | | | | |
-| 5 layers | 8 × 8 × 1000 | 7.78e-4 | 3.548 | 8 | 66 | `probe-readout-L5.log` |
-| 5 layers, pairs only (no readout) | 8 × 8 × 1000 | 2.75e-5 (best pass 9.4e-6) | 3.957 | 8 | 66 | `probe-pairs-L5.log` |
-| 6 layers | 8 × 8 × 1000 | 1.85e-4 (best pass 6.5e-5) | 3.604 | 8 | 75 | `probe-readout-L6.log` |
+Budgets are written restarts × growth × iterations; "cold" passes redraw every
+restart at random, "warm" passes descend first from the previous pass's witnesses
+(the warm start landed after the cold rows were measured).
+
+| bulk | witnesses | budget | best residual | eigenvalue | growth | free edges | source |
+|---|---|---|---|---|---|---|---|
+| 3 layers | 4 | 4 × 8 × 400, cold | 2.45e-4 | 3.362 | 8 | 48 | `run-diagonal.json` |
+| 3 layers | 4 | 8 × 24 × 1000, cold | 5.75e-5 (best pass 1.3e-5) | 3.536 | 24 | 96 | `probe-readout.log` |
+| 3 layers, **pairs only (no readout)** | 4 | 8 × 24 × 1000, cold | **9.64e-17, converged** | 5.160 | 23 | 93 | `probe-pairs.log` |
+| 5 layers | 4 | 8 × 8 × 1000, cold | 7.78e-4 | 3.548 | 8 | 66 | `probe-readout-L5.log` |
+| 5 layers, pairs only (no readout) | 4 | 8 × 8 × 1000, cold | 2.75e-5 (best pass 9.4e-6) | 3.957 | 8 | 66 | `probe-pairs-L5.log` |
+| 6 layers | 4 | 8 × 8 × 1000, cold | 1.85e-4 (best pass 6.5e-5) | 3.604 | 8 | 75 | `probe-readout-L6.log` |
+| 3 layers, each witness its own eigenvalue | 4 | 8 × 12 × 1000, cold | 7.33e-4 | 3.03–3.04 | 12 | | `probe2-indep.log` |
+| 3 layers | 3 | 8 × 12 × 1000, cold | 8.06e-5 | 3.212 | 12 | | `probe2-three.log` |
+| 3 layers | 3 | 8 × 12 × 1000, warm | 8.06e-5 (monotone trace, same floor) | 3.212 | 12 | | `warm-three.log` |
+| 3 layers, two witnesses on both modes | 2 | 8 × 12 × 1000, cold | **9.73e-17, converged** | 4.579 | 5 | | `probe2-twomixed.log` |
+
+Three readings. (i) Four independent common-eigenvalue eigenstates with prescribed
+boundary traces ARE realizable on the 3-layer annulus: the pairs-only fit reaches
+9.6e-17 after 23 growths, so the eigen-realizability alone is not the obstruction.
+(ii) The difficulty scales with the witness count, not with the mode content: two
+witnesses on both modes converge in 5 growths; three do not converge in 12; dropping
+the common eigenvalue does not help. (iii) The readout constraint is what the
+four-witness fit has not yet met: it pins the operator the bulk implements to the
+chosen `U ∈ U(4)`, whereas the pairs-only fit lets the output emerge. The
+growth-40 warm-start run of the readout fit is the pending measurement.
 
 | configuration | witnesses | growth | free edges | real parameters | real equations | slack |
 |---|---|---|---|---|---|---|
@@ -105,12 +123,9 @@ the slack is positive before any growth.
 | 6 layers | 4 | 0 | 51 | 190 | 168 | 22 |
 | 3 layers | 2 | 0 | 24 | 64 | 48 | 16 |
 
-The pairs-only fit (no readout constraint) does not converge either, so the
-bottleneck is the eigen-realizability of four independent common-eigenvalue
-eigenstates with prescribed boundary traces, not the readout system. This is the
-realizability question #901 and #903 characterize, met here in its four-fold form; the
-two-witness coupled fit has converged before (the merged operator experiment) and
-converges here.
+This is the realizability question #901 and #903 characterize, met here for a
+prescribed four-dimensional operator; the two-witness coupled fit has converged before
+(the merged operator experiment) and converges here in every form tried.
 
 ### Class 3 (CNOT over the product spanning set)
 
