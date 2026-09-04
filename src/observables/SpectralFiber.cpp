@@ -22,6 +22,10 @@
 #include <Eigen/SparseCore>
 #include <Eigen/SVD>
 
+#include "chainhodge/ChainHodge.h"
+#include "chainhodge/CovariantChainHodge.h"
+#include "chainhodge/RieszBand.h"
+#include "chainhodge/WhitneyMass.h"
 #include "cobordism/AnalyticCache.h"
 #include "cobordism/ChainComplex.h"
 #include "cobordism/DenseReference.h"
@@ -77,6 +81,8 @@ std::string regimeName(CertificateRegime regime) {
       return "hermitian-indefinite";
     case CertificateRegime::NonNormal:
       return "non-normal";
+    case CertificateRegime::ComplexSymmetricPencil:
+      return "complex-symmetric-pencil";
   }
   return "non-normal";
 }
@@ -87,6 +93,8 @@ CertificateRegime regimeFromName(const std::string &name) {
   if (name == "hermitian-indefinite")
     return CertificateRegime::HermitianIndefinite;
   if (name == "non-normal") return CertificateRegime::NonNormal;
+  if (name == "complex-symmetric-pencil")
+    return CertificateRegime::ComplexSymmetricPencil;
   throw std::invalid_argument("SpectralFiber: unknown regime '" + name + "'");
 }
 
@@ -181,6 +189,13 @@ Record bandCertificateToRecord(const SpectralBandCertificate &c) {
   m["frequency_lower"] = Record(c.frequencyLower);
   m["frequency_upper"] = Record(c.frequencyUpper);
   m["self_adjoint"] = Record(c.selfAdjoint);
+  m["pairing_determinant_re"] = Record(c.pairingDeterminant.real());
+  m["pairing_determinant_im"] = Record(c.pairingDeterminant.imag());
+  m["pairing_condition"] = Record(c.pairingCondition);
+  m["pairing_scale"] = Record(c.pairingScale);
+  m["isotropic"] = Record(c.isotropic);
+  m["left_frame_refusal"] = Record(c.leftFrameRefusal);
+  m["metric_symmetry_defect"] = Record(c.metricSymmetryDefect);
   m["accepted"] = Record(c.accepted);
   m["certificate"] = certificateToRecord(c.certificate);
   return Record(std::move(m));
@@ -213,6 +228,13 @@ SpectralBandCertificate bandCertificateFromRecord(const Record &record) {
   c.frequencyLower = m.at("frequency_lower").asDouble();
   c.frequencyUpper = m.at("frequency_upper").asDouble();
   c.selfAdjoint = m.at("self_adjoint").asBool();
+  c.pairingDeterminant = cd(optionalDouble(m, "pairing_determinant_re"),
+                            optionalDouble(m, "pairing_determinant_im"));
+  c.pairingCondition = optionalDouble(m, "pairing_condition");
+  c.pairingScale = optionalDouble(m, "pairing_scale");
+  c.isotropic = m.count("isotropic") ? m.at("isotropic").asBool() : false;
+  c.leftFrameRefusal = m.count("left_frame_refusal") ? m.at("left_frame_refusal").asString() : std::string{};
+  c.metricSymmetryDefect = optionalDouble(m, "metric_symmetry_defect");
   c.accepted = m.at("accepted").asBool();
   c.certificate = certificateFromRecord(m.at("certificate"));
   return c;
@@ -375,6 +397,11 @@ std::string SpectralBandCertificate::describe() const {
       << ", gram " << gramDefect << "), projector norm " << projectorNorm
       << ", frame condition " << frameConditionNumber << ", "
       << (selfAdjoint ? "self-adjoint" : "general") << " path";
+  if (certificate.regime() == CertificateRegime::ComplexSymmetricPencil)
+    out << "; complex-symmetric pencil: det B_C " << pairingDeterminant
+        << ", cond B_C " << pairingCondition << ", pairing scale "
+        << pairingScale << (isotropic ? ", ISOTROPIC (" + leftFrameRefusal + ")" : "")
+        << ", metric symmetry defect " << metricSymmetryDefect;
   return out.str();
 }
 
@@ -395,6 +422,12 @@ SpectralFiber::SpectralFiber(std::vector<std::vector<std::uint64_t>> cells,
 Eigen::MatrixXcd SpectralFiber::projector() const {
   if (right_.rows() == 0 || right_.cols() == 0)
     return Eigen::MatrixXcd::Zero(right_.rows(), right_.rows());
+  // The chain-level pencil regime pairs BILINEARLY: the Riesz projector is
+  // Phi Phi~^T (no conjugate, no diagonal metric); the left frame stored is
+  // Phi~ itself and the weight diagonal is the identity placeholder.
+  if (certificate_.certificate.regime() ==
+      CertificateRegime::ComplexSymmetricPencil)
+    return right_ * left_.transpose();
   return right_ * (left_.adjoint() * weights_.asDiagonal());
 }
 
@@ -558,6 +591,10 @@ struct SpectralFiberTracker::RestrictedOperator {
   CertificateRegime regime = CertificateRegime::NonNormal;
   bool positive = false;                  // verified positive regime
   double opScale = 0.0;                   // Frobenius norm of the solved matrix
+  // Chain-level pencil path: the dressed pencil of the induced subcomplex and
+  // the regime's verification residual (M L = (M L)^T).
+  std::shared_ptr<const chainhodge::CovariantChainHodge> pencil{};
+  double metricSymmetryDefect = kNaN;
 
   [[nodiscard]] std::size_t dim() const { return cells.size(); }
 };
@@ -566,6 +603,16 @@ SpectralFiberTracker::SpectralFiberTracker(
     std::shared_ptr<Spacetime> st, SpectralFiberConfig cfg,
     cobordism::HodgeLaplacian::WeightConvention weights)
     : st_(std::move(st)), cfg_(std::move(cfg)), weights_(weights) {
+  if (!st_)
+    throw std::invalid_argument("SpectralFiberTracker: null spacetime");
+}
+
+SpectralFiberTracker::SpectralFiberTracker(
+    std::shared_ptr<Spacetime> st, SpectralFiberConfig cfg,
+    cobordism::HodgeLaplacian::MetricSource source)
+    : st_(std::move(st)), cfg_(std::move(cfg)),
+      weights_(cobordism::HodgeLaplacian::defaultWeightConvention()),
+      metricSource_(source) {
   if (!st_)
     throw std::invalid_argument("SpectralFiberTracker: null spacetime");
 }
@@ -640,6 +687,49 @@ SpectralFiberTracker::assembleRestricted(
       op.regime = CertificateRegime::NonNormal;
     }
     op.opScale = norm;
+    return op;
+  }
+  if (metricSource_ == cobordism::HodgeLaplacian::MetricSource::WhitneyPencil) {
+    // The chain-level Whitney pencil of the INDUCED SUBCOMPLEX on the support:
+    // its top cells are the spacetime's top simplices with every vertex in
+    // the support, in the reference (ascending id) orientation; squared
+    // lengths and links are read from the spacetime's edges.
+    std::size_t topSize = 0;
+    for (const auto &sp : st_->getSimplices())
+      if (sp != nullptr) topSize = std::max(topSize, static_cast<std::size_t>(sp->size()));
+    std::vector<std::vector<std::uint64_t>> topCells;
+    for (const auto &sp : st_->getSimplices()) {
+      if (sp == nullptr || static_cast<std::size_t>(sp->size()) != topSize) continue;
+      std::vector<std::uint64_t> cell;
+      bool inside = true;
+      for (const auto &v : sp->getVertices()) {
+        if (!members.count(v->getId())) { inside = false; break; }
+        cell.push_back(v->getId());
+      }
+      if (!inside) continue;
+      std::sort(cell.begin(), cell.end());
+      topCells.push_back(std::move(cell));
+    }
+    if (topCells.empty()) return op;  // no cell of the support: empty read
+    const cobordism::ChainComplex K = cobordism::ChainComplex::fromTopCells(topCells);
+    if (degree > K.dimension()) return op;
+    const chainhodge::SquaredLengths s = chainhodge::WhitneyMass::squaredLengthsOf(*st_, K);
+    const chainhodge::Connection U = chainhodge::Connection::fromSpacetime(*st_, K);
+    const chainhodge::ChainHodge base(K, s, chainhodge::Preset::L2,
+                                      chainhodge::Branch::Continuation,
+                                      std::numeric_limits<int>::max());
+    auto cov = std::make_shared<const chainhodge::CovariantChainHodge>(
+        base, U, 7, /*measureCertificate=*/false);
+    op.cells = K.kSimplexVertices(degree);
+    const auto n = static_cast<Eigen::Index>(op.cells.size());
+    op.wk = Eigen::VectorXcd::Ones(n);  // identity placeholder: the pairing is bilinear
+    op.L = cov->covariantOperator(degree);
+    op.opScale = op.L.norm();
+    const chainhodge::PencilRegimeCertificate regime = cov->regimeCertificate(degree);
+    op.regime = regime.regime;
+    op.metricSymmetryDefect = std::max(regime.symmetryDefect, regime.metricSymmetryDefect);
+    op.positive = false;
+    op.pencil = cov;
     return op;
   }
 
@@ -1097,6 +1187,166 @@ void SpectralFiberTracker::solveDenseGeneral(const RestrictedOperator &op,
 // band grouping, measurement, certification
 // ---------------------------------------------------------------------------
 
+void SpectralFiberTracker::solvePencilBands(const RestrictedOperator &op,
+                                            ComponentBandRead &read) const {
+  // Dense eigenvalues of h_k(s,U) locate the bands (the gap rule of
+  // SpectralFiberConfig, sorted by (Re, Im)); every band is then the Riesz
+  // projector of a circular contour drawn around its group, computed on the
+  // pencil resolvent (specification §6, §11 step 4) with the certificates of
+  // that section. Nothing here reads a sign or an inertia from the pairing.
+  const auto n = static_cast<Eigen::Index>(op.dim());
+  Eigen::ComplexEigenSolver<Eigen::MatrixXcd> es(op.L, false);
+  if (es.info() != Eigen::Success)
+    throw std::runtime_error("SpectralFiberTracker: dense pencil eigensolve failed");
+  std::vector<cd> lambda(static_cast<std::size_t>(n));
+  for (Eigen::Index i = 0; i < n; ++i) lambda[static_cast<std::size_t>(i)] = es.eigenvalues()[i];
+  std::sort(lambda.begin(), lambda.end(), lessReIm);
+  read.solverPath = "pencil-riesz";
+  read.truncated = false;
+  read.coveredEigenvalues = lambda;
+  double scale = 0.0;
+  for (const cd &v : lambda) scale = std::max(scale, std::abs(v));
+  if (scale == 0.0) scale = 1.0;
+  std::vector<std::size_t> starts{0};
+  for (std::size_t i = 1; i < lambda.size(); ++i)
+    if (std::abs(lambda[i] - lambda[i - 1]) > cfg_.groupingTolerance * scale)
+      starts.push_back(i);
+  starts.push_back(lambda.size());
+  double worstResidual = 0.0;
+  double worstProjectorNorm = 1.0;
+  for (std::size_t bandIdx = 0; bandIdx + 1 < starts.size(); ++bandIdx) {
+    const std::size_t a = starts[bandIdx];
+    const std::size_t b = starts[bandIdx + 1];
+    std::vector<cd> bandEigs(lambda.begin() + static_cast<std::ptrdiff_t>(a),
+                             lambda.begin() + static_cast<std::ptrdiff_t>(b));
+    SpectralBandCertificate cert;
+    cert.degree = op.degree;
+    cert.selfAdjoint = false;
+    cert.metricSymmetryDefect = op.metricSymmetryDefect;
+    cert.frequencyLower = kInf;
+    cert.frequencyUpper = -kInf;
+    cd center(0.0, 0.0);
+    for (const cd &v : bandEigs) {
+      cert.frequencyLower = std::min(cert.frequencyLower, v.real());
+      cert.frequencyUpper = std::max(cert.frequencyUpper, v.real());
+      center += v;
+    }
+    center /= static_cast<double>(bandEigs.size());
+    double spread = 0.0;
+    double radiusInner = 0.0;
+    for (std::size_t i = a; i < b; ++i) {
+      radiusInner = std::max(radiusInner, std::abs(lambda[i] - center));
+      for (std::size_t j = i + 1; j < b; ++j)
+        spread = std::max(spread, std::abs(lambda[i] - lambda[j]));
+    }
+    cert.lowerGap = a > 0 ? std::abs(lambda[a] - lambda[a - 1]) : kInf;
+    cert.upperGap = b < lambda.size() ? std::abs(lambda[b] - lambda[b - 1]) : kInf;
+    double separation = kInf;
+    for (std::size_t i = a; i < b; ++i)
+      for (std::size_t j = 0; j < lambda.size(); ++j) {
+        if (j >= a && j < b) continue;
+        separation = std::min(separation, std::abs(lambda[i] - lambda[j]));
+      }
+    cert.nearestDiscardedSeparation = separation;
+    // The contour: centred on the band, enclosing every member with half the
+    // separation to the nearest discarded eigenvalue as clearance (a radius
+    // of the spectral scale when nothing is discarded).
+    const double clearance = std::isfinite(separation) ? 0.5 * separation : scale;
+    const double radius = radiusInner + std::max(clearance, 1e-12 * scale);
+    const chainhodge::Contour contour =
+        chainhodge::Contour::circle(center, radius, cfg_.contourNodes);
+    const chainhodge::Band band =
+        op.pencil->band(op.degree, contour, 10.0, cfg_.isotropyTolerance);
+    const auto rank = static_cast<std::size_t>(band.rank());
+    cert.rank = rank;
+    cert.eigenResidual = band.certificate.rightResidual;
+    cert.leftResidual = band.certificate.leftResidual;
+    cert.projectorResidual = band.certificate.idempotency;
+    cert.pairingDeterminant = band.certificate.detB;
+    cert.pairingCondition = band.certificate.condB;
+    cert.pairingScale = band.certificate.pairingScale;
+    cert.isotropic = !band.certificate.leftFrameAvailable;
+    cert.leftFrameRefusal = band.certificate.leftFrameRefusal;
+    cert.positiveSignature = 0;  // no inertia in the bilinear regime
+    cert.negativeSignature = 0;
+    Eigen::MatrixXcd Phi = band.frame;
+    Eigen::MatrixXcd Psi = band.leftFrame;  // Phi~ (empty when refused)
+    if (band.certificate.leftFrameAvailable && Psi.cols() == Phi.cols()) {
+      cert.gramDefect =
+          (Psi.transpose() * Phi -
+           Eigen::MatrixXcd::Identity(static_cast<Eigen::Index>(rank),
+                                      static_cast<Eigen::Index>(rank)))
+              .norm();
+    } else {
+      cert.gramDefect = kNaN;  // refused left frame: unmeasured, never zero
+      Psi = Eigen::MatrixXcd::Zero(Phi.rows(), Phi.cols());
+    }
+    Eigen::JacobiSVD<Eigen::MatrixXcd> psvd(band.projector);
+    cert.projectorNorm =
+        psvd.singularValues().size() > 0 ? psvd.singularValues()[0] : 0.0;
+    cert.frameConditionNumber =
+        std::max(frameCondition(Phi, op.wk), frameCondition(Psi, op.wk));
+    // Localization of the Riesz projector's diagonal, as on the other paths.
+    double diagSum = 0.0;
+    std::vector<double> diagAbs(static_cast<std::size_t>(n), 0.0);
+    for (Eigen::Index i = 0; i < n; ++i) {
+      diagAbs[static_cast<std::size_t>(i)] = std::abs(band.projector(i, i));
+      diagSum += diagAbs[static_cast<std::size_t>(i)];
+    }
+    if (diagSum > 0.0) {
+      double diagSq = 0.0;
+      for (const double v : diagAbs) {
+        const double pi = v / diagSum;
+        diagSq += pi * pi;
+      }
+      cert.localization = diagSq;
+      const double effectiveSupport = 1.0 / diagSq;
+      cert.localizationSupportFraction =
+          effectiveSupport / static_cast<double>(n);
+      const double room = static_cast<double>(n) - static_cast<double>(rank);
+      cert.localizationExcess =
+          room > 0.0
+              ? std::min(1.0, std::max(0.0, (effectiveSupport -
+                                             static_cast<double>(rank)) / room))
+              : 0.0;
+    }
+    const auto separationOk = [&](double gap) {
+      if (std::isnan(gap)) return false;
+      if (!std::isfinite(gap)) return true;
+      return gap >= cfg_.minRelativeGap * scale && gap >= cfg_.gapDominance * spread;
+    };
+    const bool residualsOk = cert.eigenResidual <= cfg_.residualTolerance &&
+                             cert.leftResidual <= cfg_.residualTolerance &&
+                             cert.projectorResidual <= cfg_.residualTolerance;
+    const bool localizedOk = std::isfinite(cert.localizationExcess) &&
+                             cert.localizationExcess <= cfg_.maxLocalizationExcess;
+    cert.accepted = !cert.isotropic &&
+                    separationOk(cert.nearestDiscardedSeparation) && localizedOk &&
+                    residualsOk && cert.gramDefect <= cfg_.gramDefectTolerance &&
+                    cert.projectorNorm <= cfg_.projectorNormCap &&
+                    rank == bandEigs.size();
+    if (cert.accepted) {
+      cert.certificate = Certificate::certifiedNumerical(
+          CertificateDomain::BandWindow, op.regime, cert.eigenResidual,
+          cert.projectorNorm, cfg_.residualTolerance);
+    } else {
+      cert.certificate =
+          Certificate::heuristicDiscovery(CertificateDomain::BandWindow, op.regime);
+    }
+    worstResidual = std::max(
+        worstResidual, std::isfinite(cert.eigenResidual) ? cert.eigenResidual : 0.0);
+    worstProjectorNorm = std::max(
+        worstProjectorNorm,
+        std::isfinite(cert.projectorNorm) ? cert.projectorNorm : 1.0);
+    read.fibers.emplace_back(op.cells, std::move(bandEigs), std::move(Phi),
+                             std::move(Psi), Eigen::VectorXcd(op.wk),
+                             std::move(cert));
+  }
+  read.solveCertificate = Certificate::certifiedNumerical(
+      CertificateDomain::Static, op.regime, worstResidual, worstProjectorNorm,
+      cfg_.residualTolerance);
+}
+
 void SpectralFiberTracker::buildFibers(const RestrictedOperator &op,
                                        const SolveOutput &out,
                                        ComponentBandRead &read) const {
@@ -1393,7 +1643,9 @@ ComponentBandRead SpectralFiberTracker::enumerateBands(
         CertificateDomain::Static, op.regime, 0.0, cfg_.residualTolerance);
     return read;
   }
-  if (op.positive) {
+  if (op.pencil) {
+    solvePencilBands(op, read);
+  } else if (op.positive) {
     if (static_cast<int>(op.dim()) < cfg_.denseCrossover)
       solveDenseSelfAdjoint(op, read);
     else

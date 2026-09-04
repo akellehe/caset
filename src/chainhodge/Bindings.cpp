@@ -317,6 +317,15 @@ the certificates.)doc")
       .def("rank", &Band::rank)
       .def("occupations", &Band::occupations);
 
+  py::class_<PencilRegimeCertificate>(m, "PencilRegimeCertificate",
+      "The pencil's measured metric regime: ComplexSymmetricPencil when the transpose identities "
+      "(A~^U)^T = A~^{U^-1} and (M^U)^T = M^{U^-1} hold to tolerance, else NonNormal.")
+      .def_readonly("regime", &PencilRegimeCertificate::regime)
+      .def_readonly("symmetryDefect", &PencilRegimeCertificate::symmetryDefect)
+      .def_readonly("metricSymmetryDefect", &PencilRegimeCertificate::metricSymmetryDefect)
+      .def_readonly("trivialConnection", &PencilRegimeCertificate::trivialConnection)
+      .def_readonly("tolerance", &PencilRegimeCertificate::tolerance);
+
   py::class_<CovariantChainHodge>(m, "CovariantChainHodge",
       R"doc(The covariant one-particle operator h_k(s,U) of specification §5: the sparse
 inverse chain metric dressed by U_{b(sigma) b(tau)} and the incidences twisted by
@@ -349,6 +358,8 @@ images and the exact properties of Prop. 5.1 measured on every instance.)doc")
       .def("dual", &CovariantChainHodge::dual)
       .def("gauged", &CovariantChainHodge::gauged, py::arg("g"))
       .def("verify", &CovariantChainHodge::verify, py::arg("k") = 1)
+      .def("regimeCertificate", &CovariantChainHodge::regimeCertificate, py::arg("k"),
+           py::arg("tolerance") = 1e-10, "The measured metric regime of the pencil at degree k.")
       .def("resolvent", &CovariantChainHodge::resolvent, py::arg("k"), py::arg("zeta"), py::arg("c"),
            "(zeta I - h_k)^{-1} c = M^U (zeta M^U - A~^U)^{-1} c by one sparse bordered factorization.")
       .def("band", &CovariantChainHodge::band, py::arg("k"), py::arg("contour"), py::arg("kappa") = 10.0,

@@ -100,6 +100,12 @@ struct SpectralFiberConfig {
   /// measured deviation is recorded on the certificate
   /// (`Certificate::denseReferenceError`).
   bool crossValidateDense = false;
+  /// Chain-level Whitney pencil path only (`HodgeLaplacian::MetricSource::WhitneyPencil`):
+  /// the trapezoidal node count of the circular Riesz contour drawn around
+  /// each band, and the relative tolerance below which the band's bilinear
+  /// pairing `B_C` is declared isotropic (an exceptional point: no left frame).
+  int contourNodes = 64;
+  double isotropyTolerance = 1e-10;
 };
 
 /// # SpectralBandCertificate
@@ -195,6 +201,21 @@ struct SpectralBandCertificate {
   /// certificate — never an automatic antiparticle identification.
   int positiveSignature = 0;
   int negativeSignature = 0;
+  /// Chain-level Whitney pencil regime (`CertificateRegime::ComplexSymmetricPencil`)
+  /// only; quiet NaN / false otherwise. The pairing is the complex BILINEAR
+  /// restriction `B_C = (Phi^vee)^T G^U Phi` of the band (specification §6):
+  /// its determinant and condition number are reported, NO sign or inertia
+  /// is extracted from it, and `isotropic` marks `det B_C = 0` (the
+  /// exceptional-point indicator), where the canonical left frame is refused
+  /// with `leftFrameRefusal` naming the reason. `metricSymmetryDefect` is the
+  /// regime's verification residual, `M L = (M L)^T`.
+  std::complex<double> pairingDeterminant{std::numeric_limits<double>::quiet_NaN(),
+                                          std::numeric_limits<double>::quiet_NaN()};
+  double pairingCondition = std::numeric_limits<double>::quiet_NaN();
+  double pairingScale = std::numeric_limits<double>::quiet_NaN();
+  bool isotropic = false;
+  std::string leftFrameRefusal{};
+  double metricSymmetryDefect = std::numeric_limits<double>::quiet_NaN();
   /// The band's frequency window [min Re(lambda), max Re(lambda)] — the
   /// plain-data window handed to the response API (see
   /// :class:`SpectralBandWindow`).
@@ -466,6 +487,24 @@ class SpectralFiberTracker {
         cobordism::HodgeLaplacian::WeightConvention weights =
             cobordism::HodgeLaplacian::defaultWeightConvention());
 
+    /// Bind with an explicit metric source. Under
+    /// `HodgeLaplacian::MetricSource::WhitneyPencil` every degree \f$ k \ge 1 \f$
+    /// is read on the chain-level Whitney pencil of the induced subcomplex
+    /// (`chainhodge::CovariantChainHodge`): the operator is \f$ h_k(s,U) \f$,
+    /// the regime is the VERIFIED `ComplexSymmetricPencil` (or `NonNormal`
+    /// when the transpose identity fails), and every band is the Riesz
+    /// projector of a circular contour drawn around the gap-rule group, with
+    /// right frame `Phi`, canonical left frame `Phi~`, and the bilinear pairing
+    /// certificates of specification §6 (`pairingDeterminant`,
+    /// `pairingCondition`, `pairingScale`, `isotropic`). Degree 0 keeps the
+    /// U(1) connection operator (#805) under either source.
+    SpectralFiberTracker(std::shared_ptr<Spacetime> st, SpectralFiberConfig cfg,
+                         cobordism::HodgeLaplacian::MetricSource source);
+
+    [[nodiscard]] cobordism::HodgeLaplacian::MetricSource metricSource() const noexcept {
+      return metricSource_;
+    }
+
     [[nodiscard]] const SpectralFiberConfig &config() const noexcept {
       return cfg_;
     }
@@ -519,6 +558,8 @@ class SpectralFiberTracker {
     SpectralFiberConfig cfg_{};
     cobordism::HodgeLaplacian::WeightConvention weights_{
         cobordism::HodgeLaplacian::WeightConvention::SquaredContent};
+    cobordism::HodgeLaplacian::MetricSource metricSource_{
+        cobordism::HodgeLaplacian::MetricSource::DiagonalWeights};
 
     [[nodiscard]] RestrictedOperator assembleRestricted(
         const std::vector<std::uint64_t> &support, int degree) const;
@@ -528,6 +569,9 @@ class SpectralFiberTracker {
                                ComponentBandRead &read) const;
     void solveSparseSelfAdjoint(const RestrictedOperator &op,
                                 ComponentBandRead &read) const;
+    // The chain-level pencil path: Riesz bands on circular contours.
+    void solvePencilBands(const RestrictedOperator &op,
+                          ComponentBandRead &read) const;
     void solveDenseGeneral(const RestrictedOperator &op,
                            ComponentBandRead &read) const;
 

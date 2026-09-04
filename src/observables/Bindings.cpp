@@ -681,6 +681,10 @@ no recomputation.)doc");
                      &SpectralFiberConfig::trackOverlapThreshold,
                      "Minimum subspace overlap for a certified track "
                      "continuation.")
+      .def_readwrite("contourNodes", &SpectralFiberConfig::contourNodes,
+                     "Whitney pencil path: trapezoidal node count of each band's Riesz contour.")
+      .def_readwrite("isotropyTolerance", &SpectralFiberConfig::isotropyTolerance,
+                     "Whitney pencil path: relative tolerance declaring a band's pairing isotropic.")
       .def_readwrite("crossValidateDense",
                      &SpectralFiberConfig::crossValidateDense,
                      "Cross-check solves below the crossover against the "
@@ -734,6 +738,15 @@ quantities are NaN, never zero.)doc")
                     &SpectralBandCertificate::positiveSignature)
       .def_readonly("negativeSignature",
                     &SpectralBandCertificate::negativeSignature)
+      .def_readonly("pairingDeterminant", &SpectralBandCertificate::pairingDeterminant,
+                    "det B_C of the bilinear pairing (complex-symmetric pencil regime only).")
+      .def_readonly("pairingCondition", &SpectralBandCertificate::pairingCondition)
+      .def_readonly("pairingScale", &SpectralBandCertificate::pairingScale)
+      .def_readonly("isotropic", &SpectralBandCertificate::isotropic,
+                    "det B_C = 0: the exceptional-point indicator; no left frame.")
+      .def_readonly("leftFrameRefusal", &SpectralBandCertificate::leftFrameRefusal)
+      .def_readonly("metricSymmetryDefect", &SpectralBandCertificate::metricSymmetryDefect,
+                    "The regime's verification residual, M L = (M L)^T.")
       .def_readonly("frequencyLower",
                     &SpectralBandCertificate::frequencyLower)
       .def_readonly("frequencyUpper",
@@ -870,6 +883,13 @@ requests rank three and no eigenvalue threshold is a Betti oracle.
 
 Read-only observable: never calls a solver on the spacetime, never mutates
 it, and nothing here enters any emergence objective.)doc")
+      .def(py::init([](std::shared_ptr<Spacetime> st, const SpectralFiberConfig &cfg,
+                       cobordism::HodgeLaplacian::MetricSource source) {
+             return SpectralFiberTracker(std::move(st), cfg, source);
+           }),
+           py::arg("spacetime"), py::arg("config"), py::arg("metric_source"),
+           "Bind with an explicit metric source; WhitneyPencil reads every degree >= 1 on the "
+           "chain-level Whitney pencil in the complex-symmetric-pencil regime.")
       .def(py::init([](std::shared_ptr<Spacetime> st,
                        const SpectralFiberConfig &cfg,
                        const py::object &weights) {
@@ -887,6 +907,8 @@ it, and nothing here enters any emergence objective.)doc")
            "Bind to the spacetime to read; weights=None follows the "
            "process-wide HodgeLaplacian.defaultWeightConvention() at call "
            "time.")
+      .def("metricSource", &SpectralFiberTracker::metricSource,
+           "Where this tracker's operators take their metric from.")
       .def("config", &SpectralFiberTracker::config,
            py::return_value_policy::copy)
       .def("weightConvention", &SpectralFiberTracker::weightConvention)

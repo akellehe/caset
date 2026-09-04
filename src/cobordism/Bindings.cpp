@@ -2351,7 +2351,8 @@ invariant.)doc")
       "Lorentzian d'Alembertian regime).")
       .value("PositiveSemidefinite", CertificateRegime::PositiveSemidefinite)
       .value("HermitianIndefinite", CertificateRegime::HermitianIndefinite)
-      .value("NonNormal", CertificateRegime::NonNormal);
+      .value("NonNormal", CertificateRegime::NonNormal)
+      .value("ComplexSymmetricPencil", CertificateRegime::ComplexSymmetricPencil);
 
   py::class_<Certificate>(m, "Certificate",
       R"doc(Certification record attached to every analytic-first kernel result (#764).

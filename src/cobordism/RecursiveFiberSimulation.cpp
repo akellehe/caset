@@ -204,6 +204,8 @@ class Json {
         case CertificateRegime::HermitianIndefinite:
           return "hermitian_indefinite";
         case CertificateRegime::NonNormal: return "non_normal";
+        case CertificateRegime::ComplexSymmetricPencil:
+          return "complex_symmetric_pencil";
       }
       return "non_normal";
     }

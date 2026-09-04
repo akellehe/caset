@@ -39,6 +39,8 @@ const char *regimeName(CertificateRegime regime) {
     return "positive-semidefinite";
   case CertificateRegime::HermitianIndefinite:
     return "hermitian-indefinite";
+  case CertificateRegime::ComplexSymmetricPencil:
+    return "complex-symmetric-pencil";
   case CertificateRegime::NonNormal:
     return "non-normal";
   }
