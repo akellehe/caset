@@ -10,6 +10,7 @@
 
 #include "chainhodge/ChainHodge.h"
 #include "chainhodge/CovariantChainHodge.h"
+#include "chainhodge/FaceAnchor.h"
 #include "chainhodge/LorentzianFamily.h"
 #include "chainhodge/WhitneyMass.h"
 #include "cobordism/ChainComplex.h"
@@ -299,4 +300,41 @@ images and the exact properties of Prop. 5.1 measured on every instance.)doc")
       .def("dual", &CovariantChainHodge::dual)
       .def("gauged", &CovariantChainHodge::gauged, py::arg("g"))
       .def("verify", &CovariantChainHodge::verify, py::arg("k") = 1);
+  py::class_<FaceBlock>(m, "FaceBlock",
+      "One triangle's 3x3 face block over its three edges (canonical edge indices in "
+      "local order (v0v1),(v0v2),(v1v2)), its numerical rank, and the preset.")
+      .def_readonly("faceIndex", &FaceBlock::faceIndex)
+      .def_readonly("edgeIndices", &FaceBlock::edgeIndices)
+      .def_readonly("block", &FaceBlock::block)
+      .def_readonly("rank", &FaceBlock::rank)
+      .def_readonly("preset", &FaceBlock::preset);
+
+  py::class_<FaceAnchor>(m, "FaceAnchor",
+      R"doc(The face anchor of specification §8 with the Whitney metric: the per-triangle
+Whitney block M_1^{(t)} (rank 3, Prop. 8.1), its connection dressing by U_{b(e)b(e')},
+the face endomorphism Pi_tau(U) = G_1^U M_1^{(tau)U} G_1^U applied by solves, and the
+invariant anchor coordinate alpha_tau = det((Z^vee)^T M_1^{(tau)U} Z) of a fiber paired
+through its geometric images. The Grassmann per-face blade block has rank 2 and makes
+alpha_tau vanish identically. Transpose pairing throughout.)doc")
+      .def_static("whitneyFaceBlock", &FaceAnchor::whitneyFaceBlock, py::arg("complex"),
+           py::arg("squared_lengths"), py::arg("face_index"), py::arg("branch") = Branch::Continuation)
+      .def_static("whitneyFaceBlocks", &FaceAnchor::whitneyFaceBlocks, py::arg("complex"),
+           py::arg("squared_lengths"), py::arg("branch") = Branch::Continuation)
+      .def_static("grassmannFaceBlock", &FaceAnchor::grassmannFaceBlock, py::arg("complex"),
+           py::arg("squared_lengths"), py::arg("face_index"))
+      .def_static("faceBlock", &FaceAnchor::faceBlock, py::arg("hodge"), py::arg("face_index"),
+           "The face block of the instance's own preset.")
+      .def_static("dressedFaceBlock", &FaceAnchor::dressedFaceBlock, py::arg("block"), py::arg("complex"),
+           py::arg("connection"), "M_1^{(tau)U}: the block dressed entrywise by U_{b(e)b(e')}.")
+      .def_static("applyFaceEndomorphism", &FaceAnchor::applyFaceEndomorphism, py::arg("covariant"),
+           py::arg("face_index"), py::arg("c"), "Pi_tau(U) c by solves.")
+      .def_static("anchorCoordinate", &FaceAnchor::anchorCoordinate, py::arg("covariant"),
+           py::arg("face_index"), py::arg("Z_dual"), py::arg("Z"),
+           "alpha_tau = det((Z^vee)^T M_1^{(tau)U} Z) from the fiber's images.")
+      .def_static("anchorCoordinateFromChains", &FaceAnchor::anchorCoordinateFromChains,
+           py::arg("covariant"), py::arg("face_index"), py::arg("Phi_dual"), py::arg("Phi"),
+           "alpha_tau = det((Phi^vee)^T Pi_tau(U) Phi) from the chain frames (images by solves).")
+      .def_static("anchorCoordinates", &FaceAnchor::anchorCoordinates, py::arg("covariant"),
+           py::arg("Z_dual"), py::arg("Z"), "alpha_tau for every triangle.")
+      .def_static("numericalRank", &FaceAnchor::numericalRank, py::arg("A"), py::arg("kappa") = 10.0);
 }
