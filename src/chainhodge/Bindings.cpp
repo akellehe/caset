@@ -347,7 +347,15 @@ images and the exact properties of Prop. 5.1 measured on every instance.)doc")
       .def("spectrum", &CovariantChainHodge::spectrum, py::arg("k"))
       .def("dual", &CovariantChainHodge::dual)
       .def("gauged", &CovariantChainHodge::gauged, py::arg("g"))
-      .def("verify", &CovariantChainHodge::verify, py::arg("k") = 1);
+      .def("verify", &CovariantChainHodge::verify, py::arg("k") = 1)
+      .def("resolvent", &CovariantChainHodge::resolvent, py::arg("k"), py::arg("zeta"), py::arg("c"),
+           "(zeta I - h_k)^{-1} c = M^U (zeta M^U - A~^U)^{-1} c by one sparse bordered factorization.")
+      .def("band", &CovariantChainHodge::band, py::arg("k"), py::arg("contour"), py::arg("kappa") = 10.0,
+           py::arg("isotropy_tolerance") = 1e-10,
+           "The Riesz band of the contour: P, Phi, Phi^vee, Z, B_C, Phi~, J, Gamma, certificates.")
+      .def_static("leftFrame", &CovariantChainHodge::leftFrame, py::arg("band"), py::arg("dual_instance"),
+           py::arg("isotropy_tolerance") = 1e-10,
+           "G^{U^-1} Phi^vee B_C^{-T} from the band's dual frame and pairing; raises on an isotropic band.");
   py::class_<FaceBlock>(m, "FaceBlock",
       "One triangle's 3x3 face block over its three edges (canonical edge indices in "
       "local order (v0v1),(v0v2),(v1v2)), its numerical rank, and the preset.")
@@ -385,13 +393,4 @@ alpha_tau vanish identically. Transpose pairing throughout.)doc")
       .def_static("anchorCoordinates", &FaceAnchor::anchorCoordinates, py::arg("covariant"),
            py::arg("Z_dual"), py::arg("Z"), "alpha_tau for every triangle.")
       .def_static("numericalRank", &FaceAnchor::numericalRank, py::arg("A"), py::arg("kappa") = 10.0);
-      .def("verify", &CovariantChainHodge::verify, py::arg("k") = 1)
-      .def("resolvent", &CovariantChainHodge::resolvent, py::arg("k"), py::arg("zeta"), py::arg("c"),
-           "(zeta I - h_k)^{-1} c = M^U (zeta M^U - A~^U)^{-1} c by one sparse bordered factorization.")
-      .def("band", &CovariantChainHodge::band, py::arg("k"), py::arg("contour"), py::arg("kappa") = 10.0,
-           py::arg("isotropy_tolerance") = 1e-10,
-           "The Riesz band of the contour: P, Phi, Phi^vee, Z, B_C, Phi~, J, Gamma, certificates.")
-      .def_static("leftFrame", &CovariantChainHodge::leftFrame, py::arg("band"), py::arg("dual_instance"),
-           py::arg("isotropy_tolerance") = 1e-10,
-           "G^{U^-1} Phi^vee B_C^{-T} from the band's dual frame and pairing; raises on an isotropic band.");
 }
