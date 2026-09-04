@@ -31,6 +31,9 @@ void CobordismDAG::run(int stage1MaxSteps, int stage1CandidateMoves,
   outputs_.assign(n, {});
   residuals_.assign(n, 0.0);
   done_.assign(n, false);
+  outputFibers_.assign(n, {});
+  fiberRefusals_.assign(n, "");
+  pipedInputs_.assign(n, 0);
 
   std::size_t completed = 0;
   while (completed < n) {
@@ -67,11 +70,35 @@ void CobordismDAG::run(int stage1MaxSteps, int stage1CandidateMoves,
         outSeeds.push_back(verts[v]->getId());
       opt.seedInputs(inSeeds);
       opt.seedOutputs(outSeeds);
+      if (pipeFibers_) {
+        // Pipe upstream output fibers into the downstream input blocks the
+        // edges name (input slots after the literals), beside the targets.
+        std::size_t slot = nd.literalInputs.size();
+        for (const auto &e : nd.upstream) {
+          const auto &fibers = outputFibers_[e.first];
+          if (e.second < static_cast<int>(fibers.size()) && fibers[e.second] &&
+              slot < opt.inputs().size()) {
+            opt.setInputFiber(slot, *fibers[e.second]);
+            ++pipedInputs_[i];
+          }
+          ++slot;
+        }
+      }
       opt.runStage1(stage1MaxSteps, stage1CandidateMoves);
       opt.runStage2(stage2Beta, stage2MaxIters);
 
       residuals_[i] = opt.rU(opt.spacetime());
       outputs_[i] = nd.outputTargets;  // verified outputs, threaded downstream
+      if (pipeFibers_) {
+        outputFibers_[i].assign(opt.outputs().size(), std::nullopt);
+        for (std::size_t j = 0; j < opt.outputs().size(); ++j) {
+          try {
+            outputFibers_[i][j] = opt.readOutputFiber(j, fiberDegree_);
+          } catch (const std::exception &ex) {
+            fiberRefusals_[i] = ex.what();
+          }
+        }
+      }
       done_[i] = true;
       ++completed;
       progressed = true;
@@ -100,6 +127,42 @@ double CobordismDAG::residual(int node) const {
   if (node < 0 || node >= static_cast<int>(residuals_.size()))
     throw std::out_of_range("CobordismDAG::residual: node id out of range");
   return residuals_[node];
+}
+
+
+
+void CobordismDAG::setFiberPiping(bool enabled, int degree) {
+  pipeFibers_ = enabled;
+  fiberDegree_ = degree;
+}
+
+bool CobordismDAG::hasOutputFiber(int node, int outputIndex) const {
+  if (node < 0 || node >= static_cast<int>(outputFibers_.size())) return false;
+  const auto &f = outputFibers_[static_cast<std::size_t>(node)];
+  return outputIndex >= 0 && outputIndex < static_cast<int>(f.size()) &&
+         f[static_cast<std::size_t>(outputIndex)].has_value();
+}
+
+const BoundaryFiber &CobordismDAG::outputFiber(int node, int outputIndex) const {
+  if (!hasOutputFiber(node, outputIndex)) {
+    std::string why;
+    if (node >= 0 && node < static_cast<int>(fiberRefusals_.size()) &&
+        !fiberRefusals_[static_cast<std::size_t>(node)].empty())
+      why = " (" + fiberRefusals_[static_cast<std::size_t>(node)] + ")";
+    throw std::out_of_range("CobordismDAG::outputFiber: no fiber recorded for node " +
+                            std::to_string(node) + " output " + std::to_string(outputIndex) + why);
+  }
+  return *outputFibers_[static_cast<std::size_t>(node)][static_cast<std::size_t>(outputIndex)];
+}
+
+int CobordismDAG::pipedInputCount(int node) const {
+  if (node < 0 || node >= static_cast<int>(pipedInputs_.size())) return 0;
+  return pipedInputs_[static_cast<std::size_t>(node)];
+}
+
+std::string CobordismDAG::fiberRefusal(int node) const {
+  if (node < 0 || node >= static_cast<int>(fiberRefusals_.size())) return "";
+  return fiberRefusals_[static_cast<std::size_t>(node)];
 }
 
 }  // namespace tessera::cobordism

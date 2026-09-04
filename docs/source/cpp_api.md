@@ -219,6 +219,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} RecursiveQuotient.h
 ```
+```{doxygenfile} PencilLayer.h
+```
 ```{doxygenfile} LevenbergMarquardt.h
 ```
 

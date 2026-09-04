@@ -3013,4 +3013,91 @@ void MultiCobordism::buildStep(BuildAction action, int maxSteps, int nCandidateM
   }
 }
 
+// ---- fiber-form boundary targets (#916) ----
+
+void MultiCobordism::setInputFiber(std::size_t index, BoundaryFiber fiber) {
+  if (index >= inputBlocks_.size())
+    throw std::out_of_range("MultiCobordism::setInputFiber: input block index out of range");
+  inputBlocks_[index].fiber = std::move(fiber);
+}
+
+void MultiCobordism::setOutputFiber(std::size_t index, BoundaryFiber fiber) {
+  if (index >= outputBlocks_.size())
+    throw std::out_of_range("MultiCobordism::setOutputFiber: output block index out of range");
+  outputBlocks_[index].fiber = std::move(fiber);
+}
+
+const std::optional<BoundaryFiber> &MultiCobordism::inputFiber(std::size_t index) const {
+  if (index >= inputBlocks_.size())
+    throw std::out_of_range("MultiCobordism::inputFiber: input block index out of range");
+  return inputBlocks_[index].fiber;
+}
+
+const std::optional<BoundaryFiber> &MultiCobordism::outputFiber(std::size_t index) const {
+  if (index >= outputBlocks_.size())
+    throw std::out_of_range("MultiCobordism::outputFiber: output block index out of range");
+  return outputBlocks_[index].fiber;
+}
+
+MultiCobordism::FixedBoundaryEigenstateResult MultiCobordism::pinInputFibers(
+    int degree, double epsilon, int restarts, int maxGrowth, std::uint64_t seed, int maxIterations) {
+  if (inputBlocks_.size() != 2 || !inputBlocks_[0].fiber || !inputBlocks_[1].fiber)
+    throw std::invalid_argument(
+        "MultiCobordism::pinInputFibers: exactly two input blocks carrying fibers are required");
+  const BoundaryFiber &A = *inputBlocks_[0].fiber;
+  const BoundaryFiber &B = *inputBlocks_[1].fiber;
+  if (A.degree != degree || B.degree != degree)
+    throw std::invalid_argument("MultiCobordism::pinInputFibers: the input fibers are not at degree " +
+                                std::to_string(degree));
+  if (A.rank() != 1 || B.rank() != 1)
+    throw std::invalid_argument("MultiCobordism::pinInputFibers: the input fibers have ranks " +
+                                std::to_string(A.rank()) + " and " + std::to_string(B.rank()) +
+                                "; the fixed-boundary fit pins one state, so only rank-one fibers are "
+                                "pinned (a joint multi-column fit is not approximated column by column)");
+  std::vector<std::vector<std::uint64_t>> support;
+  std::vector<complexd> target;
+  std::set<std::vector<std::uint64_t>> seen;
+  auto append = [&](const BoundaryFiber &f, const char *name) {
+    for (Eigen::Index r = 0; r < f.images.rows(); ++r) {
+      std::vector<std::uint64_t> cell;
+      for (const auto v : f.cells[static_cast<std::size_t>(r)]) cell.push_back(static_cast<std::uint64_t>(v));
+      std::sort(cell.begin(), cell.end());
+      if (!seen.insert(cell).second)
+        throw std::invalid_argument(std::string("MultiCobordism::pinInputFibers: ") + name +
+                                    " overlaps the other input fiber on a boundary cell; the two inputs "
+                                    "are the disjoint components of the boundary");
+      support.push_back(std::move(cell));
+      target.push_back(f.images(r, 0));
+    }
+  };
+  append(A, "input fiber 0");
+  append(B, "input fiber 1");
+  return relaxFixedBoundaryEigenstate(degree, std::move(support), std::move(target), epsilon, restarts,
+                                      maxGrowth, seed, maxIterations);
+}
+
+BoundaryFiber MultiCobordism::readOutputFiber(std::size_t index, int degree,
+                                              const chainhodge::Contour *contour, double kappa) {
+  if (index >= outputBlocks_.size())
+    throw std::out_of_range("MultiCobordism::readOutputFiber: output block index out of range");
+  if (metricSource_ != HodgeLaplacian::MetricSource::WhitneyPencil)
+    throw std::logic_error("MultiCobordism::readOutputFiber: the fiber form of a target is read on the "
+                           "chain-level Whitney pencil; this node uses the diagonal-weight metric");
+  const AssembledPencil assembled = PencilLayer::assemble({spacetime_});
+  const std::vector<std::uint64_t> region(outputBlocks_[index].vertices.begin(),
+                                          outputBlocks_[index].vertices.end());
+  const std::vector<int> idx = PencilLayer::cellsWithin(assembled, degree, region);
+  if (idx.empty())
+    throw std::invalid_argument("MultiCobordism::readOutputFiber: the output block carries no degree-" +
+                                std::to_string(degree) + " cell");
+  const auto cells = assembled.complex().kSimplexVertices(degree);
+  std::vector<std::vector<std::uint64_t>> blockCells;
+  for (const int j : idx) blockCells.push_back(cells[static_cast<std::size_t>(j)]);
+  const chainhodge::Contour chosen =
+      contour ? *contour : PencilLayer::harmonicContour(assembled, degree);
+  BoundaryFiber fiber = PencilLayer::readBoundaryFiber(assembled, degree, chosen, blockCells, kappa);
+  outputBlocks_[index].fiber = fiber;
+  return fiber;
+}
+
 }  // namespace tessera::cobordism
