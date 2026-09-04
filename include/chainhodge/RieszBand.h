@@ -58,12 +58,20 @@ struct BandCertificate {
   /// \f$ \det B_C \f$ and \f$ \operatorname{cond}_2 B_C \f$ of the pairing matrix.
   Complex detB{0.0, 0.0};
   double condB{std::numeric_limits<double>::quiet_NaN()};
+  /// \f$ \sigma_{\min}(B_C) / \|G^U\Phi\|_2 \f$ with orthonormal frames: the
+  /// normalized pairing, zero exactly when a direction of the band is
+  /// self-orthogonal (rank one: \f$ |u^{\vee T} G u| / \|Gu\| \f$). The isotropy
+  /// test compares this to the declared tolerance; a condition number cannot
+  /// see rank-one isotropy.
+  double pairingScale{std::numeric_limits<double>::quiet_NaN()};
   /// Whether the canonical left frame exists (\f$ \det B_C \ne 0 \f$ at the
   /// declared isotropy tolerance) and, if not, why.
   bool leftFrameAvailable{false};
   std::string leftFrameRefusal{};
-  /// \f$ \|h\Phi - \Phi J\| / \|h\Phi\| \f$ and \f$ \|\tilde\Phi^T h - J\tilde\Phi^T\| /
-  /// \|\tilde\Phi^T h\| \f$ with \f$ J = \tilde\Phi^T h \Phi \f$; NaN without a left frame.
+  /// \f$ \|h\Phi - \Phi J\| \f$ and \f$ \|\tilde\Phi^T h - J\tilde\Phi^T\| \f$ with
+  /// \f$ J = \tilde\Phi^T h \Phi \f$, each relative to the band's own scale
+  /// \f$ \max(\|h\Phi\|, \rho\|\Phi\|) \f$ with \f$ \rho \f$ the largest contour node
+  /// modulus (so a zero band is not 0/0); NaN without a left frame.
   double rightResidual{std::numeric_limits<double>::quiet_NaN()};
   double leftResidual{std::numeric_limits<double>::quiet_NaN()};
 };

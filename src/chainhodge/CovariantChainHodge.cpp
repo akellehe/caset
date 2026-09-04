@@ -782,7 +782,14 @@ Band CovariantChainHodge::band(int k, const Contour &contour, double kappa, doub
     band.certificate.detB = band.pairing.determinant();
     band.certificate.condB = (bs(bs.size() - 1) > 0.0) ? bs(0) / bs(bs.size() - 1)
                                                        : std::numeric_limits<double>::infinity();
-    if (bs(bs.size() - 1) <= isotropyTolerance * bs(0)) {
+    // Isotropy is judged on the NORMALIZED pairing: the frames are orthonormal,
+    // so sigma_min(B_C) relative to ||G^U Phi||_2 vanishes exactly when a
+    // direction of the band is self-orthogonal (rank one: |u^vee^T G u| /
+    // ||G u||). A condition number cannot see rank-one isotropy.
+    Eigen::BDCSVD<Eigen::MatrixXcd> zsvd(band.images);
+    const double imageScale = zsvd.singularValues()(0);
+    band.certificate.pairingScale = imageScale > 0.0 ? bs(bs.size() - 1) / imageScale : 0.0;
+    if (bs(bs.size() - 1) <= isotropyTolerance * imageScale) {
       band.certificate.leftFrameAvailable = false;
       band.certificate.leftFrameRefusal =
           "isotropic band: det B_C = 0 (the exceptional-point indicator); the canonical left frame "
@@ -795,16 +802,20 @@ Band CovariantChainHodge::band(int k, const Contour &contour, double kappa, doub
       const Eigen::MatrixXcd hPhi = applyH(k, band.frame);
       band.reduced = band.leftFrame.transpose() * hPhi;          // J = Phi~^T h Phi
       band.covariance = band.frame * band.leftFrame.transpose();  // Gamma = Phi Phi~^T
-      const double nh = hPhi.norm();
-      band.certificate.rightResidual = nh > 0.0 ? (hPhi - band.frame * band.reduced).norm() / nh
-                                                : (hPhi - band.frame * band.reduced).norm();
+      // Residuals relative to the band's own scale, max(||h Phi||, rho ||Phi||)
+      // with rho the contour's radius scale: a zero band (J = 0) is not 0/0.
+      double rho = 0.0;
+      for (const auto &zeta : contour.nodes) rho = std::max(rho, std::abs(zeta));
+      const double scaleR = std::max(hPhi.norm(), rho * band.frame.norm());
+      band.certificate.rightResidual = scaleR > 0.0 ? (hPhi - band.frame * band.reduced).norm() / scaleR
+                                                    : (hPhi - band.frame * band.reduced).norm();
       // Phi~^T h = (h^T Phi~)^T with h(U)^T = G^{U^-1} h(U^{-1}) (G^{U^-1})^{-1} (Prop. 5.1 ii).
       const Eigen::MatrixXcd hT_left =
           dualInstance.applyG(k, dualInstance.applyH(k, dualInstance.applyMinv(k, band.leftFrame)));
       const Eigen::MatrixXcd leftH = hT_left.transpose();  // Phi~^T h
-      const double nl = leftH.norm();
-      band.certificate.leftResidual = nl > 0.0 ? (leftH - band.reduced * band.leftFrame.transpose()).norm() / nl
-                                               : (leftH - band.reduced * band.leftFrame.transpose()).norm();
+      const double scaleL = std::max(leftH.norm(), rho * band.leftFrame.norm());
+      band.certificate.leftResidual = scaleL > 0.0 ? (leftH - band.reduced * band.leftFrame.transpose()).norm() / scaleL
+                                                   : (leftH - band.reduced * band.leftFrame.transpose()).norm();
     }
   }
   return band;
@@ -816,7 +827,9 @@ Eigen::MatrixXcd CovariantChainHodge::leftFrame(const Band &band, const Covarian
   if (r == 0) return Eigen::MatrixXcd(band.frame.rows(), 0);
   Eigen::JacobiSVD<Eigen::MatrixXcd> bsvd(band.pairing);
   const Eigen::VectorXd bs = bsvd.singularValues();
-  if (bs(bs.size() - 1) <= isotropyTolerance * bs(0))
+  Eigen::BDCSVD<Eigen::MatrixXcd> zsvd(band.images);
+  const double imageScale = zsvd.singularValues()(0);
+  if (bs(bs.size() - 1) <= isotropyTolerance * imageScale)
     throw std::runtime_error("CovariantChainHodge::leftFrame: isotropic band, det B_C = 0 "
                              "(exceptional-point indicator); no canonical left frame");
   const Eigen::MatrixXcd Y = dualInstance.applyG(band.degree, band.dualFrame);

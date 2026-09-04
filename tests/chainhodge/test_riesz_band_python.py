@@ -154,21 +154,26 @@ class TestHarmonicBandOnTheTorus:
 
 
 class TestIsotropicBand:
-    def test_exceptional_point_refuses_the_left_frame(self):
+    def test_exceptional_point_makes_the_rank_one_band_isotropic(self):
         """Move complex squared lengths along a line s0 + t d until two nonzero
-        eigenvalues coalesce (an exceptional point: the eigenvector becomes
-        self-orthogonal), then the contour enclosing the pair has a nearly
-        singular pairing and the left frame is refused by name."""
+        eigenvalues coalesce (an exceptional point, where the eigenvector is
+        self-orthogonal). A rank-one band enclosing ONE of the pair has a
+        normalized pairing |u^vee^T G u| / ||G u|| that vanishes as the point is
+        approached; at a declared tolerance the left frame is refused by name.
+        The band enclosing both (the generalized eigenspace) is not isotropic:
+        the Jordan chain pairs non-trivially with the eigenvector."""
         K = cob.ChainComplex.fromTopCells(TWO_COMPLEX)
         rng = np.random.default_rng(21)
         s0 = np.array([complex(rng.normal(), rng.normal()) for _ in range(K.numSimplices(1))])
         d = np.array([complex(rng.normal(), rng.normal()) for _ in range(K.numSimplices(1))])
         U = ch.Connection.trivial(K)
 
-        def spectrum(t):
+        def instance(t):
             s = s0 + complex(t[0], t[1]) * d
-            base = ch.ChainHodge(K, list(s), ch.Preset.L2, KS)
-            ev = np.array(ch.CovariantChainHodge(base, U, 7, False).spectrum(1).eigenvalues)
+            return ch.CovariantChainHodge(ch.ChainHodge(K, list(s), ch.Preset.L2, KS), U, 7, False)
+
+        def spectrum(t):
+            ev = np.array(instance(t).spectrum(1).eigenvalues)
             return ev[np.abs(ev) > 1e-8]
 
         def min_gap(t):
@@ -182,25 +187,54 @@ class TestIsotropicBand:
                            options={"xatol": 1e-12, "fatol": 1e-13, "maxiter": 4000})
             if best is None or res.fun < best.fun:
                 best = res
-        gap = best.fun
-        ev = spectrum(best.x)
-        scale = np.abs(ev).max()
-        assert gap < 1e-5 * scale, f"no exceptional point located: min gap {gap:.3e}"
+        ev_star = spectrum(best.x)
+        scale = np.abs(ev_star).max()
+        assert best.fun < 1e-5 * scale, f"no exceptional point located: min gap {best.fun:.3e}"
+
+        def rank_one_band(t):
+            ev = spectrum(t)
+            dmat = np.abs(ev[:, None] - ev[None, :]) + np.eye(len(ev)) * 1e9
+            i, j = np.unravel_index(np.argmin(dmat), dmat.shape)
+            gap = dmat[i, j]
+            others = np.delete(ev, [i])
+            radius = 0.4 * np.min(np.abs(others - ev[i]))
+            band = instance(t).band(1, ch.Contour.circle(ev[i], radius, 96))
+            return band, gap
+
+        # Step away from the point along the line by two amounts: the
+        # normalized pairing of the rank-one band shrinks with the gap.
+        step = np.array([1.0, 0.0])
+        far, gap_far = rank_one_band(best.x + 3e-2 * step)
+        near, gap_near = rank_one_band(best.x + 3e-3 * step)
+        assert far.rank() == 1 and near.rank() == 1
+        assert gap_near < gap_far
+        assert near.certificate.pairingScale < far.certificate.pairingScale
+        assert near.certificate.pairingScale < 1e-2
+        # At a declared tolerance above the measured normalized pairing the
+        # left frame is refused by name; below it, it exists.
+        tol = 2.0 * near.certificate.pairingScale
+        cov_near = instance(best.x + 3e-3 * step)
+        ev = spectrum(best.x + 3e-3 * step)
         dmat = np.abs(ev[:, None] - ev[None, :]) + np.eye(len(ev)) * 1e9
         i, j = np.unravel_index(np.argmin(dmat), dmat.shape)
-        center = 0.5 * (ev[i] + ev[j])
-        others = np.delete(ev, [i, j])
-        radius = 0.4 * np.min(np.abs(others - center))
-        s = s0 + complex(best.x[0], best.x[1]) * d
-        cov = ch.CovariantChainHodge(ch.ChainHodge(K, list(s), ch.Preset.L2, KS), U)
-        band = cov.band(1, ch.Contour.circle(center, radius, 64), 10.0, 1e-4)
-        assert band.rank() == 2
-        assert band.certificate.condB > 1e4
-        assert not band.certificate.leftFrameAvailable
-        assert "isotropic" in band.certificate.leftFrameRefusal
-        assert band.leftFrame.size == 0
+        radius = 0.4 * np.min(np.abs(np.delete(ev, [i]) - ev[i]))
+        refused = cov_near.band(1, ch.Contour.circle(ev[i], radius, 96), 10.0, tol)
+        assert not refused.certificate.leftFrameAvailable
+        assert "isotropic" in refused.certificate.leftFrameRefusal
+        assert refused.leftFrame.size == 0
         with pytest.raises(RuntimeError):
-            ch.CovariantChainHodge.leftFrame(band, cov.dual(), 1e-4)
+            ch.CovariantChainHodge.leftFrame(refused, cov_near.dual(), tol)
+        assert near.certificate.leftFrameAvailable  # default tolerance 1e-10
+        # The band enclosing both coalescing eigenvalues is NOT isotropic.
+        center = 0.5 * (ev_star[np.argsort(np.abs(ev_star - ev_star[0]))[:1]][0] + ev_star[0])
+        dm = np.abs(ev_star[:, None] - ev_star[None, :]) + np.eye(len(ev_star)) * 1e9
+        a, b = np.unravel_index(np.argmin(dm), dm.shape)
+        center = 0.5 * (ev_star[a] + ev_star[b])
+        rad = 0.4 * np.min(np.abs(np.delete(ev_star, [a, b]) - center))
+        both = instance(best.x).band(1, ch.Contour.circle(center, rad, 96))
+        assert both.rank() == 2
+        assert both.certificate.pairingScale > 1e-3
+        assert both.certificate.leftFrameAvailable
 
 
 class TestLorentzianAtPositiveEpsilon:
@@ -216,7 +250,7 @@ class TestLorentzianAtPositiveEpsilon:
         cert = band.certificate
         assert cert.leftFrameAvailable
         assert math.isfinite(cert.condB) and abs(cert.detB) > 0
-        assert cert.rightResidual < 1e-6 and cert.leftResidual < 1e-6
+        assert cert.rightResidual < 1e-8 and cert.leftResidual < 1e-8
 
     def test_grassmann_preset_is_refused_by_name(self):
         K, s = torus33()
