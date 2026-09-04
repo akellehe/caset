@@ -57,6 +57,9 @@ def bibliography_order(tex):
     """
     keys = re.findall(r"\\bibitem\{([^}]*)\}", tex)
     if not keys:
+        # A companion document without an inline bibliography converts as is.
+        return {}
+    if False:
         raise SystemExit(
             "no \\bibitem entries found: the source no longer carries an "
             "inline bibliography, so this script's numbering scheme no longer "
@@ -157,13 +160,30 @@ def generate():
 
 
 def main():
+    global TEX_PATH, MD_PATH
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--check",
         action="store_true",
         help="exit nonzero if the committed Markdown differs from the source",
     )
+    parser.add_argument(
+        "--source",
+        type=Path,
+        default=TEX_PATH,
+        help="LaTeX source to convert (default: the whitepaper); the companion "
+             "documents vendored beside it use the same conversion",
+    )
+    parser.add_argument(
+        "--target",
+        type=Path,
+        default=None,
+        help="Markdown edition to write or check (default: the source with .md)",
+    )
     args = parser.parse_args()
+    TEX_PATH = args.source.resolve()
+    MD_PATH = (args.target.resolve() if args.target is not None
+               else TEX_PATH.with_suffix(".md"))
 
     generated = generate()
 
