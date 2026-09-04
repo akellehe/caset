@@ -12,9 +12,13 @@ whole-complex readout is Θ_j. The bulk is then frozen and held-out inputs
 (including attachment permutations of the boundary cells) are read by the
 Poincaré–Steklov extension and compared with their algebraic outputs.
 
-Representation. The isolated unit 3-circle's vertex Laplacian has eigenvalues
-{0, 3, 3}; the two ω-modes span the eigenspace at 3 and are the boundary qubit
-of each circle. The whole-complex readout is the coordinate vector of the
+Representation. The degree-0 operator of `EigenstateSynthesis` is the U(1)
+connection Laplacian L = D − A on vertices (edge weights and phases), which is
+not a Hodge operator: the process-wide metric source does not enter it, so
+this experiment reads the same under diagonal weights and the Whitney pencil
+(both recorded). The isolated unit 3-circle's connection Laplacian has
+eigenvalues {0, 3, 3}; the two ω-modes span the eigenspace at 3 and are the
+boundary qubit of each circle. The whole-complex readout is the coordinate vector of the
 witness on the seed bulk's interior vertices in a fixed orthonormal frame
 (rows of the unitary discrete Fourier transform); the readout constraints are
 imposed exactly by `MultiCobordism.relax_whole_complex_readout_targets`, so
@@ -263,33 +267,54 @@ def _fit_payload(fill, result):
     }
 
 
-def one_particle_encoding(fill, operator, seed, held_out_count, **budget):
-    """Class 1: a spanning set of four generic joint inputs, then held-out and
-    attachment-permuted reads on the frozen bulk."""
+def embed(joint, channel):
+    """Joint logical vector on `channel` modes per side (ψ ⊕ φ ∈ C^{2·channel})
+    as a full joint vector in C⁴ = (mode 0, mode 1 | mode 0, mode 1)."""
+    joint = np.asarray(joint, dtype=complex)
+    full = np.zeros(4, dtype=complex)
+    full[:channel] = joint[:channel]
+    full[2:2 + channel] = joint[channel:]
+    return full
+
+
+def restrict(full, channel):
+    full = np.asarray(full, dtype=complex)
+    return np.concatenate([full[:channel], full[2:2 + channel]])
+
+
+def one_particle_encoding(fill, operator, seed, held_out_count, channel, **budget):
+    """Class 1 on `channel` modes per side: a spanning set of 2·channel generic
+    joint inputs, then held-out and attachment-permuted reads on the frozen
+    bulk. With one mode per side only the rotations of a circle preserve the
+    channel (a reflection swaps the ω-modes), so the attachment permutations
+    range over C₃ × C₃; with both modes they range over S₃ × S₃."""
     rng = np.random.default_rng(seed)
-    spanning = haar_unitary(4, rng)  # columns: joint inputs ψ_j ⊕ φ_j
-    inputs = [spanning[:, j] for j in range(4)]
+    dimension = 2 * channel
+    spanning = haar_unitary(dimension, rng)  # columns: joint inputs ψ_j ⊕ φ_j
+    inputs = [spanning[:, j] for j in range(dimension)]
     targets = [operator @ x for x in inputs]
-    result = fill.fit(inputs, targets, seed=seed, **budget)
-    payload = {"fit": _fit_payload(fill, result), "target_operator": _matrix_payload(operator)}
+    result = fill.fit([embed(x, channel) for x in inputs], targets, seed=seed, **budget)
+    payload = {"fit": _fit_payload(fill, result), "target_operator": _matrix_payload(operator),
+               "channel_modes_per_side": int(channel)}
     lam = float(result.eigenvalue)
 
     # The witnesses ARE the extension of their own boundary values.
     states = np.asarray(result.states, dtype=complex)
     witness_errors = []
     for j, x in enumerate(inputs):
-        read = fill.read_logical(x, lam)
+        read = fill.read_logical(embed(x, channel), lam)
         witness_errors.append(float(np.abs(read["state"] - states[j]).max()))
     payload["witness_extension_error_max"] = max(witness_errors)
 
     # Recovered operator from basis reads, held-out reads, and permutations.
-    recovered = np.column_stack([fill.read_logical(np.eye(4)[:, k], lam)["readout"] for k in range(4)])
+    recovered = np.column_stack([fill.read_logical(embed(np.eye(dimension)[:, k], channel), lam)["readout"]
+                                 for k in range(dimension)])
     payload["recovered_operator"] = _matrix_payload(recovered)
     payload["operator_error"] = float(np.linalg.norm(recovered - operator))
     errors, residuals, gaps = [], [], []
     for _ in range(int(held_out_count)):
-        x = _unit(rng.normal(size=4) + 1j * rng.normal(size=4))
-        read = fill.read_logical(x, lam)
+        x = _unit(rng.normal(size=dimension) + 1j * rng.normal(size=dimension))
+        read = fill.read_logical(embed(x, channel), lam)
         errors.append(float(np.linalg.norm(read["readout"] - operator @ x)))
         residuals.append(read["residual"])
         gaps.append(read["dirichlet_gap"])
@@ -298,49 +323,54 @@ def one_particle_encoding(fill, operator, seed, held_out_count, **budget):
     payload["held_out_residual_max"] = max(residuals)
     payload["dirichlet_gap_min"] = min(gaps)
 
-    x = _unit(rng.normal(size=4) + 1j * rng.normal(size=4))
+    x = embed(_unit(rng.normal(size=dimension) + 1j * rng.normal(size=dimension)), channel)
     amp_a, amp_b = amplitudes_from_logical(x[:2]), amplitudes_from_logical(x[2:])
+    attachments = (list(itertools.permutations(range(3))) if channel == 2
+                   else [(0, 1, 2), (1, 2, 0), (2, 0, 1)])
     permutation_errors, leaks = [], []
-    for sigma_a in itertools.permutations(range(3)):
-        for sigma_b in itertools.permutations(range(3)):
+    for sigma_a in attachments:
+        for sigma_b in attachments:
             pa, pb = amp_a[list(sigma_a)], amp_b[list(sigma_b)]
             la, leak_a = logical_from_amplitudes(pa)
             lb, leak_b = logical_from_amplitudes(pb)
-            leaks.append(max(leak_a, leak_b))
-            expected = operator @ np.concatenate([la, lb])
+            full = np.concatenate([la, lb])
+            leaks.append(max(leak_a, leak_b, float(np.linalg.norm(full - embed(restrict(full, channel), channel)))))
+            expected = operator @ restrict(full, channel)
             read = fill.read(pa, pb, lam)
             permutation_errors.append(float(np.linalg.norm(read["readout"] - expected)))
     payload["attachment_permutation_count"] = len(permutation_errors)
     payload["attachment_permutation_error_max"] = max(permutation_errors)
-    payload["attachment_permutation_qubit_leak_max"] = max(leaks)
+    payload["attachment_permutation_channel_leak_max"] = max(leaks)
     return payload, recovered, lam
 
 
-def fock_lift(fill, operator, recovered, eigenvalue, seed, trials):
-    """Class 2: two-particle amplitudes read from the frozen bulk as
-    determinants of one-particle reads, against Γ(U)(ψ ∧ φ)."""
+def fock_lift(fill, operator, recovered, eigenvalue, seed, trials, channel):
+    """Class 2: two-particle amplitudes (one particle on A, one on B) read
+    from the frozen bulk as determinants of one-particle reads, against
+    Γ(U)(ψ ∧ φ). With two modes per side the Pfaffian witness records that
+    every read output is decomposable while a Bell-type target is not."""
     rng = np.random.default_rng(seed + 7)
     errors = []
     for _ in range(int(trials)):
-        psi = _unit(rng.normal(size=2) + 1j * rng.normal(size=2))
-        phi = _unit(rng.normal(size=2) + 1j * rng.normal(size=2))
-        x = np.concatenate([psi, np.zeros(2)])   # one particle on A
-        y = np.concatenate([np.zeros(2), phi])   # one particle on B
-        u = fill.read_logical(x, eigenvalue)["readout"]
-        v = fill.read_logical(y, eigenvalue)["readout"]
+        psi = _unit(rng.normal(size=channel) + 1j * rng.normal(size=channel))
+        phi = _unit(rng.normal(size=channel) + 1j * rng.normal(size=channel))
+        x = np.concatenate([psi, np.zeros(channel)])   # one particle on A
+        y = np.concatenate([np.zeros(channel), phi])   # one particle on B
+        u = fill.read_logical(embed(x, channel), eigenvalue)["readout"]
+        v = fill.read_logical(embed(y, channel), eigenvalue)["readout"]
         errors.append(float(np.linalg.norm(wedge(u, v) - wedge(operator @ x, operator @ y))))
-    bell = np.zeros(6, dtype=complex)
-    bell[0] = bell[5] = 1.0 / math.sqrt(2.0)  # (e0∧e1 + e2∧e3)/√2
-    return {
-        "two_particle_error_max": max(errors),
-        "trials": int(trials),
-        "decomposable_output_pfaffian_max": max(
+    payload = {"two_particle_error_max": max(errors), "trials": int(trials),
+               "channel_modes_per_side": int(channel)}
+    if channel == 2:
+        bell = np.zeros(6, dtype=complex)
+        bell[0] = bell[5] = 1.0 / math.sqrt(2.0)  # (e0∧e1 + e2∧e3)/√2
+        payload["decomposable_output_pfaffian_max"] = max(
             abs(pfaffian_4(wedge(recovered @ _unit(rng.normal(size=4) + 1j * rng.normal(size=4)),
                                  recovered @ _unit(rng.normal(size=4) + 1j * rng.normal(size=4)))))
-            for _ in range(int(trials))),
-        "bell_target_pfaffian": abs(pfaffian_4(bell)),
-        "bell_best_decomposable_overlap": 1.0 / math.sqrt(2.0),
-    }
+            for _ in range(int(trials)))
+        payload["bell_target_pfaffian"] = abs(pfaffian_4(bell))
+        payload["bell_best_decomposable_overlap"] = 1.0 / math.sqrt(2.0)
+    return payload
 
 
 def tensor_product_encoding(fill_factory, tensor_operator, seed, **budget):
@@ -366,22 +396,35 @@ def tensor_product_encoding(fill_factory, tensor_operator, seed, **budget):
     return payload
 
 
-def run_experiment(seed=0, held_out_count=16, layers=3, skip_controls=False, **budget):
+def run_experiment(seed=0, held_out_count=16, layers=3, qubit_layers=3, skip_controls=False,
+                   skip_qubits=False, **budget):
     rng = np.random.default_rng(seed + 20260904)
-    operator = haar_unitary(4, rng)
+    operator_2 = haar_unitary(2, rng)   # one mode per side: a beam splitter between A and B
+    operator = haar_unitary(4, rng)     # both modes per side: a generic U(4)
     record = {"method": {
         "boundary": "two prepared unit 3-circles, degree 0; the ω-modes at eigenvalue 3 are each circle's qubit",
-        "bulk": f"annular prism, {layers} layers; seed interior vertices carry the readout frame",
-        "readout": "coordinates on the seed interior vertices in the first four rows of the unitary DFT",
+        "bulk": f"annular prism, {layers} layers (one mode per side) and {qubit_layers} layers (qubits); "
+                "seed interior vertices carry the readout frame",
+        "readout": "coordinates on the seed interior vertices in the first 2·channel rows of the unitary DFT",
         "fit": "relax_whole_complex_readout_targets: boundary geometry and amplitudes fixed, readouts exact, common-eigenvalue Rayleigh residual",
         "read": "Poincaré–Steklov extension on the frozen bulk at the common eigenvalue",
         "seed": int(seed), **{k: (float(v) if isinstance(v, float) else int(v)) for k, v in budget.items()},
     }}
-    factory = lambda: ChoiEncodingCobordism(layers=layers)  # noqa: E731
+    # Class 1 with one mode per side (a two-dimensional direct sum).
+    fill_2 = ChoiEncodingCobordism(layers=layers, frame_size=2)
+    class1_2, recovered_2, lam_2 = one_particle_encoding(fill_2, operator_2, seed, held_out_count, 1, **budget)
+    record["class_1_one_mode_per_side"] = class1_2
+    record["class_2_fock_lift_one_mode_per_side"] = fock_lift(fill_2, operator_2, recovered_2, lam_2, seed,
+                                                              held_out_count, 1)
+    if skip_qubits:
+        record["checks"] = _checks(record, [("one_mode_per_side", class1_2)], None)
+        return record
+    # Class 1 with both modes per side (qubits; a four-dimensional direct sum).
+    factory = lambda: ChoiEncodingCobordism(layers=qubit_layers, frame_size=4)  # noqa: E731
     fill = factory()
-    class1, recovered, lam = one_particle_encoding(fill, operator, seed, held_out_count, **budget)
-    record["class_1_one_particle"] = class1
-    record["class_2_fock_lift"] = fock_lift(fill, operator, recovered, lam, seed, held_out_count)
+    class1, recovered, lam = one_particle_encoding(fill, operator, seed, held_out_count, 2, **budget)
+    record["class_1_qubits"] = class1
+    record["class_2_fock_lift_qubits"] = fock_lift(fill, operator, recovered, lam, seed, held_out_count, 2)
     record["class_3_cnot"] = tensor_product_encoding(factory, cnot_operator(), seed, **budget)
     if not skip_controls:
         record["class_3_identity_control"] = tensor_product_encoding(factory, np.eye(4), seed, **budget)
@@ -395,24 +438,35 @@ def run_experiment(seed=0, held_out_count=16, layers=3, skip_controls=False, **b
         consistent["product_obstruction"] = float(np.linalg.norm(
             sum(c * (operator @ x) for c, x in zip(_PRODUCT_DEPENDENCY, inputs))))
         record["class_3_one_particle_control"] = consistent
-    record["checks"] = {
-        "class_1_fit_converged": class1["fit"]["converged"],
-        "class_1_readouts_exact": class1["fit"]["readout_deviation"] < 1e-12,
-        "class_1_boundary_bit_identical": class1["fit"]["boundary_drift"] == 0.0,
-        "class_1_held_out_reads_match": class1["held_out_error_max"] < 1e-6,
-        "class_1_attachment_permutations_match": class1["attachment_permutation_error_max"] < 1e-6,
-        "class_2_two_particle_amplitudes_match": record["class_2_fock_lift"]["two_particle_error_max"] < 1e-6,
-        "class_3_cnot_obstructed_algebraically": record["class_3_cnot"]["product_obstruction"] > 1.0,
-        "class_3_cnot_fit_floors": not record["class_3_cnot"]["fit"]["converged"],
-    }
+    record["checks"] = _checks(record, [("one_mode_per_side", class1_2), ("qubits", class1)],
+                               None if skip_controls else "class_3_one_particle_control")
     return record
+
+
+def _checks(record, class1_payloads, control_key):
+    checks = {}
+    for label, payload in class1_payloads:
+        checks[f"class_1_{label}_fit_converged"] = payload["fit"]["converged"]
+        checks[f"class_1_{label}_readouts_exact"] = payload["fit"]["readout_deviation"] < 1e-12
+        checks[f"class_1_{label}_boundary_bit_identical"] = payload["fit"]["boundary_drift"] == 0.0
+        checks[f"class_1_{label}_held_out_reads_match"] = payload["held_out_error_max"] < 1e-6
+        checks[f"class_1_{label}_attachment_permutations_match"] = payload["attachment_permutation_error_max"] < 1e-6
+        checks[f"class_2_{label}_two_particle_amplitudes_match"] = (
+            record[f"class_2_fock_lift_{label}"]["two_particle_error_max"] < 1e-6)
+    if "class_3_cnot" in record:
+        checks["class_3_cnot_obstructed_algebraically"] = record["class_3_cnot"]["product_obstruction"] > 1.0
+        checks["class_3_cnot_fit_floors"] = not record["class_3_cnot"]["fit"]["converged"]
+    if control_key is not None:
+        checks["class_3_one_particle_control_converged"] = record[control_key]["fit"]["converged"]
+    return checks
 
 
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--layers", type=int, default=3)
+    parser.add_argument("--layers", type=int, default=3, help="prism layers for the one-mode-per-side fits")
+    parser.add_argument("--qubit-layers", type=int, default=3, help="prism layers for the qubit (four-witness) fits")
     parser.add_argument("--held-out-count", type=int, default=16)
     parser.add_argument("--epsilon", type=float, default=1e-16)
     parser.add_argument("--boundary-epsilon", type=float, default=1e-12)
@@ -420,6 +474,8 @@ def build_parser():
     parser.add_argument("--max-growth", type=int, default=8)
     parser.add_argument("--max-iterations", type=int, default=400)
     parser.add_argument("--skip-controls", action="store_true")
+    parser.add_argument("--skip-qubits", action="store_true",
+                        help="run only the one-mode-per-side track (classes 1 and 2)")
     return parser
 
 
@@ -427,7 +483,8 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     record = run_experiment(
         seed=args.seed, held_out_count=args.held_out_count, layers=args.layers,
-        skip_controls=args.skip_controls, epsilon=args.epsilon,
+        qubit_layers=args.qubit_layers, skip_controls=args.skip_controls,
+        skip_qubits=args.skip_qubits, epsilon=args.epsilon,
         boundary_epsilon=args.boundary_epsilon, restarts=args.restarts,
         max_growth=args.max_growth, max_iterations=args.max_iterations)
     text = json.dumps(record, indent=2)
@@ -435,7 +492,9 @@ def main(argv=None):
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(text)
     print(json.dumps(record["checks"], indent=2))
-    for key in ("class_1_one_particle", "class_3_cnot"):
+    for key in ("class_1_one_mode_per_side", "class_1_qubits", "class_3_cnot"):
+        if key not in record:
+            continue
         fit = record[key]["fit"]
         print(f"{key}: converged={fit['converged']} residual={fit['residual']:.3e} "
               f"eigenvalue={fit['common_eigenvalue']:.4f} growth={fit['growth_steps']}")
