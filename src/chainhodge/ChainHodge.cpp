@@ -67,13 +67,14 @@ struct ChainHodge::Factorization {
 };
 
 ChainHodge::ChainHodge(cobordism::ChainComplex K, SquaredLengths s, Preset preset, Branch branch,
-                       int crossoverDimension)
+                       int crossoverDimension, double epsilon)
     : K_(std::move(K)), s_(std::move(s)), preset_(preset), branch_(branch),
       crossover_(crossoverDimension) {
   if (crossover_ < 1) throw std::invalid_argument("ChainHodge: crossover must be >= 1");
   const int d = K_.dimension();
   if (d < 0) throw std::invalid_argument("ChainHodge: empty complex");
   cert_ = WhitneyMass::certificate(K_, s_, branch_);
+  cert_.epsilon = epsilon;
   sparse_.reserve(static_cast<std::size_t>(d) + 1);
   boundary_.reserve(static_cast<std::size_t>(d) + 1);
   for (int k = 0; k <= d; ++k) {

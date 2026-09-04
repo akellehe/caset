@@ -128,3 +128,44 @@ def flat_cylinder(N, L, jitter=0.25, lorentz=False, seed=0):
         s.append(complex((d[1] ** 2 - d[0] ** 2) if lorentz else (d[0] ** 2 + d[1] ** 2)))
         W.append([d[1]])
     return K, s, np.array(W, dtype=complex)
+
+
+def conformal_torus_rotated(N, amp=0.3, jitter=0.15, epsilon=0.0, seed=0):
+    """The Lorentzian conformally flat torus with its timelike direction rotated
+    by e^{-2 i epsilon} at the coordinate level: q = dx^2 - e^{-2 i eps} dt^2.
+    This is the generator's own rotation (it knows the split of every edge into
+    spatial and temporal parts); the library's `LorentzianFamily.rotate` acts on
+    declared per-edge causal types instead."""
+    rng = np.random.default_rng(seed)
+    cells, vid = torus_cells(N)
+    K = cob.ChainComplex.fromTopCells(cells)
+    coords = {vid(i, j): np.array([(i + jitter * rng.uniform(-1, 1)) / N,
+                                   (j + jitter * rng.uniform(-1, 1)) / N])
+              for i in range(N) for j in range(N)}
+
+    def phi(p):
+        return amp * np.sin(2 * np.pi * p[0]) * np.cos(2 * np.pi * p[1])
+
+    rot = np.exp(-2j * epsilon)
+    s, W = [], []
+    for (a, b) in edges(K):
+        d = coords[b] - coords[a]
+        d -= np.round(d)
+        q = d[1] ** 2 - rot * d[0] ** 2
+        s.append(complex(np.exp(2 * phi(coords[a] + 0.5 * d)) * q))
+        W.append(d.copy())
+    return K, s, np.array(W, dtype=complex)
+
+
+def torus33_causal_types(K):
+    """Declared causal types for the specification's 3x3 torus: vertical edges
+    timelike, horizontal and diagonal edges spacelike (the CDT-like reading)."""
+    from tessera import chainhodge as ch
+    n = 3
+    out = []
+    for (a, b) in edges(K):
+        ia, ja = divmod(a, n)
+        ib, jb = divmod(b, n)
+        di, dj = (ib - ia) % n, (jb - ja) % n
+        out.append(ch.CausalType.Timelike if (di in (1, 2) and dj == 0) else ch.CausalType.Spacelike)
+    return out
