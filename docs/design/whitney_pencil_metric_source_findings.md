@@ -72,22 +72,29 @@ complex conformal factor (margin < 0 measured).
 
 ## Deltas from the diagonal-weight baselines
 
+Re-measured on `main` after #931 (the image-space operator). The first
+version of this table was measured on the defective chain-space operator, and
+three of its rows were artefacts of that defect: the single-pair period fit
+(142.7), the stage-2 step count (2 → 1), and part of the fixed-boundary
+convergence gap. The rows below are the properties of the metric.
+
 | quantity | diagonal weights | Whitney pencil |
 |---|---|---|
 | deterministic objective core, closed S⁴, k = 3 (`test_multi_cobordism`) | 502.9804372639758 | 502.9755207221824 |
 | its near-kernel term | +0.0093451 | +0.0044286 |
-| fixed-boundary eigenstate, k = 1, 2-layer triangle tube, no growth, 8 restarts × 100 iterations | converged, residual 4.1e-9, 2.7 s | not converged, residual 3.0e-3, 29 s |
-| same with 2 stellar growths, 16 restarts × 200 iterations | — | converged, residual 9.9e-9, 377 s |
-| stage-2 accepted steps, unclamped fixture (`test_stage2_unclamped`), 3 iterations | 2 | 1 |
-| single-pair period fit residual (`test_geometric_operators` identifiability) | < 1e-20 | 142.7 |
-| recursive readout AMLS refusal reason on the capstone fixture | "non-normal" | "modeCutoff must cover the window upper edge" surfaces first |
+| fixed-boundary eigenstate, k = 1, 2-layer triangle tube, no growth, 8 restarts × 100 iterations | converged, residual 4.1e-9, 3 s | not converged, residual 1.4e-3, 26 s |
+| same with growth allowed, 16 restarts × 200 iterations | converged without growth, 6 s | converged after 1 stellar growth, residual 9.8e-9, 190 s |
+| stage-2 accepted steps, unclamped closed-S⁴ fixture, 3 iterations | 4 (trace 122.60 → 39.80) | 4 (trace 122.57 → 39.80) |
+| single-pair period fit residual (`test_geometric_operators` identifiability) | 1.2e-27 | 1.1e-20 |
+| merged operator experiment, generic charge-preserving target `r_U` | 0.0193518 | 7.56818e-06 |
 
-The last four rows were measured with the Whitney default forced on
-`MultiCobordism` alone; with the single knob the existing tests run on the
-diagonal path unchanged and the pencil rows stand as the recorded deltas.
-The fixed-boundary and period-fit rows are the ones the operator experiments
-(#912) must revisit: the pencil couples cells that share a top simplex, so the
-same pinned boundary data need a larger interior to be realized.
+The one genuine convergence delta is the fixed-boundary eigenstate on the
+small tube: the pencil couples cells that share a top simplex, so the same
+pinned boundary data need one interior growth to be realized. Stage 2, the
+period fits, and the operator experiment behave the same or better under the
+pencil. The coupled boundary-state relaxation of #900 (bipartite gates,
+#916's level-1 gate) does not reach its pinned sector at test budgets under
+EITHER metric; that is #901/#903's realizability question, not the pencil's.
 
 ## Pre-existing failures found on main
 
