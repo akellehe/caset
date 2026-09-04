@@ -102,3 +102,36 @@ here.
 The T6 harmonic Gram determinant 0.211555 (recorded on #907): the value
 depends on the kernel-basis normalization, which the specification does not
 state; the basis-independent statements (rank two, signature (1,1)) hold.
+
+## Bipartite operator representation (#911)
+
+Protocol: the two input states are the boundary, ∂W = A ⊔ B; the whole
+complex carries the output; the operator is READ on the frozen bulk as the
+Poincaré–Steklov extension ψ_I = −(L_II − λ)^{-1} L_I∂ ψ_∂ at the common
+eigenvalue, so linearity in the inputs is exact by construction and the
+content of the protocol is that the relaxed witnesses are that extension.
+
+Exact (always-on) on the two-layer triangle tube under the pencil, with
+jittered interior lengths: the whole-complex harmonic chain is the extension
+of its own boundary values; scaled inputs read as scaled outputs; rotating
+the boundary circles' cells is matched by an attachment permutation.
+
+The coupled boundary-state relaxation (`relaxBoundaryStatePairs`, the #900
+fit) at degree 1 on this fixture family, measured:
+
+| pinned pair | metric | layers | growth | restarts × iterations | converged | residual | eigenvalue | time |
+|---|---|---|---|---|---|---|---|---|
+| (cycle, cycle), exact λ = 0 solution exists | Whitney | 2 | ≤1 | 4 × 100 | no | 4.2e-3 | 2.39 | 26 s |
+| (v_a, v_a) in the λ = 6 sector | diagonal | 2 | ≤1 | 4 × 150 | no | 5.3e-3 | 2.25 | 5 s |
+| (v_a, v_a), (v_b, v_b) | diagonal | 2 | ≤1 | 4 × 150 | no | 1.2e-3 | 3.43 | 25 s |
+| (v_a, v_a) | Whitney | 2 | ≤1 | 4 × 150 | no | 3.6e-3 | 5.33 | 45 s |
+| (v_a, v_a), (v_b, v_b) | Whitney | 2 | ≤1 | 4 × 150 | no | 9.8e-3 | 2.90 | 115 s |
+| (v_a, v_a), (v_b, v_b) | Whitney | 3 | ≤1 | 8 × 200 | no | 1.4e-3 | 2.47 | 500 s |
+| (v_a, v_a), (v_b, v_b) | Whitney | 2 | ≤2 | 8 × 200 | no | 1.9e-2 | 3.79 | 376 s |
+
+Neither metric reaches the exact harmonic solution or the nonzero sector at
+these budgets: the relaxation settles at an intermediate eigenvalue. This
+is the realizability question #901 and #903 characterize (the qutrit sector
+fails there for two structural reasons); the convergence gates of the
+protocol run under `TESSERA_SLOW_TESTS=1`, and #912 re-runs the operator
+experiments under the pencil once those land.
