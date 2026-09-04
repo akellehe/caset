@@ -154,6 +154,16 @@ geometry-mediated interaction is required.
 \pagenumbering{arabic}
 
 % ================================================================ 1
+\paragraph*{Companion documents.}
+The integration specification \emph{Recursive Spectral Fibers from the
+Chain-Level Whitney Hodge Pencil} \cite{whitneyspec} fixes the metric,
+operator, frame, recursion, anchor, and Lorentzian conventions this paper
+cites as ``specification'' below, and the scaling verification plan
+\cite{svp} records the geometric-fidelity measurements that selected the
+Whitney metric. Both are vendored beside this paper in \texttt{docs/design};
+the Python oracle whose values the C++ tests pin stays on the repository's
+\texttt{issue-attachments} release.
+
 \section{Epistemic status and design constraint}\label{sec:epistemic}
 
 Four kinds of statement are deliberately distinguished:
@@ -392,6 +402,14 @@ arbitrary complex bilinear weight. Isotropic cancellations can enlarge or
 move the kernel, and even the coordinate representative of a degree-zero
 harmonic class need not be the constant vector. Accordingly this paper never
 identifies $\ker L_k^H$ with $H_k$ without a separate nondegeneracy theorem.
+That theorem is the rank-condition proposition of the integration
+specification \cite{whitneyspec} (its Prop.~4.2, conditions (R1)--(R4) on the
+chain-level Whitney pencil): under (R1)--(R2) the chain space splits as
+$\operatorname{im}\partial_k^\sharp\oplus\operatorname{im}\partial_{k+1}\oplus H_k$
+with $\dim H_k=b_k$, and under (R1)--(R4) $\ker L_k^H=H_k$ with no Jordan block
+at zero. The weight is fixed there as $W_k=M_k^{-1}$, the inverse of the sparse
+Whitney mass matrix of the squared edge lengths, applied by solves and never
+formed (specification \S4).
 Betti numbers are computed from incidence; spectral fibers are computed from
 the declared operator. A fiber may be non-harmonic and may live on a
 contractible cluster. This separation is what makes the no-hole hypothesis
@@ -412,7 +430,13 @@ edge-mode operator $h_1$; $L_0^H$ is never silently substituted for it.
 
 Because $h_k$ is generically complex and non-normal, a band is selected by a
 closed contour $\Gamma_C$ in the complex spectral plane, not by sorting real
-parts or imaginary parts. Its exact Riesz projector is
+parts or imaginary parts. For a Lorentzian complex the band is selected on the
+Kontsevich--Segal allowable side of the boundary: the instance is computed as
+the family $s_e(\varepsilon)$ with the timelike squared lengths rotated by
+$e^{-2i\varepsilon}$ at one or more reported $\varepsilon>0$, a result at
+$\varepsilon=0$ is reported only alongside its gap certificate and never
+alone, and extrapolation to $\varepsilon\to0$ is a separate, labeled step
+(specification \cite{whitneyspec}, \S10). Its exact Riesz projector is
 \begin{equation*}
   P_C=\frac{1}{2\pi i}\oint_{\Gamma_C}
        (\zeta I-h_C)^{-1}\,d\zeta ,
@@ -431,6 +455,19 @@ Changing the fiber frame by $g_C\in GL(r,\mathbb C)$ sends
 $\Phi_C\mapsto\Phi_Cg_C$ and
 $\widetilde\Phi_C^{\mathsf T}\mapsto
 g_C^{-1}\widetilde\Phi_C^{\mathsf T}$, leaving $P_C$ unchanged.
+The left frame is not an independent datum. With the Whitney chain metric
+$G_1=M_1^{-1}$ it is the geometric image of the right frame,
+$\widetilde\Phi_C=G_1\Phi_C$ once $\Phi_C^{\mathsf T}G_1\Phi_C=I$, and for a
+connection $U$ it is the image
+$\widetilde\Phi_C=G_1^{U^{-1}}\Phi_C^{\vee}B_C(U)^{-\mathsf T}$ of the same
+band's frame $\Phi_C^{\vee}$ for the dual connection $U^{-1}$, defined exactly
+when the complex bilinear restriction
+$B_C(U)=(\Phi_C^{\vee})^{\mathsf T}G_1^{U}\Phi_C$ is nonsingular; its
+vanishing is the isotropic band, the only place where the general
+biorthogonal machinery is needed (specification \cite{whitneyspec},
+Prop.~6.1). The cell representation of a gauge transformation is
+$G_k(g)=\rho_k(g)=\operatorname{diag}(g_{b(\sigma)}^{-1})_{\sigma\in K_k}$
+with base vertex $b(\sigma)=\min\sigma$ (specification Def.~5.1).
 
 Three layers of terminology are used from here on, and each carries a
 different word. The \emph{microscopic configuration} is the edge data
@@ -631,7 +668,15 @@ links carry linear response blocks. A cellular sheaf on the quotient graph is a
 natural realization when the blocks admit compatible restriction-map
 factorization \cite{hansenghrist2019}; otherwise Tessera retains the more
 general response network and does not invent incidence maps that the reduction
-did not determine.
+did not determine. The data type stable under the recursion is a complex
+symmetric pencil with an inherited chain metric: with the retained fibers
+$J$ and their geometric images $Z=G_1J$, the coarse metric is
+$\mathcal G_{\ell+1}=J^{\mathsf T}G_1J=Z^{\mathsf T}M_1Z$ and the coarse pencil
+$J^{\mathsf T}A_1J=Z^{\mathsf T}\tilde A_1Z$, the chain metric and pencil
+restricted to the retained fibers, and an off-diagonal block
+$Z_A^{\mathsf T}M_1Z_B$ vanishes unless the supports of the two geometric images
+share a top simplex, so overlaps are local when cluster supports are defined
+on the images (specification \cite{whitneyspec}, Prop.~7.1).
 
 Within component $C$, choose an isolated localized spectral band by the Riesz
 contour of Section~\ref{sec:state}. The derived fiber is
@@ -662,7 +707,9 @@ across a stated range of scales:
   \item a persistent connected cluster support, however proposed;
   \item a localized Riesz projector with stable rank;
   \item a closed complex-plane contour with nonzero separation and a controlled
-    resolvent separating it from discarded modes;
+    resolvent separating it from discarded modes, taken at the reported
+    rotation $\varepsilon>0$ for a Lorentzian complex
+    (specification \cite{whitneyspec}, \S10);
   \item overlap with its predecessor and successor components;
   \item lifetime across multiple cobordism frames; and
   \item small external transport leakage.
@@ -1232,12 +1279,17 @@ specification. Without such closure no integer is emitted. Identifying
 $B=\nu/3$ is a proposed physical calibration, cross-checked against the
 independent cluster-lineage intersection of Section~\ref{sec:readout}.
 
-The dual transport is branch-free:
+A hopping-defined transfer reverses by transposition: on the pencil,
+$T_{BA}(U^{-1})=T_{AB}(U)^{\mathsf T}$, and $T_{BA}=T_{AB}^{\mathsf T}$ at
+$U=1$ (specification \cite{whitneyspec}, Prop.~7.1). The branch-free dual
+transport
 \begin{equation*}
   M_{AB}^{\vee}=M_{AB}^{-\mathsf T},\qquad
-  \det M_{AB}^{\vee}=(\det M_{AB})^{-1}.
+  \det M_{AB}^{\vee}=(\det M_{AB})^{-1},
 \end{equation*}
-This is the transport assigned below to an anti-cluster. Pair creation
+follows only under the additional groupoid hypothesis $T_{BA}=T_{AB}^{-1}$;
+otherwise the sign flip of the determinant winding comes from the closure
+convention. This is the transport assigned below to an anti-cluster. Pair creation
 conserves total determinant winding under any continuous dual-pair homotopy
 that avoids $\det M=0$ and boundary flux.
 
@@ -1286,9 +1338,19 @@ largest modulus or fitting convex weights after seeing the band. Dependence on
 the declared paths is exactly microscopic face holonomy and is reported, not
 erased.
 
-For a second fully invariant coordinate, let $\Pi_\tau(U)$ be the
-connection-dressed endomorphism that selects the same face atlas and satisfies
-$\Pi_\tau(U^g)=G_1(g)^{-1}\Pi_\tau(U)G_1(g)$. Define
+For a second fully invariant coordinate, the connection-dressed face
+endomorphism is realized on chains by the Whitney block of $\tau$,
+\begin{equation*}
+  \Pi_\tau(U)=G_1^{U}M_1^{(\tau)U}G_1^{U},\qquad
+  (M_1^{(\tau)U})_{ee'}=(M_1^{(\tau)})_{ee'}\,U_{b(e)b(e')},
+\end{equation*}
+where $M_1^{(\tau)}\in\mathbb C^{3\times3}$, the contribution of $\tau$ to
+$M_1$ restricted to its three edges, is nonsingular for a nondegenerate
+triangle: the three Whitney 1-forms of $\tau$ are linearly independent
+functions on $\tau$ and $M_1^{(\tau)}$ is their Gram matrix in a nondegenerate
+metric, so the block has rank three (specification \cite{whitneyspec},
+Prop.~8.1). It satisfies
+$\Pi_\tau(U^g)=\rho_1(g)\Pi_\tau(U)\rho_1(g)^{-1}$. Define
 \begin{equation*}
   \alpha_\tau=
   \det\!\left(
@@ -1297,7 +1359,10 @@ $\Pi_\tau(U^g)=G_1(g)^{-1}\Pi_\tau(U)G_1(g)$. Define
   \right)\in\mathbb C .
 \end{equation*}
 The inner matrix transforms by similarity under both gauge groups, so
-$\alpha_\tau$ is invariant.
+$\alpha_\tau$ is invariant; paired through the geometric images it is
+$\alpha_\tau=\det\bigl((Z_Q^{\vee})^{\mathsf T}M_1^{(\tau)U}Z_Q\bigr)$, a
+well-defined complex number that is generically nonzero for a rank-three
+fiber (specification Prop.~8.1).
 The anchor certificate is the persistent nonzero projective profile
 $[\Delta_Q]$, the complex profile $\{\alpha_\tau\}$, and determinant-line
 transition functions on overlaps. An extended fiber may be anchored by an
@@ -1869,7 +1934,12 @@ three declared options: carry $G$ in every subsequent formula; certify
 $\lVert G-I\rVert\le\varepsilon$ and propagate $\varepsilon$ through the
 composable amplitude budget of Section~\ref{sec:interactions}; or quotient
 $G$'s left and right radicals through a rank-revealing factorization and
-restate the fiber ranks. A sheaf-stalk decomposition that assigns interface
+restate the fiber ranks. On the Whitney pencil the three options collapse
+to the first at no cost: $G_{\ell+1}=J^{\mathsf T}G_1J$ is the $L^{2}$ inner
+product restricted to the retained fibers, carried exactly, and it is local
+when fiber supports are defined on geometric images, an off-diagonal block
+vanishing unless two image supports share a top simplex (specification
+\cite{whitneyspec}, Prop.~7.1). A sheaf-stalk decomposition that assigns interface
 modes to link stalks is a valid realization of the same requirement
 \cite{hansenghrist2019}, but it is not necessary.
 
@@ -2425,6 +2495,15 @@ complex spacetimes.
 \emph{Journal of High Energy Physics}, 2022:129, 2022.
 doi:10.1007/JHEP08(2022)129.
 URL \url{https://arxiv.org/abs/2111.14016}.
+
+\bibitem{whitneyspec}
+Recursive Spectral Fibers from the Chain-Level Whitney Hodge Pencil:
+integration specification (chain formulation). Tessera cobordism programme,
+\texttt{docs/design/rsf\_whitney\_integration\_spec.tex}.
+
+\bibitem{svp}
+Scaling Verification Plan for the Chain-Level Hodge Construction. Tessera
+cobordism programme, \texttt{docs/design/scaling\_verification\_plan.tex}.
 
 \end{thebibliography}
 
