@@ -233,6 +233,7 @@ exclusions to see the entire interface.
 ```{doxygenfile} CovariantChainHodge.h
 ```
 ```{doxygenfile} FaceAnchor.h
+```{doxygenfile} RieszBand.h
 ```
 
 ## Reinforcement Learning

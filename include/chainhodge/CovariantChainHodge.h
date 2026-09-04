@@ -17,6 +17,7 @@
 #include <Eigen/SparseCore>
 
 #include "chainhodge/ChainHodge.h"
+#include "chainhodge/RieszBand.h"
 #include "chainhodge/WhitneyMass.h"
 #include "cobordism/ChainComplex.h"
 
@@ -196,6 +197,37 @@ class CovariantChainHodge {
   /// The same base dressed by \f$ U^g \f$.
   [[nodiscard]] CovariantChainHodge gauged(const std::map<std::uint64_t, Complex> &g) const;
 
+  /// The pencil resolvent applied to chains, \f$ (\zeta I - h_k)^{-1} c =
+  /// M_k^U(\zeta M_k^U - \tilde A_k^U)^{-1} c \f$, through ONE sparse
+  /// factorization of the bordered system
+  /// \f$ \begin{pmatrix} \zeta M_k^U - \partial_{k+1}^U M_{k+1}^U(\partial_{k+1}^{U^{-1}})^T &
+  /// -M_k^U(\partial_k^{U^{-1}})^T \\ -\partial_k^U M_k^U & M_{k-1}^U \end{pmatrix} \f$,
+  /// whose Schur complement is \f$ \zeta M_k^U - \tilde A_k^U \f$ (the dense
+  /// \f$ \tilde A_k^U \f$ is never formed). Whitney preset only.
+  /// @throws std::logic_error under `GRASSMANN_ALL`; std::runtime_error when
+  ///   \f$ \zeta \f$ is an eigenvalue (singular bordered system).
+  [[nodiscard]] Eigen::MatrixXcd resolvent(int k, Complex zeta, const Eigen::MatrixXcd &c) const;
+
+  /// The Riesz band of the contour (specification §6): \f$ P_C(U) =
+  /// \sum_j w_j (\zeta_j I - h_k)^{-1} \f$ by the contour's quadrature rule, one
+  /// sparse factorization per node, applied to the identity; the right frame
+  /// from the SVD of \f$ P \f$ at the CH tolerance \f$ \kappa\,n\,\epsilon_m\,
+  /// \sigma_{\max} \f$; the dual band \f$ \Phi^\vee \f$ from `dual()` on the SAME
+  /// contour; \f$ B_C \f$, the left frame (refused by name when
+  /// \f$ \sigma_{\min}(B_C) \le \text{isotropyTolerance}\cdot\sigma_{\max}(B_C) \f$,
+  /// the isotropic band / exceptional-point indicator), \f$ J \f$, \f$ \Gamma \f$,
+  /// and the certificates. Dense in \f$ n_k \f$: below the crossover only.
+  [[nodiscard]] Band band(int k, const Contour &contour, double kappa = 10.0,
+                          double isotropyTolerance = 1e-10) const;
+
+  /// The canonical left frame \f$ \tilde\Phi = G_k^{U^{-1}}\Phi^\vee B_C^{-T} \f$ of
+  /// a band, recomputed from its dual frame and pairing with the dual
+  /// instance's metric (`dual()` of the instance that produced the band).
+  /// @throws std::runtime_error for an isotropic band (\f$ \det B_C = 0 \f$).
+  [[nodiscard]] static Eigen::MatrixXcd leftFrame(const Band &band,
+                                                  const CovariantChainHodge &dualInstance,
+                                                  double isotropyTolerance = 1e-10);
+
   /// Measure the dense identities (i), (ii) on \f$ \tilde A_k^U \f$, (iii) on
   /// \f$ \tilde A_k^U \f$, and (v) at degree \p k and fold them into a copy of
   /// the certificate. Requires the degree below the crossover.
@@ -229,6 +261,14 @@ class CovariantChainHodge {
                                                     std::uint64_t x, std::uint64_t y, bool dual);
   struct DerivativeWorkspace;
   mutable std::vector<std::shared_ptr<DerivativeWorkspace>> workspace_;
+  // The projector, right frame, and projector certificates of one instance on
+  // a contour (no dual, no pairing): what `band` computes for U and for U^{-1}.
+  struct ProjectorRead {
+    Eigen::MatrixXcd projector;
+    Eigen::MatrixXcd frame;
+    BandCertificate certificate;
+  };
+  [[nodiscard]] ProjectorRead projectorOnContour(int k, const Contour &contour, double kappa) const;
   [[nodiscard]] const DerivativeWorkspace &derivativeWorkspace(int k) const;
   [[nodiscard]] Eigen::MatrixXcd assembleDerivative(
       int k, const SparseMatrix *dMkm1, const SparseMatrix *dMk, const SparseMatrix *dMkp1,
