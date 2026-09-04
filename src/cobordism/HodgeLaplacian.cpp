@@ -914,7 +914,12 @@ Eigen::MatrixXcd HodgeLaplacian::operatorMatrix(int k, bool metric) const {
   if (metricSource_ == MetricSource::WhitneyPencil && metric) {
     const WhitneyState &w = whitneyState();
     if (k > w.complex.dimension()) return Eigen::MatrixXcd();
-    return w.toStored(k, w.op->covariantOperator(k));
+    // The operator on GEOMETRIC IMAGES, L_z = (M^U)^{-1} h M^U (same spectrum as
+    // h; its kernel vectors are the images z = G h whose entries are the edge
+    // integrals the register readouts pair with cycles, specification §4.3, §6).
+    const Eigen::MatrixXcd h = w.op->covariantOperator(k);
+    const Eigen::MatrixXcd hM = h * w.op->dressed(k);
+    return w.toStored(k, w.op->applyG(k, hM));
   }
   return laplacianMatrix(*st_, k, metric, weightConvention_);
 }
@@ -1123,7 +1128,14 @@ std::vector<std::complex<double>> HodgeLaplacian::laplacianGradient(
       return std::vector<std::complex<double>>(static_cast<std::size_t>(nk) * nk,
                                                std::complex<double>{0.0, 0.0});
     }
-    dL = w.toStored(k, w.op->covariantOperatorDerivative(k, it->second));
+    // d L_z = M^{-1} [ -dM L_z + dh M + h dM ] with L_z = M^{-1} h M.
+    const Eigen::MatrixXcd h = w.op->covariantOperator(k);
+    const chainhodge::SparseMatrix &M = w.op->dressed(k);
+    const Eigen::MatrixXcd Lz = w.op->applyG(k, Eigen::MatrixXcd(h * M));
+    const chainhodge::SparseMatrix dM = w.op->dressedDerivative(k, it->second);
+    const Eigen::MatrixXcd dh = w.op->covariantOperatorDerivative(k, it->second);
+    const Eigen::MatrixXcd inner = -Eigen::MatrixXcd(dM * Lz) + Eigen::MatrixXcd(dh * M) + Eigen::MatrixXcd(h * dM);
+    dL = w.toStored(k, w.op->applyG(k, inner));
   } else {
     const LaplacianDerivativeWorkspace workspace(*st_, k, weightConvention_);
     dL = workspace.gradient(ea, eb);
@@ -1152,7 +1164,13 @@ std::vector<std::complex<double>> HodgeLaplacian::laplacianPhaseGradient(
                                         std::complex<double>{0.0, 0.0});
   const auto it = w.edgeIndex.find(edgeKeyOf(ea, eb));
   if (it == w.edgeIndex.end() || nk == 0) return out;
-  const Eigen::MatrixXcd dL = w.toStored(k, w.op->covariantOperatorPhaseDerivative(k, it->second));
+  const Eigen::MatrixXcd h = w.op->covariantOperator(k);
+  const chainhodge::SparseMatrix &M = w.op->dressed(k);
+  const Eigen::MatrixXcd Lz = w.op->applyG(k, Eigen::MatrixXcd(h * M));
+  const chainhodge::SparseMatrix dM = w.op->dressedPhaseDerivative(k, it->second);
+  const Eigen::MatrixXcd dh = w.op->covariantOperatorPhaseDerivative(k, it->second);
+  const Eigen::MatrixXcd inner = -Eigen::MatrixXcd(dM * Lz) + Eigen::MatrixXcd(dh * M) + Eigen::MatrixXcd(h * dM);
+  const Eigen::MatrixXcd dL = w.toStored(k, w.op->applyG(k, inner));
   for (int i = 0; i < nk; ++i)
     for (int j = 0; j < nk; ++j)
       out[static_cast<std::size_t>(i) * nk + j] = dL(i, j);

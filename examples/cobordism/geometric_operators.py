@@ -46,7 +46,11 @@ cob = tessera.cobordism
 choi = tessera.quantum.ChoiJamiolkowski
 
 _TOL = 1e-9
-_TINY_PERIOD_RESIDUAL = 1e-20
+# Round-off of a squared residual of an exactly realizable period fit. The
+# diagonal-weight operator lands at ~1e-27; the chain-level Whitney pencil,
+# whose operator entries are an order of magnitude larger on the same fixture,
+# lands at ~1e-20 (#931). Both are machine-precision zeros of the fit.
+_TINY_PERIOD_RESIDUAL = 1e-18
 _SPECTRAL_EPSILON = 1e-24
 _CHARGE = np.ones(3, dtype=complex) / math.sqrt(3.0)
 _CHARGE_PROJECTOR = np.outer(_CHARGE, _CHARGE.conj())

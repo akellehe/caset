@@ -123,7 +123,7 @@ class TestHarmonicSector:
         K = ch.WhitneyMass.complexOf(st)
         hodge = ch.ChainHodge(K, ch.WhitneyMass.squaredLengthsOf(st, K))
         assert hodge.betti() == [1, 1, 0]
-        h = hodge.harmonicChains(k).chains[:, 0]
+        h = hodge.harmonicChains(k).images[:, 0]  # the operator acts on images under the pencil (#931)
         assert residual(L, h, 0.0) < 1e-10
         boundary_index = [i for i, c in enumerate(cells) if set(c) <= A or set(c) <= B]
         assert len(boundary_index) == 6

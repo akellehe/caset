@@ -73,14 +73,20 @@ class TestOperatorEqualsChainHodge:
         for k in range(dim + 1):
             n = K.numSimplices(k)
             L = _flat(hl.laplacian(k, True), n)
-            np.testing.assert_allclose(L, cov.covariantOperator(k), atol=1e-12 * max(1.0, np.abs(L).max()))
-        # trivial phases: the undressed chain operator
+            # the operator on geometric images: L_z = (M^U)^{-1} h M^U (#931)
+            M = cov.dressed(k).toarray()
+            expected = np.linalg.solve(M, cov.covariantOperator(k) @ M)
+            np.testing.assert_allclose(L, expected, atol=1e-11 * max(1.0, np.abs(L).max()))
+            np.testing.assert_allclose(np.sort_complex(np.linalg.eigvals(L)), np.sort_complex(np.linalg.eigvals(cov.covariantOperator(k))),
+                                       atol=1e-8 * max(1.0, np.abs(L).max()))
+        # trivial phases: the undressed image-space operator M^{-1} L_chain M
         st0 = _spacetime(cells, dim, np.random.default_rng(3), phases=False)
         hl0 = HL(st0, HL.defaultWeightConvention(), Whitney)
         base0 = ch.ChainHodge(K, ch.WhitneyMass.squaredLengthsOf(st0, K))
         for k in range(dim + 1):
             n = K.numSimplices(k)
-            np.testing.assert_allclose(_flat(hl0.laplacian(k, True), n), base0.hodgeOperator(k), atol=1e-12)
+            M0 = base0.Minv(k).toarray()
+            np.testing.assert_allclose(_flat(hl0.laplacian(k, True), n), np.linalg.solve(M0, base0.hodgeOperator(k) @ M0), atol=1e-11)
 
     def test_combinatorial_operator_is_metric_free(self):
         rng = np.random.default_rng(5)
@@ -240,7 +246,9 @@ class TestStoredOrientations:
             n = K.numSimplices(k)
             D = np.diag(np.array(signs[k], dtype=float))
             L = _flat(hl.laplacian(k, True), n)
-            np.testing.assert_allclose(L, D @ cov.covariantOperator(k) @ D, atol=1e-11 * max(1.0, np.abs(L).max()))
+            M = cov.dressed(k).toarray()
+            expected = D @ np.linalg.solve(M, cov.covariantOperator(k) @ M) @ D
+            np.testing.assert_allclose(L, expected, atol=1e-11 * max(1.0, np.abs(L).max()))
         # the register residual still evaluates and the node still scores
         assert np.isfinite(node.r_u(st))
         # A reference-oriented complex has every sign +1 exactly.
@@ -248,3 +256,33 @@ class TestStoredOrientations:
         # The surgery fixture is expected to carry flipped cells (the case that
         # aborted before the signs were derived); report if it does not.
         assert flipped >= 0
+
+
+class TestRegisterReadoutOnImages:
+    """#931: the register readouts pair cycles with the kernel vectors of
+    laplacian(k), which under the pencil are geometric images (edge
+    integrals). The merged operator-transfer experiment's exact period fits
+    must therefore be exact under the pencil too."""
+
+    def test_period_fits_are_exact_under_the_pencil(self):
+        import importlib.util
+        import pathlib
+        spec = importlib.util.spec_from_file_location(
+            "geometric_operators_under_test",
+            pathlib.Path(__file__).resolve().parents[2] / "examples" / "cobordism" / "geometric_operators.py")
+        previous = HL.defaultMetricSource()
+        HL.setDefaultMetricSource(Whitney)
+        try:
+            go = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(go)
+            identity = go.PeriodCobordism()
+            identity.pin_basis(go.identity_operator())
+            assert identity.node.metricSource() == Whitney
+            assert identity.snapshot()["r_u"] < 1e-16
+            assert go.held_out_errors(identity, go.identity_operator(), 20260826)["held_out_error_max"] < 1e-8
+            cycle = go.PeriodCobordism(twist=go._GAMMA)
+            cycle.pin_basis(go.cycle_operator())
+            assert cycle.snapshot()["r_u"] < 1e-16
+            assert go.held_out_errors(cycle, go.cycle_operator(), 20260927)["held_out_error_max"] < 1e-8
+        finally:
+            HL.setDefaultMetricSource(previous)

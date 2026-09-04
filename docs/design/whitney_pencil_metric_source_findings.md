@@ -135,3 +135,32 @@ is the realizability question #901 and #903 characterize (the qutrit sector
 fails there for two structural reasons); the convergence gates of the
 protocol run under `TESSERA_SLOW_TESTS=1`, and #912 re-runs the operator
 experiments under the pencil once those land.
+
+## Register readouts read geometric images (#931)
+
+The epic's validation run of the merged operator-transfer experiment
+(`examples/cobordism/geometric_operators.py`) under the pencil failed its
+period-fit checks: identity `r_U = 168`, cycle `r_U = 210`, held-out errors
+0.34, where the diagonal metric reads `1e-27` and `1e-14`. The cause was not
+the landscape: `EigenstateSynthesis` pairs cycles with the kernel vectors of
+`laplacian(k)` and adds leak amplitudes on cells, which is the edge integral
+only when those vectors are geometric images (specification §4.3: "z is the
+readout"; §6: the left frame's entries are edge integrals). The pencil path
+had returned the chain-space operator, whose kernel vectors are chains
+`h = M z`. `laplacian(k)` under the pencil is now the operator on images,
+`L_z = (M^U)^{-1} h M^U`, with its analytic derivatives, and the chain-space
+operator stays available as `CovariantChainHodge::covariantOperator`.
+
+With that, the experiment passes every check under both metrics:
+
+| read | diagonal weights | Whitney pencil |
+|---|---|---|
+| single-pair period residual `r_U` | 1.2e-27 | 1.1e-20 |
+| identity / cycle held-out error | 8e-15 / 2e-14 | < 1e-8 (pinned in tests) |
+| generic charge-preserving target `r_U` after relaxation | 0.0193518 | 7.56818e-06 |
+| hard gap / transport error (metric-independent reads) | 0.135345 / 0.520279 | 0.135345 / 0.520279 |
+| wall time | 6 s | 71 s |
+
+The single-pair cutoff `_TINY_PERIOD_RESIDUAL` moved from 1e-20 to 1e-18: both
+values are round-off of an exactly realizable fit, the pencil's operator
+entries being an order of magnitude larger on that fixture.

@@ -160,9 +160,13 @@ class HodgeLaplacian {
     ///   assembled from the complex squared edge lengths, dressed at EVERY
     ///   degree by the \f$ \mathbb{C}^* \f$ links read from the edge phases
     ///   (`chainhodge::Connection::fromSpacetime`). `laplacian(k)` is then the
-    ///   dense covariant operator \f$ h_k(s,U) \f$ on chains,
-    ///   `laplacianGradient` its analytic \f$ \partial h_k/\partial s_e \f$, and
-    ///   `laplacianPhaseGradient` its analytic \f$ \partial h_k/\partial\varphi_e \f$.
+    ///   dense operator on GEOMETRIC IMAGES, \f$ L_z = (M_k^U)^{-1} h_k(s,U) M_k^U \f$
+    ///   (the same spectrum as the covariant chain operator; its kernel vectors
+    ///   are the images \f$ z = G_k h \f$ whose entries are the edge integrals the
+    ///   register readouts pair with cycles, specification §4.3 and §6), and
+    ///   `laplacianGradient` / `laplacianPhaseGradient` are its analytic
+    ///   derivatives. The chain-space operator itself is
+    ///   `chainhodge::CovariantChainHodge::covariantOperator`.
     ///   The reference orientation of the pencil (ascending vertex id) is
     ///   checked against `ChainComplex::fromSpacetime`'s boundary maps on
     ///   every assembly and refused by name if they differ. `weights(k)` keeps
