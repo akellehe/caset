@@ -10,6 +10,7 @@
 
 #include "cobordism/CobordismObjective.h"
 #include "cobordism/HodgeLaplacian.h"
+#include "cobordism/PencilLayer.h"
 #include "spacetime/pachner/AddMove.h"
 #include "spacetime/pachner/FlipMove.h"
 #include "spacetime/pachner/IFlipMove.h"
@@ -17,6 +18,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <random>
 #include <set>
 #include <string>
@@ -65,6 +67,12 @@ class MultiCobordism {
   struct BoundaryBlock {
     std::set<std::uint64_t> vertices;
     std::vector<std::complex<double>> target;
+    /// The fiber form of the target (#916): a retained fiber on the block's
+    /// degree-k cells with its Gram, band eigenvalue, contour, and certificate,
+    /// beside the period vector. Set on an input block by `setInputFiber`
+    /// (pinned as boundary data by `pinInputFibers`); read on an output block
+    /// by `readOutputFiber` after relaxation.
+    std::optional<BoundaryFiber> fiber;
   };
 
   /// An ordered, explicit period constraint evaluated by the existing
@@ -725,6 +733,39 @@ class MultiCobordism {
   void seedInputs(const std::vector<std::uint64_t> &seeds);
   /// Seed one OUTPUT block per seed vertex (see seedInputs).
   void seedOutputs(const std::vector<std::uint64_t> &seeds);
+
+  // ---- fiber-form boundary targets (#916) ----
+
+  /// Attach the fiber form of an input block's target (a prior cobordism's
+  /// output fiber piped downstream). @throws std::out_of_range on the index.
+  void setInputFiber(std::size_t index, BoundaryFiber fiber);
+  /// Attach the fiber form of an output block's target.
+  void setOutputFiber(std::size_t index, BoundaryFiber fiber);
+  [[nodiscard]] const std::optional<BoundaryFiber> &inputFiber(std::size_t index) const;
+  [[nodiscard]] const std::optional<BoundaryFiber> &outputFiber(std::size_t index) const;
+
+  /// Pin the two input blocks' fibers as boundary data and relax the bulk so
+  /// the whole complex carries them: the two fibers' images are concatenated
+  /// on the union of their cells (the labeled sum on disjoint supports) and
+  /// handed to `relaxFixedBoundaryEigenstate`, which holds the full geometric
+  /// boundary fixed and varies only interior weights. The output emerges;
+  /// nothing hand-identifies interior simplices. The fixed-boundary fit takes
+  /// one pinned state, so the fibers must be rank one; a joint multi-column
+  /// fit is refused by name rather than approximated column by column.
+  /// @throws std::invalid_argument unless exactly two input blocks carry
+  ///   rank-one fibers at the requested degree on disjoint cells.
+  [[nodiscard]] FixedBoundaryEigenstateResult pinInputFibers(
+      int degree, double epsilon = 1e-10, int restarts = 64, int maxGrowth = 4,
+      std::uint64_t seed = 0, int maxIterations = 200);
+
+  /// Read the fiber form of an output block's target from the live complex:
+  /// the Riesz band of \p contour on the whole complex's pencil (the harmonic
+  /// contour of `PencilLayer::harmonicContour` when \p contour is null)
+  /// restricted to the block's degree-\p degree cells. Stores it on the block
+  /// and returns it. Requires the Whitney pencil metric source.
+  [[nodiscard]] BoundaryFiber readOutputFiber(std::size_t index, int degree,
+                                              const chainhodge::Contour *contour = nullptr,
+                                              double kappa = 10.0);
   /// `growBoundaries` is the INITIALIZATION pass: while true the boundary regions
   /// grow to track the bulk until they carry their states (growBlockRegions);
   /// run the bulk EVOLUTION with it false, so ∂W stays frozen.

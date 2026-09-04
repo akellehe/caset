@@ -7,8 +7,12 @@
 #include <complex>
 #include <cstdint>
 #include <memory>
+#include <optional>
+#include <string>
 #include <utility>
 #include <vector>
+
+#include "cobordism/PencilLayer.h"
 
 namespace tessera::spacetime { class Spacetime; }
 
@@ -62,6 +66,22 @@ class CobordismDAG {
   [[nodiscard]] double residual(int node) const;
   [[nodiscard]] std::size_t size() const { return nodes_.size(); }
 
+  /// Pipe fibers (#916): after each node runs, read the fiber form of every
+  /// output block at `degree` (`MultiCobordism::readOutputFiber` on the
+  /// harmonic contour) and attach it to the downstream input block the edge
+  /// names, beside the period target. A read that refuses leaves the slot
+  /// empty and records the reason (`fiberRefusal`). Requires the
+  /// process-wide Whitney pencil metric source when the DAG runs.
+  void setFiberPiping(bool enabled, int degree = 1);
+  [[nodiscard]] bool fiberPiping() const noexcept { return pipeFibers_; }
+  /// The fiber form of a node's output, valid after run; throws when absent.
+  [[nodiscard]] const BoundaryFiber &outputFiber(int node, int outputIndex) const;
+  [[nodiscard]] bool hasOutputFiber(int node, int outputIndex) const;
+  /// Why a node's output fiber was not read (empty when it was).
+  [[nodiscard]] std::string fiberRefusal(int node) const;
+  /// How many upstream fibers were attached to a node's input blocks when it ran.
+  [[nodiscard]] int pipedInputCount(int node) const;
+
  private:
   struct Node {
     std::shared_ptr<Spacetime> host;
@@ -76,6 +96,11 @@ class CobordismDAG {
   std::vector<std::vector<std::vector<std::complex<double>>>> outputs_;  // per node
   std::vector<double> residuals_;
   std::vector<bool> done_;
+  bool pipeFibers_{false};
+  int fiberDegree_{1};
+  std::vector<std::vector<std::optional<BoundaryFiber>>> outputFibers_;  // per node
+  std::vector<std::string> fiberRefusals_;
+  std::vector<int> pipedInputs_;
 };
 
 }  // namespace tessera::cobordism

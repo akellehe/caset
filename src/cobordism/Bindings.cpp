@@ -6,6 +6,7 @@
 // in the Python dependency. This translation unit is always added to
 // _tessera's sources (see CMakeLists.txt, TESSERA_PYBIND_SOURCES).
 
+#include <limits>
 #include <optional>
 
 #include <pybind11/complex.h>
@@ -27,6 +28,7 @@
 #include "cobordism/CobordismDAG.h"
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/MultiCobordism.h"
+#include "cobordism/PencilLayer.h"
 #include "cobordism/Proton.h"
 #include "cobordism/ProtonIngredients.h"
 #include "cobordism/HodgeLaplacian.h"
@@ -1027,6 +1029,104 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
   // === MultiCobordism (#491): the C++ source-of-truth fully-emergent merge
   // optimizer — emergent topology at a user-defined degree k. ===
 
+  py::class_<BoundaryFiber>(m, "BoundaryFiber",
+      R"doc(The fiber form of a boundary block's target (#916): a retained fiber on the
+block's degree-k cells (images Z_B, dual images, Gram Z_B^T M_BB Z_B, the band's eigenvalue,
+contour, certificate, and the Lorentzian rotation epsilon).)doc")
+      .def(py::init<>())
+      .def_readwrite("degree", &BoundaryFiber::degree)
+      .def_readwrite("cells", &BoundaryFiber::cells)
+      .def_readwrite("images", &BoundaryFiber::images)
+      .def_readwrite("dualImages", &BoundaryFiber::dualImages)
+      .def_readwrite("gram", &BoundaryFiber::gram)
+      .def_readwrite("fullGram", &BoundaryFiber::fullGram)
+      .def_readwrite("eigenvalue", &BoundaryFiber::eigenvalue)
+      .def_readwrite("contour", &BoundaryFiber::contour)
+      .def_readwrite("certificate", &BoundaryFiber::certificate)
+      .def_readwrite("epsilon", &BoundaryFiber::epsilon)
+      .def("rank", &BoundaryFiber::rank);
+
+  py::class_<AssembledPencil>(m, "AssembledPencil",
+      "A glued pencil (#916): the union of cobordisms' top cells with one geometry, "
+      "assembled per top simplex, with the shared cells and the one epsilon recorded.")
+      .def_property_readonly("complex", [](const AssembledPencil &a) { return a.complex(); })
+      .def_property_readonly("lengths", [](const AssembledPencil &a) { return a.lengths; })
+      .def_property_readonly("epsilon", [](const AssembledPencil &a) { return a.epsilon; })
+      .def_property_readonly("pieces", [](const AssembledPencil &a) { return a.pieces; })
+      .def_property_readonly("sharedCells", [](const AssembledPencil &a) { return a.sharedCells; })
+      .def_property_readonly("op", [](const AssembledPencil &a) { return *a.op; })
+      .def_property_readonly("dual", [](const AssembledPencil &a) { return *a.dual; })
+      .def("dimension", &AssembledPencil::dimension)
+      .def("cell_index", &AssembledPencil::cellIndex, py::arg("k"), py::arg("cell"));
+
+  py::class_<BorderedPencil>(m, "BorderedPencil",
+      "The bordered form of the degree-k pencil at a shift: degree-k cells then degree-(k-1) "
+      "cells; its Schur complement over the lower block is lambda M_k - A~_k. Assembled per top "
+      "simplex, so it composes exactly across glued cobordisms.")
+      .def_readonly("degree", &BorderedPencil::degree)
+      .def_readonly("lambda_", &BorderedPencil::lambda)
+      .def_readonly("upperCount", &BorderedPencil::upperCount)
+      .def_readonly("lowerCount", &BorderedPencil::lowerCount)
+      .def_readonly("matrix", &BorderedPencil::matrix);
+
+  py::class_<FiberLevel>(m, "FiberLevel",
+      "A pencil level whose interface coordinates are retained fibers (#916): the Feshbach "
+      "reduction onto the fibers' cells restricted to the fibers, with J, J~ = Z, and the Gram.")
+      .def_readonly("degree", &FiberLevel::degree)
+      .def_readonly("lambda_", &FiberLevel::lambda)
+      .def_readonly("interfaceCells", &FiberLevel::interfaceCells)
+      .def_readonly("interiorCells", &FiberLevel::interiorCells)
+      .def_readonly("response", &FiberLevel::response)
+      .def_readonly("J", &FiberLevel::J)
+      .def_readonly("Jdual", &FiberLevel::Jdual)
+      .def_readonly("restriction", &FiberLevel::restriction)
+      .def_readonly("constraintGram", &FiberLevel::constraintGram)
+      .def_readonly("blockOffsets", &FiberLevel::blockOffsets)
+      .def_readonly("blockRanks", &FiberLevel::blockRanks)
+      .def_readonly("fibersDisjoint", &FiberLevel::fibersDisjoint);
+
+  py::class_<PencilLayer>(m, "PencilLayer",
+      R"doc(Continuation of a relaxed cobordism's boundary fibers into the next pencil level
+(#916): exact assembly of cobordisms along shared cells (one epsilon per assembly), boundary
+responses and their star-product composition, fiber reads from certified Riesz bands, the
+next level with the Gram carried exactly, and fiber-to-fiber transfer with the reversal
+assertion. Every pairing is the transpose.)doc")
+      // The chainhodge enums are registered after this submodule, so their
+      // defaults are resolved at call time through std::optional.
+      .def_static("assemble",
+           [](const std::vector<std::shared_ptr<Spacetime>> &pieces, const std::vector<double> &epsilons,
+              std::optional<chainhodge::Branch> branch, int crossover) {
+             return PencilLayer::assemble(pieces, epsilons,
+                                          branch.value_or(chainhodge::Branch::Continuation), crossover);
+           },
+           py::arg("pieces"), py::arg("epsilons") = std::vector<double>{},
+           py::arg("branch") = py::none(),
+           py::arg("crossover_dimension") = std::numeric_limits<int>::max())
+      .def_static("assembly_residual",
+           [](const AssembledPencil &a, int k, std::optional<chainhodge::Branch> branch) {
+             return PencilLayer::assemblyResidual(a, k, branch.value_or(chainhodge::Branch::Continuation));
+           },
+           py::arg("assembled"), py::arg("k"), py::arg("branch") = py::none())
+      .def_static("cells_within", &PencilLayer::cellsWithin, py::arg("assembled"), py::arg("k"), py::arg("vertices"))
+      .def_static("indices_of", &PencilLayer::indicesOf, py::arg("assembled"), py::arg("k"), py::arg("cells"))
+      .def_static("boundary_response", &PencilLayer::boundaryResponse, py::arg("assembled"), py::arg("k"),
+           py::arg("interface"), py::arg("lambda_"))
+      .def_static("bordered_pencil", &PencilLayer::borderedPencil, py::arg("assembled"), py::arg("k"), py::arg("lambda_"))
+      .def_static("bordered_response", &PencilLayer::borderedResponse, py::arg("assembled"), py::arg("k"),
+           py::arg("upper_interface"), py::arg("lower_interface"), py::arg("lambda_"))
+      .def_static("upper_response", &PencilLayer::upperResponse, py::arg("bordered"), py::arg("upper_count"))
+      .def_static("compose_responses", &PencilLayer::composeResponses, py::arg("left"), py::arg("left_cells"),
+           py::arg("right"), py::arg("right_cells"))
+      .def_static("harmonic_contour", &PencilLayer::harmonicContour, py::arg("assembled"), py::arg("k"),
+           py::arg("node_count") = 64)
+      .def_static("read_boundary_fiber", &PencilLayer::readBoundaryFiber, py::arg("assembled"), py::arg("k"),
+           py::arg("contour"), py::arg("cells"), py::arg("kappa") = 10.0)
+      .def_static("level", &PencilLayer::level, py::arg("assembled"), py::arg("k"), py::arg("retained"),
+           py::arg("lambda_"))
+      .def_static("transfer", &PencilLayer::transfer, py::arg("assembled"), py::arg("k"), py::arg("A"),
+           py::arg("B"), py::arg("tolerance") = 1e-8)
+      .def_static("pencil", &PencilLayer::pencil, py::arg("assembled"), py::arg("k"));
+
   py::class_<MultiCobordism::BoundaryBlock>(m, "MultiCobordismBlock",
       "An emergent boundary block of a MultiCobordism (an input or output): the "
       "vertex set whose own sub-complex carries the block, and its target period "
@@ -1041,7 +1141,12 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def_property_readonly("target",
                              [](const MultiCobordism::BoundaryBlock &block) {
                                return block.target;
-                             });
+                             })
+      .def_property_readonly("fiber",
+                             [](const MultiCobordism::BoundaryBlock &block) {
+                               return block.fiber;
+                             },
+                             "The fiber form of the target (#916), or None.");
   py::class_<MultiCobordism::FixedBoundaryEigenstateResult>(
       m, "FixedBoundaryEigenstateResult",
       "Witness from the historical fixed-boundary Rayleigh-residual "
@@ -1335,6 +1440,26 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "every other amplitude, varies only interior geometry, and "
            "minimizes the Rayleigh "
            "residual. It does not run the node's period or Regge objective.")
+      .def("set_input_fiber", &MultiCobordism::setInputFiber, py::arg("index"), py::arg("fiber"),
+           "Attach the fiber form of an input block's target (#916).")
+      .def("set_output_fiber", &MultiCobordism::setOutputFiber, py::arg("index"), py::arg("fiber"))
+      .def("input_fiber", [](const MultiCobordism &self, std::size_t i) { return self.inputFiber(i); },
+           py::arg("index"))
+      .def("output_fiber", [](const MultiCobordism &self, std::size_t i) { return self.outputFiber(i); },
+           py::arg("index"))
+      .def("pin_input_fibers", &MultiCobordism::pinInputFibers, py::arg("degree"), py::arg("epsilon") = 1e-10,
+           py::arg("restarts") = 64, py::arg("max_growth") = 4, py::arg("seed") = 0,
+           py::arg("max_iterations") = 200,
+           "Pin the two input blocks' rank-one fibers as boundary data on the union of their cells and "
+           "relax the bulk through relax_fixed_boundary_eigenstate.")
+      .def("read_output_fiber",
+           [](MultiCobordism &self, std::size_t index, int degree,
+              std::optional<chainhodge::Contour> contour, double kappa) {
+             return self.readOutputFiber(index, degree, contour ? &*contour : nullptr, kappa);
+           },
+           py::arg("index"), py::arg("degree"), py::arg("contour") = py::none(), py::arg("kappa") = 10.0,
+           "Read the fiber form of an output block's target from the live complex (harmonic contour "
+           "by default) and store it on the block.")
       .def("relax_boundary_state_pairs",
            &MultiCobordism::relaxBoundaryStatePairs,
            py::arg("degree"), py::arg("input_region"),
@@ -2124,6 +2249,14 @@ Right -- re-read after each drive call:
            py::arg("output_index") = 0)
       .def("num_outputs", &CobordismDAG::numOutputs, py::arg("node"))
       .def("residual", &CobordismDAG::residual, py::arg("node"))
+      .def("set_fiber_piping", &CobordismDAG::setFiberPiping, py::arg("enabled"), py::arg("degree") = 1,
+           "Pipe each node's output fibers (#916) into the downstream input blocks the edges name.")
+      .def("fiber_piping", &CobordismDAG::fiberPiping)
+      .def("output_fiber", &CobordismDAG::outputFiber, py::arg("node"), py::arg("output_index"),
+           py::return_value_policy::copy)
+      .def("has_output_fiber", &CobordismDAG::hasOutputFiber, py::arg("node"), py::arg("output_index"))
+      .def("fiber_refusal", &CobordismDAG::fiberRefusal, py::arg("node"))
+      .def("piped_input_count", &CobordismDAG::pipedInputCount, py::arg("node"))
       .def("__len__", &CobordismDAG::size);
 
   // === Proton (#503): the canonical two-step MultiCobordism proton build ===
