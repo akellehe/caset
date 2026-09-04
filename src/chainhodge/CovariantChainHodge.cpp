@@ -5,12 +5,15 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <string>
 #include <numeric>
 #include <random>
 #include <stdexcept>
 
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
+#include <Eigen/SVD>
 #include <Eigen/SparseLU>
 
 #include "mesh/Edge.h"
@@ -633,6 +636,204 @@ CovarianceCertificate CovariantChainHodge::verify(int k) const {
   haus = std::max(oneSided(a, b), oneSided(b, a));
   c.pureGaugeIsospectrality = radius > 0.0 ? haus / radius : haus;
   return c;
+}
+
+// ---------------------------------------------------------------- Riesz bands
+
+Contour Contour::circle(Complex center, double radius, int nodeCount) {
+  if (nodeCount < 3) throw std::invalid_argument("Contour::circle: at least three nodes");
+  if (!(radius > 0.0)) throw std::invalid_argument("Contour::circle: radius must be positive");
+  Contour c;
+  c.nodes.reserve(static_cast<std::size_t>(nodeCount));
+  c.weights.reserve(static_cast<std::size_t>(nodeCount));
+  constexpr double kTwoPi = 6.283185307179586476925286766559;
+  for (int j = 0; j < nodeCount; ++j) {
+    const double theta = kTwoPi * (static_cast<double>(j) + 0.5) / static_cast<double>(nodeCount);
+    const Complex e = std::exp(Complex(0.0, theta));
+    c.nodes.push_back(center + radius * e);
+    // (1/2πi) ζ'(θ) Δθ = (1/2πi)(i r e^{iθ})(2π/N) = (r/N) e^{iθ}
+    c.weights.push_back((radius / static_cast<double>(nodeCount)) * e);
+  }
+  c.description = "circle center=(" + std::to_string(center.real()) + "," + std::to_string(center.imag()) +
+                  ") radius=" + std::to_string(radius) + " nodes=" + std::to_string(nodeCount);
+  return c;
+}
+
+Eigen::MatrixXcd CovariantChainHodge::resolvent(int k, Complex zeta, const Eigen::MatrixXcd &c) const {
+  if (k < 0 || k > dimension()) throw std::invalid_argument("CovariantChainHodge: degree out of range");
+  if (preset() != Preset::L2)
+    throw std::logic_error("CovariantChainHodge::resolvent: the pencil resolvent is the Whitney preset's");
+  const int d = dimension();
+  const int n = base_->size(k);
+  if (c.rows() != n) throw std::invalid_argument("CovariantChainHodge::resolvent: right-hand side has the wrong height");
+  const SparseMatrix &Mk = dressed_[static_cast<std::size_t>(k)];
+  // Upper block: ζ M_k − ∂_{k+1}^U M_{k+1}^U (∂_{k+1}^{U^{-1}})^T (sparse).
+  SparseMatrix upper = zeta * Mk;
+  if (k < d) {
+    const SparseMatrix &C = twisted_[static_cast<std::size_t>(k) + 1];
+    const SparseMatrix DT = SparseMatrix(twistedDual_[static_cast<std::size_t>(k) + 1].transpose());
+    upper = upper - SparseMatrix(C * dressed_[static_cast<std::size_t>(k) + 1] * DT);
+  }
+  Eigen::MatrixXcd z;
+  if (k >= 1) {
+    const int m = base_->size(k - 1);
+    const SparseMatrix Tlo = SparseMatrix(Mk * SparseMatrix(twistedDual_[static_cast<std::size_t>(k)].transpose()));  // n x m
+    const SparseMatrix Slo = SparseMatrix(twisted_[static_cast<std::size_t>(k)] * Mk);                                // m x n
+    const SparseMatrix &Mlo = dressed_[static_cast<std::size_t>(k) - 1];
+    // Bordered system [[upper, -Tlo], [-Slo, Mlo]] [z; w] = [c; 0].
+    std::vector<Eigen::Triplet<Complex>> trip;
+    trip.reserve(static_cast<std::size_t>(upper.nonZeros() + Tlo.nonZeros() + Slo.nonZeros() + Mlo.nonZeros()));
+    auto scatter = [&](const SparseMatrix &A, int r0, int c0, Complex scale) {
+      for (int col = 0; col < A.outerSize(); ++col)
+        for (SparseMatrix::InnerIterator it(A, col); it; ++it)
+          trip.emplace_back(r0 + static_cast<int>(it.row()), c0 + static_cast<int>(it.col()), scale * it.value());
+    };
+    scatter(upper, 0, 0, Complex(1.0, 0.0));
+    scatter(Tlo, 0, n, Complex(-1.0, 0.0));
+    scatter(Slo, n, 0, Complex(-1.0, 0.0));
+    scatter(Mlo, n, n, Complex(1.0, 0.0));
+    SparseMatrix bordered(n + m, n + m);
+    bordered.setFromTriplets(trip.begin(), trip.end());
+    bordered.makeCompressed();
+    Eigen::SparseLU<SparseMatrix> lu(bordered);
+    if (lu.info() != Eigen::Success)
+      throw std::runtime_error("CovariantChainHodge::resolvent: the bordered pencil system is singular at this zeta");
+    Eigen::MatrixXcd rhs = Eigen::MatrixXcd::Zero(n + m, c.cols());
+    rhs.topRows(n) = c;
+    const Eigen::MatrixXcd sol = lu.solve(rhs);
+    z = sol.topRows(n);
+  } else {
+    upper.makeCompressed();
+    Eigen::SparseLU<SparseMatrix> lu(upper);
+    if (lu.info() != Eigen::Success)
+      throw std::runtime_error("CovariantChainHodge::resolvent: the pencil system is singular at this zeta");
+    z = lu.solve(c);
+  }
+  // (ζI − h)^{-1} c = M_k^U (ζ M_k^U − Ã_k^U)^{-1} c
+  return Mk * z;
+}
+
+CovariantChainHodge::ProjectorRead CovariantChainHodge::projectorOnContour(int k, const Contour &contour,
+                                                                           double kappa) const {
+  if (contour.nodes.size() != contour.weights.size() || contour.nodes.empty())
+    throw std::invalid_argument("CovariantChainHodge::band: a contour needs matching nodes and weights");
+  const int n = base_->size(k);
+  if (n >= base_->crossoverDimension())
+    throw std::length_error("CovariantChainHodge::band: the projector is formed densely below the crossover only");
+  ProjectorRead read;
+  read.projector = Eigen::MatrixXcd::Zero(n, n);
+  const Eigen::MatrixXcd I = Eigen::MatrixXcd::Identity(n, n);
+  double resolventMax = 0.0;
+  for (std::size_t j = 0; j < contour.nodes.size(); ++j) {
+    const Eigen::MatrixXcd R = resolvent(k, contour.nodes[j], I);
+    read.projector += contour.weights[j] * R;
+    Eigen::BDCSVD<Eigen::MatrixXcd> svd(R);
+    resolventMax = std::max(resolventMax, svd.singularValues()(0));
+  }
+  read.certificate.contour = contour.description;
+  read.certificate.nodeCount = static_cast<int>(contour.nodes.size());
+  read.certificate.resolventMax = resolventMax;
+  const double normP = read.projector.norm();
+  read.certificate.idempotency =
+      normP > 0.0 ? (read.projector * read.projector - read.projector).norm() / normP
+                  : (read.projector * read.projector - read.projector).norm();
+  Eigen::JacobiSVD<Eigen::MatrixXcd> svd(read.projector, Eigen::ComputeThinU);
+  const Eigen::VectorXd sv = svd.singularValues();
+  const double tol = (sv.size() > 0) ? kappa * static_cast<double>(n) *
+                                           std::numeric_limits<double>::epsilon() * sv(0)
+                                     : 0.0;
+  int r = 0;
+  for (int i = 0; i < sv.size(); ++i)
+    if (sv(i) > tol) ++r;
+  read.certificate.rank = r;
+  read.certificate.rankTolerance = tol;
+  read.certificate.singularGap = (r >= 1 && r < sv.size() && sv(r) > 0.0)
+                                     ? sv(r - 1) / sv(r)
+                                     : std::numeric_limits<double>::infinity();
+  read.frame = svd.matrixU().leftCols(r);
+  return read;
+}
+
+Band CovariantChainHodge::band(int k, const Contour &contour, double kappa, double isotropyTolerance) const {
+  if (k < 0 || k > dimension()) throw std::invalid_argument("CovariantChainHodge: degree out of range");
+  if (preset() != Preset::L2)
+    throw std::logic_error("CovariantChainHodge::band: Riesz bands on the pencil are the Whitney preset's");
+  Band band;
+  band.degree = k;
+  band.contour = contour;
+  ProjectorRead right = projectorOnContour(k, contour, kappa);
+  band.projector = std::move(right.projector);
+  band.frame = std::move(right.frame);
+  band.certificate = right.certificate;
+  const int r = static_cast<int>(band.frame.cols());
+  // The same contour's band for the dual connection U^{-1}: Phi^vee.
+  const CovariantChainHodge dualInstance = dual();
+  const ProjectorRead left = dualInstance.projectorOnContour(k, contour, kappa);
+  if (static_cast<int>(left.frame.cols()) != r)
+    throw std::runtime_error("CovariantChainHodge::band: the dual connection's band has a different rank (" +
+                             std::to_string(left.frame.cols()) + " vs " + std::to_string(r) +
+                             ") on the same contour");
+  band.dualFrame = left.frame;
+  band.images = applyG(k, band.frame);                       // Z = G^U Phi
+  band.pairing = band.dualFrame.transpose() * band.images;   // B_C = (Phi^vee)^T G^U Phi
+  if (r > 0) {
+    Eigen::JacobiSVD<Eigen::MatrixXcd> bsvd(band.pairing);
+    const Eigen::VectorXd bs = bsvd.singularValues();
+    band.certificate.detB = band.pairing.determinant();
+    band.certificate.condB = (bs(bs.size() - 1) > 0.0) ? bs(0) / bs(bs.size() - 1)
+                                                       : std::numeric_limits<double>::infinity();
+    // Isotropy is judged on the NORMALIZED pairing: the frames are orthonormal,
+    // so sigma_min(B_C) relative to ||G^U Phi||_2 vanishes exactly when a
+    // direction of the band is self-orthogonal (rank one: |u^vee^T G u| /
+    // ||G u||). A condition number cannot see rank-one isotropy.
+    Eigen::BDCSVD<Eigen::MatrixXcd> zsvd(band.images);
+    const double imageScale = zsvd.singularValues()(0);
+    band.certificate.pairingScale = imageScale > 0.0 ? bs(bs.size() - 1) / imageScale : 0.0;
+    if (bs(bs.size() - 1) <= isotropyTolerance * imageScale) {
+      band.certificate.leftFrameAvailable = false;
+      band.certificate.leftFrameRefusal =
+          "isotropic band: det B_C = 0 (the exceptional-point indicator); the canonical left frame "
+          "G^{U^-1} Phi^vee B_C^{-T} does not exist and RSF's general biorthogonal machinery is required";
+    } else {
+      band.certificate.leftFrameAvailable = true;
+      // Phi~ = G^{U^-1} Phi^vee B^{-T}: Phi~^T = B^{-1} (G^{U^-1} Phi^vee)^T
+      const Eigen::MatrixXcd Y = dualInstance.applyG(k, band.dualFrame);
+      band.leftFrame = (band.pairing.partialPivLu().solve(Y.transpose())).transpose();
+      const Eigen::MatrixXcd hPhi = applyH(k, band.frame);
+      band.reduced = band.leftFrame.transpose() * hPhi;          // J = Phi~^T h Phi
+      band.covariance = band.frame * band.leftFrame.transpose();  // Gamma = Phi Phi~^T
+      // Residuals relative to the band's own scale, max(||h Phi||, rho ||Phi||)
+      // with rho the contour's radius scale: a zero band (J = 0) is not 0/0.
+      double rho = 0.0;
+      for (const auto &zeta : contour.nodes) rho = std::max(rho, std::abs(zeta));
+      const double scaleR = std::max(hPhi.norm(), rho * band.frame.norm());
+      band.certificate.rightResidual = scaleR > 0.0 ? (hPhi - band.frame * band.reduced).norm() / scaleR
+                                                    : (hPhi - band.frame * band.reduced).norm();
+      // Phi~^T h = (h^T Phi~)^T with h(U)^T = G^{U^-1} h(U^{-1}) (G^{U^-1})^{-1} (Prop. 5.1 ii).
+      const Eigen::MatrixXcd hT_left =
+          dualInstance.applyG(k, dualInstance.applyH(k, dualInstance.applyMinv(k, band.leftFrame)));
+      const Eigen::MatrixXcd leftH = hT_left.transpose();  // Phi~^T h
+      const double scaleL = std::max(leftH.norm(), rho * band.leftFrame.norm());
+      band.certificate.leftResidual = scaleL > 0.0 ? (leftH - band.reduced * band.leftFrame.transpose()).norm() / scaleL
+                                                   : (leftH - band.reduced * band.leftFrame.transpose()).norm();
+    }
+  }
+  return band;
+}
+
+Eigen::MatrixXcd CovariantChainHodge::leftFrame(const Band &band, const CovariantChainHodge &dualInstance,
+                                                double isotropyTolerance) {
+  const int r = band.rank();
+  if (r == 0) return Eigen::MatrixXcd(band.frame.rows(), 0);
+  Eigen::JacobiSVD<Eigen::MatrixXcd> bsvd(band.pairing);
+  const Eigen::VectorXd bs = bsvd.singularValues();
+  Eigen::BDCSVD<Eigen::MatrixXcd> zsvd(band.images);
+  const double imageScale = zsvd.singularValues()(0);
+  if (bs(bs.size() - 1) <= isotropyTolerance * imageScale)
+    throw std::runtime_error("CovariantChainHodge::leftFrame: isotropic band, det B_C = 0 "
+                             "(exceptional-point indicator); no canonical left frame");
+  const Eigen::MatrixXcd Y = dualInstance.applyG(band.degree, band.dualFrame);
+  return (band.pairing.partialPivLu().solve(Y.transpose())).transpose();
 }
 
 }  // namespace tessera::chainhodge

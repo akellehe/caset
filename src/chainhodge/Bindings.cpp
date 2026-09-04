@@ -11,6 +11,7 @@
 #include "chainhodge/ChainHodge.h"
 #include "chainhodge/CovariantChainHodge.h"
 #include "chainhodge/FaceAnchor.h"
+#include "chainhodge/RieszBand.h"
 #include "chainhodge/LorentzianFamily.h"
 #include "chainhodge/WhitneyMass.h"
 #include "cobordism/ChainComplex.h"
@@ -268,6 +269,53 @@ normalized or conjugated.)doc")
       .def_readonly("gaugeSeed", &CovarianceCertificate::gaugeSeed)
       .def_readonly("checkedDegree", &CovarianceCertificate::checkedDegree);
 
+  py::class_<Contour>(m, "Contour",
+      "A closed positively oriented contour as quadrature nodes and weights with "
+      "(1/2 pi i) oint f = sum_j w_j f(zeta_j); circle(center, radius, nodes) is the trapezoidal rule.")
+      .def_static("circle", &Contour::circle, py::arg("center"), py::arg("radius"), py::arg("nodes") = 32)
+      .def_readonly("nodes", &Contour::nodes)
+      .def_readonly("weights", &Contour::weights)
+      .def_readonly("description", &Contour::description)
+      .def("nodeCount", &Contour::nodeCount);
+
+  py::class_<BandCertificate>(m, "BandCertificate",
+      "Certificates of one Riesz band (specification §6); NaN means unmeasured; no sign or "
+      "inertia is extracted from B_C.")
+      .def_readonly("contour", &BandCertificate::contour)
+      .def_readonly("nodeCount", &BandCertificate::nodeCount)
+      .def_readonly("idempotency", &BandCertificate::idempotency)
+      .def_readonly("rank", &BandCertificate::rank)
+      .def_readonly("rankTolerance", &BandCertificate::rankTolerance)
+      .def_readonly("singularGap", &BandCertificate::singularGap)
+      .def_readonly("resolventMax", &BandCertificate::resolventMax)
+      .def_readonly("detB", &BandCertificate::detB)
+      .def_readonly("condB", &BandCertificate::condB)
+      .def_readonly("pairingScale", &BandCertificate::pairingScale)
+      .def_readonly("leftFrameAvailable", &BandCertificate::leftFrameAvailable)
+      .def_readonly("leftFrameRefusal", &BandCertificate::leftFrameRefusal)
+      .def_readonly("rightResidual", &BandCertificate::rightResidual)
+      .def_readonly("leftResidual", &BandCertificate::leftResidual);
+
+  py::class_<Band>(m, "Band",
+      R"doc(One Riesz band of h_k(s,U) (specification §6): projector P on chains, right frame Phi,
+the dual connection's frame Phi^vee on the same contour, images Z = G^U Phi, pairing
+B_C = (Phi^vee)^T G^U Phi, the canonical left frame Phi~ = G^{U^-1} Phi^vee B_C^{-T} (empty
+when refused), the reduced operator J = Phi~^T h Phi, the covariance Gamma = Phi Phi~^T, and
+the certificates.)doc")
+      .def_readonly("degree", &Band::degree)
+      .def_readonly("contour", &Band::contour)
+      .def_readonly("projector", &Band::projector)
+      .def_readonly("frame", &Band::frame)
+      .def_readonly("dualFrame", &Band::dualFrame)
+      .def_readonly("images", &Band::images)
+      .def_readonly("pairing", &Band::pairing)
+      .def_readonly("leftFrame", &Band::leftFrame)
+      .def_readonly("reduced", &Band::reduced)
+      .def_readonly("covariance", &Band::covariance)
+      .def_readonly("certificate", &Band::certificate)
+      .def("rank", &Band::rank)
+      .def("occupations", &Band::occupations);
+
   py::class_<CovariantChainHodge>(m, "CovariantChainHodge",
       R"doc(The covariant one-particle operator h_k(s,U) of specification §5: the sparse
 inverse chain metric dressed by U_{b(sigma) b(tau)} and the incidences twisted by
@@ -299,7 +347,15 @@ images and the exact properties of Prop. 5.1 measured on every instance.)doc")
       .def("spectrum", &CovariantChainHodge::spectrum, py::arg("k"))
       .def("dual", &CovariantChainHodge::dual)
       .def("gauged", &CovariantChainHodge::gauged, py::arg("g"))
-      .def("verify", &CovariantChainHodge::verify, py::arg("k") = 1);
+      .def("verify", &CovariantChainHodge::verify, py::arg("k") = 1)
+      .def("resolvent", &CovariantChainHodge::resolvent, py::arg("k"), py::arg("zeta"), py::arg("c"),
+           "(zeta I - h_k)^{-1} c = M^U (zeta M^U - A~^U)^{-1} c by one sparse bordered factorization.")
+      .def("band", &CovariantChainHodge::band, py::arg("k"), py::arg("contour"), py::arg("kappa") = 10.0,
+           py::arg("isotropy_tolerance") = 1e-10,
+           "The Riesz band of the contour: P, Phi, Phi^vee, Z, B_C, Phi~, J, Gamma, certificates.")
+      .def_static("leftFrame", &CovariantChainHodge::leftFrame, py::arg("band"), py::arg("dual_instance"),
+           py::arg("isotropy_tolerance") = 1e-10,
+           "G^{U^-1} Phi^vee B_C^{-T} from the band's dual frame and pairing; raises on an isotropic band.");
   py::class_<FaceBlock>(m, "FaceBlock",
       "One triangle's 3x3 face block over its three edges (canonical edge indices in "
       "local order (v0v1),(v0v2),(v1v2)), its numerical rank, and the preset.")
