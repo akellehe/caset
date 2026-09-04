@@ -9,6 +9,7 @@
 #include <pybind11/stl.h>
 
 #include "chainhodge/ChainHodge.h"
+#include "chainhodge/CovariantChainHodge.h"
 #include "chainhodge/LorentzianFamily.h"
 #include "chainhodge/WhitneyMass.h"
 #include "cobordism/ChainComplex.h"
@@ -237,4 +238,60 @@ epsilon -> 0 is a separate, labeled step.)doc")
       .def_static("extrapolateToZero", &LorentzianFamily::extrapolateToZero, py::arg("epsilons"),
            py::arg("values"), py::arg("order") = 2,
            "Labeled polynomial extrapolation of reads at epsilon > 0 to epsilon -> 0.");
+  py::class_<Connection>(m, "Connection",
+      R"doc(A C* connection on the canonical edges x < y: U_xy per edge, U_yx = 1/U_xy exactly,
+U_xx = 1 (specification Def. 5.1). Gauge: U_xy -> g_x^{-1} U_xy g_y. Links are never
+normalized or conjugated.)doc")
+      .def(py::init<const ChainComplex &, std::vector<Complex>>(), py::arg("complex"), py::arg("links"))
+      .def_static("trivial", &Connection::trivial, py::arg("complex"))
+      .def_static("fromSpacetime", &Connection::fromSpacetime, py::arg("spacetime"), py::arg("complex"),
+           "U_xy = exp(i phase) on the stored source->target orientation, inverted when the source is the larger id.")
+      .def("links", &Connection::links)
+      .def("edgeCount", &Connection::edgeCount)
+      .def("link", &Connection::link, py::arg("x"), py::arg("y"))
+      .def("inverse", &Connection::inverse)
+      .def("gauge", &Connection::gauge, py::arg("g"))
+      .def("curvature", &Connection::curvature, py::arg("p"), py::arg("q"), py::arg("r"))
+      .def("isUnitary", &Connection::isUnitary, py::arg("tolerance") = 1e-12);
+
+  py::class_<CovarianceCertificate>(m, "CovarianceCertificate",
+      "Residuals of specification Prop. 5.1 (i)-(vi) on an instance; NaN means unmeasured.")
+      .def_readonly("transposeMetric", &CovarianceCertificate::transposeMetric)
+      .def_readonly("transposePencil", &CovarianceCertificate::transposePencil)
+      .def_readonly("covarianceMetric", &CovarianceCertificate::covarianceMetric)
+      .def_readonly("covariancePencil", &CovarianceCertificate::covariancePencil)
+      .def_readonly("curvature", &CovarianceCertificate::curvature)
+      .def_readonly("pairingInvariance", &CovarianceCertificate::pairingInvariance)
+      .def_readonly("trivialReduction", &CovarianceCertificate::trivialReduction)
+      .def_readonly("pureGaugeIsospectrality", &CovarianceCertificate::pureGaugeIsospectrality)
+      .def_readonly("gaugeSeed", &CovarianceCertificate::gaugeSeed)
+      .def_readonly("checkedDegree", &CovarianceCertificate::checkedDegree);
+
+  py::class_<CovariantChainHodge>(m, "CovariantChainHodge",
+      R"doc(The covariant one-particle operator h_k(s,U) of specification §5: the sparse
+inverse chain metric dressed by U_{b(sigma) b(tau)} and the incidences twisted by
+U_{b(tau) b(sigma)}, b(sigma) = min sigma, with the dressed pencil (A~_k^U, M_k^U) on
+images and the exact properties of Prop. 5.1 measured on every instance.)doc")
+      .def(py::init<const ChainHodge &, Connection, std::uint64_t>(), py::arg("base"),
+           py::arg("connection"), py::arg("gauge_seed") = 7)
+      .def("base", &CovariantChainHodge::base, py::return_value_policy::reference_internal)
+      .def("connection", &CovariantChainHodge::connection, py::return_value_policy::reference_internal)
+      .def("dimension", &CovariantChainHodge::dimension)
+      .def("preset", &CovariantChainHodge::preset)
+      .def("certificate", &CovariantChainHodge::certificate)
+      .def("Minv", [](const CovariantChainHodge &c, int k) { return SparseMatrix(c.Minv(k)); }, py::arg("k"))
+      .def("dressed", [](const CovariantChainHodge &c, int k) { return SparseMatrix(c.dressed(k)); }, py::arg("k"))
+      .def("twistedBoundary", [](const CovariantChainHodge &c, int k) { return SparseMatrix(c.twistedBoundary(k)); }, py::arg("k"))
+      .def("twistedBoundaryDual", [](const CovariantChainHodge &c, int k) { return SparseMatrix(c.twistedBoundaryDual(k)); }, py::arg("k"))
+      .def("rho", &CovariantChainHodge::rho, py::arg("k"), py::arg("g"))
+      .def("applyG", &CovariantChainHodge::applyG, py::arg("k"), py::arg("c"))
+      .def("applyMinv", &CovariantChainHodge::applyMinv, py::arg("k"), py::arg("c"))
+      .def("applyH", &CovariantChainHodge::applyH, py::arg("k"), py::arg("c"))
+      .def("covariantOperator", &CovariantChainHodge::covariantOperator, py::arg("k"))
+      .def("pencil", &CovariantChainHodge::pencil, py::arg("k"))
+      .def("pencilAux", &CovariantChainHodge::pencilAux, py::arg("k"))
+      .def("spectrum", &CovariantChainHodge::spectrum, py::arg("k"))
+      .def("dual", &CovariantChainHodge::dual)
+      .def("gauged", &CovariantChainHodge::gauged, py::arg("g"))
+      .def("verify", &CovariantChainHodge::verify, py::arg("k") = 1);
 }

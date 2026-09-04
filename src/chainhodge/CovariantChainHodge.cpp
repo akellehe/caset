@@ -1,0 +1,487 @@
+// Copyright (c) 2026 Twin Vector Labs LLC.
+// All rights reserved.
+
+#include "chainhodge/CovariantChainHodge.h"
+
+#include <algorithm>
+#include <cmath>
+#include <numeric>
+#include <random>
+#include <stdexcept>
+
+#include <Eigen/Dense>
+#include <Eigen/Eigenvalues>
+#include <Eigen/SparseLU>
+
+#include "mesh/Edge.h"
+#include "mesh/EdgeList.h"
+#include "mesh/Vertex.h"
+#include "spacetime/Spacetime.h"
+
+namespace tessera::chainhodge {
+
+// ---------------------------------------------------------------- Connection
+
+Connection::Connection(const cobordism::ChainComplex &K, std::vector<Complex> links)
+    : links_(std::move(links)), K_(&K) {
+  const auto edges = K.kSimplexVertices(1);
+  if (links_.size() != edges.size())
+    throw std::invalid_argument("Connection: one link per canonical edge is required (" +
+                                std::to_string(edges.size()) + " edges, " +
+                                std::to_string(links_.size()) + " links)");
+  for (std::size_t j = 0; j < edges.size(); ++j) {
+    if (links_[j] == Complex(0.0, 0.0))
+      throw std::invalid_argument("Connection: a link must be nonzero (U_xy in C*)");
+    index_[{edges[j][0], edges[j][1]}] = static_cast<int>(j);
+  }
+}
+
+Connection Connection::trivial(const cobordism::ChainComplex &K) {
+  return Connection(K, std::vector<Complex>(K.numSimplices(1), Complex(1.0, 0.0)));
+}
+
+Connection Connection::fromSpacetime(const spacetime::Spacetime &st,
+                                     const cobordism::ChainComplex &K) {
+  std::map<std::pair<std::uint64_t, std::uint64_t>, Complex> byPair;
+  if (st.getEdgeList()) {
+    for (const auto &e : st.getEdgeList()->toVector()) {
+      if (e == nullptr || e->getSource() == nullptr || e->getTarget() == nullptr) continue;
+      const std::uint64_t a = e->getSource()->getId();
+      const std::uint64_t b = e->getTarget()->getId();
+      const Complex link = std::exp(Complex(0.0, 1.0) * e->getPhase());  // source -> target
+      if (a < b)
+        byPair[{a, b}] = link;
+      else
+        byPair[{b, a}] = Complex(1.0, 0.0) / link;
+    }
+  }
+  std::vector<Complex> links;
+  for (const auto &e : K.kSimplexVertices(1)) {
+    const auto it = byPair.find({e[0], e[1]});
+    if (it == byPair.end())
+      throw std::invalid_argument("Connection::fromSpacetime: complex edge (" +
+                                  std::to_string(e[0]) + "," + std::to_string(e[1]) +
+                                  ") has no spacetime edge");
+    links.push_back(it->second);
+  }
+  return Connection(K, std::move(links));
+}
+
+Complex Connection::link(std::uint64_t x, std::uint64_t y) const {
+  if (x == y) return Complex(1.0, 0.0);
+  const bool forward = x < y;
+  const auto it = index_.find(forward ? std::make_pair(x, y) : std::make_pair(y, x));
+  if (it == index_.end())
+    throw std::invalid_argument("Connection::link: (" + std::to_string(x) + "," +
+                                std::to_string(y) + ") is not an edge");
+  const Complex u = links_[static_cast<std::size_t>(it->second)];
+  return forward ? u : Complex(1.0, 0.0) / u;
+}
+
+Connection Connection::inverse() const {
+  Connection out(*this);
+  for (auto &u : out.links_) u = Complex(1.0, 0.0) / u;
+  return out;
+}
+
+Connection Connection::gauge(const std::map<std::uint64_t, Complex> &g) const {
+  Connection out(*this);
+  const auto edges = K_->kSimplexVertices(1);
+  for (std::size_t j = 0; j < edges.size(); ++j) {
+    const auto gx = g.find(edges[j][0]);
+    const auto gy = g.find(edges[j][1]);
+    if (gx == g.end() || gy == g.end() || gx->second == Complex(0.0, 0.0) || gy->second == Complex(0.0, 0.0))
+      throw std::invalid_argument("Connection::gauge: every vertex needs a nonzero g_x");
+    out.links_[j] = links_[j] / gx->second * gy->second;  // U_xy -> g_x^{-1} U_xy g_y
+  }
+  return out;
+}
+
+Complex Connection::curvature(std::uint64_t p, std::uint64_t q, std::uint64_t r) const {
+  return link(r, q) * link(q, p) * link(p, r);
+}
+
+bool Connection::isUnitary(double tolerance) const {
+  for (const auto &u : links_)
+    if (std::abs(std::abs(u) - 1.0) > tolerance) return false;
+  return true;
+}
+
+// ---------------------------------------------------------------- CovariantChainHodge
+
+struct CovariantChainHodge::Factorization {
+  Eigen::SparseLU<SparseMatrix> lu;
+  bool ok{false};
+};
+
+SparseMatrix CovariantChainHodge::dress(const SparseMatrix &M,
+                                        const std::vector<std::uint64_t> &baseRow,
+                                        const std::vector<std::uint64_t> &baseCol,
+                                        const Connection &U) {
+  SparseMatrix out(M.rows(), M.cols());
+  std::vector<Eigen::Triplet<Complex>> trip;
+  trip.reserve(static_cast<std::size_t>(M.nonZeros()));
+  for (int c = 0; c < M.outerSize(); ++c)
+    for (SparseMatrix::InnerIterator it(M, c); it; ++it)
+      trip.emplace_back(static_cast<int>(it.row()), static_cast<int>(it.col()),
+                        it.value() * U.link(baseRow[static_cast<std::size_t>(it.row())],
+                                            baseCol[static_cast<std::size_t>(it.col())]));
+  out.setFromTriplets(trip.begin(), trip.end());
+  out.makeCompressed();
+  return out;
+}
+
+CovariantChainHodge::CovariantChainHodge(const ChainHodge &base, Connection U, std::uint64_t gaugeSeed)
+    : base_(std::make_shared<ChainHodge>(base)), U_(std::move(U)), Uinv_(U_.inverse()) {
+  const int d = base_->dimension();
+  if (U_.edgeCount() != base_->complex().numSimplices(1))
+    throw std::invalid_argument("CovariantChainHodge: the connection lives on a different edge set");
+  base_vertex_.resize(static_cast<std::size_t>(d) + 1);
+  for (int k = 0; k <= d; ++k)
+    for (const auto &cell : base_->complex().kSimplexVertices(k))
+      base_vertex_[static_cast<std::size_t>(k)].push_back(cell.front());  // b(σ) = min σ (sorted)
+  for (int k = 0; k <= d; ++k) {
+    const auto &bk = base_vertex_[static_cast<std::size_t>(k)];
+    const SparseMatrix &sparse = (base_->preset() == Preset::L2) ? base_->Minv(k) : base_->chainMetricSparse(k);
+    dressed_.push_back(dress(sparse, bk, bk, U_));
+    dressedDual_.push_back(dress(sparse, bk, bk, Uinv_));
+    if (k >= 1) {
+      const auto &bkm1 = base_vertex_[static_cast<std::size_t>(k) - 1];
+      twisted_.push_back(dress(base_->boundary(k), bkm1, bk, U_));      // (∂_k^U)_{τσ} = (∂_k)_{τσ} U_{b(τ)b(σ)}
+      twistedDual_.push_back(dress(base_->boundary(k), bkm1, bk, Uinv_));
+    } else {
+      twisted_.push_back(base_->boundary(0));
+      twistedDual_.push_back(base_->boundary(0));
+    }
+  }
+  factor_.assign(static_cast<std::size_t>(d) + 1, nullptr);
+  measureSparseIdentities(gaugeSeed);
+}
+
+const SparseMatrix &CovariantChainHodge::Minv(int k) const {
+  if (preset() != Preset::L2)
+    throw std::logic_error("CovariantChainHodge::Minv: the GRASSMANN_ALL preset's dressed sparse "
+                           "object is the chain metric (dressed)");
+  return dressed(k);
+}
+
+const SparseMatrix &CovariantChainHodge::dressed(int k) const {
+  if (k < 0 || k > dimension()) throw std::invalid_argument("CovariantChainHodge: degree out of range");
+  return dressed_[static_cast<std::size_t>(k)];
+}
+
+const SparseMatrix &CovariantChainHodge::twistedBoundary(int k) const {
+  if (k < 0 || k > dimension()) throw std::invalid_argument("CovariantChainHodge: degree out of range");
+  return twisted_[static_cast<std::size_t>(k)];
+}
+
+const SparseMatrix &CovariantChainHodge::twistedBoundaryDual(int k) const {
+  if (k < 0 || k > dimension()) throw std::invalid_argument("CovariantChainHodge: degree out of range");
+  return twistedDual_[static_cast<std::size_t>(k)];
+}
+
+Eigen::VectorXcd CovariantChainHodge::rho(int k, const std::map<std::uint64_t, Complex> &g) const {
+  if (k < 0 || k > dimension()) throw std::invalid_argument("CovariantChainHodge: degree out of range");
+  const auto &bk = base_vertex_[static_cast<std::size_t>(k)];
+  Eigen::VectorXcd out(static_cast<Eigen::Index>(bk.size()));
+  for (std::size_t j = 0; j < bk.size(); ++j) {
+    const auto it = g.find(bk[j]);
+    if (it == g.end() || it->second == Complex(0.0, 0.0))
+      throw std::invalid_argument("CovariantChainHodge::rho: every base vertex needs a nonzero g");
+    out(static_cast<Eigen::Index>(j)) = Complex(1.0, 0.0) / it->second;
+  }
+  return out;
+}
+
+Eigen::MatrixXcd CovariantChainHodge::solveDressed(int k, const Eigen::MatrixXcd &rhs) const {
+  auto &slot = factor_[static_cast<std::size_t>(k)];
+  if (!slot) {
+    auto f = std::make_shared<Factorization>();
+    f->lu.compute(dressed_[static_cast<std::size_t>(k)]);
+    f->ok = (f->lu.info() == Eigen::Success);
+    slot = std::move(f);
+  }
+  if (!slot->ok)
+    throw std::runtime_error("CovariantChainHodge: the dressed sparse metric at degree " +
+                             std::to_string(k) + " is singular");
+  if (rhs.cols() == 0) return Eigen::MatrixXcd(rhs.rows(), 0);
+  return slot->lu.solve(rhs);
+}
+
+Eigen::MatrixXcd CovariantChainHodge::applyG(int k, const Eigen::MatrixXcd &c) const {
+  if (k < 0 || k > dimension()) throw std::invalid_argument("CovariantChainHodge: degree out of range");
+  if (preset() == Preset::L2) return solveDressed(k, c);
+  return dressed_[static_cast<std::size_t>(k)] * c;
+}
+
+Eigen::MatrixXcd CovariantChainHodge::applyMinv(int k, const Eigen::MatrixXcd &c) const {
+  if (k < 0 || k > dimension()) throw std::invalid_argument("CovariantChainHodge: degree out of range");
+  if (preset() == Preset::L2) return dressed_[static_cast<std::size_t>(k)] * c;
+  return solveDressed(k, c);
+}
+
+Eigen::MatrixXcd CovariantChainHodge::applyH(int k, const Eigen::MatrixXcd &c) const {
+  if (k < 0 || k > dimension()) throw std::invalid_argument("CovariantChainHodge: degree out of range");
+  const int d = dimension();
+  const SparseMatrix &Mk = dressed_[static_cast<std::size_t>(k)];
+  Eigen::MatrixXcd out = Eigen::MatrixXcd::Zero(c.rows(), c.cols());
+  if (preset() == Preset::L2) {
+    if (k >= 1) {
+      // M_k^U (∂_k^{U^{-1}})^T (M_{k-1}^U)^{-1} ∂_k^U c
+      const Eigen::MatrixXcd y = solveDressed(k - 1, Eigen::MatrixXcd(twisted_[static_cast<std::size_t>(k)] * c));
+      out += Mk * (SparseMatrix(twistedDual_[static_cast<std::size_t>(k)].transpose()) * y);
+    }
+    if (k < d) {
+      // ∂_{k+1}^U M_{k+1}^U (∂_{k+1}^{U^{-1}})^T (M_k^U)^{-1} c
+      const Eigen::MatrixXcd w = solveDressed(k, c);
+      out += twisted_[static_cast<std::size_t>(k) + 1] *
+             (dressed_[static_cast<std::size_t>(k) + 1] *
+              (SparseMatrix(twistedDual_[static_cast<std::size_t>(k) + 1].transpose()) * w));
+    }
+    return out;
+  }
+  // Grassmann: h = G^{-1} A on chains, A = (∂^{U^{-1}})^T G_{k-1} ∂^U + G_k ∂_{k+1}^U G_{k+1}^{-1} (∂_{k+1}^{U^{-1}})^T G_k
+  return solveDressed(k, pencil(k).A * c);
+}
+
+Eigen::MatrixXcd CovariantChainHodge::covariantOperator(int k) const {
+  const int n = base_->size(k);
+  if (n >= base_->crossoverDimension())
+    throw std::length_error("CovariantChainHodge::covariantOperator: at or above the dense crossover");
+  return applyH(k, Eigen::MatrixXcd::Identity(n, n));
+}
+
+Pencil CovariantChainHodge::pencil(int k) const {
+  if (k < 0 || k > dimension()) throw std::invalid_argument("CovariantChainHodge: degree out of range");
+  const int n = base_->size(k);
+  if (n >= base_->crossoverDimension())
+    throw std::length_error("CovariantChainHodge::pencil: at or above the dense crossover");
+  const int d = dimension();
+  Pencil P;
+  P.degree = k;
+  const SparseMatrix &Mk = dressed_[static_cast<std::size_t>(k)];
+  P.B = Eigen::MatrixXcd(Mk);
+  P.A = Eigen::MatrixXcd::Zero(n, n);
+  if (preset() == Preset::L2) {
+    P.variable = PencilVariable::GeometricImage;
+    if (k >= 1) {
+      // M_k^U (∂_k^{U^{-1}})^T (M_{k-1}^U)^{-1} ∂_k^U M_k^U
+      // M_k^U (∂_k^{U^{-1}})^T (M_{k-1}^U)^{-1} ∂_k^U M_k^U. The dressed metric is
+      // NOT symmetric ((M^U)^T = M^{U^{-1}}), so the left factor is formed as written.
+      const Eigen::MatrixXcd X = Eigen::MatrixXcd(twisted_[static_cast<std::size_t>(k)] * Mk);
+      const Eigen::MatrixXcd Y = solveDressed(k - 1, X);
+      P.A += Eigen::MatrixXcd(Mk * SparseMatrix(twistedDual_[static_cast<std::size_t>(k)].transpose())) * Y;
+    }
+    if (k < d) {
+      const SparseMatrix &B = twisted_[static_cast<std::size_t>(k) + 1];
+      const SparseMatrix &BD = twistedDual_[static_cast<std::size_t>(k) + 1];
+      P.A += Eigen::MatrixXcd(B * dressed_[static_cast<std::size_t>(k) + 1] * SparseMatrix(BD.transpose()));
+    }
+  } else {
+    P.variable = PencilVariable::Chain;
+    if (k >= 1) {
+      const SparseMatrix &B = twisted_[static_cast<std::size_t>(k)];
+      const SparseMatrix &BD = twistedDual_[static_cast<std::size_t>(k)];
+      P.A += Eigen::MatrixXcd(SparseMatrix(BD.transpose()) * dressed_[static_cast<std::size_t>(k) - 1] * B);
+    }
+    if (k < d) {
+      const SparseMatrix &B = twisted_[static_cast<std::size_t>(k) + 1];
+      const SparseMatrix &BD = twistedDual_[static_cast<std::size_t>(k) + 1];
+      const Eigen::MatrixXcd X = Eigen::MatrixXcd(SparseMatrix(BD.transpose()) * Mk);
+      const Eigen::MatrixXcd Y = solveDressed(k + 1, X);
+      P.A += Eigen::MatrixXcd(Mk * B) * Y;
+    }
+  }
+  return P;
+}
+
+Eigen::MatrixXcd CovariantChainHodge::pencilAux(int k) const {
+  if (preset() != Preset::L2)
+    throw std::logic_error("CovariantChainHodge::pencilAux: Whitney preset only");
+  return pencil(k).A;
+}
+
+SpectrumRead CovariantChainHodge::spectrum(int k) const {
+  const Pencil P = pencil(k);
+  const int n = static_cast<int>(P.A.rows());
+  SpectrumRead read;
+  read.degree = k;
+  if (n == 0) return read;
+  const Eigen::MatrixXcd C = solveDressed(k, P.A);
+  Eigen::ComplexEigenSolver<Eigen::MatrixXcd> es(C, true);
+  if (es.info() != Eigen::Success)
+    throw std::runtime_error("CovariantChainHodge::spectrum: eigensolver did not converge");
+  std::vector<int> order(static_cast<std::size_t>(n));
+  std::iota(order.begin(), order.end(), 0);
+  const auto &ev = es.eigenvalues();
+  std::sort(order.begin(), order.end(), [&](int a, int b) {
+    if (ev(a).real() != ev(b).real()) return ev(a).real() < ev(b).real();
+    return ev(a).imag() < ev(b).imag();
+  });
+  read.vectors.resize(n, n);
+  const double normA = P.A.norm();
+  double worst = 0.0;
+  for (int i = 0; i < n; ++i) {
+    const int j = order[static_cast<std::size_t>(i)];
+    read.eigenvalues.push_back(ev(j));
+    Eigen::VectorXcd x = es.eigenvectors().col(j);
+    x /= x.norm();
+    read.vectors.col(i) = x;
+    const double res = (P.A * x - ev(j) * (P.B * x)).norm();
+    worst = std::max(worst, normA > 0.0 ? res / normA : res);
+  }
+  read.residual = worst;
+  return read;
+}
+
+CovariantChainHodge CovariantChainHodge::dual() const {
+  return CovariantChainHodge(*base_, Uinv_, cert_.gaugeSeed);
+}
+
+CovariantChainHodge CovariantChainHodge::gauged(const std::map<std::uint64_t, Complex> &g) const {
+  return CovariantChainHodge(*base_, U_.gauge(g), cert_.gaugeSeed);
+}
+
+namespace {
+
+double relativeSparseDiff(const SparseMatrix &A, const SparseMatrix &B) {
+  const double n = A.norm();
+  const SparseMatrix D = A - B;
+  return n > 0.0 ? D.norm() / n : D.norm();
+}
+
+std::map<std::uint64_t, Complex> randomGauge(const cobordism::ChainComplex &K, std::uint64_t seed) {
+  std::mt19937_64 rng(seed);
+  std::normal_distribution<double> nd(0.0, 1.0);
+  std::map<std::uint64_t, Complex> g;
+  for (const auto &v : K.kSimplexVertices(0)) {
+    Complex z(nd(rng), nd(rng));
+    while (std::abs(z) < 0.1) z = Complex(nd(rng), nd(rng));
+    g[v[0]] = z;
+  }
+  return g;
+}
+
+}  // namespace
+
+void CovariantChainHodge::measureSparseIdentities(std::uint64_t seed) {
+  cert_.gaugeSeed = seed;
+  const int d = dimension();
+  // (ii) (M_k^U)^T = M_k^{U^{-1}}
+  double worst = 0.0;
+  for (int k = 0; k <= d; ++k)
+    worst = std::max(worst, relativeSparseDiff(SparseMatrix(dressed_[static_cast<std::size_t>(k)].transpose()),
+                                               dressedDual_[static_cast<std::size_t>(k)]));
+  cert_.transposeMetric = worst;
+  // (iii) M_k^{U^g} = ρ_k M_k^U ρ_k^{-1}, and (vi) invariance of the pairing.
+  const auto g = randomGauge(base_->complex(), seed);
+  const Connection Ug = U_.gauge(g);
+  worst = 0.0;
+  double worstPairing = 0.0;
+  std::mt19937_64 rng(seed ^ 0x5bd1e995ULL);
+  std::normal_distribution<double> nd(0.0, 1.0);
+  for (int k = 0; k <= d; ++k) {
+    const auto &bk = base_vertex_[static_cast<std::size_t>(k)];
+    const SparseMatrix &sparse = (preset() == Preset::L2) ? base_->Minv(k) : base_->chainMetricSparse(k);
+    const SparseMatrix dressedG = dress(sparse, bk, bk, Ug);
+    const Eigen::VectorXcd r = rho(k, g);
+    const SparseMatrix conj = r.asDiagonal() * dressed_[static_cast<std::size_t>(k)] * r.cwiseInverse().asDiagonal();
+    worst = std::max(worst, relativeSparseDiff(conj, dressedG));
+    // (vi): c~^T G^U c with c~ -> ρ^{-1} c~, c -> ρ c, G^{U^g} in place of G^U.
+    const int n = static_cast<int>(bk.size());
+    if (n == 0) continue;
+    Eigen::VectorXcd ct(n), c(n);
+    for (int i = 0; i < n; ++i) {
+      ct(i) = Complex(nd(rng), nd(rng));
+      c(i) = Complex(nd(rng), nd(rng));
+    }
+    const CovariantChainHodge *self = this;
+    const Eigen::MatrixXcd Gc = self->applyG(k, c);
+    const Complex before = (ct.transpose() * Gc)(0, 0);
+    // G^{U^g} (ρ c) = (ρ G^U ρ^{-1}) ρ c = ρ G^U c  ⇒ (ρ^{-1} c~)^T ρ G^U c = c~^T G^U c
+    Eigen::MatrixXcd GcG;
+    if (preset() == Preset::L2) {
+      Eigen::SparseLU<SparseMatrix> lu(dressedG);
+      if (lu.info() != Eigen::Success) continue;
+      GcG = lu.solve(Eigen::MatrixXcd(r.asDiagonal() * c));
+    } else {
+      GcG = dressedG * (r.asDiagonal() * c);
+    }
+    const Complex after = ((r.cwiseInverse().asDiagonal() * ct).transpose() * GcG)(0, 0);
+    worstPairing = std::max(worstPairing, std::abs(after - before) / (std::abs(before) + 1.0));
+  }
+  cert_.covarianceMetric = worst;
+  cert_.pairingInvariance = worstPairing;
+  // (iv) ∂_1^U ∂_2^U t = U_rp (F_t − 1)[r] for every triangle t = [p<q<r].
+  if (d >= 2) {
+    const SparseMatrix C = twisted_[1] * twisted_[2];
+    const auto tris = base_->complex().kSimplexVertices(2);
+    const auto verts = base_->complex().kSimplexVertices(0);
+    std::map<std::uint64_t, int> vindex;
+    for (int i = 0; i < static_cast<int>(verts.size()); ++i) vindex[verts[static_cast<std::size_t>(i)][0]] = i;
+    double worstCurv = 0.0, scale = 1.0;
+    for (int t = 0; t < static_cast<int>(tris.size()); ++t) {
+      const auto &tri = tris[static_cast<std::size_t>(t)];
+      const std::uint64_t p = tri[0], q = tri[1], r = tri[2];
+      const Complex expected = U_.link(r, p) * (U_.curvature(p, q, r) - Complex(1.0, 0.0));
+      scale = std::max(scale, std::abs(expected));
+      Eigen::VectorXcd col = Eigen::VectorXcd(C.col(t));
+      const int ir = vindex.at(r);
+      double err = std::abs(col(ir) - expected);
+      col(ir) = 0.0;
+      err = std::max(err, col.norm());
+      worstCurv = std::max(worstCurv, err);
+    }
+    cert_.curvature = worstCurv / scale;
+  } else {
+    cert_.curvature = 0.0;
+  }
+}
+
+CovarianceCertificate CovariantChainHodge::verify(int k) const {
+  CovarianceCertificate c = cert_;
+  c.checkedDegree = k;
+  const int n = base_->size(k);
+  if (n >= base_->crossoverDimension()) return c;
+  // (ii) on the pencil: (Ã_k^U)^T = Ã_k^{U^{-1}}
+  const Pencil P = pencil(k);
+  const Pencil PD = dual().pencil(k);
+  const double nA = P.A.norm();
+  c.transposePencil = (nA > 0.0) ? (P.A.transpose() - PD.A).norm() / nA : (P.A.transpose() - PD.A).norm();
+  // (iii) on the pencil under the certificate's random gauge
+  const auto g = randomGauge(base_->complex(), cert_.gaugeSeed);
+  const Pencil PG = gauged(g).pencil(k);
+  const Eigen::VectorXcd r = rho(k, g);
+  const Eigen::MatrixXcd conj = r.asDiagonal() * P.A * r.cwiseInverse().asDiagonal();
+  c.covariancePencil = (nA > 0.0) ? (conj - PG.A).norm() / nA : (conj - PG.A).norm();
+  // (i) h_k(s,1) = L_k when the connection is trivial
+  bool trivial = true;
+  for (const auto &u : U_.links())
+    if (std::abs(u - Complex(1.0, 0.0)) > 0.0) { trivial = false; break; }
+  if (trivial) {
+    const Eigen::MatrixXcd L = base_->hodgeOperator(k);
+    const Eigen::MatrixXcd h = covariantOperator(k);
+    const double nL = L.norm();
+    c.trivialReduction = (nL > 0.0) ? (h - L).norm() / nL : (h - L).norm();
+  }
+  // (v) pure gauge U = 1^g is isospectral to L_k
+  const CovariantChainHodge pure(*base_, Connection::trivial(base_->complex()).gauge(g), cert_.gaugeSeed);
+  const std::vector<Complex> a = pure.spectrum(k).eigenvalues;
+  const std::vector<Complex> b = base_->spectrum(k).eigenvalues;
+  double radius = 0.0, haus = 0.0;
+  for (const auto &z : b) radius = std::max(radius, std::abs(z));
+  auto oneSided = [](const std::vector<Complex> &x, const std::vector<Complex> &y) {
+    double worst = 0.0;
+    for (const auto &p : x) {
+      double best = std::numeric_limits<double>::infinity();
+      for (const auto &q : y) best = std::min(best, std::abs(p - q));
+      worst = std::max(worst, best);
+    }
+    return worst;
+  };
+  haus = std::max(oneSided(a, b), oneSided(b, a));
+  c.pureGaugeIsospectrality = radius > 0.0 ? haus / radius : haus;
+  return c;
+}
+
+}  // namespace tessera::chainhodge
