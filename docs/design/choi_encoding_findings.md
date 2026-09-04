@@ -100,6 +100,8 @@ restart at random, "warm" passes descend first from the previous pass's witnesse
 | 5 layers | 4 | 8 × 8 × 1000, cold | 7.78e-4 | 3.548 | 8 | 66 | `probe-readout-L5.log` |
 | 5 layers, pairs only (no readout) | 4 | 8 × 8 × 1000, cold | 2.75e-5 (best pass 9.4e-6) | 3.957 | 8 | 66 | `probe-pairs-L5.log` |
 | 6 layers | 4 | 8 × 8 × 1000, cold | 1.85e-4 (best pass 6.5e-5) | 3.604 | 8 | 75 | `probe-readout-L6.log` |
+| 3 layers | 4 | 8 × 24 × 1000, warm | 7.00e-6 (monotone trace) | 4.652 | 24 | 96 | `warm-readout-L3-g24.log` |
+| 6 layers | 4 | 8 × 12 × 1000, warm | 2.03e-6 (monotone trace) | 3.759 | 12 | 87 | `warm-readout-L6-g12.log` |
 | 3 layers, each witness its own eigenvalue | 4 | 8 × 12 × 1000, cold | 7.33e-4 | 3.03–3.04 | 12 | | `probe2-indep.log` |
 | 3 layers | 3 | 8 × 12 × 1000, cold | 8.06e-5 | 3.212 | 12 | | `probe2-three.log` |
 | 3 layers | 3 | 8 × 12 × 1000, warm | 8.06e-5 (monotone trace, same floor) | 3.212 | 12 | | `warm-three.log` |
@@ -112,8 +114,11 @@ boundary traces ARE realizable on the 3-layer annulus: the pairs-only fit reache
 witnesses on both modes converge in 5 growths; three do not converge in 12; dropping
 the common eigenvalue does not help. (iii) The readout constraint is what the
 four-witness fit has not yet met: it pins the operator the bulk implements to the
-chosen `U ∈ U(4)`, whereas the pairs-only fit lets the output emerge. The
-growth-40 warm-start run of the readout fit is the pending measurement.
+chosen `U ∈ U(4)`, whereas the pairs-only fit lets the output emerge. With the warm
+start the readout fit's trace is monotone and an order of magnitude lower at the same
+budget (7.0e-6 at 3 layers/growth 24, 2.0e-6 at 6 layers/growth 12), still falling at
+the last pass; the growth-40 (3 layers) and growth-30 (6 layers) warm runs are the
+pending measurements.
 
 | configuration | witnesses | growth | free edges | real parameters | real equations | slack |
 |---|---|---|---|---|---|---|
