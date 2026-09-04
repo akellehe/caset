@@ -3043,6 +3043,16 @@ ancestry. Read-only: nothing here enters the emergence objective.)doc");
                   "diagonal chain metric (empty = identity) and 0-based, "
                   "possibly overlapping component index sets covering every "
                   "index. Fixtures and next-level recursion.")
+      .def_static("overPencil", &RecursiveQuotient::overPencil, py::arg("A"),
+                  py::arg("M"), py::arg("dim"), py::arg("components"),
+                  py::arg("options") = RecursiveQuotient::Options(),
+                  "Build over a symmetric PENCIL (A~, M) on geometric images (flat "
+                  "row-major both): every shifted elimination is taken on "
+                  "P(lambda) = A~ - lambda M, and a child level carries the Gram "
+                  "T^T M T of its constraint modes (specification §7).")
+      .def("isPencil", &RecursiveQuotient::isPencil, "Whether this level is a pencil level.")
+      .def("pencilMetric", &RecursiveQuotient::pencilMetric,
+           "The pencil's metric M (base) or carried Gram (child), flat row-major; empty otherwise.")
       .def_static(
           "overCells",
           [](std::shared_ptr<Spacetime> st, int degree,

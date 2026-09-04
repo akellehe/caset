@@ -315,6 +315,17 @@ void RecursiveQuotient::classify() {
       neighbors[static_cast<std::size_t>(it.col())].insert(
           static_cast<int>(it.row()));
     }
+  // A pencil level couples coordinates through M as well: a cell whose
+  // metric row leaves its component is an interface cell of the pencil.
+  if (pencil_)
+    for (int outer = 0; outer < pencilMetric_.outerSize(); ++outer)
+      for (Eigen::SparseMatrix<cd>::InnerIterator it(pencilMetric_, outer); it; ++it) {
+        if (it.row() == it.col() || it.value() == cd(0.0, 0.0)) continue;
+        neighbors[static_cast<std::size_t>(it.row())].insert(
+            static_cast<int>(it.col()));
+        neighbors[static_cast<std::size_t>(it.col())].insert(
+            static_cast<int>(it.row()));
+      }
 
   std::vector<std::set<int>> memberSets;
   memberSets.reserve(components_.size());
@@ -517,6 +528,21 @@ RecursiveQuotient::computeSolve(int component, cd lambda) const {
         if (kept >= 0) adjacent.insert(kept);
       }
     }
+  if (pencil_ && lambda != cd(0.0, 0.0))
+    for (int outer = 0; outer < pencilMetric_.outerSize(); ++outer)
+      for (Eigen::SparseMatrix<cd>::InnerIterator it(pencilMetric_, outer); it; ++it) {
+        if (it.value() == cd(0.0, 0.0)) continue;
+        const int row = static_cast<int>(it.row());
+        const int col = static_cast<int>(it.col());
+        if (interiorPos[static_cast<std::size_t>(row)] >= 0) {
+          const int kept = interfacePosition_[static_cast<std::size_t>(col)];
+          if (kept >= 0) adjacent.insert(kept);
+        }
+        if (interiorPos[static_cast<std::size_t>(col)] >= 0) {
+          const int kept = interfacePosition_[static_cast<std::size_t>(row)];
+          if (kept >= 0) adjacent.insert(kept);
+        }
+      }
   solve->adjacentKept.assign(adjacent.begin(), adjacent.end());
   const int a = static_cast<int>(solve->adjacentKept.size());
 
@@ -558,8 +584,27 @@ RecursiveQuotient::computeSolve(int component, cd lambda) const {
         keptBlock(keptLocal[static_cast<std::size_t>(row)], colInterior) =
             it.value();
     }
-  for (int i = 0; i < m; ++i)
-    interiorTriplets.emplace_back(i, i, -lambda);
+  if (pencil_) {
+    // P(lambda) = A - lambda M on every block: interior, load (I x K), and kept (K x I).
+    for (int outer = 0; outer < pencilMetric_.outerSize(); ++outer)
+      for (Eigen::SparseMatrix<cd>::InnerIterator it(pencilMetric_, outer); it; ++it) {
+        const cd shift = -lambda * it.value();
+        if (shift == cd(0.0, 0.0)) continue;
+        const int row = static_cast<int>(it.row());
+        const int col = static_cast<int>(it.col());
+        const int rowInterior = interiorPos[static_cast<std::size_t>(row)];
+        const int colInterior = interiorPos[static_cast<std::size_t>(col)];
+        if (rowInterior >= 0 && colInterior >= 0)
+          interiorTriplets.emplace_back(rowInterior, colInterior, shift);
+        else if (rowInterior >= 0 && keptLocal[static_cast<std::size_t>(col)] >= 0)
+          loadBlock(rowInterior, keptLocal[static_cast<std::size_t>(col)]) += shift;
+        else if (colInterior >= 0 && keptLocal[static_cast<std::size_t>(row)] >= 0)
+          keptBlock(keptLocal[static_cast<std::size_t>(row)], colInterior) += shift;
+      }
+  } else {
+    for (int i = 0; i < m; ++i)
+      interiorTriplets.emplace_back(i, i, -lambda);
+  }
   Eigen::SparseMatrix<cd> sparseShifted(m, m);
   sparseShifted.setFromTriplets(interiorTriplets.begin(),
                                 interiorTriplets.end());
@@ -1083,8 +1128,17 @@ RecursiveQuotient::FeshbachRead RecursiveQuotient::feshbach(
       const int col = interfacePosition_[static_cast<std::size_t>(it.col())];
       if (row >= 0 && col >= 0) response(row, col) += it.value();
     }
-  for (int position = 0; position < kept; ++position)
-    response(position, position) -= lambda;
+  if (pencil_) {
+    for (int outer = 0; outer < pencilMetric_.outerSize(); ++outer)
+      for (Eigen::SparseMatrix<cd>::InnerIterator it(pencilMetric_, outer); it; ++it) {
+        const int row = interfacePosition_[static_cast<std::size_t>(it.row())];
+        const int col = interfacePosition_[static_cast<std::size_t>(it.col())];
+        if (row >= 0 && col >= 0) response(row, col) -= lambda * it.value();
+      }
+  } else {
+    for (int position = 0; position < kept; ++position)
+      response(position, position) -= lambda;
+  }
 
   double solveResidual = 0.0;
   double compatibilityResidual = 0.0;
@@ -1543,14 +1597,20 @@ RecursiveQuotient::LabeledFiberSumRead RecursiveQuotient::summarizeFiberSum(
     // |W|-unit normalization keeps the Gram scale-free; a W-null column is
     // left raw (its Gram diagonal reports the null norm honestly).
     cd wNorm = cd(0.0, 0.0);
-    for (int i = 0; i < dim_; ++i)
-      wNorm += std::conj(columnVector(i)) * weights_(i) * columnVector(i);
+    if (pencil_) {
+      // The complex bilinear pairing c^T M c (specification §6, §7): no conjugation.
+      wNorm = (columnVector.transpose() * (pencilMetric_ * columnVector))(0, 0);
+    } else {
+      for (int i = 0; i < dim_; ++i)
+        wNorm += std::conj(columnVector(i)) * weights_(i) * columnVector(i);
+    }
     const double magnitude = std::sqrt(std::abs(wNorm));
     if (magnitude > 1e-300) columnVector /= magnitude;
     embedding.col(j) = columnVector;
   }
   const Eigen::MatrixXcd gram =
-      embedding.adjoint() * (weights_.asDiagonal() * embedding);
+      pencil_ ? Eigen::MatrixXcd(embedding.transpose() * (pencilMetric_ * embedding))
+              : Eigen::MatrixXcd(embedding.adjoint() * (weights_.asDiagonal() * embedding));
   read.embedding = toFlat(embedding);
   read.gram = toFlat(gram);
   read.nominalRank = static_cast<std::size_t>(total);
@@ -2101,13 +2161,92 @@ RecursiveQuotient RecursiveQuotient::childOver(
   return child;
 }
 
+RecursiveQuotient RecursiveQuotient::overPencil(
+    const std::vector<cd> &A, const std::vector<cd> &M, int dim,
+    const std::vector<std::vector<int>> &components, const Options &options) {
+  RecursiveQuotient quotient;
+  quotient.pencil_ = true;
+  const Eigen::MatrixXcd denseM = toMatrix(M, dim, dim, "RecursiveQuotient pencil metric");
+  quotient.pencilMetric_ = denseM.sparseView();
+  quotient.pencilMetric_.makeCompressed();
+  quotient.initMatrix(A, dim, {}, components, options);
+  return quotient;
+}
+
+std::vector<cd> RecursiveQuotient::pencilMetric() const {
+  if (!pencil_) return {};
+  return toFlat(Eigen::MatrixXcd(pencilMetric_));
+}
+
+Eigen::MatrixXcd RecursiveQuotient::pencilConstraintModes(
+    const std::vector<RetainedCoordinate> &coordinates,
+    const std::vector<std::shared_ptr<ComponentSolve>> &solves) const {
+  const int reduced = static_cast<int>(coordinates.size());
+  Eigen::MatrixXcd T = Eigen::MatrixXcd::Zero(dim_, reduced);
+  for (int p = 0; p < reduced; ++p) {
+    const RetainedCoordinate &coordinate = coordinates[static_cast<std::size_t>(p)];
+    if (coordinate.fineIndex < 0) {
+      // A retained resonant mode: its embedding is the kernel vector in fine coordinates.
+      for (int i = 0; i < dim_; ++i)
+        T(i, p) = coordinate.embedding[static_cast<std::size_t>(i)];
+      continue;
+    }
+    T(coordinate.fineIndex, p) = cd(1.0, 0.0);
+    const int position = interfacePosition_[static_cast<std::size_t>(coordinate.fineIndex)];
+    if (position < 0) continue;
+    for (std::size_t component = 0; component < solves.size(); ++component) {
+      const ComponentSolve &solve = *solves[component];
+      const auto it = std::find(solve.adjacentKept.begin(), solve.adjacentKept.end(), position);
+      if (it == solve.adjacentKept.end()) continue;
+      const int j = static_cast<int>(it - solve.adjacentKept.begin());
+      const auto &interior = interior_[component];
+      for (int i = 0; i < solve.interiorDim && i < static_cast<int>(interior.size()); ++i)
+        T(interior[static_cast<std::size_t>(i)], p) -= solve.X(i, j);
+    }
+  }
+  return T;
+}
+
+RecursiveQuotient RecursiveQuotient::pencilChildOver(
+    const std::vector<cd> &op,
+    const std::vector<RetainedCoordinate> &coordinates,
+    const std::vector<std::vector<int>> &components,
+    const Options &options,
+    const std::vector<std::shared_ptr<ComponentSolve>> &solves) const {
+  const int reduced = static_cast<int>(coordinates.size());
+  const Eigen::MatrixXcd T = pencilConstraintModes(coordinates, solves);
+  const Eigen::MatrixXcd gram = T.transpose() * (pencilMetric_ * T);
+  RecursiveQuotient child;
+  child.pencil_ = true;
+  child.pencilMetric_ = gram.sparseView();
+  child.pencilMetric_.makeCompressed();
+  child.level_ = level_ + 1;
+  child.provenance_.resize(static_cast<std::size_t>(reduced));
+  for (int coordinate = 0; coordinate < reduced; ++coordinate)
+    child.provenance_[static_cast<std::size_t>(coordinate)] =
+        "L" + std::to_string(level_) + ":" +
+        coordinates[static_cast<std::size_t>(coordinate)].provenance;
+  Options childOptions = options;
+  childOptions.embeddingPolicy = FiberEmbeddingPolicy::CarryGramExactly;
+  child.initMatrix(op, reduced, {}, components, childOptions);
+  return child;
+}
+
 RecursiveQuotient RecursiveQuotient::nextLevel(
     const std::vector<std::vector<int>> &components,
     const Options &options) const {
   const StaticReductionRead &reduction = staticReduction();
-  RecursiveQuotient child = childOver(reduction.effectiveOperator,
-                                      reduction.coordinates, components,
-                                      options);
+  RecursiveQuotient child;
+  if (pencil_) {
+    std::vector<std::shared_ptr<ComponentSolve>> solves;
+    for (int component = 0; component < componentCount(); ++component)
+      solves.push_back(componentSolve(component));
+    child = pencilChildOver(reduction.effectiveOperator, reduction.coordinates,
+                            components, options, solves);
+  } else {
+    child = childOver(reduction.effectiveOperator, reduction.coordinates,
+                      components, options);
+  }
   child.levelProvenance_.origin = LevelOrigin::StaticResponse;
   // A static level carries NO window: lambda = 0 is a point, not a band, and
   // reporting a window here would claim a band domain the reduction does not
@@ -2132,7 +2271,10 @@ RecursiveQuotient RecursiveQuotient::nextLevelAtLambda(
   // nonzero spectrum, which is precisely why this path exists.
   const FeshbachRead response = feshbach(lambda, windowLower, windowUpper);
   RecursiveQuotient child =
-      childOver(response.response, response.coordinates, components, options);
+      pencil_ ? pencilChildOver(response.response, response.coordinates,
+                                components, options, shiftedSolves(lambda))
+              : childOver(response.response, response.coordinates, components,
+                          options);
   child.levelProvenance_.origin = LevelOrigin::BandPencil;
   child.levelProvenance_.lambda = lambda;
   child.levelProvenance_.windowLower = windowLower;
@@ -2216,11 +2358,34 @@ RecursiveQuotient RecursiveQuotient::nextLevelFromSurrogate(
     coordinate.provenance = "amls#" + std::to_string(j);
   }
 
-  RecursiveQuotient child =
-      childOver(toFlat(childOperator), coordinates, components, options);
-  // The M-orthonormalized child metric is the identity by construction; the
-  // W-norms `childOver` derives from the embeddings reproduce it, and the
-  // congruence above is what makes that true rather than an assumption.
+  RecursiveQuotient child;
+  if (pencil_) {
+    // A pencil level carries the CONGRUENCE (V^T A V, V^T M V) (specification
+    // Prop. 7.1(b)); the M^{-1/2} orthonormalization above is a Hermitian
+    // device and is not applied to a complex symmetric M.
+    const Eigen::MatrixXcd A = Eigen::MatrixXcd(op_);
+    const Eigen::MatrixXcd congruentA = basis.transpose() * A * basis;
+    const Eigen::MatrixXcd congruentM =
+        basis.transpose() * (pencilMetric_ * basis);
+    for (int j = 0; j < columns; ++j)
+      for (int i = 0; i < dim_; ++i)
+        coordinates[static_cast<std::size_t>(j)]
+            .embedding[static_cast<std::size_t>(i)] = basis(i, j);
+    child.pencil_ = true;
+    child.pencilMetric_ = congruentM.sparseView();
+    child.pencilMetric_.makeCompressed();
+    child.level_ = level_ + 1;
+    child.provenance_.resize(static_cast<std::size_t>(columns));
+    for (int j = 0; j < columns; ++j)
+      child.provenance_[static_cast<std::size_t>(j)] =
+          "L" + std::to_string(level_) + ":" +
+          coordinates[static_cast<std::size_t>(j)].provenance;
+    Options childOptions = options;
+    childOptions.embeddingPolicy = FiberEmbeddingPolicy::CarryGramExactly;
+    child.initMatrix(toFlat(congruentA), columns, {}, components, childOptions);
+  } else {
+    child = childOver(toFlat(childOperator), coordinates, components, options);
+  }
   child.levelProvenance_.origin = LevelOrigin::Surrogate;
   child.levelProvenance_.windowLower = surrogate.windowLower;
   child.levelProvenance_.windowUpper = surrogate.windowUpper;
