@@ -137,6 +137,56 @@ class MultiCobordism {
     std::vector<double> residualTrace;
   };
 
+  /// A formal complex-coefficient degree-\f$k\f$ chain on the live complex.
+  /// Its readout of a \f$k\f$-cochain \f$\psi\f$ is the chain–cochain pairing
+  /// \f$\langle c,\psi\rangle=\sum_\sigma c_\sigma\,\psi(\sigma)\f$ over the
+  /// listed cells (vertex sets; the value is taken on the ascending-order
+  /// cell). A unit chain reads one cell, a \f$\pm1\f$ chain over a cycle reads
+  /// a period, and a dense chain pairs with a reference state.
+  using ReadoutChain =
+      std::vector<std::pair<std::vector<std::uint64_t>, std::complex<double>>>;
+
+  /// Result of a whole-complex readout relaxation: a spanning set of coupled
+  /// eigenstate witnesses, each with both boundary components' amplitudes
+  /// fixed as inputs and its whole-complex readouts fixed to the algebraic
+  /// output. The readout constraints hold exactly on every witness; the
+  /// residual measures only whether the whole complex carries the witnesses
+  /// as eigenstates at the common eigenvalue.
+  struct WholeComplexReadoutResult {
+    bool converged{false};
+    bool commonEigenvalue{true};
+    double residual{0.0};
+    double eigenvalue{0.0};
+    int degree{0};
+    int growthSteps{0};
+    std::size_t freeEdgeCount{0};
+    /// Free amplitude coordinates per witness after the readout constraints
+    /// are eliminated (interior cells minus the readout rank).
+    std::size_t auxiliaryCellCount{0};
+    std::size_t readoutRank{0};
+    std::string regionA;
+    std::string regionB;
+    std::vector<std::vector<std::uint64_t>> cellsA;
+    std::vector<std::vector<std::uint64_t>> cellsB;
+    /// The fixed boundary amplitudes after the joint per-witness
+    /// normalization (component A, then component B).
+    std::vector<std::vector<std::complex<double>>> statesA;
+    std::vector<std::vector<std::complex<double>>> statesB;
+    /// The readout targets scaled by the same per-witness factor.
+    std::vector<std::vector<std::complex<double>>> targets;
+    /// The readouts of the returned witnesses; `readoutDeviation` is their
+    /// largest absolute difference from `targets` (round-off only).
+    std::vector<std::vector<std::complex<double>>> readouts;
+    double readoutDeviation{0.0};
+    std::vector<std::vector<std::complex<double>>> states;
+    std::vector<double> stateResiduals;
+    std::vector<double> stateEigenvalues;
+    std::vector<double> boundaryResidualsA;
+    std::vector<double> boundaryResidualsB;
+    /// Best coupled residual after each relaxation/growth pass.
+    std::vector<double> residualTrace;
+  };
+
   /// Target-free Choi promotion of the live metric
   /// \f$\ker L_1(W-\partial W)\f$ restricted to an ordered \f$d^2\f$ frame.
   /// identifiable is true only when that restriction has rank one. A
@@ -324,6 +374,46 @@ class MultiCobordism {
       std::string outputRegionName,
       std::vector<std::vector<std::uint64_t>> outputCells,
       std::vector<std::vector<std::complex<double>>> outputStates,
+      bool commonEigenvalue = true, double epsilon = 1e-10,
+      double boundaryEpsilon = 1e-10, int restarts = 64,
+      int maxGrowth = 4, std::uint64_t seed = 0,
+      int maxIterations = 200);
+
+  /// Fit one shared bulk geometry so the whole complex carries a spanning set
+  /// of eigenstates whose boundary restrictions are prepared INPUT pairs and
+  /// whose whole-complex readouts are prescribed outputs. `regionAName` and
+  /// `regionBName` must name two declared pinned regions whose vertex sets are
+  /// exactly the two connected components of \f$\partial W\f$; `cellsA` and
+  /// `cellsB` must enumerate every degree-`degree` cell of the corresponding
+  /// component. Witness `j` has boundary data `statesA[j]` on A and
+  /// `statesB[j]` on B; the joint boundary vector is normalized once and
+  /// `targets[j]` is scaled by the same factor. Each nonzero component
+  /// restriction must be an isolated-boundary eigenstate (residual below
+  /// `boundaryEpsilon`); an exactly zero restriction is admitted as the zero
+  /// input on that component.
+  ///
+  /// `readouts[r]` is a formal chain on the live complex; the readout
+  /// constraint \f$\langle c_r,\psi_j\rangle=\text{targets}[j][r]\f$ is imposed
+  /// EXACTLY: the free amplitudes of witness `j` are parametrized on the
+  /// affine solution set of its readout system (particular solution plus the
+  /// readout null space), so no penalty weight enters. A readout system that
+  /// the fixed boundary amplitudes make inconsistent is refused by name. The
+  /// residual is the common-eigenvalue Rayleigh residual of
+  /// `relaxBoundaryStatePairs`; bulk edge weights and, at degree zero,
+  /// connection phases vary; every edge held by a declared pinned region is
+  /// bit-identical. Boundary-preserving stellar growth is retried up to
+  /// `maxGrowth`; existing cells persist under it, so readout chains survive.
+  ///
+  /// This method mutates the node's live spacetime in place.
+  [[nodiscard]] WholeComplexReadoutResult relaxWholeComplexReadoutTargets(
+      int degree, std::string regionAName,
+      std::vector<std::vector<std::uint64_t>> cellsA,
+      std::vector<std::vector<std::complex<double>>> statesA,
+      std::string regionBName,
+      std::vector<std::vector<std::uint64_t>> cellsB,
+      std::vector<std::vector<std::complex<double>>> statesB,
+      std::vector<ReadoutChain> readouts,
+      std::vector<std::vector<std::complex<double>>> targets,
       bool commonEigenvalue = true, double epsilon = 1e-10,
       double boundaryEpsilon = 1e-10, int restarts = 64,
       int maxGrowth = 4, std::uint64_t seed = 0,

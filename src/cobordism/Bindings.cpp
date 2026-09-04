@@ -1271,6 +1271,49 @@ assertion. Every pairing is the transpose.)doc")
       .def_readonly("input_fiber_residuals", &MultiCobordism::TwoBodyRead::inputFiberResiduals)
       .def_readonly("cells_a", &MultiCobordism::TwoBodyRead::cellsA)
       .def_readonly("cells_b", &MultiCobordism::TwoBodyRead::cellsB);
+  py::class_<MultiCobordism::WholeComplexReadoutResult>(
+      m, "WholeComplexReadoutResult",
+      "Coupled full-cobordism eigenstate witnesses whose boundary "
+      "restrictions on BOTH components are fixed inputs and whose "
+      "whole-complex readouts are fixed exactly to the prescribed outputs.")
+      .def_readonly("converged",
+                    &MultiCobordism::WholeComplexReadoutResult::converged)
+      .def_readonly("common_eigenvalue",
+                    &MultiCobordism::WholeComplexReadoutResult::commonEigenvalue)
+      .def_readonly("residual",
+                    &MultiCobordism::WholeComplexReadoutResult::residual)
+      .def_readonly("eigenvalue",
+                    &MultiCobordism::WholeComplexReadoutResult::eigenvalue)
+      .def_readonly("degree", &MultiCobordism::WholeComplexReadoutResult::degree)
+      .def_readonly("growth_steps",
+                    &MultiCobordism::WholeComplexReadoutResult::growthSteps)
+      .def_readonly("free_edge_count",
+                    &MultiCobordism::WholeComplexReadoutResult::freeEdgeCount)
+      .def_readonly("auxiliary_cell_count",
+                    &MultiCobordism::WholeComplexReadoutResult::auxiliaryCellCount)
+      .def_readonly("readout_rank",
+                    &MultiCobordism::WholeComplexReadoutResult::readoutRank)
+      .def_readonly("region_a", &MultiCobordism::WholeComplexReadoutResult::regionA)
+      .def_readonly("region_b", &MultiCobordism::WholeComplexReadoutResult::regionB)
+      .def_readonly("cells_a", &MultiCobordism::WholeComplexReadoutResult::cellsA)
+      .def_readonly("cells_b", &MultiCobordism::WholeComplexReadoutResult::cellsB)
+      .def_readonly("states_a", &MultiCobordism::WholeComplexReadoutResult::statesA)
+      .def_readonly("states_b", &MultiCobordism::WholeComplexReadoutResult::statesB)
+      .def_readonly("targets", &MultiCobordism::WholeComplexReadoutResult::targets)
+      .def_readonly("readouts", &MultiCobordism::WholeComplexReadoutResult::readouts)
+      .def_readonly("readout_deviation",
+                    &MultiCobordism::WholeComplexReadoutResult::readoutDeviation)
+      .def_readonly("states", &MultiCobordism::WholeComplexReadoutResult::states)
+      .def_readonly("state_residuals",
+                    &MultiCobordism::WholeComplexReadoutResult::stateResiduals)
+      .def_readonly("state_eigenvalues",
+                    &MultiCobordism::WholeComplexReadoutResult::stateEigenvalues)
+      .def_readonly("boundary_residuals_a",
+                    &MultiCobordism::WholeComplexReadoutResult::boundaryResidualsA)
+      .def_readonly("boundary_residuals_b",
+                    &MultiCobordism::WholeComplexReadoutResult::boundaryResidualsB)
+      .def_readonly("residual_trace",
+                    &MultiCobordism::WholeComplexReadoutResult::residualTrace);
   py::class_<MultiCobordism::GeometricOperatorReadout>(
       m, "GeometricOperatorReadout",
       "Target-free promotion of a framed bulk-minus-boundary kernel. "
@@ -1563,6 +1606,24 @@ assertion. Every pairing is the transpose.)doc")
            "full-W Rayleigh residual is minimized jointly; by default every "
            "witness is constrained to one common eigenvalue so their span "
            "extends linearly to unseen input combinations.")
+      .def("relax_whole_complex_readout_targets",
+           &MultiCobordism::relaxWholeComplexReadoutTargets,
+           py::arg("degree"), py::arg("region_a"), py::arg("cells_a"),
+           py::arg("states_a"), py::arg("region_b"), py::arg("cells_b"),
+           py::arg("states_b"), py::arg("readouts"), py::arg("targets"),
+           py::arg("common_eigenvalue") = true, py::arg("epsilon") = 1e-10,
+           py::arg("boundary_epsilon") = 1e-10, py::arg("restarts") = 64,
+           py::arg("max_growth") = 4, py::arg("seed") = 0,
+           py::arg("max_iterations") = 200,
+           py::call_guard<py::gil_scoped_release>(),
+           "Fit one shared bulk geometry so the whole complex carries a "
+           "spanning set of common-eigenvalue eigenstates whose restrictions "
+           "to BOTH boundary components are the prepared inputs and whose "
+           "readouts over the given chains (lists of (cell, coefficient) "
+           "pairs) equal the prescribed outputs EXACTLY, by parametrizing "
+           "each witness's free amplitudes on the affine solution set of its "
+           "readout system. Boundary geometry and amplitudes remain exact; "
+           "the residual is the whole-complex Rayleigh residual alone.")
       .def("geometric_operator", &MultiCobordism::geometricOperator,
            py::arg("state_dimension"),
            py::arg("frame_cells") =
