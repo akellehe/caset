@@ -125,6 +125,71 @@ ChainComplex ChainComplex::fromSpacetime(const Spacetime &K) {
   return cc;
 }
 
+ChainComplex ChainComplex::fromTopCells(
+    const std::vector<std::vector<std::uint64_t>> &topCells) {
+  ChainComplex cc;
+  if (topCells.empty()) return cc;
+  std::size_t nv = 0;
+  for (const auto &raw : topCells) nv = std::max(nv, raw.size());
+  if (nv == 0) return cc;
+  const int n = static_cast<int>(nv) - 1;
+  cc.dimension_ = n;
+
+  // Face closure: every subset of every (sorted) top cell, bucketed by
+  // dimension in a set so the order is lexicographic on sorted tuples.
+  std::vector<std::set<Face>> faces(static_cast<std::size_t>(n) + 1);
+  for (const auto &raw : topCells) {
+    if (raw.size() != nv)
+      throw std::invalid_argument(
+          "ChainComplex::fromTopCells: every top cell must have the same number "
+          "of vertices (pure complex)");
+    Face cell(raw);
+    std::sort(cell.begin(), cell.end());
+    if (std::adjacent_find(cell.begin(), cell.end()) != cell.end())
+      throw std::invalid_argument("ChainComplex::fromTopCells: a cell repeats a vertex");
+    // Enumerate subsets by bitmask over the (n+1) vertices.
+    const unsigned full = 1u << nv;
+    for (unsigned mask = 1; mask < full; ++mask) {
+      Face f;
+      for (std::size_t i = 0; i < nv; ++i)
+        if (mask & (1u << i)) f.push_back(cell[i]);
+      faces[f.size() - 1].insert(std::move(f));
+    }
+  }
+
+  cc.counts_.assign(static_cast<std::size_t>(n) + 1, 0);
+  cc.faceVerts_.assign(static_cast<std::size_t>(n) + 1, {});
+  std::vector<std::map<Face, int>> index(static_cast<std::size_t>(n) + 1);
+  for (int k = 0; k <= n; ++k) {
+    auto &fk = cc.faceVerts_[static_cast<std::size_t>(k)];
+    fk.assign(faces[static_cast<std::size_t>(k)].begin(), faces[static_cast<std::size_t>(k)].end());
+    cc.counts_[static_cast<std::size_t>(k)] = fk.size();
+    for (int j = 0; j < static_cast<int>(fk.size()); ++j)
+      index[static_cast<std::size_t>(k)][fk[static_cast<std::size_t>(j)]] = j;
+  }
+
+  cc.boundary_.assign(static_cast<std::size_t>(n) + 1, {});
+  for (int k = 1; k <= n; ++k) {
+    const int rows = static_cast<int>(cc.counts_[static_cast<std::size_t>(k) - 1]);
+    const int cols = static_cast<int>(cc.counts_[static_cast<std::size_t>(k)]);
+    std::vector<long> M(static_cast<std::size_t>(rows) * cols, 0);
+    const auto &fk = cc.faceVerts_[static_cast<std::size_t>(k)];
+    for (int j = 0; j < cols; ++j) {
+      const Face &cell = fk[static_cast<std::size_t>(j)];
+      for (int i = 0; i <= k; ++i) {
+        Face facet;
+        facet.reserve(cell.size() - 1);
+        for (int p = 0; p <= k; ++p)
+          if (p != i) facet.push_back(cell[static_cast<std::size_t>(p)]);
+        const int r = index[static_cast<std::size_t>(k) - 1].at(facet);
+        M[static_cast<std::size_t>(r) * cols + j] = (i % 2 == 0) ? 1 : -1;
+      }
+    }
+    cc.boundary_[static_cast<std::size_t>(k)] = std::move(M);
+  }
+  return cc;
+}
+
 std::size_t ChainComplex::numSimplices(int k) const noexcept {
   if (k < 0 || k > dimension_) return 0;
   return counts_[static_cast<std::size_t>(k)];

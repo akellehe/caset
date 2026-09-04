@@ -142,6 +142,8 @@ Spacetime's declared metric dimension.)doc")
 Boundary maps ∂_k over ℤ plus the homology invariants derived from them — Betti
 numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and the
 ∂²=0 sanity check. Purely combinatorial (built from vertex sets; no geometry).)doc")
+      .def_static("fromTopCells", &ChainComplex::fromTopCells, py::arg("top_cells"),
+           "Build from top cells (vertex-id tuples) alone, oriented by ascending vertex id; no geometry.")
       .def_static("fromSpacetime", &ChainComplex::fromSpacetime, py::arg("spacetime"),
                   "Build the chain complex from a triangulation (a Spacetime).")
       .def("dimension", &ChainComplex::dimension)
