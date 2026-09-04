@@ -142,7 +142,8 @@ class CovariantChainHodge {
  public:
   /// Dress \p base by \p U. The certificate's sparse residuals are measured
   /// here with a deterministic random gauge from \p gaugeSeed.
-  CovariantChainHodge(const ChainHodge &base, Connection U, std::uint64_t gaugeSeed = 7);
+  CovariantChainHodge(const ChainHodge &base, Connection U, std::uint64_t gaugeSeed = 7,
+                      bool measureCertificate = true);
 
   [[nodiscard]] const ChainHodge &base() const noexcept { return *base_; }
   [[nodiscard]] const Connection &connection() const noexcept { return U_; }
@@ -171,6 +172,18 @@ class CovariantChainHodge {
   [[nodiscard]] Eigen::MatrixXcd applyH(int k, const Eigen::MatrixXcd &c) const;
   /// The dense \f$ h_k(s,U) \f$ (below the crossover).
   [[nodiscard]] Eigen::MatrixXcd covariantOperator(int k) const;
+  /// \f$ \partial h_k(s,U)/\partial s_e \f$ for the edge at canonical index
+  /// \p edgeIndex, dense: the product rule over the dressed metrics (the
+  /// dressing is independent of \f$ s \f$, so \f$ \partial M_k^U = \mathrm{dress}(\partial M_k) \f$),
+  /// with \f$ \partial (M^U)^{-1} = -(M^U)^{-1}\,\partial M^U\,(M^U)^{-1} \f$ applied by
+  /// solves. Below the crossover.
+  [[nodiscard]] Eigen::MatrixXcd covariantOperatorDerivative(int k, std::size_t edgeIndex) const;
+  /// \f$ \partial h_k(s,U)/\partial\varphi_e \f$ for the multiplicative variation
+  /// \f$ U_e = e^{i\varphi_e} \f$ of one link (so \f$ \partial U_e = iU_e \f$ and
+  /// \f$ \partial U_e^{-1} = -iU_e^{-1} \f$): every dressed entry whose base-vertex
+  /// pair is that edge moves by \f$ \pm i \f$ times itself, in the metrics and in
+  /// the twisted incidences alike. Below the crossover.
+  [[nodiscard]] Eigen::MatrixXcd covariantOperatorPhaseDerivative(int k, std::size_t edgeIndex) const;
   /// The dense dressed pencil \f$ (\tilde A_k^U, M_k^U) \f$ on images (Whitney)
   /// or \f$ (A_k^U, G_k^U) \f$ on chains (Grassmann).
   [[nodiscard]] Pencil pencil(int k) const;
@@ -207,6 +220,20 @@ class CovariantChainHodge {
                                           const std::vector<std::uint64_t> &baseRow,
                                           const std::vector<std::uint64_t> &baseCol,
                                           const Connection &U);
+  // Entries of a dressed matrix whose base-vertex pair is the edge (x,y),
+  // times +i when the pair reads (x,y) and -i when it reads (y,x); `dual`
+  // flips both signs (the U^{-1} dressing). Zero elsewhere.
+  [[nodiscard]] static SparseMatrix phaseDerivative(const SparseMatrix &dressedM,
+                                                    const std::vector<std::uint64_t> &baseRow,
+                                                    const std::vector<std::uint64_t> &baseCol,
+                                                    std::uint64_t x, std::uint64_t y, bool dual);
+  struct DerivativeWorkspace;
+  mutable std::vector<std::shared_ptr<DerivativeWorkspace>> workspace_;
+  [[nodiscard]] const DerivativeWorkspace &derivativeWorkspace(int k) const;
+  [[nodiscard]] Eigen::MatrixXcd assembleDerivative(
+      int k, const SparseMatrix *dMkm1, const SparseMatrix *dMk, const SparseMatrix *dMkp1,
+      const SparseMatrix *dBk, const SparseMatrix *dBkDual, const SparseMatrix *dBkp1,
+      const SparseMatrix *dBkp1Dual) const;
 };
 
 }  // namespace tessera::chainhodge

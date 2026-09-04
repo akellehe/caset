@@ -16,6 +16,7 @@ import sys
 import unittest
 
 import tessera
+from tessera import cobordism as cob
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -46,7 +47,8 @@ class MultiCobordismCxxTest(unittest.TestCase):
                                499.9710921237928, places=6)
         self.assertAlmostEqual(CXX.r_state(self.host, 3, tgt), 3.0, places=10)  # the leak
         obj = CXX(self.host, [[1, w, w * w], [1, w * w, w]], [tgt], degrees=[3],
-                  gamma=1.0, seed=0).objective()
+                  gamma=1.0, seed=0,
+                  metric_source=cob.HodgeMetricSource.DiagonalWeights).objective()
         # 502.9710921237928 before #644; the near-kernel residual — the
         # pre-topological register signal, +0.0093451402 on this closed S⁴ at
         # k=3 for a 3-component target, computed on the METRIC L_3 (geometric
@@ -54,6 +56,14 @@ class MultiCobordismCxxTest(unittest.TestCase):
         # decomposition: regge_action_gradient 499.9710921 + r_u (3.0 leak
         # + 0.0093451 near-kernel).
         self.assertAlmostEqual(obj, 502.9804372639758, places=6)
+        # Under the chain-level Whitney pencil the
+        # near-kernel term of the same closed S⁴ reads +0.0044286: the pencil's
+        # L_3 couples cells sharing a top simplex, so its lowest singular values
+        # differ from the diagonal-weight operator's (#910 findings note).
+        obj_whitney = CXX(self.host, [[1, w, w * w], [1, w * w, w]], [tgt], degrees=[3],
+                          gamma=1.0, seed=0,
+                          metric_source=cob.HodgeMetricSource.WhitneyPencil).objective()
+        self.assertAlmostEqual(obj_whitney, 502.9755207221824, places=6)
 
     def test_two_stage_grows_emergent_register(self):
         # The two-stage emergent run grows a b₃ color register out of the closed-S⁴ host.

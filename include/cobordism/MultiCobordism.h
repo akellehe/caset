@@ -203,7 +203,32 @@ class MultiCobordism {
                  bool balancedEdgeWiring = false,
                  bool singularValueRatio = false,
                  bool einsteinHilbert = true,
-                 bool realSquaredLengthsOnly = false);
+                 bool realSquaredLengthsOnly = false,
+                 HodgeLaplacian::MetricSource metricSource =
+                     HodgeLaplacian::defaultMetricSource());
+
+  /// Where every Hodge operator this node scores, relaxes, and reads takes its
+  /// metric from. Defaults to the process-wide `HodgeLaplacian::defaultMetricSource()`
+  /// read at construction, so a node, the static readouts, the observables, the
+  /// capstone, and checkpoint replay always agree: an experiment on the
+  /// chain-level Whitney pencil flips that default ONCE at startup
+  /// (`HodgeLaplacian::setDefaultMetricSource(WhitneyPencil)`), exactly as the
+  /// weight convention is flipped. Under `WhitneyPencil` the operator is
+  /// \f$ h_k(s,U) \f$ of the complex squared edge lengths and the edge-phase
+  /// links at EVERY degree; `DiagonalWeights` is the historical per-simplex
+  /// diagonal metric, unchanged.
+  [[nodiscard]] HodgeLaplacian::MetricSource metricSource() const noexcept {
+    return metricSource_;
+  }
+
+  /// Configuration-space admissibility of a geometry under the Whitney pencil:
+  /// the closure of the Kontsevich–Segal allowable domain, i.e. margin
+  /// \f$ \ge 0 \f$ (the real Lorentzian boundary, margin exactly zero, is
+  /// admitted and certified as the boundary). Not a clamp, back-off, or
+  /// penalty: a proposal outside it is not a member of the configuration
+  /// space, exactly as a non-manifold proposal is not. Always true under
+  /// `DiagonalWeights`.
+  [[nodiscard]] bool geometryAdmissible(const std::shared_ptr<Spacetime> &spacetime) const;
 
   [[nodiscard]] bool einsteinHilbertEnabled() const noexcept {
     return einsteinHilbert_;
@@ -418,7 +443,8 @@ class MultiCobordism {
   /// the register degrees.
   [[nodiscard]] static double residualOfTargetStateAgainstHarmonic(
       const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
-      const std::vector<std::complex<double>> &targetState);
+      const std::vector<std::complex<double>> &targetState,
+      HodgeLaplacian::MetricSource metricSource = HodgeLaplacian::defaultMetricSource());
   /// The same residual, with the winning relabeling RECORDED so no two registers in
   /// one `r_U` evaluation are scored against the same one. Every register scored
   /// independently picks its own argmin relabeling, and nothing stops a second
@@ -432,7 +458,8 @@ class MultiCobordism {
   [[nodiscard]] static double residualOfTargetStateAgainstHarmonicWithDistinctMatching(
       const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
       const std::vector<std::complex<double>> &targetState,
-      std::set<std::vector<int>> &claimedMatchings);
+      std::set<std::vector<int>> &claimedMatchings,
+      HodgeLaplacian::MetricSource metricSource = HodgeLaplacian::defaultMetricSource());
 
   // ---- objective ----
   /// The per-block register residual summed over `registerDegrees_`: `Σ r_U(boundary
@@ -482,7 +509,8 @@ class MultiCobordism {
   ///   the worst case on the normalized scale.
   [[nodiscard]] static double nearKernelResidual(
       const std::shared_ptr<Spacetime> &st, int registerDegree,
-      std::size_t expectedRegisterCount);
+      std::size_t expectedRegisterCount,
+      HodgeLaplacian::MetricSource metricSource = HodgeLaplacian::defaultMetricSource());
 
   /// Exact COMPLEX gradient of `nearKernelResidual` with respect to each edge's
   /// `ℓ²`, in ChainComplex 1-cell order — the register residual's derivative,
@@ -509,7 +537,8 @@ class MultiCobordism {
   /// line search arbitrates at one.
   [[nodiscard]] static std::vector<std::complex<double>> nearKernelResidualGradient(
       const std::shared_ptr<Spacetime> &st, int registerDegree,
-      std::size_t expectedRegisterCount);
+      std::size_t expectedRegisterCount,
+      HodgeLaplacian::MetricSource metricSource = HodgeLaplacian::defaultMetricSource());
 
   /// The scale-invariant spectral-shape term the `singularValueRatio` mode uses
   /// as the whole-complex contribution to `rU`, in place of BOTH the
@@ -528,7 +557,8 @@ class MultiCobordism {
   /// score as a collapsed spectrum); `n = 1` and an identically-zero `L_k`
   /// return 0 (no pair of halves to compare / every mode already kernel).
   [[nodiscard]] static double singularValueHalfSumRatio(
-      const std::shared_ptr<Spacetime> &st, int registerDegree);
+      const std::shared_ptr<Spacetime> &st, int registerDegree,
+      HodgeLaplacian::MetricSource metricSource = HodgeLaplacian::defaultMetricSource());
 
   /// The number of registers the targets ask for: the largest component count
   /// over every input and output target vector (each component is carried by
@@ -1271,7 +1301,8 @@ class MultiCobordism {
       const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
       int degreeBettiNumber,
       const std::vector<std::vector<std::uint64_t>> &cycleHoles,
-      std::size_t targetDimension);
+      std::size_t targetDimension,
+      HodgeLaplacian::MetricSource metricSource = HodgeLaplacian::defaultMetricSource());
   /// The target's components reordered onto the holes by `relabeling`: component
   /// `relabeling[q]` sits in hole `q`. A relabeling is a bijection, so each hole
   /// takes exactly one component.
@@ -1435,6 +1466,8 @@ class MultiCobordism {
   /// Restrict stage-2 updates to real squared lengths. False preserves the
   /// general complexified geometry.
   bool realSquaredLengthsOnly_{false};
+  /// The metric source of every Hodge operator this node builds (see `metricSource()`).
+  HodgeLaplacian::MetricSource metricSource_{HodgeLaplacian::MetricSource::DiagonalWeights};
   /// The injected functional, and the only record of what this node descends.
   /// Never null: the constructor installs `LegacyObjective`, so a caller that
   /// never injects one gets exactly the objective it got before this became

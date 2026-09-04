@@ -644,7 +644,7 @@ class FrozenBoundaryTransport:
 class PeriodCobordism:
     """Fixed pair-of-pants prism driven only by explicit r_U constraints."""
 
-    def __init__(self, twist=None):
+    def __init__(self, twist=None, metric_source=None):
         cells = tessera.Spacetime.prismCells(
             _REGISTER_FACES, 1, twist or {})
         self.spacetime = tessera.Spacetime.fromCells(3, cells, 1.0, 0.0)
@@ -695,6 +695,8 @@ class PeriodCobordism:
             singular_value_ratio=False,
             einstein_hilbert=False,
             real_squared_lengths_only=True,
+            metric_source=(metric_source if metric_source is not None
+                           else cob.HodgeLaplacian.defaultMetricSource()),
         )
         # One region per boundary facet pins exactly the full boundary
         # subcomplex, including its lateral faces.

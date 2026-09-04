@@ -37,8 +37,10 @@ namespace tessera::cobordism {
 
 using cd = std::complex<double>;
 
-EigenstateSynthesis::EigenstateSynthesis(std::shared_ptr<Spacetime> st, int k)
-    : st_(st), k_(k), laplacian_(std::move(st)) {
+EigenstateSynthesis::EigenstateSynthesis(std::shared_ptr<Spacetime> st, int k,
+                                         HodgeLaplacian::MetricSource metricSource)
+    : st_(st), k_(k), metricSource_(metricSource),
+      laplacian_(std::move(st), HodgeLaplacian::defaultWeightConvention(), metricSource) {
   if (k_ < 0)
     throw std::runtime_error(
         "EigenstateSynthesis: degree k must be non-negative; got k=" +
@@ -342,7 +344,7 @@ bool EigenstateSynthesis::growInterior(std::uint64_t seed) {
   // (the new apex has the largest id, so it appends last in sorted order and
   // the existing psi indices are preserved), then re-capture the tunable edges
   // and the interior/boundary partition.
-  laplacian_ = HodgeLaplacian(st_);
+  laplacian_ = HodgeLaplacian(st_, HodgeLaplacian::defaultWeightConvention(), metricSource_);
   capture();
   classifyBoundary();
   return true;
@@ -428,7 +430,7 @@ bool EigenstateSynthesis::attachInteriorVertex(
   }
 
   // Re-capture so the operator / partition track the grown complex.
-  laplacian_ = HodgeLaplacian(st_);
+  laplacian_ = HodgeLaplacian(st_, HodgeLaplacian::defaultWeightConvention(), metricSource_);
   capture();
   classifyBoundary();
 
@@ -473,7 +475,7 @@ bool EigenstateSynthesis::attachInteriorVertex(
 
   if (!valid) {
     rollbackAttachment(att);
-    laplacian_ = HodgeLaplacian(st_);
+    laplacian_ = HodgeLaplacian(st_, HodgeLaplacian::defaultWeightConvention(), metricSource_);
     capture();
     classifyBoundary();
     return false;
@@ -487,7 +489,7 @@ bool EigenstateSynthesis::detachLastInteriorVertex() {
   const Attachment att = std::move(attachments_.back());
   attachments_.pop_back();
   rollbackAttachment(att);
-  laplacian_ = HodgeLaplacian(st_);
+  laplacian_ = HodgeLaplacian(st_, HodgeLaplacian::defaultWeightConvention(), metricSource_);
   capture();
   classifyBoundary();
   return true;
@@ -622,7 +624,7 @@ bool EigenstateSynthesis::removeInteriorCell(
   for (auto *e : toRemove)
     if (e != nullptr) st_->removeEdge(e);
 
-  laplacian_ = HodgeLaplacian(st_);
+  laplacian_ = HodgeLaplacian(st_, HodgeLaplacian::defaultWeightConvention(), metricSource_);
   capture();
   classifyBoundary();
 
@@ -651,7 +653,7 @@ bool EigenstateSynthesis::removeInteriorCell(
 
   if (!valid) {
     applyRestore(rem);
-    laplacian_ = HodgeLaplacian(st_);
+    laplacian_ = HodgeLaplacian(st_, HodgeLaplacian::defaultWeightConvention(), metricSource_);
     capture();
     classifyBoundary();
     return false;
@@ -700,7 +702,7 @@ bool EigenstateSynthesis::restoreLastRemoval() {
   const Removal rem = std::move(removals_.back());
   removals_.pop_back();
   applyRestore(rem);
-  laplacian_ = HodgeLaplacian(st_);
+  laplacian_ = HodgeLaplacian(st_, HodgeLaplacian::defaultWeightConvention(), metricSource_);
   capture();
   classifyBoundary();
   return true;
@@ -887,7 +889,7 @@ EigenstateSynthesis::bulkMinusBoundaryHarmonicMatrix(double tol,
 
   MatrixXcd L = D1.transpose() * D1 + D2 * D2.transpose();
   if (metric) {
-    const HodgeLaplacian hodge(st_);
+    const HodgeLaplacian hodge(st_, HodgeLaplacian::defaultWeightConvention(), metricSource_);
     const auto fullW0 = hodge.weights(0);
     const auto fullW1 = hodge.weights(1);
     const auto fullW2 = hodge.weights(2);
@@ -969,7 +971,7 @@ std::vector<cd> EigenstateSynthesis::readoutHarmonicMatrix() const {
   // degree-zero readout taken from them would be identically gauge-flat. The
   // connection operator is indexed over the full sorted vertex order, which is
   // exactly cellOrdering_ at k = 0.
-  const HodgeLaplacian hodge(st_);
+  const HodgeLaplacian hodge(st_, HodgeLaplacian::defaultWeightConvention(), metricSource_);
   return k_ == 0 ? hodge.connectionHarmonicMatrix(1e-9)
                  : hodge.harmonicMatrix(k_, 1e-9, /*metric=*/true);
 }
@@ -1493,7 +1495,7 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
   const std::vector<long> &d1flat = cc.boundaryMatrix(1);  // n0 x n1
   const std::vector<long> &d2flat = cc.boundaryMatrix(2);  // n1 x n2
   const std::size_t n0 = d1flat.size() / n1;
-  const HodgeLaplacian hl(st_);
+  const HodgeLaplacian hl(st_, HodgeLaplacian::defaultWeightConvention(), metricSource_);
   const std::vector<cd> W1v = hl.weights(1);  // n1, signed complex
   const std::vector<cd> W2v = hl.weights(2);  // n2, signed complex
   const std::vector<cd> Lflat = hl.laplacian(1, /*metric=*/true);
@@ -1617,48 +1619,63 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
     //        -(dW2_t/W2_t^2) (d2 col t)((W1 o d2 col t))^T    [d(W2^-1) term]
     // dM is generally NON-symmetric, like M itself. The old columns here
     // differentiated the removed sqrt(W)-conjugated symmetric form (#644).
-    std::vector<VectorXcd> colsA, colsB;
-    VectorXcd ev = VectorXcd::Zero(N);
-    ev[j] = 1.0;
-    colsA.push_back(ev);
-    colsB.push_back((-1.0 / (W1[j] * W1[j])) * K1.row(j).transpose());
-    colsA.push_back(K2.col(j));
-    colsB.push_back(ev);
-    for (std::size_t ti : trisOf[ek]) {
-      const auto &t = tris[ti];
-      Eigen::Matrix2cd G;
-      for (int i = 0; i < 2; ++i)
-        for (int jj = 0; jj < 2; ++jj)
-          G(i, jj) = 0.5 * (L2(t[0], t[i + 1]) + L2(t[0], t[jj + 1]) - L2(t[i + 1], t[jj + 1]));
-      const cd detG = G.determinant();
-      const cd W2ti = W2v[ti];
-      // Consistency: W2 must be the V^2 weight detG/4 this derivation assumes.
-      if (std::abs(detG / 4.0 - W2ti) > 1e-9 * std::max(1.0, std::abs(W2ti)) ||
-          std::abs(detG) < 1e-12)
-        continue;
-      auto ind = [&](int pp, int qq) -> double {
-        return (pp != qq && key(t[pp], t[qq]) == ek) ? 1.0 : 0.0;
-      };
-      Eigen::Matrix2cd dG;
-      for (int i = 0; i < 2; ++i)
-        for (int jj = 0; jj < 2; ++jj)
-          dG(i, jj) = 0.5 * (ind(0, i + 1) + ind(0, jj + 1) - ind(i + 1, jj + 1));
-      // W2 = detG/4 => dW2 = W2 * tr(G^-1 dG) (Jacobi). The old 1/2 belonged
-      // to the removed sqrt(detG)/2 content weight.
-      const cd dW2ti = W2ti * (G.inverse() * dG).trace();
-      const VectorXcd dcol = d2m.col(static_cast<Index>(ti));
-      colsA.push_back(dcol);
-      colsB.push_back((-dW2ti / (W2ti * W2ti)) * W1.cwiseProduct(dcol));
+    VectorXcd dMp;
+    MatrixXcd core;
+    if (metricSource_ == HodgeLaplacian::MetricSource::WhitneyPencil) {
+      // The pencil's exact dense dL_1/dl^2_e (HodgeLaplacian::laplacianGradient
+      // under WhitneyPencil); the low-rank diagonal-weight form below does not
+      // apply to a non-diagonal metric.
+      const std::vector<cd> flat = laplacian_.laplacianGradient(1, cells1[je][0], cells1[je][1]);
+      MatrixXcd dM = MatrixXcd::Zero(N, N);
+      for (Index a = 0; a < N; ++a)
+        for (Index b = 0; b < N; ++b)
+          dM(a, b) = flat[static_cast<std::size_t>(a) * static_cast<std::size_t>(N) + static_cast<std::size_t>(b)];
+      dMp = dM * p;
+      core = Vnn * (dM * Un);
+    } else {
+      std::vector<VectorXcd> colsA, colsB;
+      VectorXcd ev = VectorXcd::Zero(N);
+      ev[j] = 1.0;
+      colsA.push_back(ev);
+      colsB.push_back((-1.0 / (W1[j] * W1[j])) * K1.row(j).transpose());
+      colsA.push_back(K2.col(j));
+      colsB.push_back(ev);
+      for (std::size_t ti : trisOf[ek]) {
+        const auto &t = tris[ti];
+        Eigen::Matrix2cd G;
+        for (int i = 0; i < 2; ++i)
+          for (int jj = 0; jj < 2; ++jj)
+            G(i, jj) = 0.5 * (L2(t[0], t[i + 1]) + L2(t[0], t[jj + 1]) - L2(t[i + 1], t[jj + 1]));
+        const cd detG = G.determinant();
+        const cd W2ti = W2v[ti];
+        // Consistency: W2 must be the V^2 weight detG/4 this derivation assumes.
+        if (std::abs(detG / 4.0 - W2ti) > 1e-9 * std::max(1.0, std::abs(W2ti)) ||
+            std::abs(detG) < 1e-12)
+          continue;
+        auto ind = [&](int pp, int qq) -> double {
+          return (pp != qq && key(t[pp], t[qq]) == ek) ? 1.0 : 0.0;
+        };
+        Eigen::Matrix2cd dG;
+        for (int i = 0; i < 2; ++i)
+          for (int jj = 0; jj < 2; ++jj)
+            dG(i, jj) = 0.5 * (ind(0, i + 1) + ind(0, jj + 1) - ind(i + 1, jj + 1));
+        // W2 = detG/4 => dW2 = W2 * tr(G^-1 dG) (Jacobi). The old 1/2 belonged
+        // to the removed sqrt(detG)/2 content weight.
+        const cd dW2ti = W2ti * (G.inverse() * dG).trace();
+        const VectorXcd dcol = d2m.col(static_cast<Index>(ti));
+        colsA.push_back(dcol);
+        colsB.push_back((-dW2ti / (W2ti * W2ti)) * W1.cwiseProduct(dcol));
+      }
+      const Index r = static_cast<Index>(colsA.size());
+      MatrixXcd fa(N, r), fb(N, r);
+      for (Index k = 0; k < r; ++k) {
+        fa.col(k) = colsA[static_cast<std::size_t>(k)];
+        fb.col(k) = colsB[static_cast<std::size_t>(k)];
+      }
+      // dM p, the eigenvector perturbation dUn, the pseudo-inverse perturbation, dpsi.
+      dMp = fa.cast<cd>() * (fb.transpose().cast<cd>() * p);
+      core = (Vnn * fa) * (fb.transpose() * Un);  // nnd x nd
     }
-    const Index r = static_cast<Index>(colsA.size());
-    MatrixXcd fa(N, r), fb(N, r);
-    for (Index k = 0; k < r; ++k) {
-      fa.col(k) = colsA[static_cast<std::size_t>(k)];
-      fb.col(k) = colsB[static_cast<std::size_t>(k)];
-    }
-    // dM p, the eigenvector perturbation dUn, the pseudo-inverse perturbation, dpsi.
-    const VectorXcd dMp = fa.cast<cd>() * (fb.transpose().cast<cd>() * p);
-    const MatrixXcd core = (Vnn * fa) * (fb.transpose() * Un);  // nnd x nd
     const MatrixXcd dUn = Unn * (invlam.asDiagonal() * core);               // n1 x nd
     const MatrixXcd dA = Q * dUn;                                           // m x nd
     const MatrixXcd dAplus =
@@ -1710,7 +1727,7 @@ std::vector<double> EigenstateSynthesis::periodGradientGeneral(
 
   // ---- M = L_k, the signed operator, complex VERBATIM (a .real() here once
   // silently projected it; value and gradient must see the same M) ----
-  const std::vector<cd> Lflat = HodgeLaplacian(st_).laplacian(k_, /*metric=*/true);
+  const std::vector<cd> Lflat = HodgeLaplacian(st_, HodgeLaplacian::defaultWeightConvention(), metricSource_).laplacian(k_, /*metric=*/true);
   MatrixXcd M(N, N);
   for (std::size_t i = 0; i < nk; ++i)
     for (std::size_t j = 0; j < nk; ++j)
@@ -1797,7 +1814,7 @@ std::vector<double> EigenstateSynthesis::periodGradientGeneral(
   const double rU = rho.squaredNorm();
 
   // ---- per-edge analytic gradient: dM_e = laplacianGradient, dense perturbation ----
-  const HodgeLaplacian hl(st_);
+  const HodgeLaplacian hl(st_, HodgeLaplacian::defaultWeightConvention(), metricSource_);
   for (std::size_t je = 0; je < edges1.size(); ++je) {
     const std::vector<cd> dMflat =
         hl.laplacianGradient(k_, edges1[je][0], edges1[je][1]);
@@ -2028,10 +2045,13 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
   // the exact Euler identity Sum_e l^2_e d r_U/d l^2_e = -2 r_U: with the V^2
   // weights L_k is homogeneous of degree -1 in l^2 and r_U = ||(L - lambda)p||^2
   // of degree -2 (measured: r_U(s*l^2) = r_U/s^2 exactly).
-  if (k_ == 1)
+  if (k_ == 1 && metricSource_ == HodgeLaplacian::MetricSource::DiagonalWeights)
     return periodGradientOverLoops(
         holeLoops(holes, "EigenstateSynthesis::residualForPeriodsGradient"),
         targetPeriods);
+  // Under the Whitney pencil the loop core's low-rank dM is replaced by the
+  // dense analytic dL_1/dl^2 inside periodGradientOverLoops; the general core
+  // reads the same derivative through HodgeLaplacian::laplacianGradient.
   return periodGradientGeneral(holes, targetPeriods);
 }
 
@@ -2080,7 +2100,7 @@ std::vector<cd> EigenstateSynthesis::periodGapForLoopsGradient(
   const std::vector<long> &d1flat = cc.boundaryMatrix(1);  // n0 x n1
   const std::vector<long> &d2flat = cc.boundaryMatrix(2);  // n1 x n2
   const std::size_t n0 = d1flat.size() / n1;
-  const HodgeLaplacian hl(st_);
+  const HodgeLaplacian hl(st_, HodgeLaplacian::defaultWeightConvention(), metricSource_);
   const std::vector<cd> W1v = hl.weights(1);  // n1, signed complex
   const std::vector<cd> W2v = hl.weights(2);  // n2, signed complex
   const std::vector<cd> Lflat = hl.laplacian(1, /*metric=*/true);
@@ -2322,7 +2342,7 @@ std::vector<cd> EigenstateSynthesis::periodGapGradientOverHoles(
                                              // set the VALUE reads, not r_U's 1e-7
   const Index N = static_cast<Index>(nk);
 
-  const std::vector<cd> Lflat = HodgeLaplacian(st_).laplacian(k_, /*metric=*/true);
+  const std::vector<cd> Lflat = HodgeLaplacian(st_, HodgeLaplacian::defaultWeightConvention(), metricSource_).laplacian(k_, /*metric=*/true);
   MatrixXcd M(N, N);
   for (std::size_t i = 0; i < nk; ++i)
     for (std::size_t j = 0; j < nk; ++j)
@@ -2383,7 +2403,7 @@ std::vector<cd> EigenstateSynthesis::periodGapGradientOverHoles(
   const VectorXcd c = svd.solve(target);                        // min-norm fit
   const VectorXcd r = A * c - target;                           // the gap vector
 
-  const HodgeLaplacian hl(st_);
+  const HodgeLaplacian hl(st_, HodgeLaplacian::defaultWeightConvention(), metricSource_);
   for (std::size_t je = 0; je < edges1.size(); ++je) {
     const std::vector<cd> dMflat =
         hl.laplacianGradient(k_, edges1[je][0], edges1[je][1]);

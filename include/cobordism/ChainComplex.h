@@ -225,6 +225,19 @@ class ChainComplex {
     /// Rank of \f$ \partial_k \f$ over \f$ \mathbb{Q} \f$, exact (0 if \f$ k \f$ is out of range).
     [[nodiscard]] int rankOfBoundary(int k) const;
 
+    /// The sign \f$ D_k[j] = \pm1 \f$ relating each stored \f$ k \f$-simplex
+    /// orientation to the reference orientation (ascending vertex id,
+    /// `fromTopCells`), per degree: the stored boundary maps satisfy
+    /// \f$ \partial_k^{\rm stored} = D_{k-1}\,\partial_k^{\rm ref}\,D_k \f$ exactly.
+    /// Computed recursively from the stored maps (\f$ D_0 = +1 \f$; at degree
+    /// \f$ k \f$ the facet dropping the smallest vertex carries the reference
+    /// coefficient \f$ +1 \f$, so \f$ D_k[j] \f$ is that facet's stored entry times
+    /// \f$ D_{k-1} \f$ of the facet). A complex built by `fromTopCells` has every
+    /// sign \f$ +1 \f$.
+    /// @throws std::runtime_error if the stored maps are not a signed-permutation
+    ///   image of the reference maps (a facet entry missing or of modulus ≠ 1).
+    [[nodiscard]] std::vector<std::vector<int>> orientationSigns() const;
+
   private:
     int dimension_{-1};
     std::vector<std::size_t> counts_{};                 // |C_k|

@@ -190,6 +190,48 @@ ChainComplex ChainComplex::fromTopCells(
   return cc;
 }
 
+std::vector<std::vector<int>> ChainComplex::orientationSigns() const {
+  std::vector<std::vector<int>> signs(static_cast<std::size_t>(std::max(dimension_ + 1, 0)));
+  if (dimension_ < 0) return signs;
+  signs[0].assign(counts_[0], 1);
+  for (int k = 1; k <= dimension_; ++k) {
+    const std::size_t rows = counts_[static_cast<std::size_t>(k) - 1];
+    const std::size_t cols = counts_[static_cast<std::size_t>(k)];
+    const auto &flat = boundary_[static_cast<std::size_t>(k)];
+    const auto &cells = faceVerts_[static_cast<std::size_t>(k)];
+    std::map<Face, std::size_t> facetIndex;
+    for (std::size_t r = 0; r < rows; ++r) facetIndex[faceVerts_[static_cast<std::size_t>(k) - 1][r]] = r;
+    signs[static_cast<std::size_t>(k)].assign(cols, 1);
+    for (std::size_t j = 0; j < cols; ++j) {
+      // The facet dropping the smallest vertex: reference coefficient (-1)^0 = +1.
+      Face facet(cells[j].begin() + 1, cells[j].end());
+      const auto it = facetIndex.find(facet);
+      if (it == facetIndex.end())
+        throw std::runtime_error("ChainComplex::orientationSigns: a facet is missing from C_" +
+                                 std::to_string(k - 1));
+      const long entry = flat[it->second * cols + j];
+      if (entry != 1 && entry != -1)
+        throw std::runtime_error("ChainComplex::orientationSigns: stored boundary entry of modulus != 1");
+      signs[static_cast<std::size_t>(k)][j] =
+          static_cast<int>(entry) * signs[static_cast<std::size_t>(k) - 1][it->second];
+    }
+    // Verify the whole map: stored = D_{k-1} ref D_k, entry by entry.
+    for (std::size_t j = 0; j < cols; ++j)
+      for (std::size_t i = 0; i <= static_cast<std::size_t>(k); ++i) {
+        Face facet;
+        for (std::size_t p = 0; p <= static_cast<std::size_t>(k); ++p)
+          if (p != i) facet.push_back(cells[j][p]);
+        const std::size_t r = facetIndex.at(facet);
+        const long ref = (i % 2 == 0) ? 1 : -1;
+        const long expected = ref * signs[static_cast<std::size_t>(k) - 1][r] * signs[static_cast<std::size_t>(k)][j];
+        if (flat[r * cols + j] != expected)
+          throw std::runtime_error("ChainComplex::orientationSigns: the stored boundary map at degree " +
+                                   std::to_string(k) + " is not a signed-permutation image of the reference map");
+      }
+  }
+  return signs;
+}
+
 std::size_t ChainComplex::numSimplices(int k) const noexcept {
   if (k < 0 || k > dimension_) return 0;
   return counts_[static_cast<std::size_t>(k)];

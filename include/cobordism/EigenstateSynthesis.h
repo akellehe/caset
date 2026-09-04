@@ -105,7 +105,18 @@ class EigenstateSynthesis {
     /// tunable edge order are captured now; edge weights/phases are read live on
     /// each residual query. The held `shared_ptr` keeps the spacetime alive.
     /// @throws std::runtime_error if `k < 0`.
-    explicit EigenstateSynthesis(std::shared_ptr<Spacetime> st, int k = 0);
+    explicit EigenstateSynthesis(
+        std::shared_ptr<Spacetime> st, int k = 0,
+        HodgeLaplacian::MetricSource metricSource = HodgeLaplacian::defaultMetricSource());
+
+    /// Where this synthesizer's operator takes its metric from (see
+    /// `HodgeLaplacian::MetricSource`). Under `WhitneyPencil` every degree,
+    /// including the \f$ k = 1 \f$ loop core, differentiates the dense analytic
+    /// \f$ \partial L_k/\partial\ell^2 \f$ of the pencil instead of the
+    /// diagonal-weight low-rank form.
+    [[nodiscard]] HodgeLaplacian::MetricSource metricSource() const noexcept {
+      return metricSource_;
+    }
 
     /// The cochain degree \f$ k \f$ this synthesizer scores against (the
     /// `HodgeLaplacian` degree of \f$ L_k \f$).
@@ -658,6 +669,7 @@ class EigenstateSynthesis {
     // reassembles L_k from the live edges/volumes on each call, so perturbing the
     // edge squared-lengths and re-querying is honest (the eigendecomposition
     // cache is untouched by the matrix path).
+    HodgeLaplacian::MetricSource metricSource_{HodgeLaplacian::MetricSource::DiagonalWeights};
     HodgeLaplacian laplacian_;
     std::size_t order_{0};  // N = operator dimension (|V| at k=0, else |C_k|)
     // The sorted vertex-id tuple of each psi component, in operator order: the

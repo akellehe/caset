@@ -131,7 +131,8 @@ SparseMatrix CovariantChainHodge::dress(const SparseMatrix &M,
   return out;
 }
 
-CovariantChainHodge::CovariantChainHodge(const ChainHodge &base, Connection U, std::uint64_t gaugeSeed)
+CovariantChainHodge::CovariantChainHodge(const ChainHodge &base, Connection U, std::uint64_t gaugeSeed,
+                                         bool measureCertificate)
     : base_(std::make_shared<ChainHodge>(base)), U_(std::move(U)), Uinv_(U_.inverse()) {
   const int d = base_->dimension();
   if (U_.edgeCount() != base_->complex().numSimplices(1))
@@ -155,7 +156,157 @@ CovariantChainHodge::CovariantChainHodge(const ChainHodge &base, Connection U, s
     }
   }
   factor_.assign(static_cast<std::size_t>(d) + 1, nullptr);
-  measureSparseIdentities(gaugeSeed);
+  workspace_.assign(static_cast<std::size_t>(d) + 1, nullptr);
+  cert_.gaugeSeed = gaugeSeed;
+  if (measureCertificate) measureSparseIdentities(gaugeSeed);
+}
+
+// ---------------------------------------------------------------- derivatives
+
+struct CovariantChainHodge::DerivativeWorkspace {
+  // Whitney (L2) only: h = M_k A P B + C M_{k+1} D Q with A = (∂_k^{U^{-1}})^T,
+  // B = ∂_k^U, C = ∂_{k+1}^U, D = (∂_{k+1}^{U^{-1}})^T, P = (M_{k-1}^U)^{-1}, Q = (M_k^U)^{-1}.
+  Eigen::MatrixXcd PB;     // P B            (n_{k-1} x n_k)
+  Eigen::MatrixXcd Q;      // (M_k^U)^{-1}   (n_k x n_k)
+  Eigen::MatrixXcd DQ;     // D Q            (n_{k+1} x n_k)
+  Eigen::MatrixXcd T1;     // M_k A          (n_k x n_{k-1})
+  Eigen::MatrixXcd T2;     // C M_{k+1} D Q  (n_k x n_k)
+  bool hasLower{false}, hasUpper{false};
+};
+
+const CovariantChainHodge::DerivativeWorkspace &CovariantChainHodge::derivativeWorkspace(int k) const {
+  if (k < 0 || k > dimension()) throw std::invalid_argument("CovariantChainHodge: degree out of range");
+  if (preset() != Preset::L2)
+    throw std::logic_error("CovariantChainHodge: operator derivatives are the Whitney preset's");
+  const int n = base_->size(k);
+  if (n >= base_->crossoverDimension())
+    throw std::length_error("CovariantChainHodge: derivatives are formed densely below the crossover only");
+  auto &slot = workspace_[static_cast<std::size_t>(k)];
+  if (slot) return *slot;
+  auto w = std::make_shared<DerivativeWorkspace>();
+  const int d = dimension();
+  const SparseMatrix &Mk = dressed_[static_cast<std::size_t>(k)];
+  w->Q = solveDressed(k, Eigen::MatrixXcd::Identity(n, n));
+  if (k >= 1) {
+    w->hasLower = true;
+    w->PB = solveDressed(k - 1, Eigen::MatrixXcd(twisted_[static_cast<std::size_t>(k)]));
+    w->T1 = Eigen::MatrixXcd(Mk * SparseMatrix(twistedDual_[static_cast<std::size_t>(k)].transpose()));
+  }
+  if (k < d) {
+    w->hasUpper = true;
+    const SparseMatrix &C = twisted_[static_cast<std::size_t>(k) + 1];
+    const SparseMatrix DT = SparseMatrix(twistedDual_[static_cast<std::size_t>(k) + 1].transpose());
+    w->DQ = DT * w->Q;
+    w->T2 = Eigen::MatrixXcd(C * dressed_[static_cast<std::size_t>(k) + 1]) * w->DQ;
+  }
+  slot = std::move(w);
+  return *slot;
+}
+
+Eigen::MatrixXcd CovariantChainHodge::assembleDerivative(
+    int k, const SparseMatrix *dMkm1, const SparseMatrix *dMk, const SparseMatrix *dMkp1,
+    const SparseMatrix *dBk, const SparseMatrix *dBkDual, const SparseMatrix *dBkp1,
+    const SparseMatrix *dBkp1Dual) const {
+  const DerivativeWorkspace &w = derivativeWorkspace(k);
+  const int n = base_->size(k);
+  Eigen::MatrixXcd out = Eigen::MatrixXcd::Zero(n, n);
+  const SparseMatrix &Mk = dressed_[static_cast<std::size_t>(k)];
+  if (w.hasLower) {
+    const SparseMatrix &B = twisted_[static_cast<std::size_t>(k)];
+    const SparseMatrix AT = SparseMatrix(twistedDual_[static_cast<std::size_t>(k)].transpose());
+    // d(M_k) A P B
+    if (dMk) out += Eigen::MatrixXcd(*dMk * AT) * w.PB;
+    // M_k d(A) P B
+    if (dBkDual) out += Eigen::MatrixXcd(Mk * SparseMatrix(dBkDual->transpose())) * w.PB;
+    // M_k A d(P) B = -M_k A P dM_{k-1} P B
+    if (dMkm1) out -= w.T1 * solveDressed(k - 1, Eigen::MatrixXcd(*dMkm1 * w.PB));
+    // M_k A P d(B)
+    if (dBk) out += w.T1 * solveDressed(k - 1, Eigen::MatrixXcd(*dBk));
+  }
+  if (w.hasUpper) {
+    const SparseMatrix &C = twisted_[static_cast<std::size_t>(k) + 1];
+    const SparseMatrix &Mk1 = dressed_[static_cast<std::size_t>(k) + 1];
+    const SparseMatrix DT = SparseMatrix(twistedDual_[static_cast<std::size_t>(k) + 1].transpose());
+    // d(C) M_{k+1} D Q
+    if (dBkp1) out += Eigen::MatrixXcd(*dBkp1 * Mk1) * w.DQ;
+    // C d(M_{k+1}) D Q
+    if (dMkp1) out += Eigen::MatrixXcd(C * *dMkp1) * w.DQ;
+    // C M_{k+1} d(D) Q
+    if (dBkp1Dual) out += Eigen::MatrixXcd(C * Mk1 * SparseMatrix(dBkp1Dual->transpose())) * w.Q;
+    // C M_{k+1} D d(Q) = -T2 dM_k Q
+    if (dMk) out -= w.T2 * (Eigen::MatrixXcd(*dMk) * w.Q);
+  }
+  return out;
+}
+
+Eigen::MatrixXcd CovariantChainHodge::covariantOperatorDerivative(int k, std::size_t edgeIndex) const {
+  if (k < 0 || k > dimension()) throw std::invalid_argument("CovariantChainHodge: degree out of range");
+  const int d = dimension();
+  const auto &K = base_->complex();
+  const auto &s = base_->squaredLengths();
+  const Branch branch = base_->branch();
+  SparseMatrix dMkm1, dMk, dMkp1;
+  if (k >= 1) {
+    const auto &b = base_vertex_[static_cast<std::size_t>(k) - 1];
+    dMkm1 = dress(WhitneyMass::assembleDerivative(K, s, k - 1, edgeIndex, branch), b, b, U_);
+  }
+  {
+    const auto &b = base_vertex_[static_cast<std::size_t>(k)];
+    dMk = dress(WhitneyMass::assembleDerivative(K, s, k, edgeIndex, branch), b, b, U_);
+  }
+  if (k < d) {
+    const auto &b = base_vertex_[static_cast<std::size_t>(k) + 1];
+    dMkp1 = dress(WhitneyMass::assembleDerivative(K, s, k + 1, edgeIndex, branch), b, b, U_);
+  }
+  return assembleDerivative(k, k >= 1 ? &dMkm1 : nullptr, &dMk, k < d ? &dMkp1 : nullptr,
+                            nullptr, nullptr, nullptr, nullptr);
+}
+
+SparseMatrix CovariantChainHodge::phaseDerivative(const SparseMatrix &dressedM,
+                                                  const std::vector<std::uint64_t> &baseRow,
+                                                  const std::vector<std::uint64_t> &baseCol,
+                                                  std::uint64_t x, std::uint64_t y, bool dual) {
+  SparseMatrix out(dressedM.rows(), dressedM.cols());
+  std::vector<Eigen::Triplet<Complex>> trip;
+  const Complex plus = dual ? Complex(0.0, -1.0) : Complex(0.0, 1.0);
+  for (int c = 0; c < dressedM.outerSize(); ++c)
+    for (SparseMatrix::InnerIterator it(dressedM, c); it; ++it) {
+      const std::uint64_t a = baseRow[static_cast<std::size_t>(it.row())];
+      const std::uint64_t b = baseCol[static_cast<std::size_t>(it.col())];
+      if (a == x && b == y)
+        trip.emplace_back(static_cast<int>(it.row()), static_cast<int>(it.col()), plus * it.value());
+      else if (a == y && b == x)
+        trip.emplace_back(static_cast<int>(it.row()), static_cast<int>(it.col()), -plus * it.value());
+    }
+  out.setFromTriplets(trip.begin(), trip.end());
+  out.makeCompressed();
+  return out;
+}
+
+Eigen::MatrixXcd CovariantChainHodge::covariantOperatorPhaseDerivative(int k, std::size_t edgeIndex) const {
+  if (k < 0 || k > dimension()) throw std::invalid_argument("CovariantChainHodge: degree out of range");
+  const int d = dimension();
+  const auto edges = base_->complex().kSimplexVertices(1);
+  if (edgeIndex >= edges.size()) throw std::invalid_argument("CovariantChainHodge: edge index out of range");
+  const std::uint64_t x = edges[edgeIndex][0], y = edges[edgeIndex][1];
+  const auto &bk = base_vertex_[static_cast<std::size_t>(k)];
+  SparseMatrix dMkm1, dMk, dMkp1, dBk, dBkDual, dBkp1, dBkp1Dual;
+  dMk = phaseDerivative(dressed_[static_cast<std::size_t>(k)], bk, bk, x, y, false);
+  if (k >= 1) {
+    const auto &bkm1 = base_vertex_[static_cast<std::size_t>(k) - 1];
+    dMkm1 = phaseDerivative(dressed_[static_cast<std::size_t>(k) - 1], bkm1, bkm1, x, y, false);
+    dBk = phaseDerivative(twisted_[static_cast<std::size_t>(k)], bkm1, bk, x, y, false);
+    dBkDual = phaseDerivative(twistedDual_[static_cast<std::size_t>(k)], bkm1, bk, x, y, true);
+  }
+  if (k < d) {
+    const auto &bkp1 = base_vertex_[static_cast<std::size_t>(k) + 1];
+    dMkp1 = phaseDerivative(dressed_[static_cast<std::size_t>(k) + 1], bkp1, bkp1, x, y, false);
+    dBkp1 = phaseDerivative(twisted_[static_cast<std::size_t>(k) + 1], bk, bkp1, x, y, false);
+    dBkp1Dual = phaseDerivative(twistedDual_[static_cast<std::size_t>(k) + 1], bk, bkp1, x, y, true);
+  }
+  return assembleDerivative(k, k >= 1 ? &dMkm1 : nullptr, &dMk, k < d ? &dMkp1 : nullptr,
+                            k >= 1 ? &dBk : nullptr, k >= 1 ? &dBkDual : nullptr,
+                            k < d ? &dBkp1 : nullptr, k < d ? &dBkp1Dual : nullptr);
 }
 
 const SparseMatrix &CovariantChainHodge::Minv(int k) const {
