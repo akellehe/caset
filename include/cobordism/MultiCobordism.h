@@ -1491,7 +1491,7 @@ class MultiCobordism {
   /// Per-degree weights, empty for uniform.
   std::vector<double> hodgeDegreeWeights_;
   double hodgeEntropyWeight_{1.0};
-  double connectionEntropyWeight_{1.0};
+  double connectionEntropyWeight_{0.0};
   double reggeWeight_{1.0};
   /// #737: latched by the first committed combinatorial move. Block regions
   /// grow only BEFORE the bulk is connected, so once a move has linked the

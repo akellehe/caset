@@ -195,8 +195,8 @@ class TheNodeDrivesItsOwnComplexTest(unittest.TestCase):
         live = node.objective_terms_for(node.spacetime())
         stale = node.objective_terms_for(st)
         total = (lambda t: t.regge_stationarity + t.hodge_stationarity
-                 + t.register_residual + t.action_magnitude
-                 + t.carried_state_energy)
+                 + t.connection_stationarity + t.register_residual
+                 + t.action_magnitude + t.carried_state_energy)
         self.assertEqual(total(live), node.objective())
         self.assertNotEqual(total(stale), node.objective())
 
