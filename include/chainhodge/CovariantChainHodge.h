@@ -19,6 +19,7 @@
 #include "chainhodge/ChainHodge.h"
 #include "chainhodge/RieszBand.h"
 #include "chainhodge/WhitneyMass.h"
+#include "cobordism/Certificate.h"
 #include "cobordism/ChainComplex.h"
 
 // === tessera subsystem ns fwd-decls ===
@@ -68,8 +69,10 @@ class Connection {
 
  private:
   std::vector<Complex> links_;
+  // The canonical edges (x < y) by index; the connection owns everything it
+  // needs and never refers back to the complex it was built over.
   std::map<std::pair<std::uint64_t, std::uint64_t>, int> index_;
-  const cobordism::ChainComplex *K_{nullptr};
+  std::vector<std::pair<std::uint64_t, std::uint64_t>> edges_;
   Connection() = default;
 };
 
@@ -100,6 +103,25 @@ struct CovarianceCertificate {
   double pureGaugeIsospectrality{std::numeric_limits<double>::quiet_NaN()};
   std::uint64_t gaugeSeed{0};
   int checkedDegree{1};
+};
+
+/// The chain-level pencil's own metric regime, measured (never assumed): the
+/// operator is symmetric for the COMPLEX SYMMETRIC chain metric,
+/// \f$ M L = (M L)^T \f$, which for a dressed connection is the transpose
+/// identity \f$ (\tilde A^U)^T = \tilde A^{U^{-1}} \f$ and
+/// \f$ (M^U)^T = M^{U^{-1}} \f$ of Prop. 5.1(ii). When both defects sit within
+/// the tolerance the regime is `CertificateRegime::ComplexSymmetricPencil`;
+/// otherwise it is `NonNormal`, and the defects say by how much.
+struct PencilRegimeCertificate {
+  cobordism::CertificateRegime regime{cobordism::CertificateRegime::NonNormal};
+  /// \f$ \|(\tilde A^U)^T - \tilde A^{U^{-1}}\| / \|\tilde A^U\| \f$ (the symmetry
+  /// defect of \f$ \tilde A \f$ at \f$ U = 1 \f$).
+  double symmetryDefect{std::numeric_limits<double>::quiet_NaN()};
+  /// \f$ \|(M^U)^T - M^{U^{-1}}\| / \|M^U\| \f$ (the symmetry defect of \f$ M \f$ at
+  /// \f$ U = 1 \f$).
+  double metricSymmetryDefect{std::numeric_limits<double>::quiet_NaN()};
+  bool trivialConnection{false};
+  double tolerance{1e-10};
 };
 
 /// # CovariantChainHodge
@@ -233,6 +255,11 @@ class CovariantChainHodge {
   [[nodiscard]] static Eigen::MatrixXcd leftFrame(const Band &band,
                                                   const CovariantChainHodge &dualInstance,
                                                   double isotropyTolerance = 1e-10);
+
+  /// The pencil's metric regime at degree \p k (see `PencilRegimeCertificate`):
+  /// `ComplexSymmetricPencil` when the transpose identities hold to
+  /// \p tolerance, else `NonNormal`. Dense at the degree (below the crossover).
+  [[nodiscard]] PencilRegimeCertificate regimeCertificate(int k, double tolerance = 1e-10) const;
 
   /// Measure the dense identities (i), (ii) on \f$ \tilde A_k^U \f$, (iii) on
   /// \f$ \tilde A_k^U \f$, and (v) at degree \p k and fold them into a copy of

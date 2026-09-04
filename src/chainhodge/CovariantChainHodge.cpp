@@ -26,8 +26,9 @@ namespace tessera::chainhodge {
 // ---------------------------------------------------------------- Connection
 
 Connection::Connection(const cobordism::ChainComplex &K, std::vector<Complex> links)
-    : links_(std::move(links)), K_(&K) {
+    : links_(std::move(links)) {
   const auto edges = K.kSimplexVertices(1);
+  edges_.reserve(edges.size());
   if (links_.size() != edges.size())
     throw std::invalid_argument("Connection: one link per canonical edge is required (" +
                                 std::to_string(edges.size()) + " edges, " +
@@ -36,6 +37,7 @@ Connection::Connection(const cobordism::ChainComplex &K, std::vector<Complex> li
     if (links_[j] == Complex(0.0, 0.0))
       throw std::invalid_argument("Connection: a link must be nonzero (U_xy in C*)");
     index_[{edges[j][0], edges[j][1]}] = static_cast<int>(j);
+    edges_.emplace_back(edges[j][0], edges[j][1]);
   }
 }
 
@@ -89,10 +91,9 @@ Connection Connection::inverse() const {
 
 Connection Connection::gauge(const std::map<std::uint64_t, Complex> &g) const {
   Connection out(*this);
-  const auto edges = K_->kSimplexVertices(1);
-  for (std::size_t j = 0; j < edges.size(); ++j) {
-    const auto gx = g.find(edges[j][0]);
-    const auto gy = g.find(edges[j][1]);
+  for (std::size_t j = 0; j < edges_.size(); ++j) {
+    const auto gx = g.find(edges_[j].first);
+    const auto gy = g.find(edges_[j].second);
     if (gx == g.end() || gy == g.end() || gx->second == Complex(0.0, 0.0) || gy->second == Complex(0.0, 0.0))
       throw std::invalid_argument("Connection::gauge: every vertex needs a nonzero g_x");
     out.links_[j] = links_[j] / gx->second * gy->second;  // U_xy -> g_x^{-1} U_xy g_y
@@ -501,6 +502,31 @@ SpectrumRead CovariantChainHodge::spectrum(int k) const {
   }
   read.residual = worst;
   return read;
+}
+
+PencilRegimeCertificate CovariantChainHodge::regimeCertificate(int k, double tolerance) const {
+  PencilRegimeCertificate c;
+  c.tolerance = tolerance;
+  bool trivial = true;
+  for (const auto &u : U_.links())
+    if (std::abs(u - Complex(1.0, 0.0)) > 0.0) { trivial = false; break; }
+  c.trivialConnection = trivial;
+  const SparseMatrix &M = dressed_[static_cast<std::size_t>(k < 0 ? 0 : k)];
+  if (k < 0 || k > dimension()) throw std::invalid_argument("CovariantChainHodge: degree out of range");
+  const SparseMatrix Mt = SparseMatrix(M.transpose());
+  const double nM = M.norm();
+  c.metricSymmetryDefect = (nM > 0.0)
+      ? SparseMatrix(Mt - dressedDual_[static_cast<std::size_t>(k)]).norm() / nM
+      : SparseMatrix(Mt - dressedDual_[static_cast<std::size_t>(k)]).norm();
+  const Pencil P = pencil(k);
+  const Pencil PD = trivial ? P : dual().pencil(k);
+  const double nA = P.A.norm();
+  const Eigen::MatrixXcd diff = P.A.transpose() - PD.A;
+  c.symmetryDefect = (nA > 0.0) ? diff.norm() / nA : diff.norm();
+  c.regime = (c.symmetryDefect <= tolerance && c.metricSymmetryDefect <= tolerance)
+                 ? cobordism::CertificateRegime::ComplexSymmetricPencil
+                 : cobordism::CertificateRegime::NonNormal;
+  return c;
 }
 
 CovariantChainHodge CovariantChainHodge::dual() const {

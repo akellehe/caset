@@ -33,17 +33,20 @@ using cobordism::CertificateRegime;
 constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 
 // Severity order of the metric regimes (Positive < HermitianIndefinite <
-// NonNormal); the composed read reports the WORST regime it touched.
+// ComplexSymmetricPencil < NonNormal); the composed read reports the WORST
+// regime it touched.
 int regimeSeverity(CertificateRegime regime) {
   switch (regime) {
     case CertificateRegime::PositiveSemidefinite:
       return 0;
     case CertificateRegime::HermitianIndefinite:
       return 1;
-    case CertificateRegime::NonNormal:
+    case CertificateRegime::ComplexSymmetricPencil:
       return 2;
+    case CertificateRegime::NonNormal:
+      return 3;
   }
-  return 2;
+  return 3;
 }
 
 CertificateRegime worseRegime(CertificateRegime a, CertificateRegime b) {

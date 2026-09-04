@@ -76,6 +76,11 @@ double isolationGap(const SpectralBandCertificate &c) {
 CertificateRegime pairedRegime(CertificateRegime a, CertificateRegime b) {
   if (a == CertificateRegime::NonNormal || b == CertificateRegime::NonNormal)
     return CertificateRegime::NonNormal;
+  // The pencil regime pairs bilinearly (no J-isometry, no inertia); it
+  // dominates the Hermitian regimes and is named, never folded into NonNormal.
+  if (a == CertificateRegime::ComplexSymmetricPencil ||
+      b == CertificateRegime::ComplexSymmetricPencil)
+    return CertificateRegime::ComplexSymmetricPencil;
   if (a == CertificateRegime::HermitianIndefinite ||
       b == CertificateRegime::HermitianIndefinite)
     return CertificateRegime::HermitianIndefinite;
@@ -174,6 +179,8 @@ std::string regimeName(CertificateRegime regime) {
       return "hermitian-indefinite";
     case CertificateRegime::NonNormal:
       return "non-normal";
+    case CertificateRegime::ComplexSymmetricPencil:
+      return "complex-symmetric-pencil";
   }
   return "non-normal";
 }
@@ -184,6 +191,8 @@ CertificateRegime regimeFromName(const std::string &name) {
   if (name == "hermitian-indefinite")
     return CertificateRegime::HermitianIndefinite;
   if (name == "non-normal") return CertificateRegime::NonNormal;
+  if (name == "complex-symmetric-pencil")
+    return CertificateRegime::ComplexSymmetricPencil;
   throw std::invalid_argument("FiberConnection: unknown regime '" + name + "'");
 }
 
@@ -309,6 +318,7 @@ std::string FiberTransportRead::describe() const {
     case CertificateRegime::PositiveSemidefinite: out << "positive"; break;
     case CertificateRegime::HermitianIndefinite: out << "krein"; break;
     case CertificateRegime::NonNormal: out << "non-normal"; break;
+    case CertificateRegime::ComplexSymmetricPencil: out << "complex-symmetric-pencil"; break;
   }
   out << "] numerical rank " << numericalRank << ", leakage " << leakage
       << ", overlap cond " << overlapConditionNumber << ", gaps ("
@@ -704,7 +714,11 @@ FiberTransportRead FiberConnection::deriveTransport(
       std::fmax(certTo.frameConditionNumber, certFrom.frameConditionNumber);
   read.regime = pairedRegime(certTo.certificate.regime(),
                              certFrom.certificate.regime());
-  const bool nonNormal = read.regime == CertificateRegime::NonNormal;
+  // The biorthogonal (left-frame) path serves both the non-normal regime and
+  // the complex-symmetric pencil, whose pairing is bilinear; the certificate
+  // keeps the pencil's own name.
+  const bool nonNormal = read.regime == CertificateRegime::NonNormal ||
+                         read.regime == CertificateRegime::ComplexSymmetricPencil;
 
   // Overlap: M = Phi_A^dagger W_A T Phi_B in the self-adjoint regimes,
   // M = Psi_A^dagger W_A T Phi_B on the biorthogonal path (spec 5.5).

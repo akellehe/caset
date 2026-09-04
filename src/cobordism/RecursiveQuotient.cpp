@@ -410,6 +410,22 @@ void RecursiveQuotient::detectRegime() {
   // routinely indefinite (the 3-cycle with one timelike edge has
   // spec(L_0) = {0, 3, 1 - 2/alpha^2}), and the regime has to say so.
   //
+  if (pencil_) {
+    // A pencil level (Ã, M): the chain-level pencil's own regime is complex
+    // SYMMETRY of both matrices (M L = (M L)^T with M complex symmetric), not
+    // Hermiticity. Measured; a broken symmetry is the non-normal regime.
+    const double tolP = std::max(options_.tolerance, 1e-12);
+    const Eigen::SparseMatrix<cd> opT = Eigen::SparseMatrix<cd>(op_.transpose());
+    const Eigen::SparseMatrix<cd> mT = Eigen::SparseMatrix<cd>(pencilMetric_.transpose());
+    const double opDefect = Eigen::SparseMatrix<cd>(op_ - opT).norm() /
+                            std::max(op_.norm(), 1e-300);
+    const double mDefect = Eigen::SparseMatrix<cd>(pencilMetric_ - mT).norm() /
+                           std::max(pencilMetric_.norm(), 1e-300);
+    regime_ = (opDefect <= tolP && mDefect <= tolP)
+                  ? CertificateRegime::ComplexSymmetricPencil
+                  : CertificateRegime::NonNormal;
+    return;
+  }
   // Hermiticity against the carried metric: WL vs (WL)^dagger.
   const Eigen::SparseMatrix<cd> weighted = weights_.asDiagonal() * op_;
   const Eigen::SparseMatrix<cd> adjoint =
@@ -1018,7 +1034,10 @@ Certificate RecursiveQuotient::staticProbeCertificate(
   const double probeScale = std::max(keptProbe.squaredNorm(), 1e-300);
   double residual = 0.0;
 
-  if (regime_ == CertificateRegime::NonNormal) {
+  if (regime_ == CertificateRegime::NonNormal ||
+      regime_ == CertificateRegime::ComplexSymmetricPencil) {
+    // The complex-symmetric pencil takes this path too (bilinear, no energy
+    // minimum to claim), under its own name.
     // Certified block elimination: eliminated interior rows of L x vanish
     // (retained kernel directions are couplings, not residuals) AND the
     // left-kernel compatibility condition holds.
@@ -1381,6 +1400,11 @@ RecursiveQuotient::CraigBamptonRead RecursiveQuotient::craigBampton(
         "RecursiveQuotient: Craig-Bampton refuses the non-normal regime (a "
         "self-adjoint solver is never applied to a non-self-adjoint "
         "operator); use the exact Feshbach pencil instead");
+  if (regime_ == CertificateRegime::ComplexSymmetricPencil)
+    throw std::invalid_argument(
+        "RecursiveQuotient: Craig-Bampton refuses the complex-symmetric-pencil "
+        "regime (the Hermitian AMLS read has no bilinear form); use the exact "
+        "Feshbach pencil or the pencil congruence (T^T A T, T^T M T)");
   if (windowLower > windowUpper)
     throw std::invalid_argument("RecursiveQuotient: windowLower > windowUpper");
   if (modeCutoff < windowUpper)
@@ -2023,7 +2047,10 @@ RecursiveQuotient::ResponseNetworkRead RecursiveQuotient::responseNetwork()
 RecursiveQuotient::SheafRealizationRead RecursiveQuotient::sheafRealization()
     const {
   SheafRealizationRead read;
-  if (regime_ == CertificateRegime::NonNormal) {
+  if (regime_ == CertificateRegime::NonNormal ||
+      regime_ == CertificateRegime::ComplexSymmetricPencil) {
+    // The complex-symmetric pencil is refused under its own name for the same
+    // reason as the non-normal regime.
     // A cellular sheaf Laplacian is self-adjoint; a non-normal response
     // network has no such realization — retain the network, invent nothing.
     read.certificate = Certificate::certifiedNumerical(

@@ -64,6 +64,8 @@ const char *regimeName(CertificateRegime regime) {
       return "hermitian-indefinite";
     case CertificateRegime::NonNormal:
       return "non-normal";
+    case CertificateRegime::ComplexSymmetricPencil:
+      return "complex-symmetric-pencil";
   }
   return "non-normal";
 }
@@ -74,6 +76,8 @@ CertificateRegime regimeFromName(const std::string &name) {
   if (name == "hermitian-indefinite")
     return CertificateRegime::HermitianIndefinite;
   if (name == "non-normal") return CertificateRegime::NonNormal;
+  if (name == "complex-symmetric-pencil")
+    return CertificateRegime::ComplexSymmetricPencil;
   throw std::invalid_argument("ClusterRegister: unknown regime name '" + name +
                               "'");
 }
@@ -271,11 +275,14 @@ ClusterRegisterRead ClusterRegister::read(
   const SpectralBandCertificate &cert = band.certificate();
 
   // The regime report — what the specification requires be reported of each.
-  read.regime.regime = cert.selfAdjoint
-                           ? (cert.negativeSignature > 0
-                                  ? CertificateRegime::HermitianIndefinite
-                                  : CertificateRegime::PositiveSemidefinite)
-                           : CertificateRegime::NonNormal;
+  read.regime.regime =
+      cert.certificate.regime() == CertificateRegime::ComplexSymmetricPencil
+          ? CertificateRegime::ComplexSymmetricPencil  // bilinear: no inertia
+          : cert.selfAdjoint
+                ? (cert.negativeSignature > 0
+                       ? CertificateRegime::HermitianIndefinite
+                       : CertificateRegime::PositiveSemidefinite)
+                : CertificateRegime::NonNormal;
   read.regime.gramDefect = cert.gramDefect;
   read.regime.positiveSignature = cert.positiveSignature;
   read.regime.negativeSignature = cert.negativeSignature;

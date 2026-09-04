@@ -49,7 +49,19 @@ enum class CertificateDomain { Static, BandWindow };
 /// A self-adjoint solver is never applied outside `PositiveSemidefinite` /
 /// `HermitianIndefinite`; `NonNormal` results carry general-eigensolver
 /// conditioning instead.
-enum class CertificateRegime { PositiveSemidefinite, HermitianIndefinite, NonNormal };
+/// `ComplexSymmetricPencil` is the chain-level Whitney pencil's own regime
+/// (specification §3, §6, §9): the operator is symmetric for a COMPLEX
+/// SYMMETRIC chain metric \f$ M \f$, \f$ M L = (M L)^T \f$ (for a dressed
+/// connection, \f$ (\tilde A^U)^T = \tilde A^{U^{-1}} \f$), verified before it
+/// is claimed. Its pairings are bilinear, so a band carries `det B_C`,
+/// `cond B_C`, and an isotropy certificate and NO inertia; nothing Hermitian
+/// is asserted, and it is never silently folded into `NonNormal`.
+enum class CertificateRegime {
+  PositiveSemidefinite,
+  HermitianIndefinite,
+  NonNormal,
+  ComplexSymmetricPencil,
+};
 
 /// # Certificate
 ///
