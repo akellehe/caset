@@ -13,6 +13,7 @@
 #include "chainhodge/FaceAnchor.h"
 #include "chainhodge/RieszBand.h"
 #include "chainhodge/LorentzianFamily.h"
+#include "chainhodge/PencilSchur.h"
 #include "chainhodge/WhitneyMass.h"
 #include "cobordism/ChainComplex.h"
 #include "spacetime/Spacetime.h"
@@ -393,4 +394,65 @@ alpha_tau vanish identically. Transpose pairing throughout.)doc")
       .def_static("anchorCoordinates", &FaceAnchor::anchorCoordinates, py::arg("covariant"),
            py::arg("Z_dual"), py::arg("Z"), "alpha_tau for every triangle.")
       .def_static("numericalRank", &FaceAnchor::numericalRank, py::arg("A"), py::arg("kappa") = 10.0);
+  py::class_<FeshbachResult>(m, "FeshbachResult",
+      "One Feshbach complement F_B(lambda) = P_BB - P_BI P_II^{-1} P_IB of a symmetric pencil "
+      "P = A - lambda M, with det P = det P_II det F_B and the constraint modes T = [I_B; -P_II^{-1} P_IB].")
+      .def_readonly("lambda_", &FeshbachResult::lambda)
+      .def_readonly("interface", &FeshbachResult::interface)
+      .def_readonly("interior", &FeshbachResult::interior)
+      .def_readonly("response", &FeshbachResult::response)
+      .def_readonly("constraintModes", &FeshbachResult::constraintModes)
+      .def_readonly("interiorDeterminant", &FeshbachResult::interiorDeterminant)
+      .def_readonly("responseDeterminant", &FeshbachResult::responseDeterminant)
+      .def_readonly("pencilDeterminant", &FeshbachResult::pencilDeterminant)
+      .def_readonly("determinantResidual", &FeshbachResult::determinantResidual)
+      .def_readonly("solveResidual", &FeshbachResult::solveResidual)
+      .def_readonly("interiorSingular", &FeshbachResult::interiorSingular);
+
+  py::class_<CongruenceResult>(m, "CongruenceResult", "A congruence (T^T A T, T^T M T).")
+      .def_readonly("A", &CongruenceResult::A)
+      .def_readonly("M", &CongruenceResult::M);
+
+  py::class_<FiberRestriction>(m, "FiberRestriction",
+      "The coarse pencil and chain metric restricted to retained fibers: (Z^T A~ Z, Z^T M Z).")
+      .def_readonly("A", &FiberRestriction::A)
+      .def_readonly("gram", &FiberRestriction::gram)
+      .def_readonly("blockOffsets", &FiberRestriction::blockOffsets)
+      .def_readonly("blockRanks", &FiberRestriction::blockRanks);
+
+  py::class_<TransferResult>(m, "TransferResult",
+      "A transfer T_AB(U) = (Z_A^vee)^T (A~^U)_AB Z_B with its reversal certificate "
+      "T_BA(U^-1) = T_AB(U)^T and the groupoid hypothesis T_BA = T_AB^-1.")
+      .def_readonly("forward", &TransferResult::forward)
+      .def_readonly("reverse", &TransferResult::reverse)
+      .def_readonly("reversalResidual", &TransferResult::reversalResidual)
+      .def_readonly("tolerance", &TransferResult::tolerance)
+      .def_readonly("groupoidHolds", &TransferResult::groupoidHolds)
+      .def_readonly("groupoidResidual", &TransferResult::groupoidResidual)
+      .def_readonly("dualTransfer", &TransferResult::dualTransfer);
+
+  py::class_<PencilSchur>(m, "PencilSchur",
+      R"doc(The recursion on the symmetric pencil P(lambda) = A~ - lambda M on geometric images
+(specification §7, §13): the Feshbach complement with its determinant factorization, the
+Craig-Bampton congruence, the restriction of pencil and chain metric to retained fibers, and
+the transfer between fibers with the reversal identity asserted at runtime. Every pairing is
+the transpose.)doc")
+      .def_static("feshbach", &PencilSchur::feshbach, py::arg("A"), py::arg("M"), py::arg("lambda_"),
+           py::arg("interface"), py::arg("rank_tolerance") = 1e-12)
+      .def_static("craigBampton", &PencilSchur::craigBampton, py::arg("A"), py::arg("M"), py::arg("T"))
+      .def_static("restrictToFibers",
+           py::overload_cast<const Eigen::MatrixXcd &, const Eigen::MatrixXcd &, const Eigen::MatrixXcd &>(
+               &PencilSchur::restrictToFibers),
+           py::arg("A"), py::arg("M"), py::arg("Z"))
+      .def_static("restrictToFiberBlocks",
+           py::overload_cast<const Eigen::MatrixXcd &, const Eigen::MatrixXcd &,
+                             const std::vector<Eigen::MatrixXcd> &>(&PencilSchur::restrictToFibers),
+           py::arg("A"), py::arg("M"), py::arg("fibers"))
+      .def_static("gramBlock", &PencilSchur::gramBlock, py::arg("M"), py::arg("ZA"), py::arg("ZB"))
+      .def_static("supportsShareTopSimplex", &PencilSchur::supportsShareTopSimplex,
+           py::arg("complex"), py::arg("k"), py::arg("support_a"), py::arg("support_b"))
+      .def_static("support", &PencilSchur::support, py::arg("Z"), py::arg("threshold") = 1e-12)
+      .def_static("transfer", &PencilSchur::transfer, py::arg("AtildeU"), py::arg("AtildeUinv"),
+           py::arg("ZA"), py::arg("ZAdual"), py::arg("ZB"), py::arg("ZBdual"),
+           py::arg("tolerance") = 1e-8);
 }

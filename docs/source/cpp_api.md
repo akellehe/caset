@@ -236,6 +236,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} RieszBand.h
 ```
+```{doxygenfile} PencilSchur.h
+```
 
 ## Reinforcement Learning
 

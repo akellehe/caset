@@ -684,6 +684,31 @@ class RecursiveQuotient {
         const std::vector<std::complex<double>> &weights,
         const std::vector<std::vector<int>> &components,
         const Options &options = Options());
+    /// Build over a symmetric PENCIL \f$ (\tilde A, M) \f$ on geometric images
+    /// (the chain-level Whitney Hodge pencil, specification §7): `A` and `M`
+    /// are flat row-major `dim` x `dim`, `M` the sparse complex-symmetric
+    /// inverse chain metric (base level) or the carried Gram
+    /// \f$ \mathcal G \f$ (child level). Every shifted elimination is taken on
+    /// \f$ \mathcal P(\lambda) = \tilde A - \lambda M \f$ (interior, coupling, and
+    /// interface blocks alike), the static reduction at \f$ \lambda = 0 \f$
+    /// coincides with the operator path, and a child level carries
+    /// \f$ \mathcal G_{\ell+1} = T^T M T \f$ with \f$ T \f$ the constraint modes
+    /// (interface cells extended by \f$ -\mathcal P_{II}^{-1}\mathcal P_{IB} \f$,
+    /// resonant kernel modes as retained) — the Craig–Bampton congruence,
+    /// `FiberEmbeddingPolicy::CarryGramExactly`. Labeled-sum Grams on a pencil
+    /// level are \f$ J^T M J \f$ (the transpose pairing). The Hermitian
+    /// surrogate's \f$ M^{-1/2} \f$ orthonormalization is never applied to a
+    /// pencil level: `nextLevelFromSurrogate` carries the congruence instead.
+    [[nodiscard]] static RecursiveQuotient overPencil(
+        const std::vector<std::complex<double>> &A,
+        const std::vector<std::complex<double>> &M, int dim,
+        const std::vector<std::vector<int>> &components,
+        const Options &options = Options());
+    /// Whether this level is a pencil level (see `overPencil`).
+    [[nodiscard]] bool isPencil() const noexcept { return pencil_; }
+    /// The pencil's metric \f$ M \f$ (base) or carried Gram \f$ \mathcal G \f$
+    /// (child), flat row-major `dim` x `dim`; empty on an operator level.
+    [[nodiscard]] std::vector<std::complex<double>> pencilMetric() const;
 
     /// Build over a spacetime's Hodge operator at `degree`, with components
     /// given as explicit k-cell sets (each cell a vertex-id tuple, matched
@@ -1029,6 +1054,18 @@ class RecursiveQuotient {
         const std::vector<RetainedCoordinate> &coordinates,
         const std::vector<std::vector<int>> &components,
         const Options &options) const;
+    // Pencil child: the same reduced operator, with the carried Gram
+    // T^T M T over the constraint modes of `solves` (and the retained
+    // resonant embeddings), as a pencil level.
+    [[nodiscard]] RecursiveQuotient pencilChildOver(
+        const std::vector<std::complex<double>> &op,
+        const std::vector<RetainedCoordinate> &coordinates,
+        const std::vector<std::vector<int>> &components,
+        const Options &options,
+        const std::vector<std::shared_ptr<ComponentSolve>> &solves) const;
+    [[nodiscard]] Eigen::MatrixXcd pencilConstraintModes(
+        const std::vector<RetainedCoordinate> &coordinates,
+        const std::vector<std::shared_ptr<ComponentSolve>> &solves) const;
     // The Gram/policy treatment shared by both labeled-sum entry points.
     [[nodiscard]] LabeledFiberSumRead summarizeFiberSum(
         const std::vector<Eigen::VectorXcd> &columns) const;
@@ -1036,6 +1073,8 @@ class RecursiveQuotient {
     // --- problem data (op_/weights_ refresh under invalidate()) ------------
     Eigen::SparseMatrix<std::complex<double>> op_{};
     Eigen::VectorXcd weights_{};        // diagonal chain metric W
+    bool pencil_{false};                // pencil level: shifts by lambda*M, Gram carried
+    Eigen::SparseMatrix<std::complex<double>> pencilMetric_{};  // M (base) or G (child)
     double opNorm_{0.0};                // scale for relative residuals
     int dim_{0};
     int degree_{-1};
