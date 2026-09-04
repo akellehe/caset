@@ -204,11 +204,11 @@ class TestRecursiveQuotientPencilLevels:
         K, P, q = self._pencil_quotient()
         assert q.isPencil()
         np.testing.assert_allclose(np.asarray(q.pencilMetric()).reshape(P.B.shape), P.B, atol=1e-15)
-        interface = list(q.interfaceIndices())
+        interface = list(q.interfaceIndices)
         F0 = PS.feshbach(P.A, P.B, 0.0, interface)
         child = q.nextLevel([list(range(len(interface)))])
-        assert child.isPencil() and child.level() == 1
-        m = child.dimension()
+        assert child.isPencil() and child.level == 1
+        m = child.dimension
         A_child = np.asarray(q.staticReduction().effectiveOperator).reshape(m, m)
         np.testing.assert_allclose(A_child, F0.response, atol=1e-9 * np.abs(F0.response).max())
         G_child = np.asarray(child.pencilMetric()).reshape(m, m)
@@ -219,7 +219,7 @@ class TestRecursiveQuotientPencilLevels:
 
     def test_band_child_is_the_pencil_feshbach_with_its_gram(self):
         K, P, q = self._pencil_quotient()
-        interface = list(q.interfaceIndices())
+        interface = list(q.interfaceIndices)
         lam = complex(0.9, 0.2)
         read = q.feshbach(lam, -1.0, 2.0)
         F = PS.feshbach(P.A, P.B, lam, interface)
@@ -234,17 +234,17 @@ class TestRecursiveQuotientPencilLevels:
 
     def test_second_level_consumes_the_first_with_the_same_schema(self):
         K, P, q = self._pencil_quotient()
-        interface = list(q.interfaceIndices())
+        interface = list(q.interfaceIndices)
         m = len(interface)
         half = m // 2
         child = q.nextLevel([list(range(half + 1)), list(range(half, m))])
         assert child.isPencil()
-        grand = child.nextLevel([list(range(len(child.interfaceIndices())))])
-        assert grand.isPencil() and grand.level() == 2
-        k = grand.dimension()
+        grand = child.nextLevel([list(range(len(child.interfaceIndices)))])
+        assert grand.isPencil() and grand.level == 2
+        k = grand.dimension
         G = np.asarray(grand.pencilMetric()).reshape(k, k)
         np.testing.assert_allclose(G, G.T, atol=1e-10 * max(1.0, np.abs(G).max()))
-        assert all(p.startswith("L1:L0:") for p in grand.coordinateProvenance())
+        assert all(p.startswith("L1:L0:") for p in grand.coordinateProvenance)
 
     def test_operator_levels_are_untouched(self):
         K, P, q = self._pencil_quotient()
