@@ -185,6 +185,12 @@ class CovariantChainHodge {
   /// pair is that edge moves by \f$ \pm i \f$ times itself, in the metrics and in
   /// the twisted incidences alike. Below the crossover.
   [[nodiscard]] Eigen::MatrixXcd covariantOperatorPhaseDerivative(int k, std::size_t edgeIndex) const;
+  /// \f$ \partial M_k^U/\partial s_e \f$: the dressed sparse metric derivative
+  /// (the dressing is independent of \f$ s \f$).
+  [[nodiscard]] SparseMatrix dressedDerivative(int k, std::size_t edgeIndex) const;
+  /// \f$ \partial M_k^U/\partial\varphi_e \f$ for \f$ U_e = e^{i\varphi_e} \f$: every
+  /// dressed entry whose base-vertex pair is that edge times \f$ \pm i \f$.
+  [[nodiscard]] SparseMatrix dressedPhaseDerivative(int k, std::size_t edgeIndex) const;
   /// The dense dressed pencil \f$ (\tilde A_k^U, M_k^U) \f$ on images (Whitney)
   /// or \f$ (A_k^U, G_k^U) \f$ on chains (Grassmann).
   [[nodiscard]] Pencil pencil(int k) const;

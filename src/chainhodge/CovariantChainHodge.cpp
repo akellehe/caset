@@ -265,6 +265,21 @@ Eigen::MatrixXcd CovariantChainHodge::covariantOperatorDerivative(int k, std::si
                             nullptr, nullptr, nullptr, nullptr);
 }
 
+SparseMatrix CovariantChainHodge::dressedDerivative(int k, std::size_t edgeIndex) const {
+  if (k < 0 || k > dimension()) throw std::invalid_argument("CovariantChainHodge: degree out of range");
+  const auto &b = base_vertex_[static_cast<std::size_t>(k)];
+  return dress(WhitneyMass::assembleDerivative(base_->complex(), base_->squaredLengths(), k, edgeIndex,
+                                              base_->branch()), b, b, U_);
+}
+
+SparseMatrix CovariantChainHodge::dressedPhaseDerivative(int k, std::size_t edgeIndex) const {
+  if (k < 0 || k > dimension()) throw std::invalid_argument("CovariantChainHodge: degree out of range");
+  const auto edges = base_->complex().kSimplexVertices(1);
+  if (edgeIndex >= edges.size()) throw std::invalid_argument("CovariantChainHodge: edge index out of range");
+  const auto &b = base_vertex_[static_cast<std::size_t>(k)];
+  return phaseDerivative(dressed_[static_cast<std::size_t>(k)], b, b, edges[edgeIndex][0], edges[edgeIndex][1], false);
+}
+
 SparseMatrix CovariantChainHodge::phaseDerivative(const SparseMatrix &dressedM,
                                                   const std::vector<std::uint64_t> &baseRow,
                                                   const std::vector<std::uint64_t> &baseCol,
