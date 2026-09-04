@@ -16,41 +16,7 @@ from tessera import cobordism as cob
 WM = ch.WhitneyMass
 
 
-def _edges(K):
-    return [tuple(int(v) for v in e) for e in K.kSimplexVertices(1)]
-
-
-def _lengths(K, table):
-    return [complex(table[e]) for e in _edges(K)]
-
-
-def _torus33(h=1.0, v=-0.5, dgl=0.5):
-    """The oracle's 3x3 CDT-like torus: 9 vertices, 27 edges, 18 triangles."""
-    n = 3
-
-    def vid(i, j):
-        return (i % n) * n + (j % n)
-
-    cells = []
-    for i in range(n):
-        for j in range(n):
-            cells.append([vid(i, j), vid(i + 1, j), vid(i + 1, j + 1)])
-            cells.append([vid(i, j), vid(i, j + 1), vid(i + 1, j + 1)])
-    K = cob.ChainComplex.fromTopCells(cells)
-
-    def stype(e):
-        a, b = e
-        ia, ja = divmod(a, n)
-        ib, jb = divmod(b, n)
-        di, dj = (ib - ia) % n, (jb - ja) % n
-        if di in (1, 2) and dj == 0:
-            return "v"
-        if di == 0:
-            return "h"
-        return "d"
-
-    table = {e: {"h": h, "v": v, "d": dgl}[stype(e)] for e in _edges(K)}
-    return K, _lengths(K, table)
+from tests.chainhodge._fixtures import edges as _edges, lengths as _lengths, torus33 as _torus33
 
 
 def _random_allowable(K, rng, scale=0.05):

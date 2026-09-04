@@ -222,6 +222,9 @@ class ChainComplex {
     ///   general Steenrod squares are deferred (see issue #65).
     [[nodiscard]] std::map<std::string, int> stiefelWhitneyNumbers() const;
 
+    /// Rank of \f$ \partial_k \f$ over \f$ \mathbb{Q} \f$, exact (0 if \f$ k \f$ is out of range).
+    [[nodiscard]] int rankOfBoundary(int k) const;
+
   private:
     int dimension_{-1};
     std::vector<std::size_t> counts_{};                 // |C_k|
@@ -229,7 +232,6 @@ class ChainComplex {
     // faceVerts_[k][j] = sorted vertex ids of the j-th k-simplex (column j of
     // ∂_{k+1} / row j of ∂_k). Needed by the cup product (front/back faces).
     std::vector<std::vector<std::vector<std::uint64_t>>> faceVerts_{};
-    [[nodiscard]] int rankOfBoundary(int k) const;      // rank ∂_k over ℚ (0 if out of range)
     [[nodiscard]] int gf2RankOfBoundary(int k) const;   // rank ∂_k over GF(2)
 };
 

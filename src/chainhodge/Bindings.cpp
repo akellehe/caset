@@ -6,6 +6,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include "chainhodge/ChainHodge.h"
 #include "chainhodge/WhitneyMass.h"
 #include "cobordism/ChainComplex.h"
 #include "spacetime/Spacetime.h"
@@ -106,4 +107,83 @@ Hodge pencil, assembled per top simplex from the complex squared edge lengths al
            py::arg("complex"), py::arg("squared_lengths"), py::arg("k"),
            py::arg("X"), py::arg("Y"), py::arg("branch") = Branch::Continuation,
            "Per-edge tr(X^T (dM_k/ds_e) Y) from the local blocks (transpose pairing).");
+  py::enum_<PencilVariable>(m, "PencilVariable",
+      "Which vector a pencil eigenproblem A x = lambda B x is written in: geometric "
+      "images (Whitney) or chains (Grassmann).")
+      .value("GeometricImage", PencilVariable::GeometricImage)
+      .value("Chain", PencilVariable::Chain);
+
+  py::class_<Pencil>(m, "Pencil", "A complex symmetric pencil A - lambda B at one degree, dense.")
+      .def_readonly("degree", &Pencil::degree)
+      .def_readonly("variable", &Pencil::variable)
+      .def_readonly("A", &Pencil::A)
+      .def_readonly("B", &Pencil::B);
+
+  py::class_<HarmonicRead>(m, "HarmonicRead",
+      "Harmonic chains H_k, their geometric images, and the kernel's rank certificate.")
+      .def_readonly("degree", &HarmonicRead::degree)
+      .def_readonly("chains", &HarmonicRead::chains)
+      .def_readonly("images", &HarmonicRead::images)
+      .def_readonly("nullity", &HarmonicRead::nullity)
+      .def_readonly("rank", &HarmonicRead::rank)
+      .def_readonly("tolerance", &HarmonicRead::tolerance)
+      .def_readonly("gap", &HarmonicRead::gap)
+      .def_readonly("dense", &HarmonicRead::dense);
+
+  py::class_<RankReport>(m, "RankReport",
+      "The rank conditions (R1)-(R4) of specification Prop. 4.2 at one degree.")
+      .def_readonly("degree", &RankReport::degree)
+      .def_property_readonly("measured", [](const RankReport &r) {
+        return std::vector<int>(r.measured.begin(), r.measured.end()); })
+      .def_property_readonly("expected", [](const RankReport &r) {
+        return std::vector<int>(r.expected.begin(), r.expected.end()); })
+      .def_property_readonly("holds", [](const RankReport &r) {
+        return std::vector<bool>(r.holds.begin(), r.holds.end()); })
+      .def_readonly("decompositionHolds", &RankReport::decompositionHolds)
+      .def_readonly("kernelIsHarmonic", &RankReport::kernelIsHarmonic)
+      .def_readonly("kappa", &RankReport::kappa);
+
+  py::class_<SpectrumRead>(m, "SpectrumRead", "Dense spectrum of one degree's pencil.")
+      .def_readonly("degree", &SpectrumRead::degree)
+      .def_readonly("eigenvalues", &SpectrumRead::eigenvalues)
+      .def_readonly("residual", &SpectrumRead::residual)
+      .def_readonly("vectors", &SpectrumRead::vectors);
+
+  py::class_<ChainHodge>(m, "ChainHodge",
+      R"doc(The chain-level Hodge pencil of a complexified simplicial complex (specification
+§4.3, §9, §13): sparse inverse chain metrics, geometric images by solves, the symmetric
+pencil and its auxiliary form, harmonic chains H_k = M_k ker S, rank conditions R1-R4,
+exact Betti numbers, and the dense spectrum below the crossover. The adjoint is the
+transpose; no conjugation enters any operator.)doc")
+      .def(py::init<ChainComplex, SquaredLengths, Preset, Branch, int>(),
+           py::arg("complex"), py::arg("squared_lengths"), py::arg("preset") = Preset::L2,
+           py::arg("branch") = Branch::Continuation,
+           py::arg("crossover_dimension") = ChainHodge::kDefaultCrossoverDimension)
+      .def("complex", &ChainHodge::complex, py::return_value_policy::reference_internal)
+      .def("squaredLengths", &ChainHodge::squaredLengths)
+      .def("dimension", &ChainHodge::dimension)
+      .def("preset", &ChainHodge::preset)
+      .def("branch", &ChainHodge::branch)
+      .def("crossoverDimension", &ChainHodge::crossoverDimension)
+      .def("certificate", &ChainHodge::certificate)
+      .def("size", &ChainHodge::size, py::arg("k"))
+      .def("Minv", [](const ChainHodge &c, int k) { return SparseMatrix(c.Minv(k)); }, py::arg("k"),
+           "The sparse inverse chain metric M_k (Whitney preset).")
+      .def("chainMetricSparse", [](const ChainHodge &c, int k) { return SparseMatrix(c.chainMetricSparse(k)); },
+           py::arg("k"), "The sparse chain metric G_k (Grassmann preset).")
+      .def("boundary", [](const ChainHodge &c, int k) { return SparseMatrix(c.boundary(k)); }, py::arg("k"),
+           "The sparse boundary map d_k.")
+      .def("applyG", &ChainHodge::applyG, py::arg("k"), py::arg("c"), "G_k c: the geometric image, by solve.")
+      .def("applyMinv", &ChainHodge::applyMinv, py::arg("k"), py::arg("c"), "M_k c.")
+      .def("pencil", &ChainHodge::pencil, py::arg("k"), "The dense pencil at degree k.")
+      .def("pencilAux", &ChainHodge::pencilAux, py::arg("k"), "A~_k = M_k A_k M_k (Whitney), dense.")
+      .def("hodgeOperator", &ChainHodge::hodgeOperator, py::arg("k"), "The dense L_k on chains.")
+      .def("harmonicChains", &ChainHodge::harmonicChains, py::arg("k"), py::arg("kappa") = 10.0,
+           py::arg("force_sparse") = false, "H_k = M_k ker S with the kernel's rank certificate.")
+      .def("geometricImage", &ChainHodge::geometricImage, py::arg("k"), py::arg("H"), "G_k H.")
+      .def("harmonicGram", &ChainHodge::harmonicGram, py::arg("read"), "Phi^T G_k Phi = Z^T M_k Z.")
+      .def("rankConditions", &ChainHodge::rankConditions, py::arg("k"), py::arg("kappa") = 10.0,
+           "The rank conditions (R1)-(R4) at degree k.")
+      .def("betti", &ChainHodge::betti, "Betti numbers over Q, exact.")
+      .def("spectrum", &ChainHodge::spectrum, py::arg("k"), "Dense spectrum of the degree-k pencil.");
 }
