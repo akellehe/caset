@@ -403,6 +403,11 @@ class MultiCobordism {
   /// connection phases vary; every edge held by a declared pinned region is
   /// bit-identical. Boundary-preserving stellar growth is retried up to
   /// `maxGrowth`; existing cells persist under it, so readout chains survive.
+  /// After the first pass every pass descends first from the previous pass's
+  /// witnesses and live geometry (cells created by growth start at zero) and
+  /// then from `restarts - 1` fresh random draws, so growth never discards
+  /// progress; the first pass draws `restarts` random starts as
+  /// `relaxBoundaryStatePairs` does on every pass.
   ///
   /// This method mutates the node's live spacetime in place.
   [[nodiscard]] WholeComplexReadoutResult relaxWholeComplexReadoutTargets(

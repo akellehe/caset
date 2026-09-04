@@ -269,13 +269,22 @@ struct AffineAuxiliary {
   Eigen::MatrixXcd basis;
 };
 
+/// A warm start for one relaxation pass (#936): the previous pass's witnesses
+/// keyed by cell (cells absent from the live complex, i.e. created by growth,
+/// start at zero) together with the live edge geometry. The warm start is
+/// descended first; the remaining restarts are drawn as before.
+struct WarmStart {
+  std::vector<std::map<Cell, complexd>> states;
+};
+
 FixedCochainOptimization optimizeFixedCochainTargets(
     const std::shared_ptr<Spacetime> &spacetime,
     EigenstateSynthesis &synthesis,
     const std::vector<FixedCochainTarget> &fixedTargets,
     const std::function<bool(std::uint64_t, std::uint64_t)> &edgeIsFree,
     bool commonEigenvalue, double epsilon, int restarts, std::uint64_t seed,
-    int maxIterations, const ReadoutSystem *readoutSystem = nullptr) {
+    int maxIterations, const ReadoutSystem *readoutSystem = nullptr,
+    const WarmStart *warmStart = nullptr) {
   constexpr double kPi = 3.14159265358979323846;
   constexpr double kWeightMinimum = 0.1;
   constexpr double kWeightMaximum = 10.0;
@@ -549,9 +558,52 @@ FixedCochainOptimization optimizeFixedCochainTargets(
       };
 
   const LevenbergMarquardt solver(maxIterations, epsilon);
-  const auto best = solver.multiRestart(residual, clamp, sample,
-                                        parameterCount, restarts, seed,
-                                        epsilon);
+  LevenbergMarquardt::Result best;
+  int remainingRestarts = restarts;
+  if (warmStart != nullptr) {
+    if (warmStart->states.size() != fixedTargets.size())
+      throw std::invalid_argument(
+          "MultiCobordism: warm-start witness count does not match");
+    Eigen::VectorXd start = Eigen::VectorXd::Zero(
+        static_cast<Eigen::Index>(parameterCount));
+    for (std::size_t index = 0; index < weightCount; ++index)
+      start[static_cast<Eigen::Index>(index)] =
+          (freeEdges[index]->getLength() * freeEdges[index]->getLength())
+              .real();
+    for (std::size_t index = 0; index < phaseCount; ++index)
+      start[static_cast<Eigen::Index>(weightCount + index)] =
+          freeEdges[index]->getPhase().real();
+    for (std::size_t stateIndex = 0; stateIndex < fixedTargets.size();
+         ++stateIndex) {
+      const auto &auxiliary = auxiliaryIndices[stateIndex];
+      Eigen::VectorXcd previous = Eigen::VectorXcd::Zero(
+          static_cast<Eigen::Index>(auxiliary.size()));
+      for (std::size_t auxiliaryIndex = 0; auxiliaryIndex < auxiliary.size();
+           ++auxiliaryIndex) {
+        const auto found =
+            warmStart->states[stateIndex].find(cells[auxiliary[auxiliaryIndex]]);
+        if (found != warmStart->states[stateIndex].end())
+          previous[static_cast<Eigen::Index>(auxiliaryIndex)] = found->second;
+      }
+      const Eigen::VectorXcd coordinates =
+          hasAffine ? Eigen::VectorXcd(affine[stateIndex].basis.adjoint() *
+                                       (previous - affine[stateIndex].offset))
+                    : previous;
+      const Eigen::Index base = static_cast<Eigen::Index>(
+          weightCount + phaseCount + 2 * auxiliaryOffsets[stateIndex]);
+      for (Eigen::Index index = 0; index < coordinates.size(); ++index) {
+        start[base + 2 * index] = coordinates[index].real();
+        start[base + 2 * index + 1] = coordinates[index].imag();
+      }
+    }
+    best = solver.minimize(residual, clamp, clamp(start));
+    remainingRestarts = restarts - 1;
+  }
+  if (remainingRestarts > 0 && !(best.cost < epsilon)) {
+    auto trial = solver.multiRestart(residual, clamp, sample, parameterCount,
+                                     remainingRestarts, seed, epsilon);
+    if (trial.cost < best.cost) best = std::move(trial);
+  }
   (void)residual(best.parameters);
 
   FixedCochainOptimization result;
@@ -2089,6 +2141,7 @@ MultiCobordism::relaxWholeComplexReadoutTargets(
   FixedCochainOptimization best;
   std::vector<double> residualTrace;
   int growthSteps = 0;
+  WarmStart warmStart;
   for (int pass = 0;; ++pass) {
     best = optimizeFixedCochainTargets(
         spacetime_, synthesis, fixedTargets,
@@ -2097,9 +2150,16 @@ MultiCobordism::relaxWholeComplexReadoutTargets(
         },
         commonEigenvalue, epsilon, restarts,
         seed + static_cast<std::uint64_t>(pass), maxIterations,
-        &readoutSystem);
+        &readoutSystem, pass == 0 ? nullptr : &warmStart);
     residualTrace.push_back(best.residual);
     if (best.residual < epsilon || growthSteps >= maxGrowth) break;
+    // Carry this pass's witnesses (by cell) and the live geometry into the
+    // next pass as its first descent; cells created by growth start at zero.
+    warmStart.states.assign(best.states.size(), {});
+    for (std::size_t witness = 0; witness < best.states.size(); ++witness)
+      for (std::size_t index = 0; index < synthesis.order(); ++index)
+        warmStart.states[witness].emplace(synthesis.cellSimplices()[index],
+                                          best.states[witness][index]);
     if (!synthesis.growInterior(seed + 1000u +
                                 static_cast<std::uint64_t>(pass)))
       break;
