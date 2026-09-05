@@ -84,9 +84,10 @@ rotations.
 
 ### Class 1, both modes per side (qubits, `U ∈ U(4)`, four witnesses)
 
-The four-witness common-eigenvalue fit did not converge in any probed configuration.
-Parameter counts (real unknowns vs real equations) are not the limit: at 5 and 6 layers
-the slack is positive before any growth.
+The four-witness common-eigenvalue fit reaches 1.1e-11 on the 6-layer annulus with the
+warm start and 30 growths (2.3 h), and no shorter configuration converged. Parameter
+counts (real unknowns vs real equations) are not the limit: at 5 and 6 layers the slack
+is positive before any growth.
 
 Budgets are written restarts × growth × iterations; "cold" passes redraw every
 restart at random, "warm" passes descend first from the previous pass's witnesses
@@ -102,6 +103,8 @@ restart at random, "warm" passes descend first from the previous pass's witnesse
 | 6 layers | 4 | 8 × 8 × 1000, cold | 1.85e-4 (best pass 6.5e-5) | 3.604 | 8 | 75 | `probe-readout-L6.log` |
 | 3 layers | 4 | 8 × 24 × 1000, warm | 7.00e-6 (monotone trace) | 4.652 | 24 | 96 | `warm-readout-L3-g24.log` |
 | 6 layers | 4 | 8 × 12 × 1000, warm | 2.03e-6 (monotone trace) | 3.759 | 12 | 87 | `warm-readout-L6-g12.log` |
+| 6 layers | 4 | 8 × 30 × 1000, warm | **8.56e-11 (best pass 1.12e-11)**, 2.3 h | 4.039 | 30 | 141 | `warm-readout-L6-g30.log` |
+| 3 layers | 4 | 8 × 40 × 1000, warm | 4.25e-6 (plateau near 3e-6 from pass 25), 2.3 h | 4.886 | 40 | 144 | `warm-readout-L3-g40.log` |
 | 3 layers, each witness its own eigenvalue | 4 | 8 × 12 × 1000, cold | 7.33e-4 | 3.03–3.04 | 12 | | `probe2-indep.log` |
 | 3 layers | 3 | 8 × 12 × 1000, cold | 8.06e-5 | 3.212 | 12 | | `probe2-three.log` |
 | 3 layers | 3 | 8 × 12 × 1000, warm | 8.06e-5 (monotone trace, same floor) | 3.212 | 12 | | `warm-three.log` |
@@ -116,9 +119,12 @@ the common eigenvalue does not help. (iii) The readout constraint is what the
 four-witness fit has not yet met: it pins the operator the bulk implements to the
 chosen `U ∈ U(4)`, whereas the pairs-only fit lets the output emerge. With the warm
 start the readout fit's trace is monotone and an order of magnitude lower at the same
-budget (7.0e-6 at 3 layers/growth 24, 2.0e-6 at 6 layers/growth 12), still falling at
-the last pass; the growth-40 (3 layers) and growth-30 (6 layers) warm runs are the
-pending measurements.
+budget (7.0e-6 at 3 layers/growth 24, 2.0e-6 at 6 layers/growth 12). On the 3-layer
+annulus it then plateaus near 3e-6 (4.3e-6 at growth 40); on the 6-layer annulus it
+drops from a plateau near 3e-6 to 7.7e-10 (pass 27) and 1.1e-11 (pass 29) at growth 30:
+the generic `U ∈ U(4)` on two qubits IS encodable, at a read error of about 3e-6 (the
+square root of the residual), on the wider bulk, at a cost of 141 free edges and 2.3 h.
+The full record at that configuration is `full-L6-g30.json` when it completes.
 
 | configuration | witnesses | growth | free edges | real parameters | real equations | slack |
 |---|---|---|---|---|---|---|
