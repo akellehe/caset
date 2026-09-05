@@ -1468,9 +1468,33 @@ assertion. Every pairing is the transpose.)doc")
            "target images in the band read on the block's own pencil, restricted to the fiber's cells) "
            "instead of the period residual; folded into r_U so both stages descend it. Off by default.")
       .def("uses_fiber_residuals", &MultiCobordism::usesFiberResiduals)
+      .def("set_fiber_phase_descent", &MultiCobordism::setFiberPhaseDescent, py::arg("enabled"),
+           "Also descend the degree-0 link phases through the analytic fiber gradient (off by default).")
+      .def("fiber_phase_descent", &MultiCobordism::fiberPhaseDescent)
       .def("fiber_residual_for_input_block", &MultiCobordism::fiberResidualForInputBlock, py::arg("index"),
            py::call_guard<py::gil_scoped_release>(),
            "The fiber residual of one input block on the live complex.")
+      .def("fiber_residual_gradient",
+           [](const MultiCobordism &self, const BoundaryFiber &fiber) {
+             py::gil_scoped_release release;
+             const auto g = self.fiberResidualGradientOn(self.spacetime(), fiber);
+             return std::make_pair(g.lengths, g.phases);
+           }, py::arg("fiber"),
+           "Analytic gradient of the fiber residual of `fiber` on the live complex (#947): (lengths, phases) "
+           "in EdgeList order, each entry (d/dRe, d/dIm) packed as a complex number; phases empty above degree 0.")
+      .def("two_body_residual_gradient",
+           [](const MultiCobordism &self) {
+             if (!self.twoBodyTarget()) throw std::logic_error("no two-body target");
+             py::gil_scoped_release release;
+             const auto g = self.twoBodyResidualGradientOn(self.spacetime(), *self.twoBodyTarget());
+             return std::make_pair(g.lengths, g.phases);
+           }, "Analytic gradient of the two-body residual on the live complex (#947).")
+      .def("fiber_mode_ascent",
+           [](const MultiCobordism &self) {
+             py::gil_scoped_release release;
+             const auto g = self.fiberModeAscent();
+             return std::make_pair(g.lengths, g.phases);
+           }, "The analytic ascent of every fiber-mode term of r_U on the live complex (#947).")
       .def("attach_input_fiber", &MultiCobordism::attachInputFiber, py::arg("index"), py::arg("fiber"),
            py::arg("cells"),
            "Attach a piped input fiber to THIS complex's cells (one per fiber row, in the attachment "

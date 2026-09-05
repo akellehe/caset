@@ -238,6 +238,9 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} RieszBand.h
 ```
+
+```{doxygenfile} BandDerivative.h
+```
 ```{doxygenfile} PencilSchur.h
 ```
 

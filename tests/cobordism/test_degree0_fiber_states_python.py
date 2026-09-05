@@ -133,8 +133,18 @@ class TestFiberResidual:
         flat = cob.PencilLayer.band_contour(cob.PencilLayer.assemble([st]), 0, 0)
         node = node_with_state(psi, contour=flat)
         assert node.whole_complex_fiber_residual() == pytest.approx(0.75, abs=1e-12)  # 1 - |<1, e0>|^2 / 4
-        node.run_stage2(beta=1.0, max_iters=10, tolerance=1e-15)
+        # no choice of LENGTHS moves it: the flat band's image is the constant
+        # vector on a connected complex at trivial holonomy
+        rng = np.random.default_rng(5)
+        for e in node.spacetime().getEdgeList().toVector():
+            e.setLength(np.sqrt(complex(1.0 + 0.3 * rng.uniform(-1, 1), 0.2 * rng.uniform(-1, 1))))
         assert node.whole_complex_fiber_residual() == pytest.approx(0.75, abs=1e-12)
+        # a link phase (flux) lifts the zero mode and the band inside the same
+        # contour acquires content: stage 2's analytic phase gradient (#947) is
+        # what descends it
+        node.spacetime().getEdgeList().toVector()[0].setPhase(0.3 + 0j)
+        assert node.whole_complex_fiber_residual() != pytest.approx(0.75, abs=1e-6)
+        node.spacetime().getEdgeList().toVector()[0].setPhase(0j)  # back to trivial holonomy
         read = node.read_whole_complex_fiber()
         assembled = cob.PencilLayer.assemble([node.spacetime()])
         K = assembled.complex

@@ -10,6 +10,7 @@
 
 #include "chainhodge/ChainHodge.h"
 #include "chainhodge/CovariantChainHodge.h"
+#include "chainhodge/BandDerivative.h"
 #include "chainhodge/FaceAnchor.h"
 #include "chainhodge/RieszBand.h"
 #include "chainhodge/LorentzianFamily.h"
@@ -347,6 +348,11 @@ images and the exact properties of Prop. 5.1 measured on every instance.)doc")
       .def("applyMinv", &CovariantChainHodge::applyMinv, py::arg("k"), py::arg("c"))
       .def("applyH", &CovariantChainHodge::applyH, py::arg("k"), py::arg("c"))
       .def("covariantOperator", &CovariantChainHodge::covariantOperator, py::arg("k"))
+      .def("dressedDerivative", [](const CovariantChainHodge &self, int k, std::size_t e) {
+             return Eigen::MatrixXcd(self.dressedDerivative(k, e)); }, py::arg("k"), py::arg("edge_index"),
+           "dM_k^U/ds_e, dense.")
+      .def("dressedPhaseDerivative", [](const CovariantChainHodge &self, int k, std::size_t e) {
+             return Eigen::MatrixXcd(self.dressedPhaseDerivative(k, e)); }, py::arg("k"), py::arg("edge_index"))
       .def("covariantOperatorDerivative", &CovariantChainHodge::covariantOperatorDerivative,
            py::arg("k"), py::arg("edge_index"), "dh_k/ds_e for the canonical edge index, dense.")
       .def("covariantOperatorPhaseDerivative", &CovariantChainHodge::covariantOperatorPhaseDerivative,
@@ -386,6 +392,22 @@ images and the exact properties of Prop. 5.1 measured on every instance.)doc")
       .def_readonly("rank", &TetrahedronBlock::rank)
       .def_readonly("preset", &TetrahedronBlock::preset);
 
+  py::class_<BandDerivative::ResolventFrames>(m, "ResolventFrames")
+      .def_readonly("degree", &BandDerivative::ResolventFrames::degree)
+      .def_readonly("frame", &BandDerivative::ResolventFrames::frame);
+  py::class_<BandDerivative>(m, "BandDerivative",
+      "Analytic derivatives of a Riesz band's geometric images (#947): dZ = G^U(-dM^U Z + dP Phi) with "
+      "dP Phi = sum_j w_j R(zeta_j) dh R(zeta_j) Phi; and d(A~^U) = dM^U h + M^U dh.")
+      .def_static("resolventFrames", &BandDerivative::resolventFrames, py::arg("covariant"), py::arg("k"),
+           py::arg("contour"), py::arg("frame"))
+      .def_static("imagesLengthDerivative", &BandDerivative::imagesLengthDerivative, py::arg("covariant"),
+           py::arg("frames"), py::arg("images"), py::arg("edge_index"))
+      .def_static("imagesPhaseDerivative", &BandDerivative::imagesPhaseDerivative, py::arg("covariant"),
+           py::arg("frames"), py::arg("images"), py::arg("edge_index"))
+      .def_static("pencilOperatorLengthDerivative", &BandDerivative::pencilOperatorLengthDerivative,
+           py::arg("covariant"), py::arg("k"), py::arg("edge_index"))
+      .def_static("pencilOperatorPhaseDerivative", &BandDerivative::pencilOperatorPhaseDerivative,
+           py::arg("covariant"), py::arg("k"), py::arg("edge_index"));
   py::class_<FaceAnchor>(m, "FaceAnchor",
       R"doc(The face anchor of specification §8 with the Whitney metric: the per-triangle
 Whitney block M_1^{(t)} (rank 3, Prop. 8.1), its connection dressing by U_{b(e)b(e')},

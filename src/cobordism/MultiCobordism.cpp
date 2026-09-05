@@ -16,6 +16,7 @@
 #include <Eigen/Dense>
 
 #include "Logger.h"
+#include "chainhodge/BandDerivative.h"
 #include "cobordism/ChainComplex.h"
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/HodgeLaplacian.h"
@@ -2731,7 +2732,15 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
         objectiveSpec_->numericalRegisterResidualWeight(
             directionContext.scalar);
     if (numericalResidualWeight != 0.0) {
-      if (explicitConstraintsAreWholeResidual && realSquaredLengthsOnly_)
+      if (useFiberResiduals_) {
+        // #947: every fiber-mode term of rU has an analytic gradient through
+        // the band's Riesz projector and the frame transfer; the numerical
+        // path is not used for them.
+        const ResidualGradient analytic = fiberModeAscent();
+        descentDirection += numericalResidualWeight * analytic.lengths;
+        if (fiberPhaseDescent_ && analytic.phases.size() == static_cast<Eigen::Index>(edgeCount))
+          phaseDescentDirection += numericalResidualWeight * analytic.phases;
+      } else if (explicitConstraintsAreWholeResidual && realSquaredLengthsOnly_)
         descentDirection += numericalResidualWeight *
                             explicitConstraintAscentDirection();
       else
@@ -3072,12 +3081,28 @@ double MultiCobordism::fiberResidualOn(const std::shared_ptr<Spacetime> &spaceti
   return leak / targetNorm;
 }
 
+std::shared_ptr<Spacetime> MultiCobordism::blockSubcomplexWithGeometry(
+    const BoundaryBlock &block, const std::shared_ptr<Spacetime> &spacetime) {
+  auto sub = spacetime->subcomplexWithinVertexSet(block.vertices);
+  if (!sub) return nullptr;
+  std::map<std::pair<std::uint64_t, std::uint64_t>, ::tessera::mesh::Edge *> parentEdges;
+  for (auto *edge : spacetime->getEdgeList()->toVector()) parentEdges.emplace(edgeKey(edge), edge);
+  for (auto *edge : sub->getEdgeList()->toVector()) {
+    const auto parent = parentEdges.find(edgeKey(edge));
+    if (parent == parentEdges.end())
+      throw std::logic_error("MultiCobordism::blockSubcomplexWithGeometry: a block edge is absent from the parent");
+    edge->setLength(parent->second->getLength());
+    edge->setPhase(parent->second->getPhase());
+  }
+  sub->materializeFacets();
+  return sub;
+}
+
 double MultiCobordism::fiberResidualForBoundaryBlock(
     const BoundaryBlock &boundaryBlock, const std::shared_ptr<Spacetime> &spacetime) const {
   if (!boundaryBlock.fiber || boundaryBlock.fiber->images.cols() == 0)
     throw std::logic_error("MultiCobordism::fiberResidualForBoundaryBlock: the block carries no fiber target");
-  auto blockSubcomplex = spacetime->subcomplexWithinVertexSet(boundaryBlock.vertices);
-  return fiberResidualOn(blockSubcomplex, *boundaryBlock.fiber);
+  return fiberResidualOn(blockSubcomplexWithGeometry(boundaryBlock, spacetime), *boundaryBlock.fiber);
 }
 
 // ---- two-body cobordism map (#941) ----
@@ -3212,6 +3237,160 @@ MultiCobordism::TwoBodyRead MultiCobordism::readTwoBody() const {
   read.cellsA = A->cells;
   read.cellsB = B->cells;
   return read;
+}
+
+// ---- analytic gradients of the fiber-mode residuals (#947) ----
+
+namespace {
+
+/// (∂/∂Re, ∂/∂Im) of a real objective whose holomorphic sensitivity to the
+/// coordinate is `dF` (that is, dObjective = 2 Re(dF · dcoordinate)).
+complexd packHolomorphic(complexd dF) {
+  return complexd{2.0 * dF.real(), -2.0 * dF.imag()};
+}
+
+/// Canonical C_1 index of every live edge (EdgeList order), by vertex pair.
+std::vector<std::size_t> canonicalEdgeIndices(const Spacetime &spacetime, const ChainComplex &K) {
+  std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> canonical;
+  const auto cells = K.kSimplexVertices(1);
+  for (std::size_t j = 0; j < cells.size(); ++j) canonical[{cells[j][0], cells[j][1]}] = j;
+  std::vector<std::size_t> out;
+  for (const auto *edge : spacetime.getEdgeList()->toVector()) {
+    const auto found = canonical.find(edgeKey(edge));
+    if (found == canonical.end())
+      throw std::logic_error("MultiCobordism: a live edge is absent from the chain complex");
+    out.push_back(found->second);
+  }
+  return out;
+}
+
+}  // namespace
+
+MultiCobordism::ResidualGradient MultiCobordism::fiberResidualGradientOn(
+    const std::shared_ptr<Spacetime> &spacetime, const BoundaryFiber &target) const {
+  if (metricSource_ != HodgeLaplacian::MetricSource::WhitneyPencil)
+    throw std::logic_error("MultiCobordism::fiberResidualGradientOn: read on the chain-level Whitney pencil");
+  if (!spacetime) throw std::invalid_argument("MultiCobordism::fiberResidualGradientOn: null spacetime");
+  const auto edges = spacetime->getEdgeList()->toVector();
+  ResidualGradient gradient;
+  gradient.lengths = Eigen::VectorXcd::Zero(static_cast<Eigen::Index>(edges.size()));
+  if (target.degree == 0) gradient.phases = Eigen::VectorXcd::Zero(static_cast<Eigen::Index>(edges.size()));
+  const AssembledPencil assembled = PencilLayer::assemble({spacetime});
+  const std::vector<int> idx = PencilLayer::indicesOf(assembled, target.degree, target.cells);
+  const chainhodge::Contour contour =
+      target.contour.nodes.empty() ? PencilLayer::bandContour(assembled, target.degree, 1) : target.contour;
+  const chainhodge::Band band = assembled.op->band(target.degree, contour);
+  if (band.rank() == 0) return gradient;  // full leak everywhere: no descent direction
+  // The least-squares fit on the cells: u = psi - Z_T c, r = |u|^2 / |psi|^2.
+  Eigen::MatrixXcd ZT(static_cast<Eigen::Index>(idx.size()), band.rank());
+  for (std::size_t i = 0; i < idx.size(); ++i) ZT.row(static_cast<Eigen::Index>(i)) = band.images.row(idx[i]);
+  const Eigen::MatrixXcd c = ZT.colPivHouseholderQr().solve(target.images);
+  const Eigen::MatrixXcd u = target.images - ZT * c;
+  const double norm = target.images.squaredNorm();
+  const chainhodge::BandDerivative::ResolventFrames frames =
+      chainhodge::BandDerivative::resolventFrames(*assembled.op, target.degree, contour, band.frame);
+  const std::vector<std::size_t> canonical = canonicalEdgeIndices(*spacetime, assembled.complex());
+  // Holomorphic sensitivity: d r = 2 Re(dF · dcoord) with dF = -tr(u^H dZ_T c)/|psi|^2.
+  const auto sensitivity = [&](const Eigen::MatrixXcd &dZ) {
+    complexd dF(0.0, 0.0);
+    for (std::size_t i = 0; i < idx.size(); ++i) {
+      const Eigen::RowVectorXcd row = dZ.row(idx[i]) * c;  // 1 x columns of psi
+      dF += (u.row(static_cast<Eigen::Index>(i)).conjugate().cwiseProduct(row)).sum();
+    }
+    return -dF / norm;
+  };
+  for (std::size_t e = 0; e < edges.size(); ++e) {
+    gradient.lengths[static_cast<Eigen::Index>(e)] = packHolomorphic(sensitivity(
+        chainhodge::BandDerivative::imagesLengthDerivative(*assembled.op, frames, band.images, canonical[e])));
+    if (target.degree == 0)
+      gradient.phases[static_cast<Eigen::Index>(e)] = packHolomorphic(sensitivity(
+          chainhodge::BandDerivative::imagesPhaseDerivative(*assembled.op, frames, band.images, canonical[e])));
+  }
+  return gradient;
+}
+
+MultiCobordism::ResidualGradient MultiCobordism::twoBodyResidualGradientOn(
+    const std::shared_ptr<Spacetime> &spacetime, const TwoBodyTarget &target) const {
+  const auto [A, B] = attachedInputFibers();
+  if (!spacetime) throw std::invalid_argument("MultiCobordism::twoBodyResidualGradientOn: null spacetime");
+  const auto edges = spacetime->getEdgeList()->toVector();
+  ResidualGradient gradient;
+  gradient.lengths = Eigen::VectorXcd::Zero(static_cast<Eigen::Index>(edges.size()));
+  if (A->degree == 0) gradient.phases = Eigen::VectorXcd::Zero(static_cast<Eigen::Index>(edges.size()));
+  const AssembledPencil assembled = PencilLayer::assemble({spacetime});
+  const std::vector<int> ia = PencilLayer::indicesOf(assembled, A->degree, A->cells);
+  const std::vector<int> ib = PencilLayer::indicesOf(assembled, B->degree, B->cells);
+  const Eigen::MatrixXcd Atilde = PencilLayer::pencil(assembled, A->degree).A;
+  const auto block = [&](const Eigen::MatrixXcd &full) {
+    Eigen::MatrixXcd out(static_cast<Eigen::Index>(ia.size()), static_cast<Eigen::Index>(ib.size()));
+    for (std::size_t i = 0; i < ia.size(); ++i)
+      for (std::size_t j = 0; j < ib.size(); ++j)
+        out(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) = full(ia[i], ib[j]);
+    return out;
+  };
+  const Eigen::MatrixXcd T = block(Atilde);
+  const double tt = T.squaredNorm();
+  if (!(tt > 0.0)) return gradient;
+  const double cc = target.chi.squaredNorm();
+  const complexd overlap = (T.conjugate().cwiseProduct(target.chi)).sum();  // <T, chi>
+  const std::vector<std::size_t> canonical = canonicalEdgeIndices(*spacetime, assembled.complex());
+  // r = 1 - |<T,chi>|^2 / (|T|^2 |chi|^2). For a holomorphic dT:
+  //   d|<T,chi>|^2 = 2 Re( <T,chi> <chi,dT> ),  d|T|^2 = 2 Re( <T,dT> ),
+  // so dr = 2 Re(dF · dcoord) with
+  //   dF = -( <T,chi> <chi,dT> |T|^2 - |<T,chi>|^2 <T,dT> ) / (|T|^4 |chi|^2).
+  const auto sensitivity = [&](const Eigen::MatrixXcd &dA) {
+    const Eigen::MatrixXcd dT = block(dA);
+    const complexd s1 = (target.chi.conjugate().cwiseProduct(dT)).sum();  // <chi, dT>
+    const complexd s2 = (T.conjugate().cwiseProduct(dT)).sum();           // <T, dT>
+    return -(overlap * s1 * tt - std::norm(overlap) * s2) / (tt * tt * cc);
+  };
+  for (std::size_t e = 0; e < edges.size(); ++e) {
+    gradient.lengths[static_cast<Eigen::Index>(e)] = packHolomorphic(sensitivity(
+        chainhodge::BandDerivative::pencilOperatorLengthDerivative(*assembled.op, A->degree, canonical[e])));
+    if (A->degree == 0)
+      gradient.phases[static_cast<Eigen::Index>(e)] = packHolomorphic(sensitivity(
+          chainhodge::BandDerivative::pencilOperatorPhaseDerivative(*assembled.op, A->degree, canonical[e])));
+  }
+  return gradient;
+}
+
+MultiCobordism::ResidualGradient MultiCobordism::fiberModeAscent() const {
+  const auto edges = spacetime_->getEdgeList()->toVector();
+  ResidualGradient total;
+  total.lengths = Eigen::VectorXcd::Zero(static_cast<Eigen::Index>(edges.size()));
+  total.phases = Eigen::VectorXcd::Zero(static_cast<Eigen::Index>(edges.size()));
+  std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> parentIndex;
+  for (std::size_t e = 0; e < edges.size(); ++e) parentIndex[edgeKey(edges[e])] = e;
+  const auto accumulate = [&](const ResidualGradient &g, const Spacetime &on, double weight) {
+    const auto onEdges = on.getEdgeList()->toVector();
+    for (std::size_t e = 0; e < onEdges.size(); ++e) {
+      const auto found = parentIndex.find(edgeKey(onEdges[e]));
+      if (found == parentIndex.end()) continue;
+      total.lengths[static_cast<Eigen::Index>(found->second)] += weight * g.lengths[static_cast<Eigen::Index>(e)];
+      if (g.phases.size() == static_cast<Eigen::Index>(onEdges.size()))
+        total.phases[static_cast<Eigen::Index>(found->second)] += weight * g.phases[static_cast<Eigen::Index>(e)];
+    }
+  };
+  if (wholeFiberTarget_) accumulate(fiberResidualGradientOn(spacetime_, *wholeFiberTarget_), *spacetime_, 1.0);
+  for (const auto &block : inputBlocks_) {
+    if (!block.fiber || block.fiber->images.cols() == 0) continue;
+    auto sub = blockSubcomplexWithGeometry(block, spacetime_);
+    if (!sub) continue;
+    try {
+      accumulate(fiberResidualGradientOn(sub, *block.fiber), *sub, inputResidualWeight_);
+    } catch (const std::runtime_error &) {
+      // a refused geometry has no descent direction (its residual is the full leak)
+    } catch (const std::invalid_argument &) {
+    }
+  }
+  if (twoBodyTarget_) {
+    try {
+      accumulate(twoBodyResidualGradientOn(spacetime_, *twoBodyTarget_), *spacetime_, 1.0);
+    } catch (const std::runtime_error &) {
+    } catch (const std::invalid_argument &) {
+    }
+  }
+  return total;
 }
 
 void MultiCobordism::setWholeComplexFiberTarget(BoundaryFiber fiber) {
