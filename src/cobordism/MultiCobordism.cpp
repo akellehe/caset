@@ -2148,6 +2148,16 @@ double MultiCobordism::deltaF(
 
 double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth,
                             double baseObjective) {
+  // The candidate loop below constructs one `ReggeSolver` on the LIVE
+  // spacetime per candidate (`deltaF`), and that constructor materializes the
+  // facet lattice lazily — a mutation of the shared object. On a live complex
+  // whose facets are not yet materialized (a fresh seed, or the complex built
+  // from the snapshot of a committed move) two OpenMP threads then race in
+  // `Simplex::getFacets` and corrupt the simplex deque (measured on the Δ³
+  // fiber drive, #940: SIGSEGV in `Spacetime::createSimplex` from two
+  // candidate threads). Reach the fixpoint once, here, so every thread's
+  // construction is read-only.
+  spacetime_->materializeFacets();
   const auto currentSnapshot = snapshot();
   const double baseResidualU =
       compositeSupportsLocalizedDelta() ? rU(spacetime_) : 0.0;
