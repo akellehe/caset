@@ -244,10 +244,37 @@ struct FixedCochainOptimization {
   double residual{std::numeric_limits<double>::infinity()};
   double eigenvalue{0.0};
   std::size_t freeEdgeCount{0};
+  /// Free amplitude coordinates summed over the witnesses: the auxiliary
+  /// cells, minus the readout rank when a readout system is imposed.
   std::size_t auxiliaryCellCount{0};
+  std::size_t readoutRank{0};
   std::vector<std::vector<complexd>> states;
   std::vector<double> stateResiduals;
   std::vector<double> stateEigenvalues;
+};
+
+/// Exact linear readout constraints on every witness (#936): chain `r` paired
+/// with witness `j` must equal `targets[j][r]`. The auxiliary block of each
+/// witness is parametrized on the affine solution set of its readout system,
+/// so the constraints hold exactly at every iterate and no penalty enters.
+struct ReadoutSystem {
+  const std::vector<MultiCobordism::ReadoutChain> *chains{nullptr};
+  const std::vector<std::vector<complexd>> *targets{nullptr};
+};
+
+/// The affine parametrization `auxiliary = offset + basis * coordinates` of one
+/// witness's auxiliary block (identity when no readout system is imposed).
+struct AffineAuxiliary {
+  Eigen::VectorXcd offset;
+  Eigen::MatrixXcd basis;
+};
+
+/// A warm start for one relaxation pass (#936): the previous pass's witnesses
+/// keyed by cell (cells absent from the live complex, i.e. created by growth,
+/// start at zero) together with the live edge geometry. The warm start is
+/// descended first; the remaining restarts are drawn as before.
+struct WarmStart {
+  std::vector<std::map<Cell, complexd>> states;
 };
 
 FixedCochainOptimization optimizeFixedCochainTargets(
@@ -256,7 +283,8 @@ FixedCochainOptimization optimizeFixedCochainTargets(
     const std::vector<FixedCochainTarget> &fixedTargets,
     const std::function<bool(std::uint64_t, std::uint64_t)> &edgeIsFree,
     bool commonEigenvalue, double epsilon, int restarts, std::uint64_t seed,
-    int maxIterations) {
+    int maxIterations, const ReadoutSystem *readoutSystem = nullptr,
+    const WarmStart *warmStart = nullptr) {
   constexpr double kPi = 3.14159265358979323846;
   constexpr double kWeightMinimum = 0.1;
   constexpr double kWeightMaximum = 10.0;
@@ -294,8 +322,95 @@ FixedCochainOptimization optimizeFixedCochainTargets(
       throw std::invalid_argument(
           "MultiCobordism: a fixed cochain cell is absent from the live "
           "complex");
+  }
+
+  const bool hasAffine = readoutSystem != nullptr &&
+                         readoutSystem->chains != nullptr &&
+                         !readoutSystem->chains->empty();
+  std::vector<AffineAuxiliary> affine(fixedTargets.size());
+  std::size_t readoutRank = 0;
+  if (hasAffine) {
+    const auto &chains = *readoutSystem->chains;
+    const auto &targets = *readoutSystem->targets;
+    if (targets.size() != fixedTargets.size())
+      throw std::invalid_argument(
+          "MultiCobordism: readout target count does not match the witness "
+          "count");
+    std::map<Cell, std::size_t> cellIndex;
+    for (std::size_t index = 0; index < order; ++index)
+      cellIndex.emplace(cells[index], index);
+    // The readout matrix over ALL cells, in canonical cell order.
+    Eigen::MatrixXcd readoutMatrix = Eigen::MatrixXcd::Zero(
+        static_cast<Eigen::Index>(chains.size()),
+        static_cast<Eigen::Index>(order));
+    for (std::size_t row = 0; row < chains.size(); ++row) {
+      for (const auto &[cell, coefficient] : chains[row]) {
+        const auto found = cellIndex.find(cell);
+        if (found == cellIndex.end())
+          throw std::invalid_argument(
+              "MultiCobordism: a readout chain cell is absent from the live "
+              "complex");
+        readoutMatrix(static_cast<Eigen::Index>(row),
+                      static_cast<Eigen::Index>(found->second)) +=
+            coefficient;
+      }
+    }
+    for (std::size_t stateIndex = 0; stateIndex < fixedTargets.size();
+         ++stateIndex) {
+      if (targets[stateIndex].size() != chains.size())
+        throw std::invalid_argument(
+            "MultiCobordism: a readout target row does not match the readout "
+            "chain count");
+      const auto &auxiliary = auxiliaryIndices[stateIndex];
+      const Eigen::Index rows = static_cast<Eigen::Index>(chains.size());
+      const Eigen::Index columns = static_cast<Eigen::Index>(auxiliary.size());
+      // Right-hand side: the target minus the fixed cells' contribution.
+      Eigen::VectorXcd rhs(rows);
+      for (Eigen::Index row = 0; row < rows; ++row) {
+        complexd fixedPart(0.0, 0.0);
+        for (std::size_t cell = 0; cell < order; ++cell)
+          fixedPart += readoutMatrix(row, static_cast<Eigen::Index>(cell)) *
+                       fixedValues[stateIndex][cell];
+        rhs[row] = targets[stateIndex][static_cast<std::size_t>(row)] -
+                   fixedPart;
+      }
+      Eigen::MatrixXcd auxiliaryMatrix(rows, columns);
+      for (Eigen::Index column = 0; column < columns; ++column)
+        auxiliaryMatrix.col(column) = readoutMatrix.col(
+            static_cast<Eigen::Index>(auxiliary[static_cast<std::size_t>(column)]));
+      // Fixed cells contribute only to the right-hand side above; the fixed
+      // values of the auxiliary block are zero there by construction.
+      Eigen::JacobiSVD<Eigen::MatrixXcd> svd(
+          auxiliaryMatrix, Eigen::ComputeFullU | Eigen::ComputeFullV);
+      svd.setThreshold(1e-12);
+      const Eigen::Index rank = columns == 0 ? 0 : svd.rank();
+      Eigen::VectorXcd particular = Eigen::VectorXcd::Zero(columns);
+      if (columns > 0) particular = svd.solve(rhs);
+      const double inconsistency =
+          (auxiliaryMatrix * particular - rhs).norm();
+      if (!(inconsistency <= 1e-10 * std::max(1.0, rhs.norm())))
+        throw std::invalid_argument(
+            "MultiCobordism: the readout targets of witness " +
+            std::to_string(stateIndex) +
+            " are inconsistent with its fixed amplitudes on the live "
+            "complex (readout system has no solution)");
+      affine[stateIndex].offset = std::move(particular);
+      affine[stateIndex].basis =
+          columns == 0 ? Eigen::MatrixXcd(0, 0)
+                       : Eigen::MatrixXcd(svd.matrixV().rightCols(columns - rank));
+      if (stateIndex == 0) readoutRank = static_cast<std::size_t>(rank);
+    }
+  }
+  // Free amplitude coordinates per witness: the auxiliary cells, or the
+  // readout null-space dimension when a readout system is imposed.
+  std::vector<std::size_t> coordinateCounts(fixedTargets.size(), 0);
+  for (std::size_t stateIndex = 0; stateIndex < fixedTargets.size();
+       ++stateIndex) {
+    coordinateCounts[stateIndex] =
+        hasAffine ? static_cast<std::size_t>(affine[stateIndex].basis.cols())
+                  : auxiliaryIndices[stateIndex].size();
     auxiliaryOffsets[stateIndex] = totalAuxiliaryCount;
-    totalAuxiliaryCount += auxiliaryIndices[stateIndex].size();
+    totalAuxiliaryCount += coordinateCounts[stateIndex];
   }
 
   const std::size_t weightCount = freeEdges.size();
@@ -304,21 +419,40 @@ FixedCochainOptimization optimizeFixedCochainTargets(
       weightCount + phaseCount + 2 * totalAuxiliaryCount;
 
   const auto buildStates =
-      [&fixedValues, &auxiliaryIndices, &auxiliaryOffsets, weightCount,
+      [&fixedValues, &auxiliaryIndices, &auxiliaryOffsets, &coordinateCounts,
+       &affine, hasAffine, weightCount,
        phaseCount](const Eigen::VectorXd &parameters) {
         std::vector<std::vector<complexd>> states = fixedValues;
         for (std::size_t stateIndex = 0; stateIndex < states.size();
              ++stateIndex) {
+          const Eigen::Index base = static_cast<Eigen::Index>(
+              weightCount + phaseCount + 2 * auxiliaryOffsets[stateIndex]);
+          if (!hasAffine) {
+            for (std::size_t auxiliaryIndex = 0;
+                 auxiliaryIndex < auxiliaryIndices[stateIndex].size();
+                 ++auxiliaryIndex) {
+              const Eigen::Index parameterIndex =
+                  base + static_cast<Eigen::Index>(2 * auxiliaryIndex);
+              states[stateIndex]
+                    [auxiliaryIndices[stateIndex][auxiliaryIndex]] =
+                  complexd(parameters[parameterIndex],
+                           parameters[parameterIndex + 1]);
+            }
+            continue;
+          }
+          Eigen::VectorXcd coordinates(
+              static_cast<Eigen::Index>(coordinateCounts[stateIndex]));
+          for (Eigen::Index index = 0; index < coordinates.size(); ++index)
+            coordinates[index] = complexd(parameters[base + 2 * index],
+                                          parameters[base + 2 * index + 1]);
+          const Eigen::VectorXcd auxiliary =
+              affine[stateIndex].offset +
+              affine[stateIndex].basis * coordinates;
           for (std::size_t auxiliaryIndex = 0;
                auxiliaryIndex < auxiliaryIndices[stateIndex].size();
-               ++auxiliaryIndex) {
-            const Eigen::Index parameterIndex = static_cast<Eigen::Index>(
-                weightCount + phaseCount +
-                2 * (auxiliaryOffsets[stateIndex] + auxiliaryIndex));
+               ++auxiliaryIndex)
             states[stateIndex][auxiliaryIndices[stateIndex][auxiliaryIndex]] =
-                complexd(parameters[parameterIndex],
-                         parameters[parameterIndex + 1]);
-          }
+                auxiliary[static_cast<Eigen::Index>(auxiliaryIndex)];
         }
         return states;
       };
@@ -424,14 +558,58 @@ FixedCochainOptimization optimizeFixedCochainTargets(
       };
 
   const LevenbergMarquardt solver(maxIterations, epsilon);
-  const auto best = solver.multiRestart(residual, clamp, sample,
-                                        parameterCount, restarts, seed,
-                                        epsilon);
+  LevenbergMarquardt::Result best;
+  int remainingRestarts = restarts;
+  if (warmStart != nullptr) {
+    if (warmStart->states.size() != fixedTargets.size())
+      throw std::invalid_argument(
+          "MultiCobordism: warm-start witness count does not match");
+    Eigen::VectorXd start = Eigen::VectorXd::Zero(
+        static_cast<Eigen::Index>(parameterCount));
+    for (std::size_t index = 0; index < weightCount; ++index)
+      start[static_cast<Eigen::Index>(index)] =
+          (freeEdges[index]->getLength() * freeEdges[index]->getLength())
+              .real();
+    for (std::size_t index = 0; index < phaseCount; ++index)
+      start[static_cast<Eigen::Index>(weightCount + index)] =
+          freeEdges[index]->getPhase().real();
+    for (std::size_t stateIndex = 0; stateIndex < fixedTargets.size();
+         ++stateIndex) {
+      const auto &auxiliary = auxiliaryIndices[stateIndex];
+      Eigen::VectorXcd previous = Eigen::VectorXcd::Zero(
+          static_cast<Eigen::Index>(auxiliary.size()));
+      for (std::size_t auxiliaryIndex = 0; auxiliaryIndex < auxiliary.size();
+           ++auxiliaryIndex) {
+        const auto found =
+            warmStart->states[stateIndex].find(cells[auxiliary[auxiliaryIndex]]);
+        if (found != warmStart->states[stateIndex].end())
+          previous[static_cast<Eigen::Index>(auxiliaryIndex)] = found->second;
+      }
+      const Eigen::VectorXcd coordinates =
+          hasAffine ? Eigen::VectorXcd(affine[stateIndex].basis.adjoint() *
+                                       (previous - affine[stateIndex].offset))
+                    : previous;
+      const Eigen::Index base = static_cast<Eigen::Index>(
+          weightCount + phaseCount + 2 * auxiliaryOffsets[stateIndex]);
+      for (Eigen::Index index = 0; index < coordinates.size(); ++index) {
+        start[base + 2 * index] = coordinates[index].real();
+        start[base + 2 * index + 1] = coordinates[index].imag();
+      }
+    }
+    best = solver.minimize(residual, clamp, clamp(start));
+    remainingRestarts = restarts - 1;
+  }
+  if (remainingRestarts > 0 && !(best.cost < epsilon)) {
+    auto trial = solver.multiRestart(residual, clamp, sample, parameterCount,
+                                     remainingRestarts, seed, epsilon);
+    if (trial.cost < best.cost) best = std::move(trial);
+  }
   (void)residual(best.parameters);
 
   FixedCochainOptimization result;
   result.freeEdgeCount = freeEdges.size();
   result.auxiliaryCellCount = totalAuxiliaryCount;
+  result.readoutRank = readoutRank;
   result.states = buildStates(best.parameters);
   result.stateEigenvalues.reserve(result.states.size());
   std::vector<std::vector<complexd>> unitStates;
@@ -1741,6 +1919,314 @@ MultiCobordism::relaxBoundaryStatePairs(
   result.stateEigenvalues = std::move(best.stateEigenvalues);
   result.inputBoundaryResiduals = finalInputBoundary.residuals;
   result.outputBoundaryResiduals = finalOutputBoundary.residuals;
+  result.residualTrace = std::move(residualTrace);
+  return result;
+}
+
+MultiCobordism::WholeComplexReadoutResult
+MultiCobordism::relaxWholeComplexReadoutTargets(
+    int degree, std::string regionAName,
+    std::vector<std::vector<std::uint64_t>> cellsA,
+    std::vector<std::vector<complexd>> statesA, std::string regionBName,
+    std::vector<std::vector<std::uint64_t>> cellsB,
+    std::vector<std::vector<complexd>> statesB,
+    std::vector<ReadoutChain> readouts,
+    std::vector<std::vector<complexd>> targets, bool commonEigenvalue,
+    double epsilon, double boundaryEpsilon, int restarts, int maxGrowth,
+    std::uint64_t seed, int maxIterations) {
+  const std::string prefix =
+      "MultiCobordism::relaxWholeComplexReadoutTargets: ";
+  if (!spacetime_)
+    throw std::invalid_argument(prefix + "null spacetime");
+  if (degree < 0 || degree >= spacetime_->getDimensions())
+    throw std::invalid_argument(
+        prefix + "degree must index a cell of the boundary");
+  if (regionAName.empty() || regionBName.empty() ||
+      regionAName == regionBName)
+    throw std::invalid_argument(
+        prefix + "the two region names must be distinct and nonempty");
+  if (statesA.empty() || statesA.size() != statesB.size() ||
+      statesA.size() != targets.size())
+    throw std::invalid_argument(
+        prefix + "witness count mismatch between the two boundary states and "
+                 "the readout targets, or no witnesses");
+  if (readouts.empty())
+    throw std::invalid_argument(
+        prefix + "at least one readout chain is required");
+  if (!(epsilon > 0.0) || !std::isfinite(epsilon) ||
+      !(boundaryEpsilon > 0.0) || !std::isfinite(boundaryEpsilon))
+    throw std::invalid_argument(
+        prefix + "residual tolerances must be finite and positive");
+  if (restarts <= 0 || maxGrowth < 0 || maxIterations <= 0)
+    throw std::invalid_argument(prefix + "invalid search budget");
+
+  const PinnedRegion *regionA = nullptr;
+  const PinnedRegion *regionB = nullptr;
+  for (const auto &region : pinnedRegions_) {
+    if (region.name == regionAName) regionA = &region;
+    if (region.name == regionBName) regionB = &region;
+  }
+  if (!regionA || !regionB)
+    throw std::invalid_argument(
+        prefix + "both named pinned regions must be declared");
+
+  const auto components = boundaryComponents(*spacetime_);
+  if (components.size() != 2)
+    throw std::invalid_argument(
+        prefix + "the live cobordism boundary must have exactly two "
+                 "connected components");
+  const BoundaryComponentData *componentA = nullptr;
+  const BoundaryComponentData *componentB = nullptr;
+  for (const auto &component : components) {
+    if (component.vertices == regionA->vertices) componentA = &component;
+    if (component.vertices == regionB->vertices) componentB = &component;
+  }
+  if (!componentA || !componentB || componentA == componentB)
+    throw std::invalid_argument(
+        prefix + "each named region must equal one distinct boundary "
+                 "component");
+
+  const std::size_t cellWidth = static_cast<std::size_t>(degree) + 1;
+  const auto canonicalizeCell = [&prefix, cellWidth](Cell &cell,
+                                                     const std::string &label) {
+    if (cell.size() != cellWidth)
+      throw std::invalid_argument(prefix + label + " contains a malformed cell");
+    std::sort(cell.begin(), cell.end());
+    if (std::adjacent_find(cell.begin(), cell.end()) != cell.end())
+      throw std::invalid_argument(prefix + label + " contains a malformed cell");
+  };
+  const auto canonicalizeFrame = [&prefix, &canonicalizeCell](
+                                     std::vector<Cell> &frame,
+                                     const std::string &label) {
+    std::set<Cell> unique;
+    for (auto &cell : frame) {
+      canonicalizeCell(cell, label);
+      if (!unique.insert(cell).second)
+        throw std::invalid_argument(prefix + label +
+                                    " contains a repeated cell");
+    }
+    return unique;
+  };
+  const auto suppliedCellsA = canonicalizeFrame(cellsA, "cell frame A");
+  const auto suppliedCellsB = canonicalizeFrame(cellsB, "cell frame B");
+  if (suppliedCellsA.empty() ||
+      suppliedCellsA != componentCells(*componentA, degree))
+    throw std::invalid_argument(
+        prefix + "cell frame A must enumerate the complete degree-k boundary "
+                 "component");
+  if (suppliedCellsB.empty() ||
+      suppliedCellsB != componentCells(*componentB, degree))
+    throw std::invalid_argument(
+        prefix + "cell frame B must enumerate the complete degree-k boundary "
+                 "component");
+
+  for (std::size_t row = 0; row < readouts.size(); ++row) {
+    if (readouts[row].empty())
+      throw std::invalid_argument(prefix + "readout chain " +
+                                  std::to_string(row) + " is empty");
+    std::set<Cell> seen;
+    for (auto &[cell, coefficient] : readouts[row]) {
+      canonicalizeCell(cell, "readout chain " + std::to_string(row));
+      if (!seen.insert(cell).second)
+        throw std::invalid_argument(prefix + "readout chain " +
+                                    std::to_string(row) +
+                                    " lists a cell twice");
+      if (!finiteComplex(coefficient))
+        throw std::invalid_argument(prefix + "readout chain " +
+                                    std::to_string(row) +
+                                    " has a non-finite coefficient");
+    }
+  }
+
+  for (std::size_t witness = 0; witness < statesA.size(); ++witness) {
+    if (statesA[witness].size() != cellsA.size())
+      throw std::invalid_argument(
+          prefix + "state A width does not match cell frame A");
+    if (statesB[witness].size() != cellsB.size())
+      throw std::invalid_argument(
+          prefix + "state B width does not match cell frame B");
+    if (targets[witness].size() != readouts.size())
+      throw std::invalid_argument(
+          prefix + "a readout target row does not match the readout chain "
+                   "count");
+    double jointNormSquared = 0.0;
+    for (const complexd value : statesA[witness]) {
+      if (!finiteComplex(value))
+        throw std::invalid_argument(
+            prefix + "boundary states must contain only finite amplitudes");
+      jointNormSquared += std::norm(value);
+    }
+    for (const complexd value : statesB[witness]) {
+      if (!finiteComplex(value))
+        throw std::invalid_argument(
+            prefix + "boundary states must contain only finite amplitudes");
+      jointNormSquared += std::norm(value);
+    }
+    for (const complexd value : targets[witness])
+      if (!finiteComplex(value))
+        throw std::invalid_argument(
+            prefix + "readout targets must contain only finite amplitudes");
+    if (!(jointNormSquared > 0.0) || !std::isfinite(jointNormSquared))
+      throw std::invalid_argument(
+          prefix + "the joint boundary state of a witness must be nonzero");
+    const double inverseNorm = 1.0 / std::sqrt(jointNormSquared);
+    for (complexd &value : statesA[witness]) value *= inverseNorm;
+    for (complexd &value : statesB[witness]) value *= inverseNorm;
+    for (complexd &value : targets[witness]) value *= inverseNorm;
+  }
+
+  // Isolated-boundary eigenstate check on every NONZERO component
+  // restriction; an exactly zero restriction is the zero input.
+  const auto isZero = [](const std::vector<complexd> &state) {
+    for (const complexd value : state)
+      if (value != complexd(0.0, 0.0)) return false;
+    return true;
+  };
+  const auto boundaryResiduals =
+      [this, degree, &isZero, &prefix, boundaryEpsilon](
+          const BoundaryComponentData &component,
+          const std::vector<Cell> &cells,
+          const std::vector<std::vector<complexd>> &states,
+          const char *label, bool enforce) {
+        std::vector<std::vector<complexd>> nonzero;
+        std::vector<std::size_t> witnessOf;
+        for (std::size_t witness = 0; witness < states.size(); ++witness) {
+          if (isZero(states[witness])) continue;
+          nonzero.push_back(states[witness]);
+          witnessOf.push_back(witness);
+        }
+        std::vector<double> residuals(states.size(), 0.0);
+        if (!nonzero.empty()) {
+          const auto evaluation = evaluateBoundaryStates(
+              spacetime_, component, degree, cells, nonzero, metricSource_);
+          for (std::size_t index = 0; index < witnessOf.size(); ++index) {
+            residuals[witnessOf[index]] = evaluation.residuals[index];
+            if (enforce && !(evaluation.residuals[index] < boundaryEpsilon))
+              throw std::invalid_argument(
+                  prefix + "the state of witness " +
+                  std::to_string(witnessOf[index]) + " on component " +
+                  label + " is not an isolated-boundary eigenstate");
+          }
+        }
+        return residuals;
+      };
+  (void)boundaryResiduals(*componentA, cellsA, statesA, "A", true);
+  (void)boundaryResiduals(*componentB, cellsB, statesB, "B", true);
+
+  EigenstateSynthesis synthesis(spacetime_, degree, metricSource_);
+  for (const auto &[a, b] : synthesis.boundaryEdges())
+    if (!edgeIsPinned(a, b))
+      throw std::invalid_argument(
+          prefix + "every geometric boundary edge must be held by a declared "
+                   "pinned region");
+
+  using Geometry = std::pair<complexd, complexd>;
+  std::map<std::pair<std::uint64_t, std::uint64_t>, Geometry> pinnedGeometry;
+  for (auto *edge : spacetime_->getEdgeList()->toVector()) {
+    const auto key = edgeKey(edge);
+    if (edgeIsPinned(key.first, key.second))
+      pinnedGeometry.emplace(key,
+                             Geometry{edge->getLength(), edge->getPhase()});
+  }
+
+  std::vector<FixedCochainTarget> fixedTargets(statesA.size());
+  for (std::size_t witness = 0; witness < statesA.size(); ++witness) {
+    for (std::size_t index = 0; index < cellsA.size(); ++index)
+      fixedTargets[witness].emplace(cellsA[index], statesA[witness][index]);
+    for (std::size_t index = 0; index < cellsB.size(); ++index)
+      fixedTargets[witness].emplace(cellsB[index], statesB[witness][index]);
+  }
+  const ReadoutSystem readoutSystem{&readouts, &targets};
+
+  FixedCochainOptimization best;
+  std::vector<double> residualTrace;
+  int growthSteps = 0;
+  WarmStart warmStart;
+  for (int pass = 0;; ++pass) {
+    best = optimizeFixedCochainTargets(
+        spacetime_, synthesis, fixedTargets,
+        [this](std::uint64_t a, std::uint64_t b) {
+          return !edgeIsPinned(a, b);
+        },
+        commonEigenvalue, epsilon, restarts,
+        seed + static_cast<std::uint64_t>(pass), maxIterations,
+        &readoutSystem, pass == 0 ? nullptr : &warmStart);
+    residualTrace.push_back(best.residual);
+    if (best.residual < epsilon || growthSteps >= maxGrowth) break;
+    // Carry this pass's witnesses (by cell) and the live geometry into the
+    // next pass as its first descent; cells created by growth start at zero.
+    warmStart.states.assign(best.states.size(), {});
+    for (std::size_t witness = 0; witness < best.states.size(); ++witness)
+      for (std::size_t index = 0; index < synthesis.order(); ++index)
+        warmStart.states[witness].emplace(synthesis.cellSimplices()[index],
+                                          best.states[witness][index]);
+    if (!synthesis.growInterior(seed + 1000u +
+                                static_cast<std::uint64_t>(pass)))
+      break;
+    ++growthSteps;
+  }
+
+  std::map<std::pair<std::uint64_t, std::uint64_t>, Geometry>
+      finalPinnedGeometry;
+  for (auto *edge : spacetime_->getEdgeList()->toVector()) {
+    const auto key = edgeKey(edge);
+    if (edgeIsPinned(key.first, key.second))
+      finalPinnedGeometry.emplace(
+          key, Geometry{edge->getLength(), edge->getPhase()});
+  }
+  if (finalPinnedGeometry != pinnedGeometry)
+    throw std::logic_error(
+        prefix + "pinned geometry changed during the readout relaxation");
+
+  // Readouts of the returned (unnormalized) witnesses in the live cell order.
+  std::map<Cell, std::size_t> cellIndex;
+  for (std::size_t index = 0; index < synthesis.order(); ++index)
+    cellIndex.emplace(synthesis.cellSimplices()[index], index);
+  std::vector<std::vector<complexd>> measuredReadouts(best.states.size());
+  double readoutDeviation = 0.0;
+  for (std::size_t witness = 0; witness < best.states.size(); ++witness) {
+    measuredReadouts[witness].reserve(readouts.size());
+    for (std::size_t row = 0; row < readouts.size(); ++row) {
+      complexd value(0.0, 0.0);
+      for (const auto &[cell, coefficient] : readouts[row]) {
+        const auto found = cellIndex.find(cell);
+        if (found == cellIndex.end())
+          throw std::logic_error(
+              prefix + "a readout chain cell vanished from the live complex");
+        value += coefficient * best.states[witness][found->second];
+      }
+      measuredReadouts[witness].push_back(value);
+      readoutDeviation = std::max(
+          readoutDeviation, std::abs(value - targets[witness][row]));
+    }
+  }
+
+  WholeComplexReadoutResult result;
+  result.converged = best.residual < epsilon;
+  result.commonEigenvalue = commonEigenvalue;
+  result.residual = best.residual;
+  result.eigenvalue = best.eigenvalue;
+  result.degree = degree;
+  result.growthSteps = growthSteps;
+  result.freeEdgeCount = best.freeEdgeCount;
+  result.auxiliaryCellCount = best.auxiliaryCellCount;
+  result.readoutRank = best.readoutRank;
+  result.regionA = std::move(regionAName);
+  result.regionB = std::move(regionBName);
+  result.boundaryResidualsA =
+      boundaryResiduals(*componentA, cellsA, statesA, "A", false);
+  result.boundaryResidualsB =
+      boundaryResiduals(*componentB, cellsB, statesB, "B", false);
+  result.cellsA = std::move(cellsA);
+  result.cellsB = std::move(cellsB);
+  result.statesA = std::move(statesA);
+  result.statesB = std::move(statesB);
+  result.targets = std::move(targets);
+  result.readouts = std::move(measuredReadouts);
+  result.readoutDeviation = readoutDeviation;
+  result.states = std::move(best.states);
+  result.stateResiduals = std::move(best.stateResiduals);
+  result.stateEigenvalues = std::move(best.stateEigenvalues);
   result.residualTrace = std::move(residualTrace);
   return result;
 }
