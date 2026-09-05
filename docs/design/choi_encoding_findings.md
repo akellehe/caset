@@ -84,72 +84,54 @@ rotations.
 
 ### Class 1, both modes per side (qubits, `U ∈ U(4)`, four witnesses)
 
-The four-witness common-eigenvalue fit reaches 1.1e-11 on the 6-layer annulus with the
-warm start and 30 growths (2.3 h), and no shorter configuration converged. Parameter
-counts (real unknowns vs real equations) are not the limit: at 5 and 6 layers the slack
-is positive before any growth.
+The four-witness common-eigenvalue fit reaches small residuals only by approaching a
+Dirichlet degeneracy of the bulk, and then its reads fail. The full record on the
+6-layer annulus (`full-L6-g30.json`, 8 restarts, 30 growths, 1000 iterations, warm
+start, 51 vertices) is the measurement:
 
-Budgets are written restarts × growth × iterations; "cold" passes redraw every
-restart at random, "warm" passes descend first from the previous pass's witnesses
-(the warm start landed after the cold rows were measured).
+| quantity | one mode per side | qubits (four witnesses) |
+|---|---|---|
+| fit residual | 7.18e-17, converged | 8.74e-8 |
+| Dirichlet gap `σ_min(L_II − λ)` on reads | 0.10 | 6.2e-6 |
+| held-out reads vs `U x` (max) | 1.5e-8 | 4.7 |
+| attachment permutations (max) | 1.5e-8 | 4.7 |
+| recovered operator vs `U` | 1.6e-8 | 5.5 |
+| class 2 two-particle amplitudes | 6.9e-9 | 5.0 |
 
-| bulk | witnesses | budget | best residual | eigenvalue | growth | free edges | source |
-|---|---|---|---|---|---|---|---|
-| 3 layers | 4 | 4 × 8 × 400, cold | 2.45e-4 | 3.362 | 8 | 48 | `run-diagonal.json` |
-| 3 layers | 4 | 8 × 24 × 1000, cold | 5.75e-5 (best pass 1.3e-5) | 3.536 | 24 | 96 | `probe-readout.log` |
-| 3 layers, **pairs only (no readout)** | 4 | 8 × 24 × 1000, cold | **9.64e-17, converged** | 5.160 | 23 | 93 | `probe-pairs.log` |
-| 5 layers | 4 | 8 × 8 × 1000, cold | 7.78e-4 | 3.548 | 8 | 66 | `probe-readout-L5.log` |
-| 5 layers, pairs only (no readout) | 4 | 8 × 8 × 1000, cold | 2.75e-5 (best pass 9.4e-6) | 3.957 | 8 | 66 | `probe-pairs-L5.log` |
-| 6 layers | 4 | 8 × 8 × 1000, cold | 1.85e-4 (best pass 6.5e-5) | 3.604 | 8 | 75 | `probe-readout-L6.log` |
-| 3 layers | 4 | 8 × 24 × 1000, warm | 7.00e-6 (monotone trace) | 4.652 | 24 | 96 | `warm-readout-L3-g24.log` |
-| 6 layers | 4 | 8 × 12 × 1000, warm | 2.03e-6 (monotone trace) | 3.759 | 12 | 87 | `warm-readout-L6-g12.log` |
-| 6 layers | 4 | 8 × 30 × 1000, warm | **8.56e-11 (best pass 1.12e-11)**, 2.3 h | 4.039 | 30 | 141 | `warm-readout-L6-g30.log` |
-| 3 layers | 4 | 8 × 40 × 1000, warm | 4.25e-6 (plateau near 3e-6 from pass 25), 2.3 h | 4.886 | 40 | 144 | `warm-readout-L3-g40.log` |
-| 3 layers, each witness its own eigenvalue | 4 | 8 × 12 × 1000, cold | 7.33e-4 | 3.03–3.04 | 12 | | `probe2-indep.log` |
-| 3 layers | 3 | 8 × 12 × 1000, cold | 8.06e-5 | 3.212 | 12 | | `probe2-three.log` |
-| 3 layers | 3 | 8 × 12 × 1000, warm | 8.06e-5 (monotone trace, same floor) | 3.212 | 12 | | `warm-three.log` |
-| 3 layers, two witnesses on both modes | 2 | 8 × 12 × 1000, cold | **9.73e-17, converged** | 4.579 | 5 | | `probe2-twomixed.log` |
+The residual falls because the common eigenvalue moves onto an interior mode of the
+bulk (the gap closes from 0.10 to 6e-6), which is exactly the evasion route recorded
+below for class 3: with `L_II − λ` nearly singular the witnesses can be eigenstates
+without the whole-complex state being a function of the boundary data, and the
+Poincaré–Steklov read of a held-out input is not the witness the fit produced. The
+earlier probe rows (1.1e-11 at growth 30) measured the residual alone and are not a
+demonstration of encoding; the operative test is the held-out read, and it fails.
 
-Three readings. (i) Four independent common-eigenvalue eigenstates with prescribed
-boundary traces ARE realizable on the 3-layer annulus: the pairs-only fit reaches
-9.6e-17 after 23 growths, so the eigen-realizability alone is not the obstruction.
-(ii) The difficulty scales with the witness count, not with the mode content: two
-witnesses on both modes converge in 5 growths; three do not converge in 12; dropping
-the common eigenvalue does not help. (iii) The readout constraint is what the
-four-witness fit has not yet met: it pins the operator the bulk implements to the
-chosen `U ∈ U(4)`, whereas the pairs-only fit lets the output emerge. With the warm
-start the readout fit's trace is monotone and an order of magnitude lower at the same
-budget (7.0e-6 at 3 layers/growth 24, 2.0e-6 at 6 layers/growth 12). On the 3-layer
-annulus it then plateaus near 3e-6 (4.3e-6 at growth 40); on the 6-layer annulus it
-drops from a plateau near 3e-6 to 7.7e-10 (pass 27) and 1.1e-11 (pass 29) at growth 30:
-the generic `U ∈ U(4)` on two qubits IS encodable, at a read error of about 3e-6 (the
-square root of the residual), on the wider bulk, at a cost of 141 free edges and 2.3 h.
-The full record at that configuration is `full-L6-g30.json` when it completes.
+Probe rows, for the record (budgets restarts × growth × iterations; "cold" passes
+redraw every restart, "warm" passes descend first from the previous witnesses):
 
-| configuration | witnesses | growth | free edges | real parameters | real equations | slack |
-|---|---|---|---|---|---|---|
-| 3 layers | 4 | 0 | 24 | 64 | 96 | −32 |
-| 3 layers | 4 | 8 | 48 | 176 | 160 | 16 |
-| 5 layers | 4 | 0 | 42 | 148 | 144 | 4 |
-| 6 layers | 4 | 0 | 51 | 190 | 168 | 22 |
-| 3 layers | 2 | 0 | 24 | 64 | 48 | 16 |
+| bulk | witnesses | budget | best residual | growth | source |
+|---|---|---|---|---|---|
+| 3 layers | 4 | 4 × 8 × 400, cold | 2.45e-4 | 8 | `run-diagonal.json` |
+| 3 layers, pairs only (no readout) | 4 | 8 × 24 × 1000, cold | 9.64e-17, converged | 23 | `probe-pairs.log` |
+| 3 layers | 4 | 8 × 40 × 1000, warm | 4.25e-6 (plateau near 3e-6) | 40 | `warm-readout-L3-g40.log` |
+| 6 layers | 4 | 8 × 30 × 1000, warm | 1.12e-11 best pass | 30 | `warm-readout-L6-g30.log` |
+| 3 layers, two witnesses on both modes | 2 | 8 × 12 × 1000, cold | 9.73e-17, converged | 5 | `probe2-twomixed.log` |
 
-This is the realizability question #901 and #903 characterize, met here for a
-prescribed four-dimensional operator; the two-witness coupled fit has converged before
-(the merged operator experiment) and converges here in every form tried.
+Two witnesses converge with a gap of 0.1; the difficulty scales with the witness
+count, and the four-witness route to a small residual is the degeneracy, not an
+encoding.
 
 ### Class 3 (CNOT over the product spanning set)
 
-`run-diagonal.json` (3 layers, 4 × 8 × 400): the CNOT fit floors at 3.7e-4 and the
-identity-on-`⊗` control at 4.2e-4, but the one-particle control on the same product
-spanning set also floors (1.1e-4), so at this budget the numerical floor is not yet
-attributable to the tensor structure; the algebraic obstruction (norm 2 versus 2.6e-16)
-is. Two further readings from the record: the dependency witness `Σ_j c_j Ψ_j` has norm
-30 (CNOT) and 17 (identity), and the Dirichlet gap is 1e-4 (CNOT) and 6e-4 (identity)
-versus 0.10 on the converged one-mode bulk — the fit lowers its residual by driving
-`L_II − λ` toward singularity, which is the one way a linear bulk can hold a nonzero
-combination with zero boundary trace. That is the predicted evasion, and it is why the
-held-out read (which needs `L_II − λ` invertible) is the operative test.
+The algebraic obstruction stands (norm 2 for CNOT and for the identity on `⊗`; 2.6e-16
+for any one-particle operator). The full record shows how a fit evades it:
+`class_3_cnot` reaches 9.17e-17 at growth 29 with the dependency witness
+`Σ_j c_j Ψ_j` of norm 9.8 and eigen-residual 4.5e-9, and a Dirichlet gap of 1.5e-10:
+the combination that a linear extension must send to zero is carried as a nonzero
+interior eigenmode with zero boundary trace, exactly the predicted evasion. The
+identity-on-`⊗` control stops at 3.9e-7 (gap 5.4e-5) and the one-particle control at
+8.3e-7. A fit that "converges" this way encodes nothing: the held-out read, which needs
+`L_II − λ` invertible, is the operative test, and the Dirichlet gap is its certificate.
 
 ### Class 2, the decomposability witness
 
@@ -165,8 +147,9 @@ stated for the two-particle sector.
   bit-identical, and the no-readout path is unchanged.
 - The Choi-encoding claim holds as stated for the two-dimensional direct sum (one mode
   per side): the bulk encodes a generic `U(2)` between the A and B modes, and its Fock
-  lift, with reads at the square root of the fit residual.
-- For qubits on both sides the four-witness common-eigenvalue fit is the open
-  realizability item; every larger-budget probe lowers the residual under growth but
-  none reaches the tolerance. The CNOT falsification is established algebraically and
-  its numerical form waits on that fit.
+  lift, with reads at the square root of the fit residual and a Dirichlet gap of 0.1.
+- For qubits on both sides the four-witness fit reaches small residuals only through
+  a Dirichlet degeneracy, and its reads fail; the same route lets the CNOT product set
+  "converge". Any residual reported without the Dirichlet gap is not evidence of
+  encoding. The open item is a fit that keeps the gap open, or a different
+  representation of the state (epic #938 moves to degree-0 tetrahedral fibers).
