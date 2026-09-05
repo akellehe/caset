@@ -72,7 +72,11 @@ class CobordismDAG {
   /// names, beside the period target. A read that refuses leaves the slot
   /// empty and records the reason (`fiberRefusal`). Requires the
   /// process-wide Whitney pencil metric source when the DAG runs.
-  void setFiberPiping(bool enabled, int degree = 1);
+  /// \p scoreBlocksByFiber makes every node score its piped input blocks by
+  /// the fiber residual (`MultiCobordism::useFiberResiduals`, #940) instead of
+  /// the period residual; off by default.
+  void setFiberPiping(bool enabled, int degree = 1, bool scoreBlocksByFiber = false);
+  [[nodiscard]] bool scoresBlocksByFiber() const noexcept { return scoreBlocksByFiber_; }
   [[nodiscard]] bool fiberPiping() const noexcept { return pipeFibers_; }
   /// The fiber form of a node's output, valid after run; throws when absent.
   [[nodiscard]] const BoundaryFiber &outputFiber(int node, int outputIndex) const;
@@ -98,6 +102,7 @@ class CobordismDAG {
   std::vector<bool> done_;
   bool pipeFibers_{false};
   int fiberDegree_{1};
+  bool scoreBlocksByFiber_{false};
   std::vector<std::vector<std::optional<BoundaryFiber>>> outputFibers_;  // per node
   std::vector<std::string> fiberRefusals_;
   std::vector<int> pipedInputs_;

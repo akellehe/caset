@@ -32,6 +32,7 @@
 #include "quantum/ChoiJamiolkowski.h"
 #include "simulations/ReggeSolver.h"
 #include "spacetime/Spacetime.h"
+#include "spacetime/topologies/SolidSimplex.h"
 #include "spacetime/pachner/AddMove.h"
 #include "spacetime/pachner/FlipMove.h"
 #include "spacetime/pachner/IFlipMove.h"
@@ -742,6 +743,8 @@ double MultiCobordism::residualForBoundaryBlockWithDistinctMatchings(
     const BoundaryBlock &boundaryBlock,
     const std::shared_ptr<Spacetime> &spacetime,
     std::set<std::vector<int>> &claimedMatchings) const {
+  if (useFiberResiduals_ && boundaryBlock.fiber && boundaryBlock.fiber->images.cols() > 0)
+    return fiberResidualForBoundaryBlock(boundaryBlock, spacetime);  // #940
   auto blockSubcomplex = spacetime->subcomplexWithinVertexSet(
     boundaryBlock.vertices);
   double residual = 0.0;
@@ -841,6 +844,12 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
   // they carry no register-seeking gradient at a seed. The near-kernel residual
   // is the same functional continued below the topological threshold, and it
   // saturates at 0 the moment b_k reaches the expected count (see the header).
+  // Fiber-form targets (#940) declare no register count and no hole: the
+  // whole-complex fiber residual replaces the near-kernel hole-forcing term.
+  if (useFiberResiduals_) {
+    if (wholeFiberTarget_) totalResidual += fiberResidualOn(spacetime, *wholeFiberTarget_);
+    return totalResidual;
+  }
   const std::size_t expectedRegisters = expectedRegisterCount();
   if (expectedRegisters > 0)
     for (int registerDegree : registerDegrees_)
@@ -3014,6 +3023,105 @@ void MultiCobordism::buildStep(BuildAction action, int maxSteps, int nCandidateM
 }
 
 // ---- fiber-form boundary targets (#916) ----
+
+double MultiCobordism::fiberResidualOn(const std::shared_ptr<Spacetime> &spacetime,
+                                       const BoundaryFiber &target) const {
+  if (target.images.cols() == 0)
+    throw std::logic_error("MultiCobordism::fiberResidualOn: the fiber target has no images");
+  if (metricSource_ != HodgeLaplacian::MetricSource::WhitneyPencil)
+    throw std::logic_error("MultiCobordism::fiberResidualOn: the fiber residual is read on the chain-level "
+                           "Whitney pencil; this node uses the diagonal-weight metric");
+  const double targetNorm = target.images.squaredNorm();
+  if (!(targetNorm > 0.0))
+    throw std::logic_error("MultiCobordism::fiberResidualOn: the fiber target is zero");
+  if (!spacetime) return 1.0;  // no complex to read: the target leaks in full
+  // A candidate geometry the pencil refuses (a singular dressed metric, a
+  // branch or allowability failure, a cell outside the complex) cannot carry
+  // the state: it scores as the full leak, exactly as a block with no emerged
+  // register does under the period residual. Contract errors still propagate.
+  BoundaryFiber read;
+  try {
+    const AssembledPencil assembled = PencilLayer::assemble({spacetime});
+    if (assembled.dimension() < target.degree) return 1.0;
+    const std::vector<int> idx = PencilLayer::indicesOf(assembled, target.degree, target.cells);
+    if (idx.size() != target.cells.size()) return 1.0;
+    const chainhodge::Contour contour =
+        target.contour.nodes.empty() ? PencilLayer::bandContour(assembled, target.degree, 1)
+                                     : target.contour;
+    read = PencilLayer::readBoundaryFiber(assembled, target.degree, contour, target.cells);
+  } catch (const std::runtime_error &) {
+    return 1.0;
+  } catch (const std::invalid_argument &) {
+    return 1.0;
+  }
+  if (read.images.cols() == 0 || read.images.rows() != target.images.rows()) return 1.0;
+  // Least-squares fit of the target images in the band's images on the cells.
+  const Eigen::MatrixXcd coefficients = read.images.colPivHouseholderQr().solve(target.images);
+  const double leak = (read.images * coefficients - target.images).squaredNorm();
+  return leak / targetNorm;
+}
+
+double MultiCobordism::fiberResidualForBoundaryBlock(
+    const BoundaryBlock &boundaryBlock, const std::shared_ptr<Spacetime> &spacetime) const {
+  if (!boundaryBlock.fiber || boundaryBlock.fiber->images.cols() == 0)
+    throw std::logic_error("MultiCobordism::fiberResidualForBoundaryBlock: the block carries no fiber target");
+  auto blockSubcomplex = spacetime->subcomplexWithinVertexSet(boundaryBlock.vertices);
+  return fiberResidualOn(blockSubcomplex, *boundaryBlock.fiber);
+}
+
+void MultiCobordism::setWholeComplexFiberTarget(BoundaryFiber fiber) {
+  if (fiber.images.cols() == 0)
+    throw std::invalid_argument("MultiCobordism::setWholeComplexFiberTarget: the fiber has no images");
+  if (fiber.cells.size() != static_cast<std::size_t>(fiber.images.rows()))
+    throw std::invalid_argument("MultiCobordism::setWholeComplexFiberTarget: one image row per cell");
+  for (auto &c : fiber.cells) std::sort(c.begin(), c.end());
+  wholeFiberTarget_ = std::move(fiber);
+}
+
+double MultiCobordism::wholeComplexFiberResidual() const {
+  if (!wholeFiberTarget_)
+    throw std::logic_error("MultiCobordism::wholeComplexFiberResidual: no whole-complex fiber target");
+  return fiberResidualOn(spacetime_, *wholeFiberTarget_);
+}
+
+BoundaryFiber MultiCobordism::readWholeComplexFiber(const chainhodge::Contour *contour,
+                                                    double kappa) const {
+  if (!wholeFiberTarget_)
+    throw std::logic_error("MultiCobordism::readWholeComplexFiber: no whole-complex fiber target");
+  if (metricSource_ != HodgeLaplacian::MetricSource::WhitneyPencil)
+    throw std::logic_error("MultiCobordism::readWholeComplexFiber: read on the chain-level Whitney pencil; "
+                           "this node uses the diagonal-weight metric");
+  const AssembledPencil assembled = PencilLayer::assemble({spacetime_});
+  const BoundaryFiber &target = *wholeFiberTarget_;
+  const chainhodge::Contour chosen =
+      contour ? *contour
+              : (target.contour.nodes.empty() ? PencilLayer::bandContour(assembled, target.degree, 1)
+                                              : target.contour);
+  return PencilLayer::readBoundaryFiber(assembled, target.degree, chosen, target.cells, kappa);
+}
+
+double MultiCobordism::fiberResidualForInputBlock(std::size_t index) const {
+  if (index >= inputBlocks_.size())
+    throw std::out_of_range("MultiCobordism::fiberResidualForInputBlock: input block index out of range");
+  return fiberResidualForBoundaryBlock(inputBlocks_[index], spacetime_);
+}
+
+std::shared_ptr<Spacetime> MultiCobordism::seedSimplex(int dimension, bool balancedEdges) {
+  using namespace ::tessera::spacetime;
+  if (dimension < 1)
+    throw std::invalid_argument("MultiCobordism::seedSimplex: dimension must be at least one");
+  auto metric = std::make_shared<Metric>(true, Signature(dimension, SignatureType::Lorentzian));
+  std::shared_ptr<Topology> topology = std::make_shared<SolidSimplex>(dimension);
+  auto host = std::make_shared<Spacetime>(metric, SpacetimeType::CDT, 1.0, 1.0,
+                                          Foliation::PREFERRED, topology);
+  host->build();
+  // #690: the wiring mode is stamped before ANY growth, and the seed's own
+  // uniform |l^2| = 1 edges honor it too (balanced: l = sqrt(1/2)*(1+i)).
+  host->setBalancedEdgeWiring(balancedEdges);
+  for (auto *edge : host->getEdgeList()->toVector())
+    edge->setLength(balancedEdges ? Spacetime::balancedLength(1.0) : std::sqrt(complexd(1.0, 0.0)));
+  return host;
+}
 
 void MultiCobordism::setInputFiber(std::size_t index, BoundaryFiber fiber) {
   if (index >= inputBlocks_.size())

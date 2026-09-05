@@ -289,6 +289,47 @@ Eigen::MatrixXcd PencilLayer::composeResponses(const Eigen::MatrixXcd &left, con
   return Rkk - Rks * Rss.partialPivLu().solve(Rsk);
 }
 
+chainhodge::Contour PencilLayer::bandContour(const AssembledPencil &assembled, int k, int bandIndex,
+                                             int nodeCount) {
+  if (bandIndex < 0) throw std::invalid_argument("PencilLayer::bandContour: negative band index");
+  const auto ev = assembled.op->spectrum(k).eigenvalues;
+  double scale = 0.0;
+  for (const auto &z : ev) scale = std::max(scale, std::abs(z));
+  const double tolerance = 1e-9 * std::max(scale, 1.0);
+  std::vector<Complex> sorted(ev.begin(), ev.end());
+  std::sort(sorted.begin(), sorted.end(),
+            [](const Complex &a, const Complex &b) { return std::abs(a) < std::abs(b); });
+  // Distinct clusters in order of modulus: a value joins the last cluster when
+  // it lies within the tolerance of that cluster's mean.
+  std::vector<Complex> centers;
+  std::vector<int> counts;
+  for (const auto &z : sorted) {
+    if (!centers.empty() && std::abs(z - centers.back()) <= tolerance) {
+      const int n = ++counts.back();
+      centers.back() += (z - centers.back()) / static_cast<double>(n);
+    } else {
+      centers.push_back(z);
+      counts.push_back(1);
+    }
+  }
+  if (bandIndex >= static_cast<int>(centers.size()))
+    throw std::invalid_argument("PencilLayer::bandContour: band index " + std::to_string(bandIndex) +
+                                " exceeds the " + std::to_string(centers.size()) +
+                                " distinct eigenvalue clusters of the degree-" + std::to_string(k) +
+                                " pencil");
+  const Complex center = centers[static_cast<std::size_t>(bandIndex)];
+  double nearest = std::numeric_limits<double>::infinity();
+  for (std::size_t j = 0; j < centers.size(); ++j)
+    if (static_cast<int>(j) != bandIndex) nearest = std::min(nearest, std::abs(centers[j] - center));
+  // A quarter of the gap: the nearest other cluster then lies three radii
+  // from the circle, so the trapezoidal resolvent quadrature leaks
+  // (1/3)^nodeCount of it into the band instead of (1/1)^nodeCount at half the
+  // gap (which at 32 nodes left 1e-10 of a neighbouring cluster in the
+  // projector and made a simple band read as rank four on a 3-simplex).
+  const double radius = std::isfinite(nearest) ? 0.25 * nearest : 1.0;
+  return chainhodge::Contour::circle(center, radius, nodeCount);
+}
+
 chainhodge::Contour PencilLayer::harmonicContour(const AssembledPencil &assembled, int k, int nodeCount) {
   const auto ev = assembled.op->spectrum(k).eigenvalues;
   double scale = 0.0;

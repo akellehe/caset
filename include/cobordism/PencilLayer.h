@@ -226,6 +226,17 @@ class PencilLayer {
 
   /// A circle around zero of radius half the smallest nonzero eigenvalue
   /// modulus of the degree-\p k pencil.
+  /// A circle around the \p bandIndex-th distinct eigenvalue cluster of the
+  /// degree-\p k pencil, clusters ordered by modulus (index 0 is the smallest,
+  /// the harmonic cluster when zero is an eigenvalue; index 1 the lowest band
+  /// above it), with radius a quarter of the distance to the nearest other
+  /// cluster so the quadrature's leak from that cluster is \f$ 3^{-n} \f$.
+  /// Two eigenvalues belong to one cluster when they differ by less than
+  /// \f$ 10^{-9} \f$ of the spectral scale. @throws std::invalid_argument when
+  /// the index exceeds the cluster count.
+  [[nodiscard]] static chainhodge::Contour bandContour(const AssembledPencil &assembled, int k,
+                                                       int bandIndex, int nodeCount = 64);
+
   [[nodiscard]] static chainhodge::Contour harmonicContour(const AssembledPencil &assembled,
                                                            int k, int nodeCount = 64);
 
