@@ -179,10 +179,11 @@ def two_body_record(node, psi, phi, Jt):
     geometric = c * T
     populated = [(K, M) for K in range(4) for M in range(4) if abs(chi[K, M]) > 1e-12]
     absent = [(K, M) for K in range(4) for M in range(4) if abs(chi[K, M]) <= 1e-12]
-    ratios_alg, ratios_geo = [], []
-    for (K, M), (K2, M2) in itertools.combinations(populated, 2):
-        ratios_alg.append(abs(chi[K, M]) ** 2 / abs(chi[K2, M2]) ** 2)
-        ratios_geo.append(abs(geometric[K, M]) ** 2 / max(abs(geometric[K2, M2]) ** 2, 1e-300))
+    # Branching ratios P_F / P_F' are compared through the probabilities
+    # normalized to their largest entry (a ratio against a vanishing geometric
+    # entry would be unbounded and say nothing).
+    p_alg = np.abs(chi) ** 2 / np.abs(chi).max() ** 2
+    p_geo = np.abs(geometric) ** 2 / max(np.abs(geometric).max() ** 2, 1e-300)
     exact = exact_amplitudes(psi, phi, Jt)
     first_order = -1j * Jt * chi
     # amplitudes to final states orthogonal to the input: F ≠ I components
@@ -205,7 +206,7 @@ def two_body_record(node, psi, phi, Jt):
             abs(first_order[K, M] - exact[K, M]) for K in range(4) for M in range(4)
             if abs(np.kron(psi, phi).reshape(4, 4)[K, M]) < 1e-12) if any(
             abs(np.kron(psi, phi).reshape(4, 4)[K, M]) < 1e-12 for K in range(4) for M in range(4)) else 0.0),
-        "branching_ratio_error_max": float(max((abs(g - a) / a for g, a in zip(ratios_geo, ratios_alg)), default=0.0)),
+        "branching_ratio_error_max": float(max(abs(p_geo[K, M] - p_alg[K, M]) for K, M in populated)),
         "selection_rule_absent_entries": [[K, M] for K, M in absent],
         "selection_rule_leak_max": float(max((abs(geometric[K, M]) for K, M in absent), default=0.0)),
         "cells_a": [list(map(int, c)) for c in read.cells_a],
