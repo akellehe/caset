@@ -848,6 +848,7 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
   // whole-complex fiber residual replaces the near-kernel hole-forcing term.
   if (useFiberResiduals_) {
     if (wholeFiberTarget_) totalResidual += fiberResidualOn(spacetime, *wholeFiberTarget_);
+    if (twoBodyTarget_) totalResidual += twoBodyResidualOn(spacetime, *twoBodyTarget_);
     return totalResidual;
   }
   const std::size_t expectedRegisters = expectedRegisterCount();
@@ -3077,6 +3078,140 @@ double MultiCobordism::fiberResidualForBoundaryBlock(
     throw std::logic_error("MultiCobordism::fiberResidualForBoundaryBlock: the block carries no fiber target");
   auto blockSubcomplex = spacetime->subcomplexWithinVertexSet(boundaryBlock.vertices);
   return fiberResidualOn(blockSubcomplex, *boundaryBlock.fiber);
+}
+
+// ---- two-body cobordism map (#941) ----
+
+void MultiCobordism::attachInputFiber(std::size_t index, BoundaryFiber fiber,
+                                      std::vector<std::vector<std::uint64_t>> cells) {
+  if (index >= inputBlocks_.size())
+    throw std::out_of_range("MultiCobordism::attachInputFiber: input block index out of range");
+  if (fiber.images.cols() == 0)
+    throw std::invalid_argument("MultiCobordism::attachInputFiber: the fiber has no images");
+  if (cells.size() != static_cast<std::size_t>(fiber.images.rows()))
+    throw std::invalid_argument("MultiCobordism::attachInputFiber: one attachment cell per fiber row");
+  const ChainComplex K = ChainComplex::fromSpacetime(*spacetime_);
+  std::set<std::vector<std::uint64_t>> live;
+  for (auto c : K.kSimplexVertices(fiber.degree)) {
+    std::sort(c.begin(), c.end());
+    live.insert(c);
+  }
+  std::set<std::vector<std::uint64_t>> seen;
+  for (auto &c : cells) {
+    std::sort(c.begin(), c.end());
+    if (!live.count(c))
+      throw std::invalid_argument("MultiCobordism::attachInputFiber: an attachment cell is absent from the "
+                                  "live complex at degree " + std::to_string(fiber.degree));
+    if (!seen.insert(c).second)
+      throw std::invalid_argument("MultiCobordism::attachInputFiber: an attachment cell is repeated");
+  }
+  for (std::size_t other = 0; other < inputBlocks_.size(); ++other) {
+    if (other == index || !inputBlocks_[other].fiber) continue;
+    for (const auto &c : inputBlocks_[other].fiber->cells)
+      if (seen.count(c))
+        throw std::invalid_argument("MultiCobordism::attachInputFiber: attachment cell overlaps input fiber " +
+                                    std::to_string(other));
+  }
+  // Attaching a fiber to cells makes those cells the block's: the block's
+  // region grows to contain them, so the block's own sub-complex reads them
+  // (a cell outside the region would score as the full leak forever).
+  for (const auto &c : cells)
+    for (const std::uint64_t v : c) inputBlocks_[index].vertices.insert(v);
+  fiber.cells = std::move(cells);
+  inputBlocks_[index].fiber = std::move(fiber);
+}
+
+void MultiCobordism::setTwoBodyTarget(Eigen::MatrixXcd chi, bool choiDecomposed) {
+  if (chi.rows() == 0 || chi.cols() == 0 || !(chi.squaredNorm() > 0.0))
+    throw std::invalid_argument("MultiCobordism::setTwoBodyTarget: the target must be a nonzero matrix");
+  twoBodyTarget_ = TwoBodyTarget{std::move(chi), choiDecomposed};
+}
+
+std::pair<const BoundaryFiber *, const BoundaryFiber *> MultiCobordism::attachedInputFibers() const {
+  std::vector<const BoundaryFiber *> attached;
+  for (const auto &block : inputBlocks_)
+    if (block.fiber && block.fiber->images.cols() > 0) attached.push_back(&*block.fiber);
+  if (attached.size() != 2)
+    throw std::logic_error("MultiCobordism: the two-body map needs exactly two attached input fibers; " +
+                           std::to_string(attached.size()) + " found");
+  return {attached[0], attached[1]};
+}
+
+chainhodge::TransferResult MultiCobordism::frameTransferOn(const std::shared_ptr<Spacetime> &spacetime,
+                                                            const BoundaryFiber &A,
+                                                            const BoundaryFiber &B) const {
+  if (metricSource_ != HodgeLaplacian::MetricSource::WhitneyPencil)
+    throw std::logic_error("MultiCobordism: the two-body map is read on the chain-level Whitney pencil; "
+                           "this node uses the diagonal-weight metric");
+  if (A.degree != B.degree)
+    throw std::logic_error("MultiCobordism: the two attached fibers are at different degrees");
+  const AssembledPencil assembled = PencilLayer::assemble({spacetime});
+  // The full frames on the attached cells: unit images (and unit dual images),
+  // so the transfer is the coupling block of the whole between the two frames.
+  auto frame = [&](const BoundaryFiber &f) {
+    BoundaryFiber out;
+    out.degree = f.degree;
+    out.cells = f.cells;
+    const Eigen::Index r = static_cast<Eigen::Index>(f.cells.size());
+    out.images = Eigen::MatrixXcd::Identity(r, r);
+    out.dualImages = Eigen::MatrixXcd::Identity(r, r);
+    return out;
+  };
+  return PencilLayer::transfer(assembled, A.degree, frame(A), frame(B));
+}
+
+double MultiCobordism::twoBodyResidualOn(const std::shared_ptr<Spacetime> &spacetime,
+                                         const TwoBodyTarget &target) const {
+  const auto [A, B] = attachedInputFibers();
+  if (!spacetime) return 1.0;
+  Eigen::MatrixXcd T;
+  try {
+    T = frameTransferOn(spacetime, *A, *B).forward;
+  } catch (const std::runtime_error &) {
+    return 1.0;  // a refused geometry cannot carry the map: full leak
+  } catch (const std::invalid_argument &) {
+    return 1.0;
+  }
+  if (T.rows() != target.chi.rows() || T.cols() != target.chi.cols())
+    throw std::logic_error("MultiCobordism: the two-body target is " + std::to_string(target.chi.rows()) + "x" +
+                           std::to_string(target.chi.cols()) + " but the attached frames give " +
+                           std::to_string(T.rows()) + "x" + std::to_string(T.cols()));
+  // Projective Frobenius leak: min_c ||c T - chi||^2 / ||chi||^2 (the same in
+  // the state and operator readings, vec being linear).
+  const double tt = T.squaredNorm();
+  if (!(tt > 0.0)) return 1.0;
+  const complexd overlap = (T.conjugate().cwiseProduct(target.chi)).sum();
+  const double leak = target.chi.squaredNorm() - std::norm(overlap) / tt;
+  return std::max(0.0, leak / target.chi.squaredNorm());
+}
+
+double MultiCobordism::twoBodyResidual() const {
+  if (!twoBodyTarget_) throw std::logic_error("MultiCobordism::twoBodyResidual: no two-body target");
+  return twoBodyResidualOn(spacetime_, *twoBodyTarget_);
+}
+
+MultiCobordism::TwoBodyRead MultiCobordism::readTwoBody() const {
+  const auto [A, B] = attachedInputFibers();
+  const chainhodge::TransferResult transfer = frameTransferOn(spacetime_, *A, *B);
+  TwoBodyRead read;
+  read.choiDecomposed = twoBodyTarget_ ? twoBodyTarget_->choiDecomposed : true;
+  read.transfer = transfer.forward;
+  read.choiState = Eigen::Map<const Eigen::VectorXcd>(transfer.forward.data(), transfer.forward.size());
+  Eigen::JacobiSVD<Eigen::MatrixXcd> svd(transfer.forward);
+  const Eigen::VectorXd sv = svd.singularValues();
+  read.singularValues.assign(sv.data(), sv.data() + sv.size());
+  read.schmidtRank = 0;
+  for (Eigen::Index i = 0; i < sv.size(); ++i)
+    if (sv.size() > 0 && sv(i) > 1e-10 * sv(0)) ++read.schmidtRank;
+  read.reversalResidual = transfer.reversalResidual;
+  read.residual = twoBodyTarget_ ? twoBodyResidualOn(spacetime_, *twoBodyTarget_)
+                                 : std::numeric_limits<double>::quiet_NaN();
+  for (const auto &block : inputBlocks_)
+    if (block.fiber && block.fiber->images.cols() > 0)
+      read.inputFiberResiduals.push_back(fiberResidualForBoundaryBlock(block, spacetime_));
+  read.cellsA = A->cells;
+  read.cellsB = B->cells;
+  return read;
 }
 
 void MultiCobordism::setWholeComplexFiberTarget(BoundaryFiber fiber) {
