@@ -3112,6 +3112,11 @@ void MultiCobordism::attachInputFiber(std::size_t index, BoundaryFiber fiber,
         throw std::invalid_argument("MultiCobordism::attachInputFiber: attachment cell overlaps input fiber " +
                                     std::to_string(other));
   }
+  // Attaching a fiber to cells makes those cells the block's: the block's
+  // region grows to contain them, so the block's own sub-complex reads them
+  // (a cell outside the region would score as the full leak forever).
+  for (const auto &c : cells)
+    for (const std::uint64_t v : c) inputBlocks_[index].vertices.insert(v);
   fiber.cells = std::move(cells);
   inputBlocks_[index].fiber = std::move(fiber);
 }

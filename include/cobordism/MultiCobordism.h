@@ -823,9 +823,10 @@ class MultiCobordism {
   /// Attach a piped input fiber to THIS complex's cells: `cells` (degree-k
   /// cells of the live complex, one per fiber row, in the attachment order — the
   /// attachment permutation is this order). The fiber's own cell ids are
-  /// upstream ids and are replaced. @throws std::invalid_argument on a count
-  /// mismatch, a cell absent from the live complex, or an overlap with another
-  /// attached input fiber's cells.
+  /// upstream ids and are replaced, and the block's region grows to contain
+  /// the attached cells. @throws std::invalid_argument on a count mismatch, a
+  /// cell absent from the live complex, or an overlap with another attached
+  /// input fiber's cells.
   void attachInputFiber(std::size_t index, BoundaryFiber fiber,
                         std::vector<std::vector<std::uint64_t>> cells);
   /// Set the two-body target; scored inside `rU` under `useFiberResiduals`
