@@ -6,12 +6,14 @@
 
 #include <complex>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "cobordism/MultiCobordism.h"
 #include "cobordism/PencilLayer.h"
 
 namespace tessera::spacetime { class Spacetime; }
@@ -86,6 +88,18 @@ class CobordismDAG {
   /// How many upstream fibers were attached to a node's input blocks when it ran.
   [[nodiscard]] int pipedInputCount(int node) const;
 
+  /// Two-body cobordism map (#941). `setInputAttachment` names the cells of
+  /// \p node's own complex that input slot \p slot's piped fiber is attached
+  /// to, in the attachment order (`MultiCobordism::attachInputFiber`); without
+  /// one the fiber is attached by upstream cell id as before. `setTwoBodyTarget`
+  /// gives the node its \f$ \chi \f$ on the pair of attached frames in the
+  /// chosen reading; the node then scores it inside `rU` (fiber residuals on).
+  void setInputAttachment(int node, int slot, std::vector<std::vector<std::uint64_t>> cells);
+  void setTwoBodyTarget(int node, Eigen::MatrixXcd chi, bool choiDecomposed = true);
+  /// The node's two-body reading after `run`; throws when the node carries none.
+  [[nodiscard]] const MultiCobordism::TwoBodyRead &twoBodyRead(int node) const;
+  [[nodiscard]] bool hasTwoBodyRead(int node) const;
+
  private:
   struct Node {
     std::shared_ptr<Spacetime> host;
@@ -104,6 +118,9 @@ class CobordismDAG {
   int fiberDegree_{1};
   bool scoreBlocksByFiber_{false};
   std::vector<std::vector<std::optional<BoundaryFiber>>> outputFibers_;  // per node
+  std::vector<std::map<int, std::vector<std::vector<std::uint64_t>>>> attachments_;  // per node, per slot
+  std::vector<std::optional<MultiCobordism::TwoBodyTarget>> twoBodyTargets_;      // per node
+  std::vector<std::optional<MultiCobordism::TwoBodyRead>> twoBodyReads_;          // per node
   std::vector<std::string> fiberRefusals_;
   std::vector<int> pipedInputs_;
 };

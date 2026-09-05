@@ -17,6 +17,7 @@
 #include "spacetime/pachner/RemoveMove.h"
 #include <cstdint>
 #include <map>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <random>
@@ -784,6 +785,62 @@ class MultiCobordism {
   /// dimension 4). @throws std::invalid_argument for dimension below 1.
   [[nodiscard]] static std::shared_ptr<Spacetime> seedSimplex(int dimension,
                                                               bool balancedEdges = false);
+
+  // ---- two-body cobordism map (#941) ----
+
+  /// The two-body target of the interaction node: \f$ \chi \f$ on the pair of
+  /// input frames (\f$ r_A\times r_B \f$). `choiDecomposed` selects the READING
+  /// the node reports: the state \f$ \mathrm{vec}(T_{AB}) \f$ on the pair space
+  /// when true, the operator \f$ T_{AB} \f$ when false. The fit residual is the
+  /// projective Frobenius leak in either reading (vec is linear, so the two
+  /// coincide there); the readings differ in what is returned and certified.
+  struct TwoBodyTarget {
+    Eigen::MatrixXcd chi{};
+    bool choiDecomposed{true};
+  };
+  /// The reading of the bulk between the two attached input frames.
+  struct TwoBodyRead {
+    bool choiDecomposed{true};
+    /// \f$ T_{AB} = (Z_A^\vee)^T(\tilde A^U)_{AB}Z_B \f$ with the full frames on
+    /// the two attached cell sets (the coupling block of the whole between them).
+    Eigen::MatrixXcd transfer{};
+    /// \f$ \mathrm{vec}(T_{AB}) \f$, column-major, the Choi-decomposed state.
+    Eigen::VectorXcd choiState{};
+    /// Singular values of \f$ T_{AB} \f$: the Schmidt spectrum of the state.
+    std::vector<double> singularValues{};
+    /// Numerical Schmidt rank (singular values above \f$ 10^{-10}\sigma_{\max} \f$);
+    /// one is the product (quasi-free) case, two the XY flip-flop's.
+    int schmidtRank{0};
+    /// The reversal identity residual of the transfer.
+    double reversalResidual{std::numeric_limits<double>::quiet_NaN()};
+    /// The projective Frobenius leak of the target in the reading.
+    double residual{std::numeric_limits<double>::quiet_NaN()};
+    /// The fiber residual of each input block carrying an attached fiber.
+    std::vector<double> inputFiberResiduals{};
+    std::vector<std::vector<std::uint64_t>> cellsA{};
+    std::vector<std::vector<std::uint64_t>> cellsB{};
+  };
+  /// Attach a piped input fiber to THIS complex's cells: `cells` (degree-k
+  /// cells of the live complex, one per fiber row, in the attachment order — the
+  /// attachment permutation is this order). The fiber's own cell ids are
+  /// upstream ids and are replaced. @throws std::invalid_argument on a count
+  /// mismatch, a cell absent from the live complex, or an overlap with another
+  /// attached input fiber's cells.
+  void attachInputFiber(std::size_t index, BoundaryFiber fiber,
+                        std::vector<std::vector<std::uint64_t>> cells);
+  /// Set the two-body target; scored inside `rU` under `useFiberResiduals`
+  /// once two input fibers are attached. @throws std::invalid_argument on an
+  /// empty target.
+  void setTwoBodyTarget(Eigen::MatrixXcd chi, bool choiDecomposed = true);
+  [[nodiscard]] const std::optional<TwoBodyTarget> &twoBodyTarget() const noexcept {
+    return twoBodyTarget_;
+  }
+  /// The two-body residual on the live complex. @throws std::logic_error
+  /// without a target or without two attached input fibers.
+  [[nodiscard]] double twoBodyResidual() const;
+  /// Read the bulk between the two attached frames on the live complex, with
+  /// certificates. @throws std::logic_error without two attached input fibers.
+  [[nodiscard]] TwoBodyRead readTwoBody() const;
 
   /// Attach the fiber form of an input block's target (a prior cobordism's
   /// output fiber piped downstream). @throws std::out_of_range on the index.
@@ -1629,6 +1686,15 @@ class MultiCobordism {
   double inputResidualWeight_ = 1.0;
   bool useFiberResiduals_{false};
   std::optional<BoundaryFiber> wholeFiberTarget_;
+  std::optional<TwoBodyTarget> twoBodyTarget_;
+  /// The transfer between the full frames on the two attached input fibers'
+  /// cells, on \p spacetime; refused geometries throw std::runtime_error.
+  [[nodiscard]] chainhodge::TransferResult frameTransferOn(
+      const std::shared_ptr<Spacetime> &spacetime, const BoundaryFiber &A,
+      const BoundaryFiber &B) const;
+  [[nodiscard]] double twoBodyResidualOn(const std::shared_ptr<Spacetime> &spacetime,
+                                         const TwoBodyTarget &target) const;
+  [[nodiscard]] std::pair<const BoundaryFiber *, const BoundaryFiber *> attachedInputFibers() const;
   /// The fiber residual of \p fiber read on \p spacetime (see `useFiberResiduals`).
   [[nodiscard]] double fiberResidualOn(const std::shared_ptr<Spacetime> &spacetime,
                                        const BoundaryFiber &fiber) const;

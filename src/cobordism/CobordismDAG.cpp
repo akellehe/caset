@@ -34,6 +34,9 @@ void CobordismDAG::run(int stage1MaxSteps, int stage1CandidateMoves,
   outputFibers_.assign(n, {});
   fiberRefusals_.assign(n, "");
   pipedInputs_.assign(n, 0);
+  twoBodyReads_.assign(n, std::nullopt);
+  if (attachments_.size() < n) attachments_.resize(n);
+  if (twoBodyTargets_.size() < n) twoBodyTargets_.resize(n);
 
   std::size_t completed = 0;
   while (completed < n) {
@@ -79,16 +82,28 @@ void CobordismDAG::run(int stage1MaxSteps, int stage1CandidateMoves,
           const auto &fibers = outputFibers_[e.first];
           if (e.second < static_cast<int>(fibers.size()) && fibers[e.second] &&
               slot < opt.inputs().size()) {
-            opt.setInputFiber(slot, *fibers[e.second]);
+            const auto attachment = attachments_[i].find(static_cast<int>(slot));
+            if (attachment != attachments_[i].end())
+              opt.attachInputFiber(slot, *fibers[e.second], attachment->second);  // #941
+            else
+              opt.setInputFiber(slot, *fibers[e.second]);
             ++pipedInputs_[i];
           }
           ++slot;
         }
+        if (twoBodyTargets_[i]) opt.setTwoBodyTarget(twoBodyTargets_[i]->chi, twoBodyTargets_[i]->choiDecomposed);
       }
       opt.runStage1(stage1MaxSteps, stage1CandidateMoves);
       opt.runStage2(stage2Beta, stage2MaxIters);
 
       residuals_[i] = opt.rU(opt.spacetime());
+      if (twoBodyTargets_[i]) {
+        try {
+          twoBodyReads_[i] = opt.readTwoBody();  // #941
+        } catch (const std::exception &ex) {
+          fiberRefusals_[i] = ex.what();
+        }
+      }
       outputs_[i] = nd.outputTargets;  // verified outputs, threaded downstream
       if (pipeFibers_) {
         outputFibers_[i].assign(opt.outputs().size(), std::nullopt);
@@ -131,6 +146,33 @@ double CobordismDAG::residual(int node) const {
 }
 
 
+
+void CobordismDAG::setInputAttachment(int node, int slot, std::vector<std::vector<std::uint64_t>> cells) {
+  if (node < 0 || node >= static_cast<int>(nodes_.size()))
+    throw std::out_of_range("CobordismDAG::setInputAttachment: node index out of range");
+  if (slot < 0) throw std::invalid_argument("CobordismDAG::setInputAttachment: negative slot");
+  if (attachments_.size() < nodes_.size()) attachments_.resize(nodes_.size());
+  attachments_[static_cast<std::size_t>(node)][slot] = std::move(cells);
+}
+
+void CobordismDAG::setTwoBodyTarget(int node, Eigen::MatrixXcd chi, bool choiDecomposed) {
+  if (node < 0 || node >= static_cast<int>(nodes_.size()))
+    throw std::out_of_range("CobordismDAG::setTwoBodyTarget: node index out of range");
+  if (twoBodyTargets_.size() < nodes_.size()) twoBodyTargets_.resize(nodes_.size());
+  twoBodyTargets_[static_cast<std::size_t>(node)] =
+      MultiCobordism::TwoBodyTarget{std::move(chi), choiDecomposed};
+}
+
+const MultiCobordism::TwoBodyRead &CobordismDAG::twoBodyRead(int node) const {
+  if (!hasTwoBodyRead(node))
+    throw std::logic_error("CobordismDAG::twoBodyRead: the node carries no two-body reading");
+  return *twoBodyReads_[static_cast<std::size_t>(node)];
+}
+
+bool CobordismDAG::hasTwoBodyRead(int node) const {
+  return node >= 0 && node < static_cast<int>(twoBodyReads_.size()) &&
+         twoBodyReads_[static_cast<std::size_t>(node)].has_value();
+}
 
 void CobordismDAG::setFiberPiping(bool enabled, int degree, bool scoreBlocksByFiber) {
   pipeFibers_ = enabled;

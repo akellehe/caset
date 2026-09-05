@@ -1252,6 +1252,25 @@ assertion. Every pairing is the transpose.)doc")
       .def_readonly(
           "residual_trace",
           &MultiCobordism::BoundaryStateTransferResult::residualTrace);
+  py::class_<MultiCobordism::TwoBodyTarget>(m, "TwoBodyTarget",
+      "chi on the pair of attached frames and the reading flag (#941).")
+      .def(py::init<>())
+      .def_readwrite("chi", &MultiCobordism::TwoBodyTarget::chi)
+      .def_readwrite("choi_decomposed", &MultiCobordism::TwoBodyTarget::choiDecomposed);
+  py::class_<MultiCobordism::TwoBodyRead>(m, "TwoBodyRead",
+      "The reading of the bulk between two attached input frames (#941): the frame transfer "
+      "T_AB (operator reading), vec(T_AB) (Choi-decomposed state reading), its Schmidt spectrum "
+      "and rank, the reversal residual, the fit residual, and the input blocks' fiber residuals.")
+      .def_readonly("choi_decomposed", &MultiCobordism::TwoBodyRead::choiDecomposed)
+      .def_readonly("transfer", &MultiCobordism::TwoBodyRead::transfer)
+      .def_readonly("choi_state", &MultiCobordism::TwoBodyRead::choiState)
+      .def_readonly("singular_values", &MultiCobordism::TwoBodyRead::singularValues)
+      .def_readonly("schmidt_rank", &MultiCobordism::TwoBodyRead::schmidtRank)
+      .def_readonly("reversal_residual", &MultiCobordism::TwoBodyRead::reversalResidual)
+      .def_readonly("residual", &MultiCobordism::TwoBodyRead::residual)
+      .def_readonly("input_fiber_residuals", &MultiCobordism::TwoBodyRead::inputFiberResiduals)
+      .def_readonly("cells_a", &MultiCobordism::TwoBodyRead::cellsA)
+      .def_readonly("cells_b", &MultiCobordism::TwoBodyRead::cellsB);
   py::class_<MultiCobordism::GeometricOperatorReadout>(
       m, "GeometricOperatorReadout",
       "Target-free promotion of a framed bulk-minus-boundary kernel. "
@@ -1452,6 +1471,21 @@ assertion. Every pairing is the transpose.)doc")
       .def("fiber_residual_for_input_block", &MultiCobordism::fiberResidualForInputBlock, py::arg("index"),
            py::call_guard<py::gil_scoped_release>(),
            "The fiber residual of one input block on the live complex.")
+      .def("attach_input_fiber", &MultiCobordism::attachInputFiber, py::arg("index"), py::arg("fiber"),
+           py::arg("cells"),
+           "Attach a piped input fiber to THIS complex's cells (one per fiber row, in the attachment "
+           "order = the attachment permutation); refuses overlaps with other attached input fibers.")
+      .def("set_two_body_target", &MultiCobordism::setTwoBodyTarget, py::arg("chi"),
+           py::arg("choi_decomposed") = true,
+           "The two-body target chi on the pair of attached frames; choi_decomposed selects the reading "
+           "(vec(T_AB) as a state on the pair space, or the operator T_AB). Scored inside r_U under "
+           "use_fiber_residuals once two input fibers are attached.")
+      .def("two_body_target", &MultiCobordism::twoBodyTarget)
+      .def("two_body_residual", &MultiCobordism::twoBodyResidual, py::call_guard<py::gil_scoped_release>(),
+           "The projective Frobenius leak of chi against the frame transfer T_AB on the live complex.")
+      .def("read_two_body", &MultiCobordism::readTwoBody, py::call_guard<py::gil_scoped_release>(),
+           "The bulk between the two attached frames: T_AB, vec(T_AB), Schmidt spectrum and rank, the "
+           "reversal residual, the fit residual, and both input blocks' fiber residuals.")
       .def("set_whole_complex_fiber_target", &MultiCobordism::setWholeComplexFiberTarget, py::arg("fiber"),
            "A fiber-form target carried by the WHOLE complex on the fiber's cells and contour (default: the "
            "lowest band above the flat zero mode); scored inside r_U under use_fiber_residuals.")
@@ -2282,6 +2316,12 @@ Right -- re-read after each drive call:
            "Pipe each node's output fibers (#916) into the downstream input blocks the edges name.")
       .def("fiber_piping", &CobordismDAG::fiberPiping)
       .def("scores_blocks_by_fiber", &CobordismDAG::scoresBlocksByFiber)
+      .def("set_input_attachment", &CobordismDAG::setInputAttachment, py::arg("node"), py::arg("slot"),
+           py::arg("cells"), "Cells of the node's own complex that the piped fiber of input slot attaches to.")
+      .def("set_two_body_target", &CobordismDAG::setTwoBodyTarget, py::arg("node"), py::arg("chi"),
+           py::arg("choi_decomposed") = true)
+      .def("two_body_read", &CobordismDAG::twoBodyRead, py::arg("node"), py::return_value_policy::copy)
+      .def("has_two_body_read", &CobordismDAG::hasTwoBodyRead, py::arg("node"))
       .def("output_fiber", &CobordismDAG::outputFiber, py::arg("node"), py::arg("output_index"),
            py::return_value_policy::copy)
       .def("has_output_fiber", &CobordismDAG::hasOutputFiber, py::arg("node"), py::arg("output_index"))
