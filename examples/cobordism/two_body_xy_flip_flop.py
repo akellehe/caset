@@ -227,19 +227,17 @@ def drive(node, rounds, stage1_steps, candidates, stage2_iters, tolerance, stage
             "vertices": int(node.spacetime().getVertexList().size())}
 
 
-def freeze_bulk(node, a, b):
-    """Pin every edge not inside the two attached tetrahedra."""
-    st = node.spacetime()
-    inside = set(a) | set(b)
-    edges = st.getEdgeList().toVector()
+def freeze_bulk(node):
+    """Pin every edge not inside one of the two input block regions (the
+    attached tetrahedra and the cells the blocks grew to), so only the blocks'
+    own edges relax when new inputs are attached."""
+    regions = [set(int(v) for v in block.vertices) for block in node.inputs]
     count = 0
-    for e in edges:
-        u, v = e.getSource().getId(), e.getTarget().getId()
-        if u in set(a) and v in set(a):
+    for e in node.spacetime().getEdgeList().toVector():
+        u, v = int(e.getSource().getId()), int(e.getTarget().getId())
+        if any(u in r and v in r for r in regions):
             continue
-        if u in set(b) and v in set(b):
-            continue
-        node.declare_pinned_region(f"bulk_edge_{u}_{v}", {int(u), int(v)})
+        node.declare_pinned_region(f"bulk_edge_{u}_{v}", {u, v})
         count += 1
     return count
 
@@ -263,6 +261,7 @@ def run(args):
     chi = flip_flop(psi, phi)
     W, a, b, grown = interaction_node(fiber_a, fiber_b, chi, args.choi, args.seed + 3, args.precone)
     record["interaction"] = {"cone_ins": int(grown), "attached_a": list(a), "attached_b": list(b),
+                             "block_regions": [sorted(int(v) for v in blk.vertices) for blk in W.inputs],
                              "before": two_body_record(W, psi, phi, args.Jt)}
     record["interaction"]["drive"] = drive(W, args.rounds, args.stage1_steps, args.candidates, args.stage2_iters,
                                            args.tolerance)
@@ -273,7 +272,7 @@ def run(args):
     phi2 = _unit(rng.normal(size=4) + 1j * rng.normal(size=4))
     _, fiber_a2, rec_a2 = grow_state(psi2, args.seed + 4, **budget)
     _, fiber_b2, rec_b2 = grow_state(phi2, args.seed + 5, **budget)
-    pinned = freeze_bulk(W, a, b)
+    pinned = freeze_bulk(W)
     W.attach_input_fiber(0, fiber_a2, [[v] for v in a])
     W.attach_input_fiber(1, fiber_b2, [[v] for v in b])
     W.set_two_body_target(flip_flop(psi2, phi2), args.choi)
@@ -302,11 +301,11 @@ def build_parser():
     p.add_argument("--output", type=Path, default=None)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--precone", type=int, default=8)
-    p.add_argument("--state-rounds", type=int, default=6)
-    p.add_argument("--rounds", type=int, default=4)
+    p.add_argument("--state-rounds", type=int, default=8)
+    p.add_argument("--rounds", type=int, default=6)
     p.add_argument("--stage1-steps", type=int, default=4)
     p.add_argument("--candidates", type=int, default=8)
-    p.add_argument("--stage2-iters", type=int, default=100)
+    p.add_argument("--stage2-iters", type=int, default=150)
     p.add_argument("--state-tolerance", type=float, default=1e-10)
     p.add_argument("--tolerance", type=float, default=1e-8)
     p.add_argument("--Jt", type=float, default=0.05)
