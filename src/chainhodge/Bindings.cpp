@@ -377,6 +377,15 @@ images and the exact properties of Prop. 5.1 measured on every instance.)doc")
       .def_readonly("rank", &FaceBlock::rank)
       .def_readonly("preset", &FaceBlock::preset);
 
+  py::class_<TetrahedronBlock>(m, "TetrahedronBlock",
+      "One tetrahedron's 4x4 degree-0 block over its four vertices (canonical vertex indices in "
+      "ascending order), its numerical rank, and the preset.")
+      .def_readonly("tetrahedronIndex", &TetrahedronBlock::tetrahedronIndex)
+      .def_readonly("vertexIndices", &TetrahedronBlock::vertexIndices)
+      .def_readonly("block", &TetrahedronBlock::block)
+      .def_readonly("rank", &TetrahedronBlock::rank)
+      .def_readonly("preset", &TetrahedronBlock::preset);
+
   py::class_<FaceAnchor>(m, "FaceAnchor",
       R"doc(The face anchor of specification §8 with the Whitney metric: the per-triangle
 Whitney block M_1^{(t)} (rank 3, Prop. 8.1), its connection dressing by U_{b(e)b(e')},
@@ -404,7 +413,34 @@ alpha_tau vanish identically. Transpose pairing throughout.)doc")
            "alpha_tau = det((Phi^vee)^T Pi_tau(U) Phi) from the chain frames (images by solves).")
       .def_static("anchorCoordinates", &FaceAnchor::anchorCoordinates, py::arg("covariant"),
            py::arg("Z_dual"), py::arg("Z"), "alpha_tau for every triangle.")
-      .def_static("numericalRank", &FaceAnchor::numericalRank, py::arg("A"), py::arg("kappa") = 10.0);
+      .def_static("numericalRank", &FaceAnchor::numericalRank, py::arg("A"), py::arg("kappa") = 10.0)
+      // ---- tetrahedral anchor at degree 0 (#939) ----
+      .def_static("whitneyTetrahedronBlock", &FaceAnchor::whitneyTetrahedronBlock, py::arg("complex"),
+           py::arg("squared_lengths"), py::arg("tetrahedron_index"),
+           py::arg("branch") = Branch::Continuation,
+           "M_0^{(T)}: the per-tetrahedron Whitney block over its four vertices (rank 4).")
+      .def_static("whitneyTetrahedronBlocks", &FaceAnchor::whitneyTetrahedronBlocks, py::arg("complex"),
+           py::arg("squared_lengths"), py::arg("branch") = Branch::Continuation)
+      .def_static("tetrahedronBlock", &FaceAnchor::tetrahedronBlock, py::arg("hodge"),
+           py::arg("tetrahedron_index"),
+           "The tetrahedron block of the instance's preset; refuses the Grassmann preset by name.")
+      .def_static("dressedTetrahedronBlock", &FaceAnchor::dressedTetrahedronBlock, py::arg("block"),
+           py::arg("complex"), py::arg("connection"), "M_0^{(T)U}: the block dressed entrywise by U_{vw}.")
+      .def_static("applyTetrahedronEndomorphism", &FaceAnchor::applyTetrahedronEndomorphism,
+           py::arg("covariant"), py::arg("tetrahedron_index"), py::arg("c"),
+           "Pi_T(U) c = G_0^U M_0^{(T)U} G_0^U c by solves.")
+      .def_static("tetrahedronAnchorCoordinate", &FaceAnchor::tetrahedronAnchorCoordinate,
+           py::arg("covariant"), py::arg("tetrahedron_index"), py::arg("Z_dual"), py::arg("Z"),
+           "alpha_T = det((Z^vee)^T M_0^{(T)U} Z) from the fiber's degree-0 images.")
+      .def_static("tetrahedronAnchorCoordinateFromChains", &FaceAnchor::tetrahedronAnchorCoordinateFromChains,
+           py::arg("covariant"), py::arg("tetrahedron_index"), py::arg("Phi_dual"), py::arg("Phi"))
+      .def_static("tetrahedronAnchorCoordinates", &FaceAnchor::tetrahedronAnchorCoordinates,
+           py::arg("covariant"), py::arg("Z_dual"), py::arg("Z"), "alpha_T for every tetrahedron.")
+      .def_static("flatZeroModeOverlap", &FaceAnchor::flatZeroModeOverlap, py::arg("covariant"),
+           py::arg("Z_dual"), py::arg("Z"),
+           "Certificate: |(P z_0)^T M_0^U (P z_0)| / |z_0^T M_0^U z_0| for the Riesz projection P of the "
+           "constant image z_0 (the vertex-volume chain, the degree-0 flat zero mode) onto the band: 1 on "
+           "the trivial-holonomy harmonic band, 0 on a band of other eigenvalues.");
   py::class_<FeshbachResult>(m, "FeshbachResult",
       "One Feshbach complement F_B(lambda) = P_BB - P_BI P_II^{-1} P_IB of a symmetric pencil "
       "P = A - lambda M, with det P = det P_II det F_B and the constraint modes T = [I_B; -P_II^{-1} P_IB].")

@@ -31,6 +31,21 @@ struct FaceBlock {
   Preset preset{Preset::L2};
 };
 
+/// One tetrahedron's block at degree 0 (#939): the \f$ 4\times4 \f$ matrix
+/// over the tetrahedron's four vertices (canonical \f$ C_0 \f$ indices in
+/// `vertexIndices`, in ascending vertex order), its numerical rank, and the
+/// preset it was assembled under.
+struct TetrahedronBlock {
+  /// Index of the tetrahedron in `ChainComplex::kSimplexVertices(3)`.
+  std::size_t tetrahedronIndex{0};
+  std::vector<int> vertexIndices{};
+  Eigen::MatrixXcd block{};
+  /// Numerical rank at tolerance \f$ \kappa\,4\,\epsilon_m\,\sigma_{\max} \f$
+  /// with \f$ \kappa = 10 \f$.
+  int rank{0};
+  Preset preset{Preset::L2};
+};
+
 /// # FaceAnchor
 ///
 /// The face anchor of specification §8, realized with the Whitney metric.
@@ -72,8 +87,90 @@ struct FaceBlock {
 /// block has rank two, so the same determinant vanishes identically for any
 /// rank-three fiber. No conjugation appears anywhere; the pairing is the
 /// transpose.
+///
+/// **The tetrahedral anchor at degree 0 (#939).** The same construction one
+/// degree down and one dimension up: for a nondegenerate tetrahedron \f$ T \f$
+/// the Whitney block \f$ M_0^{(T)}\in\mathbb{C}^{4\times4} \f$ over its four
+/// vertices is \f$ \mathrm{vol}(T)\,(I+\mathbf 1\mathbf 1^T)/20 \f$ at
+/// \f$ d = 3 \f$ (the Gram of the four barycentric functions), rank four, and
+/// for \f$ d\ge4 \f$ the sum of the local degree-0 blocks of the top simplices
+/// containing \f$ T \f$ restricted to its vertices (the same reading as the
+/// face block). With the connection,
+/// \f[
+///   \Pi_T(U) = G_0^U\,M_0^{(T)U}\,G_0^U,\qquad
+///   (M_0^{(T)U})_{vw} = (M_0^{(T)})_{vw}\,U_{vw},
+/// \f]
+/// since \f$ b(v) = v \f$ for a vertex, and the anchor coordinate of a rank-four
+/// fiber is \f$ \alpha_T = \det((Z_Q^\vee)^T M_0^{(T)U} Z_Q) \f$. Because
+/// \f$ (G_0^U)^T = G_0^{U^{-1}} \f$ (Prop. 5.1(ii)), the left factor of
+/// \f$ \Pi_T \f$ is already the transposed dual-side metric: the form is
+/// covariant under the transpose pairing and no dagger enters. The Grassmann
+/// degree-0 block pairs scalars and has rank one, so the tetrahedral anchor is
+/// defined for the Whitney metric only and refuses the Grassmann preset by
+/// name. The degree-0 harmonic band at trivial holonomy is the vertex-volume
+/// chain \f$ M_0\mathbf 1 \f$, whose geometric image is the constant vector;
+/// `flatZeroModeOverlap` reports how much of that mode a band contains (a
+/// certificate: the one case in which a fiber component carries no spectral
+/// content). Nothing is excluded by it.
 class FaceAnchor {
  public:
+  // ---- tetrahedral anchor at degree 0 (#939) ----
+
+  /// \f$ M_0^{(T)} \f$ of the tetrahedron at canonical index
+  /// \p tetrahedronIndex under the Whitney metric (sum over the top simplices
+  /// containing \f$ T \f$ of their local degree-0 blocks, restricted to
+  /// \f$ T \f$'s vertices; at \f$ d = 3 \f$ exactly its own block).
+  /// @throws std::invalid_argument on a bad index, a complex without
+  ///   tetrahedra, or a squared-length vector of the wrong size.
+  [[nodiscard]] static TetrahedronBlock whitneyTetrahedronBlock(
+      const cobordism::ChainComplex &K, const SquaredLengths &s, std::size_t tetrahedronIndex,
+      Branch branch = Branch::Continuation);
+  /// Every tetrahedron's Whitney block, in canonical tetrahedron order.
+  [[nodiscard]] static std::vector<TetrahedronBlock> whitneyTetrahedronBlocks(
+      const cobordism::ChainComplex &K, const SquaredLengths &s,
+      Branch branch = Branch::Continuation);
+  /// The tetrahedron block of the instance's own preset: Whitney for
+  /// `Preset::L2`; the Grassmann preset is refused by name (its degree-0 block
+  /// has rank one).
+  [[nodiscard]] static TetrahedronBlock tetrahedronBlock(const ChainHodge &hodge,
+                                                         std::size_t tetrahedronIndex);
+  /// \f$ M_0^{(T)U} \f$: the block dressed entrywise by \f$ U_{vw} \f$.
+  [[nodiscard]] static Eigen::MatrixXcd dressedTetrahedronBlock(const TetrahedronBlock &block,
+                                                                const cobordism::ChainComplex &K,
+                                                                const Connection &U);
+  /// \f$ \Pi_T(U)\,c = G_0^U\,M_0^{(T)U}\,G_0^U\,c \f$ for chains \p c
+  /// (\f$ n_0\times m \f$), by two solves and one \f$ 4\times4 \f$ product.
+  [[nodiscard]] static Eigen::MatrixXcd applyTetrahedronEndomorphism(
+      const CovariantChainHodge &cov, std::size_t tetrahedronIndex, const Eigen::MatrixXcd &c);
+  /// \f$ \alpha_T = \det((Z_Q^\vee)^T M_0^{(T)U} Z_Q) \f$ from the fiber's
+  /// degree-0 geometric images (\f$ n_0\times r \f$ each).
+  [[nodiscard]] static Complex tetrahedronAnchorCoordinate(const CovariantChainHodge &cov,
+                                                           std::size_t tetrahedronIndex,
+                                                           const Eigen::MatrixXcd &Zdual,
+                                                           const Eigen::MatrixXcd &Z);
+  /// The same from the chain frames (images by solves with
+  /// \f$ M_0^{U^{-1}} \f$ and \f$ M_0^U \f$).
+  [[nodiscard]] static Complex tetrahedronAnchorCoordinateFromChains(
+      const CovariantChainHodge &cov, std::size_t tetrahedronIndex,
+      const Eigen::MatrixXcd &PhiDual, const Eigen::MatrixXcd &Phi);
+  /// \f$ \alpha_T \f$ for every tetrahedron, canonical order.
+  [[nodiscard]] static std::vector<Complex> tetrahedronAnchorCoordinates(
+      const CovariantChainHodge &cov, const Eigen::MatrixXcd &Zdual, const Eigen::MatrixXcd &Z);
+  /// Certificate: how much of the degree-0 flat zero mode a band contains.
+  /// The vertex-volume chain \f$ M_0\mathbf 1 \f$ has the constant geometric
+  /// image \f$ z_0 = \mathbf 1 \f$; its Riesz projection onto the band with images
+  /// \p Z and dual images \p Zdual is \f$ Pz_0 = Z\,B_C^{-1}(Z^\vee)^T M_0^U z_0 \f$
+  /// with \f$ B_C = (Z^\vee)^T M_0^U Z \f$, and the overlap is
+  /// \f$ |(Pz_0)^T M_0^U (Pz_0)| / |z_0^T M_0^U z_0| \f$: 1 when the band is the
+  /// harmonic band at trivial holonomy, exactly 0 for a band of other
+  /// eigenvalues (transpose biorthogonality), in between when a lifted zero
+  /// mode is mixed in. Transpose pairing throughout; invariant under the
+  /// paired frame gauge.
+  /// @throws std::runtime_error for an isotropic band (\f$ B_C \f$ singular).
+  [[nodiscard]] static double flatZeroModeOverlap(const CovariantChainHodge &cov,
+                                                  const Eigen::MatrixXcd &Zdual,
+                                                  const Eigen::MatrixXcd &Z);
+
   /// \f$ M_1^{(t)} \f$ of the triangle at canonical index \p faceIndex under the
   /// Whitney metric (sum over the top simplices containing \f$ t \f$ of their
   /// local blocks, restricted to \f$ t \f$'s edges).
@@ -134,6 +231,8 @@ class FaceAnchor {
  private:
   [[nodiscard]] static std::vector<int> triangleEdgeIndices(const cobordism::ChainComplex &K,
                                                             std::size_t faceIndex);
+  [[nodiscard]] static std::vector<int> tetrahedronVertexIndices(const cobordism::ChainComplex &K,
+                                                                 std::size_t tetrahedronIndex);
 };
 
 }  // namespace tessera::chainhodge
