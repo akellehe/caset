@@ -56,25 +56,12 @@ Proton::Proton(std::uint64_t seed, int registerDegree, double gamma,
 }
 
 std::shared_ptr<Spacetime> Proton::buildMinimalSeed(bool balancedEdges) {
-  using namespace ::tessera::spacetime;
-  auto metric =
-      std::make_shared<Metric>(true, Signature(kDim, SignatureType::Lorentzian));
   // A SINGLE Δ⁴ simplex (one pentatope, 5 vertices) — the most minimal seed there is.
   // Nothing is pre-built: the proton's entire topology emerges from here via the trap
   // door, and the metric is uniform (ℓ² = 1) so the geometry emerges from the
   // relaxation too. Only the seed simplex and the target color states are imposed.
-  std::shared_ptr<Topology> topology = std::make_shared<SolidSimplex>(kDim);
-  auto host = std::make_shared<Spacetime>(metric, SpacetimeType::CDT, 1.0, 1.0,
-                                          Foliation::PREFERRED, topology);
-  host->build();
-  // #690: the wiring mode is stamped before ANY growth, and the seed's own
-  // uniform |l^2| = 1 edges honor it too (balanced: l = sqrt(1/2)*(1+i)).
-  host->setBalancedEdgeWiring(balancedEdges);
-  for (auto *edge : host->getEdgeList()->toVector())
-    edge->setLength(balancedEdges
-                        ? ::tessera::spacetime::Spacetime::balancedLength(1.0)
-                        : std::sqrt(complexd(1.0, 0.0)));
-  return host;
+  // The dimension-generic builder is `MultiCobordism::seedSimplex` (#940).
+  return MultiCobordism::seedSimplex(kDim, balancedEdges);
 }
 
 std::shared_ptr<MultiCobordism> Proton::recombinationNode(std::uint64_t seed) const {

@@ -71,6 +71,7 @@ void CobordismDAG::run(int stage1MaxSteps, int stage1CandidateMoves,
       opt.seedInputs(inSeeds);
       opt.seedOutputs(outSeeds);
       if (pipeFibers_) {
+        opt.useFiberResiduals(scoreBlocksByFiber_);  // #940
         // Pipe upstream output fibers into the downstream input blocks the
         // edges name (input slots after the literals), beside the targets.
         std::size_t slot = nd.literalInputs.size();
@@ -131,9 +132,10 @@ double CobordismDAG::residual(int node) const {
 
 
 
-void CobordismDAG::setFiberPiping(bool enabled, int degree) {
+void CobordismDAG::setFiberPiping(bool enabled, int degree, bool scoreBlocksByFiber) {
   pipeFibers_ = enabled;
   fiberDegree_ = degree;
+  scoreBlocksByFiber_ = scoreBlocksByFiber;
 }
 
 bool CobordismDAG::hasOutputFiber(int node, int outputIndex) const {

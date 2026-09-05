@@ -736,6 +736,55 @@ class MultiCobordism {
 
   // ---- fiber-form boundary targets (#916) ----
 
+  /// Score blocks that carry a fiber-form target by the FIBER residual (#940)
+  /// instead of the period residual: the block's own sub-complex is read on the
+  /// chain-level Whitney pencil, the band of the fiber's contour (or, when the
+  /// fiber names none, the lowest band above the flat zero mode) is restricted
+  /// to the fiber's cells, and the target images are least-squares fitted in
+  /// that band's images, \f$ \min_C\|Z_T C-\Psi\|_F^2/\|\Psi\|_F^2 \f$. The
+  /// coefficients of the read come from the block's lengths and connection
+  /// values only; nothing is pinned. Folded into `rU`, so stage 1 scores
+  /// candidate moves by it and stage 2 descends it through the same numerical
+  /// register-residual path the period targets use. Off by default: every
+  /// existing path is unchanged.
+  void useFiberResiduals(bool enabled) { useFiberResiduals_ = enabled; }
+  [[nodiscard]] bool usesFiberResiduals() const noexcept { return useFiberResiduals_; }
+  /// The fiber residual of one block on \p spacetime (see `useFiberResiduals`).
+  /// Full leak (1) when the block has no sub-complex, when a fiber cell is
+  /// outside it, or when the band is empty.
+  /// @throws std::logic_error when the block carries no fiber target or the
+  ///   node's metric source is not the Whitney pencil.
+  [[nodiscard]] double fiberResidualForBoundaryBlock(
+      const BoundaryBlock &boundaryBlock, const std::shared_ptr<Spacetime> &spacetime) const;
+  /// The fiber residual of input block \p index on the live complex.
+  [[nodiscard]] double fiberResidualForInputBlock(std::size_t index) const;
+  /// A fiber-form target carried by the WHOLE complex (#940): the node's own
+  /// pencil is read on the fiber's contour (default: the lowest band above the
+  /// flat zero mode), restricted to the fiber's cells, and the target images
+  /// are least-squares fitted there. This is how an input node represents a
+  /// state: its whole complex, grown from a single simplex, carries the fiber
+  /// on the seed's cells. Scored inside `rU` under `useFiberResiduals`.
+  void setWholeComplexFiberTarget(BoundaryFiber fiber);
+  [[nodiscard]] const std::optional<BoundaryFiber> &wholeComplexFiberTarget() const noexcept {
+    return wholeFiberTarget_;
+  }
+  /// The whole-complex fiber residual on the live complex.
+  /// @throws std::logic_error without a whole-complex fiber target.
+  [[nodiscard]] double wholeComplexFiberResidual() const;
+  /// Read the fiber the whole complex carries on the target's cells and
+  /// contour (the band of \p contour when given): what a downstream node is
+  /// piped. @throws std::logic_error without a whole-complex fiber target.
+  [[nodiscard]] BoundaryFiber readWholeComplexFiber(const chainhodge::Contour *contour = nullptr,
+                                                    double kappa = 10.0) const;
+
+  /// A single \p dimension-simplex host with a uniform metric
+  /// (\f$ |\ell^2| = 1 \f$; balanced wiring gives \f$ \ell=\sqrt{1/2}(1+i) \f$),
+  /// Lorentzian signature, the CDT type and preferred foliation: the canonical
+  /// seed from which every host grows (`Proton::buildMinimalSeed` is this at
+  /// dimension 4). @throws std::invalid_argument for dimension below 1.
+  [[nodiscard]] static std::shared_ptr<Spacetime> seedSimplex(int dimension,
+                                                              bool balancedEdges = false);
+
   /// Attach the fiber form of an input block's target (a prior cobordism's
   /// output fiber piped downstream). @throws std::out_of_range on the index.
   void setInputFiber(std::size_t index, BoundaryFiber fiber);
@@ -1578,6 +1627,11 @@ class MultiCobordism {
       const std::shared_ptr<Spacetime> &spacetime) const;
   /// Weight on the input-block residual terms in `rU` (see setInputResidualWeight).
   double inputResidualWeight_ = 1.0;
+  bool useFiberResiduals_{false};
+  std::optional<BoundaryFiber> wholeFiberTarget_;
+  /// The fiber residual of \p fiber read on \p spacetime (see `useFiberResiduals`).
+  [[nodiscard]] double fiberResidualOn(const std::shared_ptr<Spacetime> &spacetime,
+                                       const BoundaryFiber &fiber) const;
   /// An input region stops growing (growInputRegions) once its residual drops below
   /// this — i.e. once it carries its state.
   double inputCarriedTolerance_ = 1e-12;

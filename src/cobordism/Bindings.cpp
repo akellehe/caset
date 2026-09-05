@@ -1119,6 +1119,10 @@ assertion. Every pairing is the transpose.)doc")
            py::arg("right"), py::arg("right_cells"))
       .def_static("harmonic_contour", &PencilLayer::harmonicContour, py::arg("assembled"), py::arg("k"),
            py::arg("node_count") = 64)
+      .def_static("band_contour", &PencilLayer::bandContour, py::arg("assembled"), py::arg("k"),
+           py::arg("band_index"), py::arg("node_count") = 64,
+           "A circle around the band_index-th distinct eigenvalue cluster (by modulus; 0 is the harmonic "
+           "cluster when zero is an eigenvalue, 1 the lowest band above it), radius a quarter of the gap.")
       .def_static("read_boundary_fiber", &PencilLayer::readBoundaryFiber, py::arg("assembled"), py::arg("k"),
            py::arg("contour"), py::arg("cells"), py::arg("kappa") = 10.0)
       .def_static("level", &PencilLayer::level, py::arg("assembled"), py::arg("k"), py::arg("retained"),
@@ -1440,6 +1444,30 @@ assertion. Every pairing is the transpose.)doc")
            "every other amplitude, varies only interior geometry, and "
            "minimizes the Rayleigh "
            "residual. It does not run the node's period or Regge objective.")
+      .def("use_fiber_residuals", &MultiCobordism::useFiberResiduals, py::arg("enabled"),
+           "Score blocks carrying a fiber-form target by the fiber residual (least-squares leak of the "
+           "target images in the band read on the block's own pencil, restricted to the fiber's cells) "
+           "instead of the period residual; folded into r_U so both stages descend it. Off by default.")
+      .def("uses_fiber_residuals", &MultiCobordism::usesFiberResiduals)
+      .def("fiber_residual_for_input_block", &MultiCobordism::fiberResidualForInputBlock, py::arg("index"),
+           py::call_guard<py::gil_scoped_release>(),
+           "The fiber residual of one input block on the live complex.")
+      .def("set_whole_complex_fiber_target", &MultiCobordism::setWholeComplexFiberTarget, py::arg("fiber"),
+           "A fiber-form target carried by the WHOLE complex on the fiber's cells and contour (default: the "
+           "lowest band above the flat zero mode); scored inside r_U under use_fiber_residuals.")
+      .def("whole_complex_fiber_target", &MultiCobordism::wholeComplexFiberTarget)
+      .def("whole_complex_fiber_residual", &MultiCobordism::wholeComplexFiberResidual,
+           py::call_guard<py::gil_scoped_release>())
+      .def("read_whole_complex_fiber",
+           [](const MultiCobordism &self, std::optional<chainhodge::Contour> contour, double kappa) {
+             py::gil_scoped_release release;
+             return self.readWholeComplexFiber(contour ? &*contour : nullptr, kappa);
+           },
+           py::arg("contour") = std::nullopt, py::arg("kappa") = 10.0,
+           "The fiber the whole complex carries on the target's cells: what a downstream node is piped.")
+      .def_static("seed_simplex", &MultiCobordism::seedSimplex, py::arg("dimension"),
+           py::arg("balanced_edges") = false,
+           "A single dimension-simplex host with a uniform Lorentzian metric: the canonical seed.")
       .def("set_input_fiber", &MultiCobordism::setInputFiber, py::arg("index"), py::arg("fiber"),
            "Attach the fiber form of an input block's target (#916).")
       .def("set_output_fiber", &MultiCobordism::setOutputFiber, py::arg("index"), py::arg("fiber"))
@@ -2250,8 +2278,10 @@ Right -- re-read after each drive call:
       .def("num_outputs", &CobordismDAG::numOutputs, py::arg("node"))
       .def("residual", &CobordismDAG::residual, py::arg("node"))
       .def("set_fiber_piping", &CobordismDAG::setFiberPiping, py::arg("enabled"), py::arg("degree") = 1,
+           py::arg("score_blocks_by_fiber") = false,
            "Pipe each node's output fibers (#916) into the downstream input blocks the edges name.")
       .def("fiber_piping", &CobordismDAG::fiberPiping)
+      .def("scores_blocks_by_fiber", &CobordismDAG::scoresBlocksByFiber)
       .def("output_fiber", &CobordismDAG::outputFiber, py::arg("node"), py::arg("output_index"),
            py::return_value_policy::copy)
       .def("has_output_fiber", &CobordismDAG::hasOutputFiber, py::arg("node"), py::arg("output_index"))
