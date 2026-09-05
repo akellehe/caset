@@ -750,6 +750,12 @@ class MultiCobordism {
   /// existing path is unchanged.
   void useFiberResiduals(bool enabled) { useFiberResiduals_ = enabled; }
   [[nodiscard]] bool usesFiberResiduals() const noexcept { return useFiberResiduals_; }
+  /// Whether stage 2 also descends the degree-0 link phases through the
+  /// analytic fiber gradient (#947). Off by default: flux lifts the flat zero
+  /// mode and moves the band a default contour selects, so a caller enables
+  /// it with a fixed contour on its fiber targets.
+  void setFiberPhaseDescent(bool enabled) { fiberPhaseDescent_ = enabled; }
+  [[nodiscard]] bool fiberPhaseDescent() const noexcept { return fiberPhaseDescent_; }
   /// The fiber residual of one block on \p spacetime (see `useFiberResiduals`).
   /// Full leak (1) when the block has no sub-complex, when a fiber cell is
   /// outside it, or when the band is empty.
@@ -1709,6 +1715,7 @@ class MultiCobordism {
   /// Weight on the input-block residual terms in `rU` (see setInputResidualWeight).
   double inputResidualWeight_ = 1.0;
   bool useFiberResiduals_{false};
+  bool fiberPhaseDescent_{false};
   std::optional<BoundaryFiber> wholeFiberTarget_;
   std::optional<TwoBodyTarget> twoBodyTarget_;
   /// The transfer between the full frames on the two attached input fibers'

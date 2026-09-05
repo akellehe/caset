@@ -1468,6 +1468,9 @@ assertion. Every pairing is the transpose.)doc")
            "target images in the band read on the block's own pencil, restricted to the fiber's cells) "
            "instead of the period residual; folded into r_U so both stages descend it. Off by default.")
       .def("uses_fiber_residuals", &MultiCobordism::usesFiberResiduals)
+      .def("set_fiber_phase_descent", &MultiCobordism::setFiberPhaseDescent, py::arg("enabled"),
+           "Also descend the degree-0 link phases through the analytic fiber gradient (off by default).")
+      .def("fiber_phase_descent", &MultiCobordism::fiberPhaseDescent)
       .def("fiber_residual_for_input_block", &MultiCobordism::fiberResidualForInputBlock, py::arg("index"),
            py::call_guard<py::gil_scoped_release>(),
            "The fiber residual of one input block on the live complex.")

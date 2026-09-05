@@ -2738,7 +2738,7 @@ bool MultiCobordism::stage2Update(double beta, double tolerance,
         // path is not used for them.
         const ResidualGradient analytic = fiberModeAscent();
         descentDirection += numericalResidualWeight * analytic.lengths;
-        if (analytic.phases.size() == static_cast<Eigen::Index>(edgeCount))
+        if (fiberPhaseDescent_ && analytic.phases.size() == static_cast<Eigen::Index>(edgeCount))
           phaseDescentDirection += numericalResidualWeight * analytic.phases;
       } else if (explicitConstraintsAreWholeResidual && realSquaredLengthsOnly_)
         descentDirection += numericalResidualWeight *
