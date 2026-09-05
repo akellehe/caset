@@ -843,6 +843,29 @@ class MultiCobordism {
   /// certificates. @throws std::logic_error without two attached input fibers.
   [[nodiscard]] TwoBodyRead readTwoBody() const;
 
+  // ---- analytic gradients of the fiber-mode residuals (#947) ----
+  /// A gradient over the live complex's edges in `EdgeList` order: each entry
+  /// packs \f$ (\partial/\partial\operatorname{Re}, \partial/\partial\operatorname{Im}) \f$
+  /// of the real residual as a complex number, the convention `runStage2`
+  /// descends; `phases` is empty unless the residual varies with the links.
+  struct ResidualGradient {
+    Eigen::VectorXcd lengths;
+    Eigen::VectorXcd phases;
+  };
+  /// The analytic gradient of `fiberResidualOn(spacetime, fiber)` through the
+  /// band's Riesz projector (`chainhodge::BandDerivative`), holomorphic in
+  /// the squared lengths and the phases, over \p spacetime's edges.
+  [[nodiscard]] ResidualGradient fiberResidualGradientOn(const std::shared_ptr<Spacetime> &spacetime,
+                                                         const BoundaryFiber &fiber) const;
+  /// The analytic gradient of `twoBodyResidualOn` through the frame transfer
+  /// (\f$ d\tilde A^U = dM^U h + M^U dh \f$ on the attached blocks).
+  [[nodiscard]] ResidualGradient twoBodyResidualGradientOn(const std::shared_ptr<Spacetime> &spacetime,
+                                                           const TwoBodyTarget &target) const;
+  /// The ascent of every fiber-mode term of `rU` on the live complex: the
+  /// whole-complex fiber target, each input block's fiber (its sub-complex
+  /// gradient mapped to the parent's edges), and the two-body target.
+  [[nodiscard]] ResidualGradient fiberModeAscent() const;
+
   /// Attach the fiber form of an input block's target (a prior cobordism's
   /// output fiber piped downstream). @throws std::out_of_range on the index.
   void setInputFiber(std::size_t index, BoundaryFiber fiber);
@@ -1696,9 +1719,16 @@ class MultiCobordism {
   [[nodiscard]] double twoBodyResidualOn(const std::shared_ptr<Spacetime> &spacetime,
                                          const TwoBodyTarget &target) const;
   [[nodiscard]] std::pair<const BoundaryFiber *, const BoundaryFiber *> attachedInputFibers() const;
+
   /// The fiber residual of \p fiber read on \p spacetime (see `useFiberResiduals`).
   [[nodiscard]] double fiberResidualOn(const std::shared_ptr<Spacetime> &spacetime,
                                        const BoundaryFiber &fiber) const;
+  /// The block's sub-complex WITH the parent's geometry: `subcomplexWithinVertexSet`
+  /// builds it at unit lengths (its period residual is combinatorial), so the
+  /// fiber reads copy every edge's length and phase from \p spacetime by vertex
+  /// pair. Null when the region holds no top cell.
+  [[nodiscard]] static std::shared_ptr<Spacetime> blockSubcomplexWithGeometry(
+      const BoundaryBlock &block, const std::shared_ptr<Spacetime> &spacetime);
   /// An input region stops growing (growInputRegions) once its residual drops below
   /// this — i.e. once it carries its state.
   double inputCarriedTolerance_ = 1e-12;
