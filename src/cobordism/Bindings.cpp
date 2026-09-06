@@ -1157,7 +1157,14 @@ assertion. Every pairing is the transpose.)doc")
                              },
                              "True for an input SURFACE block (the region form of "
                              "seed_inputs on a seed_from_surfaces host): its faces are "
-                             "cells of the host the bulk is drawn onto by bridges.");
+                             "cells of the host the bulk is drawn onto by bridges.")
+      .def_property_readonly("faces",
+                             [](const MultiCobordism::BoundaryBlock &block) {
+                               return block.faces;
+                             },
+                             "A surface block's own faces as seeded (sorted vertex tuples), "
+                             "carried by the block so its own complex is the surface whatever "
+                             "the host registers; empty for an ordinary block.");
   py::class_<MultiCobordism::FixedBoundaryEigenstateResult>(
       m, "FixedBoundaryEigenstateResult",
       "Witness from the historical fixed-boundary Rayleigh-residual "
@@ -1545,14 +1552,19 @@ assertion. Every pairing is the transpose.)doc")
       .def("use_fiber_residuals", &MultiCobordism::useFiberResiduals, py::arg("enabled"),
            "Score blocks carrying a fiber-form target by the fiber residual (least-squares leak of the "
            "target images in the band read on the block's own pencil, restricted to the fiber's cells) "
-           "instead of the period residual; folded into r_U so both stages descend it. Off by default.")
+           "instead of the period residual; folded into r_U so both stages descend it. A surface block "
+           "(seed_inputs by region) is read on its own surface (block_surface_subcomplex) in the ZERO MODE "
+           "of that pencil, whatever contour its fiber stores; an ordinary block on its sub-complex at the "
+           "fiber's contour (default: the lowest band above the zero mode). Off by default.")
       .def("uses_fiber_residuals", &MultiCobordism::usesFiberResiduals)
       .def("set_fiber_phase_descent", &MultiCobordism::setFiberPhaseDescent, py::arg("enabled"),
            "Also descend the degree-0 link phases through the analytic fiber gradient (off by default).")
       .def("fiber_phase_descent", &MultiCobordism::fiberPhaseDescent)
       .def("fiber_residual_for_input_block", &MultiCobordism::fiberResidualForInputBlock, py::arg("index"),
            py::call_guard<py::gil_scoped_release>(),
-           "The fiber residual of one input block on the live complex.")
+           "The fiber residual of one input block on the live complex: a surface block's own Laplacian "
+           "(its surface with the live lengths) at the zero mode, an ordinary block's sub-complex at the "
+           "fiber's contour.")
       .def("fiber_residual_gradient",
            [](const MultiCobordism &self, const BoundaryFiber &fiber) {
              py::gil_scoped_release release;
@@ -1621,6 +1633,13 @@ assertion. Every pairing is the transpose.)doc")
       .def_static("block_surface", &MultiCobordism::blockSurface, py::arg("block"), py::arg("spacetime"),
            "The block's own surface: its (d-1)-faces (registered ones and facets of top cells "
            "inside the block) and its edges inside its vertex set, as sorted vertex tuples.")
+      .def_static("block_surface_subcomplex", &MultiCobordism::blockSurfaceWithGeometry, py::arg("block"),
+           py::arg("spacetime"),
+           "A surface block's OWN complex with the host's geometry (spec D2): block_surface's faces as "
+           "the top cells of a fresh (d-1)-dimensional Spacetime keeping the host's vertex ids, every "
+           "edge with the host's current length and phase. Its Laplacian is the block's own Laplacian: "
+           "the block's fiber residual is read in its zero mode and the residual's gradient is taken on "
+           "it (mapped back to the host's edges by vertex pair). None when the block has no face.")
       .def_static("monodromy", &MultiCobordism::monodromy, py::arg("spacetime"), py::arg("marking_a"),
            py::arg("marking_b"), py::call_guard<py::gil_scoped_release>(),
            "The MonodromyRead of `spacetime` between two markings given in host vertex ids as "
@@ -2173,6 +2192,10 @@ Right -- re-read after each drive call:
       .def_readwrite("gamma", &ObjectiveContext::gamma)
       .def_readwrite("carried_state_energy_weight",
                      &ObjectiveContext::carriedStateEnergyWeight)
+      .def_readwrite("fiber_residuals", &ObjectiveContext::fiberResiduals,
+                     "Whether the node scores its blocks by fiber residuals (use_fiber_residuals), "
+                     "whose stage-2 direction is analytic: the legacy objective then descends r_U "
+                     "next to the Regge term instead of only gating on it. False by default.")
       .def_readwrite("einstein_hilbert", &ObjectiveContext::einsteinHilbert)
       .def_readwrite("hodge_entropy_phase_mode",
                      &ObjectiveContext::hodgeEntropyPhaseMode,

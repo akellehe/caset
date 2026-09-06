@@ -217,7 +217,22 @@ D4. **Animation.** `emergence_animation.py` gains a qubit input mode:
 - Fibers are degree-generic; cells are any k-cells of the live complex, edges
   included; a listed cell that does not exist gives the full leak 1.0.
 - The default fiber contour is band 1 (above the zero mode); the harmonic
-  contour must be set explicitly on every fiber and read (R7).
+  contour must be set explicitly on every fiber and read (R7). A surface
+  block's own-Laplacian read (D2, `MultiCobordism::blockSurfaceWithGeometry`)
+  takes the zero mode of the block's OWN pencil (`harmonicContour` on its
+  surface, recomputed at every read) whatever contour its fiber stores; the
+  stored contour governs whole-complex reads only.
+- A surface block carries its own faces from seeding (`BoundaryBlock::faces`):
+  a cone-out dent uncovers a torus face and the host's orphan prune drops the
+  face's registration, so the block — not the host — is what says which
+  triangles are the surface, and `uncoveredInputFaces` reads them. On a
+  one-layer collar no cell can be dented at all: every (3,1)/(1,3) cell's apex
+  is a boundary vertex of the other torus (removing an interior triangle of
+  its disk link punctures it) and every (2,2) cell sits mid-path in a torus
+  edge's link; a two-layer collar's torus-adjacent cells, whose apex is
+  interior, can be. The engine's moves never remove a surface vertex or edge,
+  and a surface torn by any future move reads as the full leak (no own
+  complex), which the ΔF acceptance rejects.
 - All fiber and two-body paths require the Whitney pencil metric source.
 - Under fiber residuals the engine skips the hole-forcing near-kernel term and
   demands no register count.
@@ -244,6 +259,19 @@ D4. **Animation.** `emergence_animation.py` gains a qubit input mode:
   forms exactly; on a deformed torus they differ at mesh order. Report both.
 - Analytic gradients exist for the fiber and two-body residuals
   (`BandDerivative`); no finite differences.
+- Under the legacy objective with the Regge term on, stage 2 used to descend
+  the Regge direction alone and only gate on Γ·r_U (a shortcut from the
+  numerical-r_U era, kept for the period residual); under fiber residuals the
+  context flag `ObjectiveContext::fiberResiduals` restores the r_U direction
+  — the analytic fiber ascent at weight Γ — so the block residuals are
+  descended next to the bulk term (R3, S4). The level a block residual settles
+  at is the balance of `inputResidualWeight` against the Regge pull on the
+  tori's edges, roughly 1/weight² (measured on the 3×3 collar after 40
+  stage-2 steps on the real locus: 2e-9 at weight 1e6 with the Regge term
+  123 → 84 and the bulk's edges moved; 1e-4–7e-4 at 1e3; 2e-2–4e-2 at
+  weight 1, where the Regge term also drives torus edges timelike; T2's
+  test); report the weight with every residual. The tori are real and
+  spacelike, so the node is built with `realSquaredLengthsOnly`.
 - GIL: `run_stage1`, `run_stage2`, `two_body_residual`, `read_two_body`,
   `whole_complex_fiber_residual`, `read_whole_complex_fiber` release it;
   `build_step`, `attach_input_fiber`, `read_output_fiber` do not.
@@ -314,8 +342,9 @@ C5. `emergence_animation.py --inputs qubit` runs headless and `--live` with
 - `include/cobordism/MultiCobordism.h`: `seedInputs`, `attachInputFiber`,
   `setWholeComplexFiberTarget`, `setTwoBodyTarget`, `readTwoBody`,
   `useFiberResiduals`, `runStage1`, `runStage2`, `fiberModeAscent`,
-  `blockSubcomplexWithGeometry`, `frameTransferOn`, `seedCollar`,
-  `seedFromSurfaces`, `blockSurface`, `bridgePhaseComplete`, `monodromy`.
+  `blockSubcomplexWithGeometry`, `blockSurfaceWithGeometry`, `FiberBand`,
+  `frameTransferOn`, `seedCollar`, `seedFromSurfaces`, `blockSurface`,
+  `bridgePhaseComplete`, `monodromy`.
 - `include/cobordism/SurgicalCone.h`: `coneOut`, `coneIn`, `bridge`, rollback,
   gate.
 - `include/cobordism/PencilLayer.h`: `BoundaryFiber`, `harmonicContour`,

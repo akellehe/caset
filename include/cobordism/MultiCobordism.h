@@ -83,6 +83,21 @@ class MultiCobordism {
     /// a node seeded from a simplex never has one and every existing path is
     /// unchanged.
     bool surface{false};
+    /// A surface block's OWN faces (sorted vertex-id tuples): the input
+    /// surface's \f$ (d-1) \f$-simplices, recorded when the block is seeded
+    /// (the region form of `seedInputs`) and carried by the block from then
+    /// on, so that the block's own complex (`blockSurface`,
+    /// `blockSurfaceWithGeometry`) is the surface whatever the host currently
+    /// registers. WHY the block carries them: the host registers a surface
+    /// face only while a top cell covers it or a read has materialized it — a
+    /// cone-out dent uncovers a face and the host's orphan prune then drops
+    /// it — while the surface's vertices and edges persist under every stage-1
+    /// move (qubit cobordism spec §6), so the faces are the one part of the
+    /// surface the vertex set alone cannot recover. Empty for an ordinary
+    /// block, whose own complex is the host's top cells inside its vertex
+    /// set. Nothing here is pinned or scored: the list names the surface, the
+    /// residual holds the state.
+    std::vector<std::vector<std::uint64_t>> faces;
   };
 
   /// An ordered, explicit period constraint evaluated by the existing
@@ -920,9 +935,39 @@ class MultiCobordism {
   /// it with a fixed contour on its fiber targets.
   void setFiberPhaseDescent(bool enabled) { fiberPhaseDescent_ = enabled; }
   [[nodiscard]] bool fiberPhaseDescent() const noexcept { return fiberPhaseDescent_; }
-  /// The fiber residual of one block on \p spacetime (see `useFiberResiduals`).
-  /// Full leak (1) when the block has no sub-complex, when a fiber cell is
-  /// outside it, or when the band is empty.
+  /// Which band of a pencil a fiber is fitted in when its residual, or the
+  /// residual's gradient, is read on that pencil.
+  enum class FiberBand {
+    /// The contour stored on the fiber when it names one, else the lowest
+    /// band above the zero mode (`PencilLayer::bandContour(…, 1)`): the read
+    /// of a whole-complex target and of an ordinary block's sub-complex.
+    AsStored,
+    /// The zero mode of the pencil the fiber is read on — the harmonic
+    /// contour of THAT pencil (`PencilLayer::harmonicContour`), whatever
+    /// contour the fiber stores: a surface block's own Laplacian (qubit
+    /// cobordism spec R3, R7, D2).
+    ZeroMode,
+  };
+  /// The band a block's fiber is read in: `ZeroMode` for a surface block
+  /// (`BoundaryBlock::surface`), `AsStored` for an ordinary block. WHY a
+  /// surface block does not use the contour stored on its fiber: that contour
+  /// is a circle drawn on the spectrum of the complex the fiber was read from
+  /// — the whole it was cut out of, or a default band of it — and that
+  /// spectrum is not the block's own pencil's. The state a surface block keeps
+  /// representing is the zero mode of its OWN Laplacian, so its contour is the
+  /// harmonic contour of its own assembled pencil, recomputed at every read as
+  /// its lengths move. It is deliberately NOT band 1, the default of the
+  /// whole-complex read: that band sits above the zero mode and is not a
+  /// state (R7). An ordinary block keeps `AsStored`, so every existing path
+  /// is unchanged.
+  [[nodiscard]] static FiberBand fiberBandFor(const BoundaryBlock &block) noexcept {
+    return block.surface ? FiberBand::ZeroMode : FiberBand::AsStored;
+  }
+  /// The fiber residual of one block on \p spacetime (see `useFiberResiduals`):
+  /// read on the block's own complex (`blockComplexWithGeometry` — a surface
+  /// block's own surface, an ordinary block's sub-complex) in the band
+  /// `fiberBandFor` names. Full leak (1) when the block has no own complex,
+  /// when a fiber cell is outside it, or when the band is empty.
   /// @throws std::logic_error when the block carries no fiber target or the
   ///   node's metric source is not the Whitney pencil.
   [[nodiscard]] double fiberResidualForBoundaryBlock(
@@ -1013,12 +1058,14 @@ class MultiCobordism {
 
   /// A block's own surface (qubit cobordism spec D2, the enumeration half):
   /// its \f$ (d-1) \f$-faces and its edges inside its vertex set, as sorted
-  /// vertex-id tuples. A face is inside the block when the host registers it
-  /// (an uncovered surface triangle) or when it is a facet of a top cell with
-  /// all \f$ d \f$ of its vertices in the block; both are enumerated from
-  /// vertex tuples, never from the lazily materialized facet links, so the
-  /// answer does not depend on what some earlier read happened to
-  /// materialize. For a surface block this is the input surface itself —
+  /// vertex-id tuples. A face is inside the block when the block carries it
+  /// (`BoundaryBlock::faces`, a surface block's own triangles as seeded), when
+  /// the host registers it (an uncovered surface triangle), or when it is a
+  /// facet of a top cell with all \f$ d \f$ of its vertices in the block;
+  /// all three are enumerated from vertex tuples, never from the lazily
+  /// materialized facet links, so the answer does not depend on what some
+  /// earlier read happened to materialize or on what a cone-out dent's orphan
+  /// prune dropped. For a surface block this is the input surface itself —
   /// exactly, as long as no chord (an edge or face inside the block that is
   /// not part of its surface) has been created.
   struct BlockSurface {
@@ -1027,6 +1074,30 @@ class MultiCobordism {
   };
   [[nodiscard]] static BlockSurface blockSurface(const BoundaryBlock &block,
                                                 const Spacetime &spacetime);
+  /// A surface block's OWN complex with the host's geometry (qubit cobordism
+  /// spec D2, the geometry half): `blockSurface`'s faces as the top cells of
+  /// a fresh \f$ (d-1) \f$-dimensional `Spacetime` (`Spacetime::fromCells`,
+  /// the host's vertex ids kept), every edge carrying the host's CURRENT
+  /// length and phase, matched by vertex pair. Its Laplacian is the block's
+  /// own Laplacian (R3): the torus's own triangles with the live lengths and
+  /// nothing of the bulk, so its degree-1 zero mode is the torus's harmonic
+  /// space — the band the block's fiber residual is read in
+  /// (`fiberResidualForBoundaryBlock`) and the complex its gradient is taken
+  /// on (`fiberModeAscent`, mapped back to the host's edges by vertex pair,
+  /// which is exact because the surface's edges ARE host edges). The host is
+  /// read, never changed; nothing is pinned — the residual holds the state
+  /// (spec §7). WHY a second materialization: `blockSubcomplexWithGeometry`
+  /// takes the host's TOP cells inside the vertex set, and a surface block of
+  /// a \f$ d \f$-complex contains none, so under it a torus scored the full
+  /// leak forever. It is deliberately NOT built from the host's top cells
+  /// touching the block (the collar's cells): those are the bulk, and a
+  /// Laplacian over them is not the block's own. Null when the block has no
+  /// face inside its vertex set, or when the host no longer holds an edge of
+  /// one of its faces: a surface the moves have torn cannot carry its state,
+  /// so the block then scores the full leak and no move that tears a surface
+  /// survives the ΔF acceptance — that is the variational gate, not a guard.
+  [[nodiscard]] static std::shared_ptr<Spacetime> blockSurfaceWithGeometry(
+      const BoundaryBlock &block, const std::shared_ptr<Spacetime> &spacetime);
 
   // ---- two-body cobordism map (#941) ----
 
@@ -1094,18 +1165,24 @@ class MultiCobordism {
     Eigen::VectorXcd lengths;
     Eigen::VectorXcd phases;
   };
-  /// The analytic gradient of `fiberResidualOn(spacetime, fiber)` through the
-  /// band's Riesz projector (`chainhodge::BandDerivative`), holomorphic in
-  /// the squared lengths and the phases, over \p spacetime's edges.
+  /// The analytic gradient of `fiberResidualOn(spacetime, fiber, band)`
+  /// through the band's Riesz projector (`chainhodge::BandDerivative`),
+  /// holomorphic in the squared lengths and the phases, over \p spacetime's
+  /// edges. The contour is the same choice the residual makes (`FiberBand`);
+  /// it is a quadrature device, not a coordinate, so it is held fixed.
   [[nodiscard]] ResidualGradient fiberResidualGradientOn(const std::shared_ptr<Spacetime> &spacetime,
-                                                         const BoundaryFiber &fiber) const;
+                                                         const BoundaryFiber &fiber,
+                                                         FiberBand band = FiberBand::AsStored) const;
   /// The analytic gradient of `twoBodyResidualOn` through the frame transfer
   /// (\f$ d\tilde A^U = dM^U h + M^U dh \f$ on the attached blocks).
   [[nodiscard]] ResidualGradient twoBodyResidualGradientOn(const std::shared_ptr<Spacetime> &spacetime,
                                                            const TwoBodyTarget &target) const;
   /// The ascent of every fiber-mode term of `rU` on the live complex: the
-  /// whole-complex fiber target, each input block's fiber (its sub-complex
-  /// gradient mapped to the parent's edges), and the two-body target.
+  /// whole-complex fiber target, each input block's fiber (the gradient on
+  /// the block's own complex — a surface block's own surface at its zero
+  /// mode, an ordinary block's sub-complex at the fiber's contour — mapped
+  /// to the parent's edges by vertex pair; a surface's edges ARE host edges),
+  /// and the two-body target.
   [[nodiscard]] ResidualGradient fiberModeAscent() const;
 
   /// Attach the fiber form of an input block's target (a prior cobordism's
@@ -2036,15 +2113,32 @@ class MultiCobordism {
                                          const TwoBodyTarget &target) const;
   [[nodiscard]] std::pair<const BoundaryFiber *, const BoundaryFiber *> attachedInputFibers() const;
 
-  /// The fiber residual of \p fiber read on \p spacetime (see `useFiberResiduals`).
+  /// The fiber residual of \p fiber read on \p spacetime in \p band (see
+  /// `useFiberResiduals`, `FiberBand`).
   [[nodiscard]] double fiberResidualOn(const std::shared_ptr<Spacetime> &spacetime,
-                                       const BoundaryFiber &fiber) const;
+                                       const BoundaryFiber &fiber,
+                                       FiberBand band = FiberBand::AsStored) const;
+  /// The contour a fiber is read at on \p assembled under \p band: the
+  /// harmonic contour of \p assembled for `ZeroMode`; the fiber's stored
+  /// contour, else the lowest band above the zero mode, for `AsStored`.
+  [[nodiscard]] static chainhodge::Contour fiberContourOn(const AssembledPencil &assembled,
+                                                          const BoundaryFiber &fiber, FiberBand band);
   /// The block's sub-complex WITH the parent's geometry: `subcomplexWithinVertexSet`
   /// builds it at unit lengths (its period residual is combinatorial), so the
   /// fiber reads copy every edge's length and phase from \p spacetime by vertex
   /// pair. Null when the region holds no top cell.
   [[nodiscard]] static std::shared_ptr<Spacetime> blockSubcomplexWithGeometry(
       const BoundaryBlock &block, const std::shared_ptr<Spacetime> &spacetime);
+  /// The complex a block's fiber is read on: a surface block's own surface
+  /// (`blockSurfaceWithGeometry`), an ordinary block's sub-complex
+  /// (`blockSubcomplexWithGeometry`). Null when there is nothing to read.
+  [[nodiscard]] static std::shared_ptr<Spacetime> blockComplexWithGeometry(
+      const BoundaryBlock &block, const std::shared_ptr<Spacetime> &spacetime);
+  /// Copy every edge's length and phase of \p parent onto \p child, matched by
+  /// vertex pair: the shared tail of both block materializations. False when
+  /// a child edge is absent from the parent (the child is then not a
+  /// sub-complex of the parent and its geometry is meaningless).
+  [[nodiscard]] static bool adoptParentEdgeGeometry(Spacetime &child, const Spacetime &parent);
   /// An input region stops growing (growInputRegions) once its residual drops below
   /// this — i.e. once it carries its state.
   double inputCarriedTolerance_ = 1e-12;

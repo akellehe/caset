@@ -443,8 +443,12 @@ double LegacyObjective::numericalRegisterResidualWeight(
   // Legacy intentionally preserves its former analytic Regge direction (the
   // exact legacy scalar still gates the line search): evaluating the composite
   // block/target r_U at 4|E| coordinates made the compatibility mode orders of
-  // magnitude slower.
-  if (context.einsteinHilbert && context.reggeWeight != 0.0) return 0.0;
+  // magnitude slower. Under FIBER residuals that cost is gone — their ascent
+  // is analytic (#947) — and the residual is descended next to the Regge term
+  // with its weight in the scalar, so the blocks keep representing their
+  // states while the bulk relaxes (qubit cobordism spec R3, S4) instead of
+  // drifting under Regge-only steps the scalar merely gates.
+  if (context.einsteinHilbert && context.reggeWeight != 0.0 && !context.fiberResiduals) return 0.0;
   return context.gamma;
 }
 
