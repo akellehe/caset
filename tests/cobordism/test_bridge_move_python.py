@@ -338,8 +338,15 @@ def test_collar_seed_is_the_manifold_between_the_tori(n, whitney_default):
     assert swapped.rounded == [[0, 1], [1, 0]] and swapped.rounding_residual < 1e-9
     flipped = MC.monodromy(st, marking_a, [a, [(v, u) for (u, v) in reversed(b)]])
     assert flipped.rounded == [[1, 0], [0, -1]] and flipped.rounding_residual < 1e-9
+    # the periods are taken with parallel transport (T2-bis), so a cycle must be one closed
+    # walk: a single step is refused by name before any operator is built ...
     absent = MC.monodromy(st, marking_a, [[(0, 2 * n * n - 1)], b])
-    assert "not an edge of the whole" in absent.obstruction or absent.obstruction == "", absent.obstruction
+    assert "does not form one closed walk" in absent.obstruction, absent.obstruction
+    # ... and a closed walk across a pair that is not an edge of the whole is named as such
+    edges = {tuple(int(v) for v in e) for e in cob.ChainComplex.fromSpacetime(st).kSimplexVertices(1)}
+    u, v = next((u, v) for u in range(2 * n * n) for v in range(u + 1, 2 * n * n) if (u, v) not in edges)
+    missing = MC.monodromy(st, marking_a, [[(u, v), (v, u)], b])
+    assert "not an edge of the whole" in missing.obstruction, missing.obstruction
     print(f"\n[bridge T1] collar {n}x{n}: cells={len(tops(st))} betti={read.betti} monodromy rounded={read.rounded} "
           f"rounding residual={read.rounding_residual:.1e} fit residual={read.fit_residual:.1e}")
 

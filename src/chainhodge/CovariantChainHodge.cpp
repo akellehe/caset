@@ -165,6 +165,69 @@ Complex Connection::transportedPeriod(const Eigen::VectorXcd &cochain, const Wal
   return total;
 }
 
+Connection::Walk Connection::closedWalkOf(const Walk &steps) {
+  if (steps.empty()) return {};
+  // Balanced degrees at every vertex, else the steps cannot close into one
+  // circuit; the outgoing steps of a vertex in the given order.
+  std::map<std::uint64_t, std::vector<std::size_t>> outgoing;
+  std::map<std::uint64_t, long> netDegree;
+  for (std::size_t k = 0; k < steps.size(); ++k) {
+    outgoing[steps[k].first].push_back(k);
+    ++netDegree[steps[k].first];
+    --netDegree[steps[k].second];
+  }
+  for (const auto &[vertex, degree] : netDegree)
+    if (degree != 0) return {};
+  std::map<std::uint64_t, std::size_t> next;
+  std::vector<std::uint64_t> vertexStack = {steps.front().first};
+  std::vector<std::size_t> stepStack, circuit;
+  while (!vertexStack.empty()) {
+    const std::uint64_t v = vertexStack.back();
+    const auto out = outgoing.find(v);
+    std::size_t &taken = next[v];
+    if (out != outgoing.end() && taken < out->second.size()) {
+      const std::size_t k = out->second[taken++];
+      vertexStack.push_back(steps[k].second);
+      stepStack.push_back(k);
+    } else {
+      vertexStack.pop_back();
+      if (!stepStack.empty()) {
+        circuit.push_back(stepStack.back());
+        stepStack.pop_back();
+      }
+    }
+  }
+  std::reverse(circuit.begin(), circuit.end());
+  if (circuit.size() != steps.size()) return {};  // more than one component
+  Walk walk;
+  walk.reserve(steps.size());
+  for (const std::size_t k : circuit) walk.push_back(steps[k]);
+  return walk;
+}
+
+std::optional<std::uint64_t> Connection::commonBasePoint(std::vector<Walk> &walks) {
+  if (walks.empty() || walks.front().empty()) return std::nullopt;
+  std::optional<std::uint64_t> base;
+  for (const auto &step : walks.front()) {
+    const std::uint64_t candidate = step.first;
+    bool onEvery = true;
+    for (std::size_t w = 1; w < walks.size() && onEvery; ++w)
+      onEvery = std::any_of(walks[w].begin(), walks[w].end(),
+                            [&](const std::pair<std::uint64_t, std::uint64_t> &s) { return s.first == candidate; });
+    if (onEvery) {
+      base = candidate;
+      break;
+    }
+  }
+  if (!base) return std::nullopt;
+  for (auto &walk : walks) {
+    std::size_t k = 0;
+    while (walk[k].first != *base) ++k;
+    std::rotate(walk.begin(), walk.begin() + static_cast<std::ptrdiff_t>(k), walk.end());
+  }
+  return base;
+}
+
 // ---------------------------------------------------------------- CovariantChainHodge
 
 struct CovariantChainHodge::Factorization {

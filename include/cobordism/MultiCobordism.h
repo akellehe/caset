@@ -68,6 +68,16 @@ class MultiCobordism {
   /// demand from `vertices` by `subcomplexWithinVertexSet` (the ambient complex's top
   /// cells whose vertices all lie in the set), so the vertex set — together with the
   /// ambient triangulation — determines the block's complex.
+  /// A marking of a boundary surface in HOST vertex ids: cycles, each a
+  /// closed walk of directed steps \f$ (u \to v) \f$ over edges of the host.
+  /// A step contributes \f$ +h(u,v) \f$ to a period when \f$ u < v \f$ (the
+  /// ascending-id reference orientation of `ChainComplex`) and
+  /// \f$ -h(u,v) \f$ otherwise — the `Edge::walkLoop` convention. A
+  /// `SimplicialQubit` cycle (edge index, sign) becomes a step by taking the
+  /// edge's \f$ (i, j) \f$ as \f$ (i \to j) \f$ for \f$ +1 \f$ and
+  /// \f$ (j \to i) \f$ for \f$ -1 \f$, mapped through `SurfaceSeed::vertexIds`.
+  using Marking = std::vector<std::vector<std::pair<std::uint64_t, std::uint64_t>>>;
+
   /// A FRAME on a block's attached cells (qubit cobordism spec D3): the
   /// coordinates the two-body transfer is read in. `images` \f$ Z \f$ is one
   /// column per basis element on the block's fiber cells (\f$ |cells|
@@ -89,13 +99,47 @@ class MultiCobordism {
   /// written in. WHY separate from the fiber: the fiber is the rank-one
   /// state the block keeps representing and is scored by its residual; the
   /// frame is the basis that state is a coordinate vector in and is never
-  /// scored (nothing about a marking enters the relaxation).
+  /// scored (a marking enters the relaxation only through the frame it
+  /// normalizes, `BlockMarking`).
   struct BlockFrame {
     /// The block's attached fiber cells (sorted vertex tuples), one per row.
     std::vector<std::vector<std::uint64_t>> cells;
     Eigen::MatrixXcd images;
     Eigen::MatrixXcd dualImages;
     [[nodiscard]] int rank() const noexcept { return static_cast<int>(images.cols()); }
+  };
+
+  /// A block's MARKING with its input coefficients (qubit cobordism spec §2,
+  /// D2, D3 as revised): the cycles \f$ A, B \f$ of the torus the block
+  /// carries, as closed walks of directed steps in host vertex ids
+  /// (`Marking`; `setInputMarking` orders each cycle into one closed walk by
+  /// `chainhodge::Connection::closedWalkOf` and rotates every cycle to start
+  /// at the common base point, `Connection::commonBasePoint`), and the
+  /// coefficients \f$ (a, b) \f$ of the state the block represents, one per
+  /// cycle — \f$ (1, \tau_{in}) \f$ for an input torus. WHAT the engine does
+  /// with it: at every read it DERIVES the block's frame from the marking and
+  /// the block's live own kernel (`deriveFrame`: the zero mode of the block's
+  /// own covariant pencil normalized to transported periods \f$ (1, 0) \f$ and
+  /// \f$ (0, 1) \f$ over the cycles), writes the coefficients on the block's
+  /// edges through that frame, and scores the leak of those edge values in
+  /// the zero mode of the ENTIRE cobordism restricted to the block's edges
+  /// (`inputStateResidualOn`, the block residual of D2); the two-body
+  /// transfer is read in the derived frames (D3). WHY the marking and not a
+  /// frame: a frame stated at attachment (`setInputFrame`) is the seed's
+  /// kernel, which stops being the block's kernel as its lengths move; the
+  /// marking is combinatorial data every engine move keeps (spec §6), so the
+  /// frame it normalizes is always the live one. Nothing about the marking
+  /// is scored: it only normalizes the frame the coefficients are written in.
+  struct BlockMarking {
+    /// The cycles, each one closed walk starting at `baseVertex`.
+    Marking cycles;
+    /// \f$ (a, b, \dots) \f$: one coefficient per cycle, the state at the block.
+    Eigen::VectorXcd coefficients;
+    /// The common base point of the transported periods: the first vertex of
+    /// the first cycle's walk that lies on every other cycle's walk (the
+    /// `observables::SimplicialQubit::baseVertex` rule).
+    std::uint64_t baseVertex{0};
+    [[nodiscard]] int rank() const noexcept { return static_cast<int>(cycles.size()); }
   };
 
   struct BoundaryBlock {
@@ -135,8 +179,13 @@ class MultiCobordism {
     /// residual is what keeps it valid as the lengths move. Absent on every
     /// block a caller has not framed; when either input block lacks one the
     /// transfer is read in identity frames on the cells, bit-identical to a
-    /// node without frames.
+    /// node without frames. Superseded on a block that carries a `marking`:
+    /// the engine then derives the frame live and never reads this one.
     std::optional<BlockFrame> frame;
+    /// The block's marking with its input coefficients (`BlockMarking`, spec
+    /// D2/D3 as revised), set by `setInputMarking`; absent on every block a
+    /// caller has not marked, whose scoring and transfer are unchanged.
+    std::optional<BlockMarking> marking;
   };
 
   /// An ordered, explicit period constraint evaluated by the existing
@@ -601,15 +650,6 @@ class MultiCobordism {
   /// `Σ_e |actionGradientExact_e|²` — the full-complex Regge extremization term.
   [[nodiscard]] static double reggeActionGradient(const std::shared_ptr<Spacetime> &st);
 
-  /// A marking of a boundary surface in HOST vertex ids: cycles, each a
-  /// closed walk of directed steps \f$ (u \to v) \f$ over edges of the host.
-  /// A step contributes \f$ +h(u,v) \f$ to a period when \f$ u < v \f$ (the
-  /// ascending-id reference orientation of `ChainComplex`) and
-  /// \f$ -h(u,v) \f$ otherwise — the `Edge::walkLoop` convention. A
-  /// `SimplicialQubit` cycle (edge index, sign) becomes a step by taking the
-  /// edge's \f$ (i, j) \f$ as \f$ (i \to j) \f$ for \f$ +1 \f$ and
-  /// \f$ (j \to i) \f$ for \f$ -1 \f$, mapped through `SurfaceSeed::vertexIds`.
-  using Marking = std::vector<std::vector<std::pair<std::uint64_t, std::uint64_t>>>;
 
   /// The monodromy of a drawn cobordism between two marked surfaces (qubit
   /// cobordism spec S6): the whole's degree-1 ZERO MODE — the harmonic band
@@ -1138,6 +1178,68 @@ class MultiCobordism {
   [[nodiscard]] static std::shared_ptr<Spacetime> blockSurfaceWithGeometry(
       const BoundaryBlock &block, const std::shared_ptr<Spacetime> &spacetime);
 
+  // ---- the derived frame and the state at a block (qubit cobordism spec D2, D3) ----
+
+  /// The frame the engine DERIVES for a marked block from its live own
+  /// complex (spec §2 "Frame of a block", D3 as revised). `frame.cells` are
+  /// the block's own edges (sorted vertex tuples, the own pencil's canonical
+  /// order); `frame.images` \f$ F = Z\,\Pi^{-1} \f$ with \f$ Z \f$ the
+  /// images of the zero mode of the block's own covariant Whitney pencil
+  /// (`PencilLayer::harmonicContour` on `blockSurfaceWithGeometry`, lengths
+  /// AND phases) and \f$ \Pi_{ca} = \oint_c z_a \f$ its transported periods
+  /// over the marking's cycles from the common base point
+  /// (`chainhodge::Connection::transportedPeriod`), so that column \f$ b \f$
+  /// has period \f$ \delta_{cb} \f$ over cycle \f$ c \f$ — on the collar
+  /// seed this is `observables::SimplicialQubit::periodFrame` of the input
+  /// torus through the id map, since the Whitney and cotangent zero modes of
+  /// a flat torus are both its constant forms. `frame.dualImages`
+  /// \f$ F^\vee = \tilde Z\,(\tilde Z^T M_1^U F)^{-T} \f$ with \f$ \tilde Z \f$
+  /// the DUAL kernel's images (the same zero mode under the inverse links,
+  /// `AssembledPencil::dual`) and \f$ M_1^U \f$ the dressed Whitney mass
+  /// matrix of the block's own pencil: the `BlockFrame` contract
+  /// \f$ (F^\vee)^T M_1^U F = I \f$ (`dualFrame`), taken between the kernel and
+  /// the dual kernel as the qubit spec §16 states for every pairing under a
+  /// pure gauge — the one pairing that is gauge covariant (Prop. 5.1(vi));
+  /// at zero phases the dual kernel is the kernel and this is T3's dual to
+  /// rounding. `periods` is \f$ \Pi \f$ (rank × rank) and `kernelRank` the
+  /// own zero mode's rank. A block whose own kernel does not have the
+  /// marking's rank (a torn surface, phases that are not a pure gauge), a
+  /// marking edge absent from the own complex, singular periods (cycles that
+  /// do not span the block's homology) or an isotropic pairing name their
+  /// `obstruction` instead of guessing; such a block reads the full leak.
+  struct DerivedFrame {
+    BlockFrame frame;
+    Eigen::MatrixXcd periods;
+    int kernelRank{0};
+    std::string obstruction;
+    [[nodiscard]] bool derived() const noexcept { return obstruction.empty(); }
+  };
+  /// The state at a marked block (spec §2 "State at a block", S6): the
+  /// coefficients of the WHOLE's zero mode in the block's live frame, next to
+  /// the block's input coefficients and its residual. `coefficients` are the
+  /// transported periods over the marking's cycles (from `baseVertex`) of the
+  /// least-squares combination of the whole's zero mode that fits the
+  /// block's target edge values (the input coefficients written through the
+  /// live frame) on the block's edges — a kernel vector of the whole, so its
+  /// periods ARE its coordinates in the frame (spec §2); `residual` is that
+  /// fit's leak, the block residual of D2 scored at `weight` in `rU`. Under a
+  /// pure gauge the target's base-point factor cancels the transport's, so
+  /// the pair is gauge invariant. `harmonicRank` is the whole's zero-mode
+  /// rank and `frameRank` the own kernel's; an obstructed read (no frame, no
+  /// zero mode, a target edge absent from the whole) names it and reads the
+  /// full leak 1.0.
+  struct InputStateRead {
+    std::size_t block{0};
+    Eigen::VectorXcd input;
+    Eigen::VectorXcd coefficients;
+    double residual{std::numeric_limits<double>::quiet_NaN()};
+    double weight{1.0};
+    int harmonicRank{0};
+    int frameRank{0};
+    std::uint64_t baseVertex{0};
+    std::string obstruction;
+  };
+
   // ---- two-body cobordism map (#941) ----
 
   /// The two-body target of the interaction node: \f$ \chi \f$ on the pair of
@@ -1158,9 +1260,13 @@ class MultiCobordism {
     /// them, \f$ |A| \times |B| \f$) when the blocks carry no frame, or in the
     /// blocks' frames (\f$ r_A \times r_B \f$, `BlockFrame`) when both do.
     Eigen::MatrixXcd transfer{};
-    /// True when `transfer` was read in the blocks' frames (`setInputFrame`
-    /// on both), false when in identity frames on the cells.
+    /// True when `transfer` was read in the blocks' frames (a derived frame
+    /// from `setInputMarking` or a supplied one from `setInputFrame`, on
+    /// both), false when in identity frames on the cells.
     bool inFrames{false};
+    /// True when both frames were DERIVED live from the blocks' markings
+    /// (spec D3 as revised); false with supplied or identity frames.
+    bool derivedFrames{false};
     /// \f$ \mathrm{vec}(T_{AB}) \f$, column-major, the Choi-decomposed state.
     Eigen::VectorXcd choiState{};
     /// Singular values of \f$ T_{AB} \f$: the Schmidt spectrum of the state.
@@ -1172,8 +1278,15 @@ class MultiCobordism {
     double reversalResidual{std::numeric_limits<double>::quiet_NaN()};
     /// The projective Frobenius leak of the target in the reading.
     double residual{std::numeric_limits<double>::quiet_NaN()};
-    /// The fiber residual of each input block carrying an attached fiber.
+    /// The fiber residual of each input block carrying an attached fiber:
+    /// the leak of its state fiber in its OWN kernel (T2), a geometric
+    /// diagnostic on a marked block, whose scored residual is in
+    /// `inputStates`.
     std::vector<double> inputFiberResiduals{};
+    /// The state at every marked input block (`readInputState`, block order).
+    std::vector<InputStateRead> inputStates{};
+    /// The cells the transfer's rows and columns are placed on: the frames'
+    /// cells when framed, the attached fiber cells otherwise.
     std::vector<std::vector<std::uint64_t>> cellsA{};
     std::vector<std::vector<std::uint64_t>> cellsB{};
   };
@@ -1210,6 +1323,60 @@ class MultiCobordism {
   /// Drop the frame of input block \p index: the transfer returns to identity
   /// frames on the cells. @throws std::out_of_range.
   void clearInputFrame(std::size_t index);
+  /// Set the MARKING of input block \p index with the block's input
+  /// coefficients (`BlockMarking`; spec D2, D3 as revised): \p cycles in host
+  /// vertex ids (`Marking`, the convention of `monodromy`), one coefficient
+  /// per cycle. Each cycle is ordered into one closed walk and every cycle is
+  /// rotated to start at the common base point; the block must carry an
+  /// attached degree-1 fiber (the state fiber of spec S2, `attachInputFiber`).
+  /// From then on the block's residual in `rU` (under `useFiberResiduals`)
+  /// is `inputStateResidualOn` — the leak of the coefficients written
+  /// through the LIVE frame in the whole's zero mode on the block's edges —
+  /// in place of the own-kernel leak of `fiberResidualForBoundaryBlock`
+  /// (which a frame always contains, so it is zero for every state), its
+  /// stage-2 direction is `inputStateResidualGradientOn`, and the two-body
+  /// transfer is read in the derived frame (a supplied `frame` on the block
+  /// is then never read). Blocks without a marking are unchanged.
+  /// @throws std::out_of_range on the index; std::logic_error without an
+  ///   attached fiber; std::invalid_argument, by name, when the fiber is not
+  ///   at degree 1, when there is no cycle, when the coefficient count is not
+  ///   the cycle count, when a coefficient is not finite or all are zero,
+  ///   when a step is a self-loop or not an edge of the live complex inside
+  ///   the block's vertex set, when a cycle's steps do not form one closed
+  ///   walk, or when the cycles share no vertex.
+  void setInputMarking(std::size_t index, Marking cycles, std::vector<std::complex<double>> coefficients);
+  /// The marking of input block \p index, or none. @throws std::out_of_range.
+  [[nodiscard]] const std::optional<BlockMarking> &inputMarking(std::size_t index) const;
+  /// Drop the marking of input block \p index: its scoring and transfer
+  /// return to what they were before `setInputMarking`. @throws std::out_of_range.
+  void clearInputMarking(std::size_t index);
+  /// The live frame of a marked \p block on \p spacetime (`DerivedFrame`):
+  /// read-only on the geometry. @throws std::logic_error when the block
+  /// carries no marking.
+  [[nodiscard]] static DerivedFrame deriveFrame(const BoundaryBlock &block,
+                                               const std::shared_ptr<Spacetime> &spacetime);
+  /// `deriveFrame` of input block \p index on the live complex. @throws
+  /// std::out_of_range on the index; std::logic_error without a marking.
+  [[nodiscard]] DerivedFrame deriveInputFrame(std::size_t index) const;
+  /// The BLOCK RESIDUAL of a marked block (spec D2 as revised): the target
+  /// edge values \f$ t = F\,(a, b)^T \f$ of the block's input coefficients
+  /// through its live frame on \p spacetime, and the leak of \f$ t \f$ in the
+  /// zero mode of the ENTIRE cobordism — bulk and boundary edges in one
+  /// pencil, at the WHOLE's harmonic contour (`FiberBand::ZeroMode` on the
+  /// whole, R7) — restricted to the block's edges (`fiberResidualOn`, the
+  /// whole-complex leak, one target per block). Full leak 1.0 when the frame
+  /// cannot be derived or the whole refuses the read. This is what `rU`
+  /// scores at `inputResidualWeight` for a marked block. @throws
+  /// std::logic_error without a marking or off the Whitney pencil.
+  [[nodiscard]] double inputStateResidualOn(const BoundaryBlock &block,
+                                            const std::shared_ptr<Spacetime> &spacetime) const;
+  /// `inputStateResidualOn` of input block \p index on the live complex.
+  [[nodiscard]] double inputStateResidual(std::size_t index) const;
+  /// The state at input block \p index (`InputStateRead`): the coefficients
+  /// of the whole's zero mode in the block's live frame, its input
+  /// coefficients, and its residual. @throws std::out_of_range;
+  ///   std::logic_error without a marking or off the Whitney pencil.
+  [[nodiscard]] InputStateRead readInputState(std::size_t index) const;
   /// The DUAL of a frame under the transpose pairing of \p complex's own
   /// chain-level Whitney pencil at degree \p degree: with \f$ M_k \f$ the
   /// pencil's chain-metric inverse (`CovariantChainHodge::Minv`, the Whitney
@@ -1276,6 +1443,34 @@ class MultiCobordism {
   [[nodiscard]] ResidualGradient fiberResidualGradientOn(const std::shared_ptr<Spacetime> &spacetime,
                                                          const BoundaryFiber &fiber,
                                                          FiberBand band = FiberBand::AsStored) const;
+  /// The analytic gradient of `inputStateResidualOn(block, spacetime)` over
+  /// \p spacetime's edges (`ResidualGradient`, the `runStage2` convention):
+  /// the leak \f$ r = \|u\|^2/\|t\|^2 \f$, \f$ u = t - Z_T c \f$ with
+  /// \f$ c \f$ the least-squares fit, differentiated with a MOVING target —
+  /// \f$ dr = 2\,\mathrm{Re}\,dF \f$ with
+  /// \f$ dF = \big[u^H(dt - dZ_T\,c) - r\,t^H dt\big]/\|t\|^2 \f$ — where
+  /// \f$ dZ_T \f$ is the whole's band derivative on the block's edges
+  /// (`chainhodge::BandDerivative`, as `fiberResidualGradientOn`) and
+  /// \f$ dt = dF\,(a,b)^T \f$ the frame's derivative,
+  /// \f$ dF = dZ\,\Pi^{-1} - Z\,\Pi^{-1}\,d\Pi\,\Pi^{-1} \f$, with \f$ dZ \f$
+  /// the band derivative of the block's OWN zero mode on its own pencil and
+  /// \f$ d\Pi \f$ the transported periods of \f$ dZ \f$ over the cycles;
+  /// \f$ dt \f$ is supported on the block's own edges (mapped to the parent's
+  /// by vertex pair) and vanishes on bulk edges, where only \f$ dZ_T \f$
+  /// moves. The contours are held fixed (quadrature devices). No finite
+  /// difference anywhere. `phases` is empty at degree 1, as for every
+  /// degree-1 fiber gradient. Zero when the frame cannot be derived (the
+  /// full leak has no direction).
+  [[nodiscard]] ResidualGradient inputStateResidualGradientOn(const std::shared_ptr<Spacetime> &spacetime,
+                                                              const BoundaryBlock &block) const;
+  /// `inputStateResidualGradientOn` for several marked \p blocks at once, the
+  /// whole's band derivative (the per-edge cost) computed once and shared:
+  /// what `fiberModeAscent` uses for every marked block. One gradient per
+  /// block, in the given order; a block whose frame cannot be derived gets
+  /// the zero gradient. @throws std::logic_error when a block carries no
+  ///   marking or the metric source is not the Whitney pencil.
+  [[nodiscard]] std::vector<ResidualGradient> inputStateResidualGradientsOn(
+      const std::shared_ptr<Spacetime> &spacetime, const std::vector<const BoundaryBlock *> &blocks) const;
   /// The analytic gradient of `twoBodyResidualOn` through the frame transfer
   /// (\f$ d\tilde A^U = dM^U h + M^U dh \f$ on the attached blocks).
   [[nodiscard]] ResidualGradient twoBodyResidualGradientOn(const std::shared_ptr<Spacetime> &spacetime,
@@ -2253,13 +2448,35 @@ class MultiCobordism {
   std::optional<BoundaryFiber> wholeFiberTarget_;
   std::optional<TwoBodyTarget> twoBodyTarget_;
   /// The transfer between the two attached input blocks on \p spacetime: in
-  /// the blocks' frames when both carry one (`BlockFrame`), in the full
-  /// (identity) frames on the fibers' cells when neither does; refused
-  /// geometries throw std::runtime_error. @throws std::logic_error when only
-  /// one block carries a frame.
+  /// the blocks' frames when both carry one (`transferOperand`: derived live
+  /// from a marking, or the supplied `BlockFrame`), in the full (identity)
+  /// frames on the fibers' cells when neither does; refused geometries throw
+  /// std::runtime_error. @throws std::logic_error when only one block
+  /// carries a frame.
   [[nodiscard]] chainhodge::TransferResult frameTransferOn(
       const std::shared_ptr<Spacetime> &spacetime, const BoundaryBlock &A,
       const BoundaryBlock &B) const;
+  /// One operand of the transfer on \p spacetime: the block's frame in
+  /// effect — DERIVED live from its marking when it carries one
+  /// (`deriveFrame`; an obstructed derivation throws std::runtime_error by
+  /// name, which the residual scores as the full leak), the supplied
+  /// `BlockFrame` otherwise, or none — with the cells the operand is placed
+  /// on (the frame's cells when framed, the attached fiber's otherwise).
+  struct TransferOperand {
+    std::vector<std::vector<std::uint64_t>> cells;
+    std::optional<BlockFrame> frame;
+    bool derived{false};
+  };
+  [[nodiscard]] TransferOperand transferOperand(const BoundaryBlock &block,
+                                                const std::shared_ptr<Spacetime> &spacetime) const;
+  /// Order every cycle of \p cycles into one closed walk and rotate all of
+  /// them to their common base point (`chainhodge::Connection::closedWalkOf`,
+  /// `commonBasePoint`); false with \p obstruction named when a cycle is
+  /// empty, does not form one closed walk, or the cycles share no vertex.
+  [[nodiscard]] static bool orderMarking(Marking &cycles, std::uint64_t &baseVertex, std::string &obstruction);
+  /// The target edge values of a marked block through a frame: a degree-1
+  /// fiber on the frame's cells with images \f$ F\,(a, b)^T \f$.
+  [[nodiscard]] static BoundaryFiber stateTargetOf(const BlockMarking &marking, const BlockFrame &frame);
   [[nodiscard]] double twoBodyResidualOn(const std::shared_ptr<Spacetime> &spacetime,
                                          const TwoBodyTarget &target) const;
   /// The two input blocks carrying an attached fiber, in block order.
