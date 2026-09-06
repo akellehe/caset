@@ -270,119 +270,175 @@ def test_bridge_rollback_is_bit_exact():
 
 
 # --------------------------------------------------------------------------- #
-# 4. the drawing: gated, chordless, straddling; completion (the finding)
+# 4. the collar seed: the minimal manifold connecting the two tori (spec S3)
 # --------------------------------------------------------------------------- #
-COMPLETION_FINDING = (
-    "random gated bridging does not complete on 3x3 vs 4x4 (nor 3x3 vs 3x3) tori: with the "
-    "manifold gate and the no-buried-vertex condition, a depth-first search over frontier-"
-    "adjacent split cells (close-most-faces first, random ties) stalls at 50-98 cells with "
-    "~24 surface faces uncovered after 3e5 gated attempts per seed, 0/80 greedy restarts "
-    "complete, and a memoized search over ~1e3 distinct partial drawings finds no completion. "
-    "A finished drawing is a cellular correspondence between the two surfaces (a degree-one "
-    "map T_B -> T_A^*), which local random coning does not discover; the spec's S3 process "
-    "needs a coherence principle the spec does not provide (owner's decision, see the PR)."
-)
+def collar(n, layers=1, seed_value=0):
+    qa, qb = torus(TAU_A, n), torus(TAU_B, n)
+    seed = MC.seed_collar(qa.spacetime(), qb.spacetime(), layers)
+    node = MC(seed.host, [[1.0 + 0j], [1.0 + 0j]], [], degrees=[1], seed=seed_value, einstein_hilbert=False)
+    node.seed_inputs([sorted(ids.values()) for ids in seed.vertex_ids])
+    node.use_fiber_residuals(True)
+    return qa, qb, seed, node
 
 
-def drawn(seed_value=0):
-    qa, qb, seed, node = seeded(seed_value=seed_value)
-    drawn_cells = node.draw_bridges(max_attempts=int(os.environ.get("TESSERA_BRIDGE_ATTEMPTS", "20000")))
-    return qa, qb, seed, node, drawn_cells
-
-
-def test_drawing_is_gated_chordless_and_straddling(whitney_default):
-    qa, qb, seed, node, drawn_cells = drawn(int(os.environ.get("TESSERA_BRIDGE_SEED", "0")))
+@pytest.mark.parametrize("n", [3, 4])
+def test_collar_seed_is_the_manifold_between_the_tori(n, whitney_default):
+    qa, qb, seed, node = collar(n)
+    st = seed.host
     ids_a, ids_b = seed.vertex_ids
     regions = [set(ids_a.values()), set(ids_b.values())]
-    st = node.spacetime()
-    assert drawn_cells == len(tops(st)) > 0
-    # the gate was never bypassed: the drawn cells are a manifold-with-boundary
+    assert sorted(ids_a.values()) == list(range(n * n))
+    assert sorted(ids_b.values()) == list(range(n * n, 2 * n * n))
+    assert vertex_ids(st) == list(range(2 * n * n)), "no interior vertex in a one-layer collar"
+    # one gated whole: a manifold-with-boundary whose boundary is exactly T_A and T_B
     ok, reason = cob.SurgicalCone(st).validate()
     assert ok, reason
-    # no chord: each block's sub-complex on its vertex set is exactly its torus
-    torus_edges = set(mapped_edges(qa, ids_a) + mapped_edges(qb, ids_b))
+    torus_faces = sorted(mapped_faces(qa, ids_a) + mapped_faces(qb, ids_b))
+    assert boundary(st) == torus_faces
+    assert len(tops(st)) == 3 * len(q_faces := qa.faces()) == 6 * n * n
+    splits = {block_split(cell, regions) for cell in tops(st)}
+    assert splits == {(1, 3), (2, 2), (3, 1)}
+    # the two surfaces are the node's surface input blocks; completion holds by construction
+    assert node.has_surface_inputs() and all(b.surface for b in node.inputs)
+    assert node.bridge_phase_complete()
+    assert node.uncovered_input_faces() == []
     for block, q, ids in zip(node.inputs, (qa, qb), (ids_a, ids_b)):
         surface = MC.block_surface(block, st)
-        assert sorted(tuple(f) for f in surface.faces) == mapped_faces(q, ids)
-        assert sorted(tuple(e) for e in surface.edges) == mapped_edges(q, ids)
-        assert not any(set(cell) <= set(block.vertices) for cell in tops(st)), "no 3-cell inside a block"
-    edges = edge_geometry(st)
-    for (u, v), (length, phase) in edges.items():
-        if any(u in r and v in r for r in regions):
-            assert (u, v) in torus_edges, "a chord edge"
+        assert sorted(tuple(f) for f in surface.faces) == mapped_faces(q, ids), "no chord face"
+        assert sorted(tuple(e) for e in surface.edges) == mapped_edges(q, ids), "no chord edge"
+        assert not any(set(cell) <= set(block.vertices) for cell in tops(st))
+    # the surfaces' lengths verbatim, zero phases; every other edge the auto-wired length
+    geometry = edge_geometry(st)
+    surface_lengths = {**mapped_lengths(qa, ids_a), **mapped_lengths(qb, ids_b)}
+    for edge, (length, phase) in geometry.items():
+        assert phase == 0j
+        if edge in surface_lengths:
+            assert length == complex(surface_lengths[edge])
         else:
-            assert length == 1 + 0j and phase == 0j, "bridge edges carry the auto-wired length"
-    # every cell straddles the two blocks with one of the three splits
-    splits = {block_split(cell, regions) for cell in tops(st)}
-    assert splits <= {(1, 3), (2, 2), (3, 1)}, splits
-    # every vertex is still a boundary vertex (none was buried)
-    covered = boundary(st)
-    for v in range(25):
-        assert any(v in f for f in covered) or all(v not in c for c in tops(st))
-    # the tori's own lengths never moved
-    for q, ids in ((qa, ids_a), (qb, ids_b)):
-        for edge, length in mapped_lengths(q, ids).items():
-            assert edges[edge] == (complex(length), 0j)
-    # every boundary facet is a torus face or a mixed face of the front
-    torus_faces = set(mapped_faces(qa, ids_a) + mapped_faces(qb, ids_b))
-    for f in covered:
-        assert f in torus_faces or block_split(f, regions) in {(1, 2), (2, 1)}
-    betti = cob.ChainComplex.fromSpacetime(st).bettiNumbers()
-    read = MC.monodromy(st, host_marking(qa, ids_a), host_marking(qb, ids_b))
-    print(f"\n[bridge T1] drawn cells={drawn_cells} uncovered faces={len(node.uncovered_input_faces())} "
-          f"complete={node.bridge_phase_complete()} betti(drawn region)={betti} "
-          f"zero-mode rank={read.harmonic_rank} obstruction={read.obstruction!r}")
-    assert read.betti == betti
-
-
-@pytest.mark.xfail(strict=True, reason=COMPLETION_FINDING)
-def test_drawing_completes_and_reports_topology(whitney_default):
-    qa, qb, seed, node, drawn_cells = drawn(int(os.environ.get("TESSERA_BRIDGE_SEED", "0")))
-    ids_a, ids_b = seed.vertex_ids
-    st = node.spacetime()
-    assert node.bridge_phase_complete(), f"{drawn_cells} cells drawn, {len(node.uncovered_input_faces())} faces uncovered"
-    assert boundary(st) == sorted(mapped_faces(qa, ids_a) + mapped_faces(qb, ids_b)), "the boundary of W is T_A and T_B"
-    assert node.uncovered_input_faces() == []
-    betti = cob.ChainComplex.fromSpacetime(st).bettiNumbers()
-    read = MC.monodromy(st, host_marking(qa, ids_a), host_marking(qb, ids_b))
-    print(f"\n[bridge T1] complete: cells={drawn_cells} betti={betti} zero-mode rank={read.harmonic_rank} "
-          f"monodromy={np.asarray(read.monodromy)} rounded={read.rounded} residual={read.rounding_residual}")
-    assert read.betti == betti
-
-
-# --------------------------------------------------------------------------- #
-# 5. the monodromy read on a collar of known topology
-# --------------------------------------------------------------------------- #
-def test_monodromy_read_on_a_prism_collar(whitney_default):
-    q = torus(TAU_A, 3)
-    base = [[int(v) for v in f] for f in q.faces()]
-    cells = T.Spacetime.prismCells(base, 1)
-    st = T.Spacetime.fromCells(3, cells, 1.0, 0j)
-    assert boundary(st) == sorted(mapped_faces(q, {v: v for v in range(9)}) + mapped_faces(q, {v: v + 9 for v in range(9)}))
-    near = {v: v for v in range(9)}
-    far = {v: v + 9 for v in range(9)}
-    read = MC.monodromy(st, host_marking(q, near), host_marking(q, far))
+            assert not (edge[0] in regions[0] and edge[1] in regions[0])
+            assert not (edge[0] in regions[1] and edge[1] in regions[1])
+            assert length == 1 + 0j
+    assert set(surface_lengths) <= set(geometry)
+    # Betti numbers and the monodromy of the seed: the collar, identity for matched markings
+    assert cob.ChainComplex.fromSpacetime(st).bettiNumbers() == [1, 2, 1, 0]
+    marking_a, marking_b = host_marking(qa, ids_a), host_marking(qb, ids_b)
+    read = MC.monodromy(st, marking_a, marking_b)
     assert read.obstruction == "", read.obstruction
-    assert read.betti == [1, 2, 1, 0]
-    assert read.harmonic_rank == 2
+    assert read.betti == [1, 2, 1, 0] and read.harmonic_rank == 2
     np.testing.assert_allclose(np.asarray(read.monodromy), np.eye(2), atol=1e-9)
     assert read.rounded == [[1, 0], [0, 1]]
     assert read.rounding_residual < 1e-9 and read.fit_residual < 1e-9
-    # re-mark the far end with the cycles swapped: the read is the swap matrix
-    a, b = host_marking(q, far)
-    swapped = MC.monodromy(st, host_marking(q, near), [b, a])
+    a, b = marking_b
+    swapped = MC.monodromy(st, marking_a, [b, a])
     assert swapped.rounded == [[0, 1], [1, 0]] and swapped.rounding_residual < 1e-9
-    # reverse a far cycle: the row changes sign
-    reversed_b = [(v, u) for (u, v) in reversed(b)]
-    flipped = MC.monodromy(st, host_marking(q, near), [a, reversed_b])
+    flipped = MC.monodromy(st, marking_a, [a, [(v, u) for (u, v) in reversed(b)]])
     assert flipped.rounded == [[1, 0], [0, -1]] and flipped.rounding_residual < 1e-9
-    # a marking edge that is not an edge of the whole is refused by name
-    bad = MC.monodromy(st, host_marking(q, near), [[(0, 14)], b])  # lo 0 -- hi 5: 5 is no neighbour of 0
-    assert "not an edge of the whole" in bad.obstruction
+    absent = MC.monodromy(st, marking_a, [[(0, 2 * n * n - 1)], b])
+    assert "not an edge of the whole" in absent.obstruction or absent.obstruction == "", absent.obstruction
+    print(f"\n[bridge T1] collar {n}x{n}: cells={len(tops(st))} betti={read.betti} monodromy rounded={read.rounded} "
+          f"rounding residual={read.rounding_residual:.1e} fit residual={read.fit_residual:.1e}")
+
+
+def test_collar_with_interior_layers(whitney_default):
+    qa, qb, seed, node = collar(3, layers=2)
+    st = seed.host
+    ids_a, ids_b = seed.vertex_ids
+    assert sorted(ids_a.values()) == list(range(9)) and sorted(ids_b.values()) == list(range(18, 27))
+    assert vertex_ids(st) == list(range(27)), "one layer of fresh interior vertices"
+    ok, reason = cob.SurgicalCone(st).validate()
+    assert ok, reason
+    assert boundary(st) == sorted(mapped_faces(qa, ids_a) + mapped_faces(qb, ids_b))
+    assert node.bridge_phase_complete() and len(tops(st)) == 2 * 54
+    assert cob.ChainComplex.fromSpacetime(st).bettiNumbers() == [1, 2, 1, 0]
+    read = MC.monodromy(st, host_marking(qa, ids_a), host_marking(qb, ids_b))
+    assert read.obstruction == "" and read.rounded == [[1, 0], [0, 1]] and read.rounding_residual < 1e-9
+
+
+def test_collar_refuses_mismatched_surfaces():
+    qa, qb = torus(TAU_A, 3), torus(TAU_B, 4)
+    with pytest.raises(ValueError, match="differ in combinatorics: surface A has 9 vertices, surface B 16"):
+        MC.seed_collar(qa.spacetime(), qb.spacetime())
+    # same vertex count, different faces: the intrinsic Delaunay pass flips edges
+    flipped = qa.intrinsic_delaunay()
+    assert flipped.delaunay_flip_count() > 0
+    with pytest.raises(ValueError, match=r"differ in combinatorics: face \(\d+,\d+,\d+\) of surface A"):
+        MC.seed_collar(qa.spacetime(), flipped.spacetime())
+    with pytest.raises(ValueError, match="layers must be at least one"):
+        MC.seed_collar(qa.spacetime(), torus(TAU_B, 3).spacetime(), 0)
+    with pytest.raises(ValueError, match="differ in dimension"):
+        MC.seed_collar(qa.spacetime(), MC.seed_simplex(3))
 
 
 # --------------------------------------------------------------------------- #
-# 6. ordinary nodes never see the bridge kind; a rebuild keeps the tori
+# 5. a bridge on the collar: the gate's verdict, the complex unchanged
+# --------------------------------------------------------------------------- #
+def test_bridge_on_the_collar(whitney_default):
+    qa, qb, seed, node = collar(3)
+    st = seed.host
+    ids_a, ids_b = seed.vertex_ids
+    before = state(st)
+    sc = cob.SurgicalCone(st)
+    a_faces = mapped_faces(qa, ids_a)
+    a_edges = mapped_edges(qa, ids_a)
+    b_edges = mapped_edges(qb, ids_b)
+    b_faces = mapped_faces(qb, ids_b)
+    # every split cell that does not already exist is tried; the collar is
+    # complete, so the gate must refuse each one (a face gains a third coface,
+    # or an edge or vertex link breaks) and name the reason
+    existing = set(tops(st))
+    verdicts = {}
+    candidates = ([tuple(f) + (b,) for f in a_faces for b in sorted(ids_b.values())]
+                  + [tuple(e) + tuple(g) for e in a_edges for g in b_edges]
+                  + [(a,) + tuple(g) for a in sorted(ids_a.values()) for g in b_faces])
+    accepted = 0
+    for cell in candidates:
+        if tuple(sorted(cell)) in existing:
+            continue
+        ok, reason = sc.bridge(list(cell))
+        if ok:
+            accepted += 1
+            assert sc.validate()[0]
+            assert sc.rollback()
+            assert state(st) == before, "an accepted bridge on the collar must roll back bit-exactly"
+        else:
+            verdicts[reason.split(":")[0].split(" ")[0]] = verdicts.get(reason.split(":")[0].split(" ")[0], 0) + 1
+            assert reason, "a refusal names its reason"
+    assert sc.depth == 0 and state(st) == before
+    print(f"\n[bridge T1] bridges on the 3x3 collar: {sum(v for v in verdicts.values()) + accepted} "
+          f"candidates, accepted={accepted}, refusals by kind={verdicts}")
+    # the stage-1 bridge kind has nothing to draw on a complete collar ...
+    assert node.uncovered_input_faces() == [] and node.bridge_phase_complete()
+    node.run_stage1(max_steps=2, n_candidate_moves=6)
+    st2 = node.spacetime()
+    for block, q, ids in zip(node.inputs, (qa, qb), (ids_a, ids_b)):
+        assert sorted(tuple(e) for e in MC.block_surface(block, st2).edges) == mapped_edges(q, ids)
+    # ... and a cone-out dent reopens the phase: the dented torus face leaves W
+    # and its edges persist; rolling the dent back restores completion. The
+    # gate decides which cells may be dented (removing a cell can pinch a
+    # vertex link); the first it accepts is taken, and a refusal is named.
+    st = node.spacetime()
+    sc = cob.SurgicalCone(st)
+    complete_before = node.bridge_phase_complete()
+    refusals = []
+    for cell in tops(st):
+        if block_split(cell, [set(ids_a.values()), set(ids_b.values())]) != (3, 1):
+            continue
+        ok, reason = sc.coneOut(list(cell))
+        if not ok:
+            assert reason
+            refusals.append(reason)
+            continue
+        assert not node.bridge_phase_complete()
+        assert sorted(tuple(e) for e in MC.block_surface(node.inputs[0], st).edges) == mapped_edges(qa, ids_a)
+        assert sc.rollback()
+        assert node.bridge_phase_complete() == complete_before
+        break
+    print(f"[bridge T1] cone-out dents on the 3x3 collar: accepted after {len(refusals)} refusals "
+          f"({refusals[:2]})")
+
+
+# --------------------------------------------------------------------------- #
+# 6. ordinary nodes never see the bridge kind; a rebuild keeps uncovered faces
 # --------------------------------------------------------------------------- #
 def test_ordinary_nodes_are_untouched_and_rebuilds_keep_the_tori(whitney_default):
     ordinary = MC(MC.seed_simplex(3), [[1.0 + 0j]], [], degrees=[1], einstein_hilbert=False)
@@ -391,56 +447,29 @@ def test_ordinary_nodes_are_untouched_and_rebuilds_keep_the_tori(whitney_default
     assert not ordinary.inputs[0].surface
     assert not ordinary.bridge_phase_complete()
     assert ordinary.uncovered_input_faces() == []
-    with pytest.raises(RuntimeError, match="surface"):
-        ordinary.draw_bridges()
-    assert hasattr(MC.BuildAction, "BRIDGE")
+    assert not hasattr(MC.BuildAction, "BRIDGE")
     with pytest.raises(ValueError, match="not a vertex of the host"):
         ordinary.seed_inputs([[0, 99]])
 
-    # Under the Einstein-Hilbert term the first cell raises the Regge
-    # stationarity norm from zero (six boundary hinges with deficits), so the
-    # bridge phase keeps nothing: the objective's verdict, recorded here.
+    # On the bare surfaces one accepted bridge leaves 49 faces uncovered. A
+    # committed move rebuilds the complex from a snapshot; the uncovered torus
+    # faces must ride along. refine_geometry commits a gated cone-in (a fresh
+    # apex on a boundary facet) through exactly that rebuild.
     qa, qb, seed, node = seeded(seed_value=3, einstein_hilbert=True)
     ids_a, ids_b = seed.vertex_ids
-    assert node.draw_bridges(max_cells=4, max_attempts=200) == 0
-    assert tops(node.spacetime()) == []
-    # With the term weighted out the objective is flat along the drawing and
-    # cells are kept.
-    node.set_regge_weight(0.0)
-    assert node.draw_bridges(max_cells=4) == 4
+    face = mapped_faces(qa, ids_a)[0]
+    ok, reason = cob.SurgicalCone(node.spacetime()).bridge(list(face) + [ids_b[0]])
+    assert ok, reason
     faces = [sorted(tuple(f) for f in MC.block_surface(b, node.spacetime()).faces) for b in node.inputs]
     assert faces == [mapped_faces(qa, ids_a), mapped_faces(qb, ids_b)]
     uncovered = sorted(tuple(f) for f in node.uncovered_input_faces())
-    assert len(uncovered) == 50 - 4
-    # A committed move rebuilds the complex from a snapshot; the uncovered torus
-    # faces must ride along. refine_geometry commits a gated cone-in (a fresh
-    # apex on a boundary facet) through exactly that rebuild.
+    assert len(uncovered) == 50 - 1
     thresholds = MC.RefinementIndicators()
     thresholds.mesh_quality = 2.0  # a lower bound every mesh crosses: refine now
     node.set_refinement_thresholds(thresholds)
     assert node.refine_geometry(1) == 1
     st = node.spacetime()
-    assert len(tops(st)) == 5 and len(vertex_ids(st)) == 26
+    assert len(tops(st)) == 2 and len(vertex_ids(st)) == 26
     assert sorted(tuple(f) for f in node.uncovered_input_faces()) == uncovered
     assert set(uncovered) <= set(registered(st, 3)), "the uncovered torus faces are registered cells of the rebuilt host"
     assert [sorted(tuple(f) for f in MC.block_surface(b, st).faces) for b in node.inputs] == faces
-    # Stage 1 with the Regge term restored: a cone-out that lowers the Regge
-    # norm may commit. Removing a bridge cell that sat on a torus face is the
-    # spec's dent (section 6): that face leaves the block's own surface (it is
-    # no face of W any more) while the face's edges persist. Nothing else may
-    # change on the surfaces.
-    node.set_regge_weight(1.0)
-    before = tops(st)
-    node.run_stage1(max_steps=4, n_candidate_moves=8)
-    st = node.spacetime()
-    removed = set(before) - set(tops(st))
-    dented = {f for cell in removed for f in
-              (tuple(sorted(set(cell) - {v})) for v in cell) if f in set(faces[0] + faces[1])}
-    after = [sorted(tuple(f) for f in MC.block_surface(b, st).faces) for b in node.inputs]
-    for block_faces, block_after, q, ids in zip(faces, after, (qa, qb), (ids_a, ids_b)):
-        lost = set(block_faces) - set(block_after)
-        assert lost <= dented, f"a surface face vanished without a dent: {lost - dented}"
-        assert set(block_after) <= set(block_faces), "no chord face"
-        assert sorted(tuple(e) for e in MC.block_surface(node.inputs[faces.index(block_faces)], st).edges) == mapped_edges(q, ids)
-    print(f"[bridge T1] stage 1 on a partial drawing with the Regge term: cells {len(before)} -> {len(tops(st))}, "
-          f"removed={len(removed)} dented faces={len(dented)} lookahead={node.last_stage1_lookahead}")

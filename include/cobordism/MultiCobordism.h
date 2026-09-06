@@ -956,29 +956,60 @@ class MultiCobordism {
   [[nodiscard]] static std::shared_ptr<Spacetime> seedSimplex(int dimension,
                                                               bool balancedEdges = false);
 
-  /// A host seeded from boundary SURFACES (qubit cobordism spec S2). `host` is
-  /// ONE \f$ d \f$-dimensional `Spacetime` (\f$ d \f$ = the surfaces'
-  /// dimension + 1; 3 for tori) holding every surface as its own simplices —
-  /// its triangles, edges and vertices with the surface's lengths and zero
-  /// phases — on disjoint vertex id ranges, and NO \f$ d \f$-cell: the bulk
-  /// between the surfaces is drawn afterwards by gated bridges, never built
-  /// from a prism or a collar. `vertexIds[s]` maps surface \f$ s \f$'s vertex
+  /// A host seeded from boundary SURFACES (qubit cobordism spec S2/S3).
+  /// `host` is ONE \f$ d \f$-dimensional `Spacetime` (\f$ d \f$ = the
+  /// surfaces' dimension + 1; 3 for tori) holding every surface as its own
+  /// simplices — its triangles, edges and vertices with the surface's lengths
+  /// and zero phases — on disjoint vertex id ranges: the bare surfaces with
+  /// NO \f$ d \f$-cell (`seedFromSurfaces`), or the collar between two
+  /// surfaces (`seedCollar`). `vertexIds[s]` maps surface \f$ s \f$'s vertex
   /// ids to the host's, so a marking or a fiber stated on the surface carries
-  /// over.
+  /// over; the region form of `seedInputs` takes those id sets as the blocks.
   struct SurfaceSeed {
     std::shared_ptr<Spacetime> host;
     std::vector<std::map<std::uint64_t, std::uint64_t>> vertexIds;
   };
-  /// Build the `SurfaceSeed` of \p surfaces, each a closed
-  /// \f$ (d-1) \f$-dimensional `Spacetime` (e.g.
+  /// Build the `SurfaceSeed` of the BARE \p surfaces (no \f$ d \f$-cell), each
+  /// a closed \f$ (d-1) \f$-dimensional `Spacetime` (e.g.
   /// `observables::SimplicialQubit::flatTorus(tau, n, n).spacetime()`). The
   /// metric signature (Lorentzian, dimension \f$ d \f$), the CDT type and the
   /// preferred foliation are those of `seedSimplex`; the surfaces themselves
-  /// are read, never changed.
+  /// are read, never changed. This is the host the bridge primitive is
+  /// exercised on; the experiment's host is `seedCollar`.
   /// @throws std::invalid_argument on no surfaces, a null surface, surfaces of
   ///   differing dimension, or a surface without top cells.
   [[nodiscard]] static SurfaceSeed seedFromSurfaces(
       const std::vector<std::shared_ptr<Spacetime>> &surfaces);
+
+  /// The COLLAR between two surfaces (qubit cobordism spec S3): the minimal
+  /// manifold connecting the two boundaries, \f$ T^2 \times I \f$ over their
+  /// shared triangulation — `Spacetime::prismCells` over the base faces with
+  /// \p layers product layers — created as ONE gated whole. The surfaces
+  /// must have identical combinatorics: their vertices in ascending id order
+  /// are the base indices, and the two face sets must coincide under those
+  /// indices; a mismatch is refused by name. Layer 0 carries surface A's
+  /// vertices (host ids \f$ 0 \ldots n-1 \f$), the last layer surface B's
+  /// (host ids \f$ n\cdot\mathrm{layers} \ldots \f$), and the layers between,
+  /// when \p layers \f$ > 1 \f$, are fresh interior vertices. A's and B's
+  /// edges carry their surfaces' lengths verbatim; every other edge carries
+  /// the engine's auto-wired length (`Spacetime::autoWiredLength`, the
+  /// spacelike class on coordinate-free vertices); every phase is zero. The
+  /// whole host is gated once by `ChainComplex::dualComplexIsValid` and
+  /// refused by name if it fails, so `bridgePhaseComplete()` holds by
+  /// construction on the node that seeds both surfaces as its input blocks
+  /// (`seedInputs` with the two id sets). Everything after the seed is
+  /// emergent: stage 1 refines and surgers the interior (`bridge` among the
+  /// gated kinds), stage 2 relaxes every edge. Nothing beyond the collar is
+  /// templated: a per-cell drawing of the bulk cannot reach
+  /// \f$ \partial W = T_A \sqcup T_B \f$ — a cell the manifold gate accepts
+  /// meets the complex along a disk, so a drawing from one cell stays a ball
+  /// (a shellable 3-manifold is a ball) — which is WHY the collar is the seed.
+  /// @throws std::invalid_argument on a null surface, `layers < 1`, surfaces of
+  ///   differing dimension or combinatorics (named), a surface without top
+  ///   cells, or a collar the manifold gate refuses (named).
+  [[nodiscard]] static SurfaceSeed seedCollar(const std::shared_ptr<Spacetime> &surfaceA,
+                                              const std::shared_ptr<Spacetime> &surfaceB,
+                                              int layers = 1);
 
   /// A block's own surface (qubit cobordism spec D2, the enumeration half):
   /// its \f$ (d-1) \f$-faces and its edges inside its vertex set, as sorted
@@ -1173,7 +1204,7 @@ class MultiCobordism {
   /// One canonical solve action on THIS node, the unit a search policy (Proton's build
   /// restart loop, a greedy driver, or the RL agent) composes — so the solve is driven
   /// through the engine, not re-implemented by each consumer.
-  enum class BuildAction { Grow, Evolve, Relax, ConeOut, ConeIn, Bridge };
+  enum class BuildAction { Grow, Evolve, Relax, ConeOut, ConeIn };
 
   /// Candidate ordering for the directed cone-out probe's *secondary* sort (both orders are
   /// interior-first): `AdjacentHolesLast` sends cells that share vertices with the existing
@@ -1183,8 +1214,7 @@ class MultiCobordism {
 
   /// Apply one `BuildAction` to this node (in place). Grow/Evolve = `runStage1` with
   /// `growBoundaries` true/false; Relax = `runStage2`; ConeOut/ConeIn = the directed probes
-  /// below; Bridge = `drawBridges` with `maxSteps` as its cell budget. Irrelevant params
-  /// for a given action are ignored.
+  /// below. Irrelevant params for a given action are ignored.
   void buildStep(BuildAction action, int maxSteps = 30, int nCandidateMoves = 8,
                  double stage2Beta = 1.0, int stage2MaxIters = 10,
                  double stage2Alpha0 = 0.05,
@@ -1213,18 +1243,20 @@ class MultiCobordism {
   [[nodiscard]] int directedConeIn(int maxClose = 6);
 
   // ==================================================================
-  // The bridge phase (qubit cobordism spec S3, D1)
+  // Surface inputs and the bridge kind (qubit cobordism spec S3, D1)
   // ==================================================================
   //
-  // Two boundary surfaces sit in one host with nothing between them. The bulk
-  // is DRAWN: a candidate top cell on existing vertices, k from one surface
-  // block and d+1-k from the other (1+3, 2+2, 3+1 for tetrahedra), applied
-  // through `SurgicalCone::bridge`, gated by the manifold check, scored by ΔF,
-  // kept or rolled back — until every surface face has exactly one top cell on
-  // it and no other boundary face exists, ∂W = T_A ⊔ T_B. The split is chosen
-  // so that every part lies in one surface's own simplices, which is what
-  // makes a chord impossible BY CONSTRUCTION rather than by a gate: a chord is
-  // not a topological defect the manifold check could see.
+  // Two boundary surfaces sit in one host. The bulk between them starts as
+  // the collar (`seedCollar`), the minimal manifold connecting them, created
+  // as one gated whole; from there stage 1 and stage 2 are emergent. `bridge`
+  // is one of stage 1's gated move kinds: a candidate top cell on existing
+  // vertices, k from one surface block and d+1-k from the other (1+3, 2+2,
+  // 3+1 for tetrahedra), applied through `SurgicalCone::bridge`, gated by the
+  // manifold check, scored by ΔF — offered while a face of a surface block is
+  // uncovered (after a cone-out dent, for instance). The split is chosen so
+  // that every part lies in one surface's own simplices, which is what makes
+  // a chord impossible BY CONSTRUCTION rather than by a gate: a chord is not
+  // a topological defect the manifold check could see.
 
   /// The stage-1 bridge kind (payload = the cell's \f$ d+1 \f$ vertex ids).
   /// Drawn only on a node with surface inputs whose bridge phase is
@@ -1238,49 +1270,16 @@ class MultiCobordism {
   [[nodiscard]] bool hasSurfaceInputs() const;
 
   /// The faces of the surface input blocks that no top cell covers (sorted
-  /// vertex-id tuples): the faces the drawing has still to reach.
+  /// vertex-id tuples): empty on a collar seed, non-empty once a surgery has
+  /// uncovered a surface face.
   [[nodiscard]] std::vector<std::vector<std::uint64_t>> uncoveredInputFaces() const;
 
   /// Completion of the bridge phase: every face of every surface input block
   /// has exactly one top cell on it and `Spacetime::getBoundary()` is exactly
   /// the union of the surface faces, so \f$ \partial W = T_A \sqcup T_B \f$.
-  /// False on a node without surface inputs.
+  /// True by construction on a collar seed; false on a node without surface
+  /// inputs.
   [[nodiscard]] bool bridgePhaseComplete() const;
-
-  /// The bridge phase: draw the bulk between the surface inputs by gated
-  /// bridges until `bridgePhaseComplete()`, at most \p maxCells cells and
-  /// \p maxAttempts gated applications. At each depth the candidates adjacent
-  /// to the frontier (`bridgeCandidatesOn`) are shuffled by this node's
-  /// generator (so a seed reproduces the drawing) and then tried in the order
-  /// of how many open faces — boundary facets of the drawing and uncovered
-  /// surface faces among the cell's own facets — each would close, most
-  /// first, ties random. A candidate that fails the manifold gate is not
-  /// applied at all; one that BURIES one of its vertices (closes its link into
-  /// a sphere, a manifold configuration the gate accepts, after which that
-  /// vertex's surface faces can never be covered — every vertex of the host is
-  /// a boundary vertex of the finished cobordism) is rolled back as no
-  /// candidate; one that RAISES the objective by more than the convergence
-  /// tolerance is rolled back; the first that does none of these is kept, and
-  /// the search descends. A depth at which no candidate can be kept is a dead
-  /// end: the last kept cell is rolled back — bit-exactly, through the same
-  /// `SurgicalCone` stack — and the depth above resumes with its remaining
-  /// candidates, so the phase is a depth-first search over gated drawings
-  /// rather than a single greedy pass that a wrong early cell could strand.
-  /// Every cell of the returned drawing passed the gate, buried nothing, and
-  /// did not raise the objective. Acceptance is "does not raise F" rather than
-  /// stage 1's strict descent because no term of the objective is defined on
-  /// a partial drawing — the block residuals read the surfaces' own cells,
-  /// which bridging does not move, and the whole-complex reads refuse a
-  /// complex whose boundary is not yet the two surfaces — so ΔF is exactly
-  /// zero along the drawing; a term that does score partial drawings decides
-  /// through the same rule. Returns the number of cells in the drawing, which
-  /// is complete only when `bridgePhaseComplete()` says so afterwards: on
-  /// 3×3 and 4×4 flat tori this search stalls short of completion (recorded
-  /// in `tests/cobordism/test_bridge_move_python.py`), because a finished
-  /// drawing is a cellular correspondence between the two surfaces that
-  /// local random coning does not discover.
-  /// @throws std::logic_error without at least two surface input blocks.
-  int drawBridges(int maxCells = std::numeric_limits<int>::max(), int maxAttempts = 20000);
 
   // ==================================================================
   // Pinning — a plain geometric constraint

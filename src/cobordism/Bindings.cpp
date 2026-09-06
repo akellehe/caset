@@ -1610,6 +1610,14 @@ assertion. Every pairing is the transpose.)doc")
            "SimplicialQubit.flat_torus(tau, n, n).spacetime()): one d-dimensional host holding "
            "every surface as its own simplices with its lengths and zero phases on disjoint "
            "vertex id ranges, and no d-cell -- the bulk is drawn afterwards by gated bridges.")
+      .def_static("seed_collar", &MultiCobordism::seedCollar, py::arg("surface_a"), py::arg("surface_b"),
+           py::arg("layers") = 1,
+           "The SurfaceSeed of the COLLAR between two surfaces of identical combinatorics (spec S3): "
+           "T^2 x I over their shared triangulation (Spacetime.prismCells, `layers` product layers), "
+           "layer 0 = surface A, last layer = surface B, the surfaces' lengths verbatim, the auto-wired "
+           "length on every other edge, zero phases, gated once as a whole by dualComplexIsValid and "
+           "refused by name; a combinatorial mismatch is refused by name. Seed both id sets as input "
+           "blocks with seed_inputs; bridge_phase_complete() then holds by construction.")
       .def_static("block_surface", &MultiCobordism::blockSurface, py::arg("block"), py::arg("spacetime"),
            "The block's own surface: its (d-1)-faces (registered ones and facets of top cells "
            "inside the block) and its edges inside its vertex set, as sorted vertex tuples.")
@@ -1804,16 +1812,8 @@ assertion. Every pairing is the transpose.)doc")
            "The faces of the surface input blocks that no top cell covers.")
       .def("bridge_phase_complete", &MultiCobordism::bridgePhaseComplete,
            "Every surface face has exactly one top cell on it and getBoundary() is exactly the "
-           "union of the surface faces: the boundary of W is the surfaces. False without "
-           "surface inputs.")
-      .def("draw_bridges", &MultiCobordism::drawBridges,
-           py::arg("max_cells") = std::numeric_limits<int>::max(), py::arg("max_attempts") = 20000,
-           py::call_guard<py::gil_scoped_release>(),
-           "The bridge phase (spec S3): draw the bulk between the surface inputs by gated "
-           "bridges until bridge_phase_complete(), a depth-first search over frontier-adjacent "
-           "candidates in this node's random order: a candidate failing the manifold gate is "
-           "not applied, one raising the objective is rolled back, a dead end rolls the last kept "
-           "cell back and resumes above. Returns the number of cells in the drawing.")
+           "union of the surface faces: the boundary of W is the surfaces. True by construction "
+           "on a collar seed; false without surface inputs.")
       .def("seed_outputs", &MultiCobordism::seedOutputs, py::arg("seeds"))
       // Long pure-C++ compute: release the GIL for the duration so a background thread can
       // drive a pass (a single call, per the register-growth constraint) without blocking the
@@ -1930,8 +1930,7 @@ Right -- re-read after each drive call:
       .value("EVOLVE", MultiCobordism::BuildAction::Evolve)
       .value("RELAX", MultiCobordism::BuildAction::Relax)
       .value("CONE_OUT", MultiCobordism::BuildAction::ConeOut)
-      .value("CONE_IN", MultiCobordism::BuildAction::ConeIn)
-      .value("BRIDGE", MultiCobordism::BuildAction::Bridge);
+      .value("CONE_IN", MultiCobordism::BuildAction::ConeIn);
   py::enum_<MultiCobordism::HolePlacementStrategy>(multiCobordismClass,
       "HolePlacementStrategy",
       "Secondary ordering for the directed cone-out probe (both interior-first): "
@@ -1951,8 +1950,7 @@ Right -- re-read after each drive call:
            py::call_guard<py::gil_scoped_release>(),
            "Apply one BuildAction to this node in place (GROW/EVOLVE = run_stage1 with "
            "grow_boundaries true/false; RELAX = run_stage2; CONE_OUT/CONE_IN = the directed "
-           "probes; BRIDGE = draw_bridges with max_steps as its cell budget) -- the canonical "
-           "solve step a policy (build, greedy, or RL) composes.")
+           "probes) -- the canonical solve step a policy (build, greedy, or RL) composes.")
       .def("directed_cone_out", &MultiCobordism::directedConeOut,
            py::arg("strategy") = MultiCobordism::HolePlacementStrategy::AdjacentHolesLast,
            py::arg("max_open") = 6,
