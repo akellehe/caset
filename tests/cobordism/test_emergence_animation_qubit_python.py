@@ -137,7 +137,7 @@ def test_frame_zero_is_the_collar_seed():
     assert inputs.tau_in == [TAU_A, TAU_B]
     assert inputs.objective_name == "legacy"
     assert inputs.weight == ea.DECLARED_INPUT_WEIGHT and inputs.regge
-    assert inputs.seed == {"cells": 54, "vertices": 18, "edges": 63}
+    assert inputs.seed == {"cells": 54, "vertices": 18, "edges": 90}
     for index, tau_in in enumerate((TAU_A, TAU_B)):
         row = frame.blocks[index]
         assert row["tau_in"] == tau_in and row["weight"] == ea.DECLARED_INPUT_WEIGHT
