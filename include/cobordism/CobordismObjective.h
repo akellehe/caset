@@ -166,6 +166,16 @@ struct ObjectiveContext {
   double carriedStateEnergyWeight = 0.0;
   /// Whether the Einstein-Hilbert term is selected.
   bool einsteinHilbert = true;
+  /// Whether the node scores its blocks by FIBER residuals
+  /// (`MultiCobordism::useFiberResiduals`), whose stage-2 direction is the
+  /// analytic band-derivative ascent (#947) rather than a numerical
+  /// difference of \f$ r_U \f$ over every edge coordinate. An objective that
+  /// skips the numerical \f$ r_U \f$ direction under the Regge term for its
+  /// cost has no reason to skip the analytic one, and the residual is then
+  /// descended next to the bulk term instead of only gating the line search
+  /// (qubit cobordism spec R3, S4). False by default: every other path is
+  /// unchanged.
+  bool fiberResiduals = false;
   /// Which entropy the Hodge term reads: the complex operator or its
   /// phase-blind entrywise ablation.
   HodgeLaplacian::EntropyPhaseMode hodgeEntropyPhaseMode =
