@@ -111,6 +111,60 @@ bool Connection::isUnitary(double tolerance) const {
   return true;
 }
 
+std::vector<std::pair<int, double>> Connection::checkWalk(const Walk &walk, const char *who) const {
+  if (walk.empty()) throw std::invalid_argument(std::string(who) + ": the walk is empty");
+  std::vector<std::pair<int, double>> steps;
+  steps.reserve(walk.size());
+  for (std::size_t k = 0; k < walk.size(); ++k) {
+    const auto [u, v] = walk[k];
+    if (u == v)
+      throw std::invalid_argument(std::string(who) + ": step " + std::to_string(k) + " is a self-loop at vertex " +
+                                  std::to_string(u));
+    const auto it = index_.find(u < v ? std::make_pair(u, v) : std::make_pair(v, u));
+    if (it == index_.end())
+      throw std::invalid_argument(std::string(who) + ": step " + std::to_string(k) + " (" + std::to_string(u) +
+                                  " -> " + std::to_string(v) + ") is not an edge");
+    if (k + 1 < walk.size() && walk[k + 1].first != v)
+      throw std::invalid_argument(std::string(who) + ": the walk does not chain: step " + std::to_string(k) +
+                                  " ends at vertex " + std::to_string(v) + " but step " + std::to_string(k + 1) +
+                                  " starts at vertex " + std::to_string(walk[k + 1].first));
+    steps.emplace_back(it->second, u < v ? 1.0 : -1.0);
+  }
+  if (walk.back().second != walk.front().first)
+    throw std::invalid_argument(std::string(who) + ": the walk is not closed: it starts at vertex " +
+                                std::to_string(walk.front().first) + " and ends at vertex " +
+                                std::to_string(walk.back().second));
+  return steps;
+}
+
+Complex Connection::holonomy(const Walk &walk) const {
+  static_cast<void>(checkWalk(walk, "Connection::holonomy"));
+  Complex product(1.0, 0.0);
+  for (const auto &[u, v] : walk) product *= link(u, v);
+  return product;
+}
+
+Complex Connection::transportedPeriod(const Eigen::VectorXcd &cochain, const Walk &walk) const {
+  if (cochain.size() != static_cast<Eigen::Index>(links_.size()))
+    throw std::invalid_argument("Connection::transportedPeriod: the cochain has " +
+                                std::to_string(cochain.size()) + " entries for " +
+                                std::to_string(links_.size()) + " canonical edges");
+  const auto steps = checkWalk(walk, "Connection::transportedPeriod");
+  Complex total(0.0, 0.0);
+  Complex toBase(1.0, 0.0);  // U_{v_0 v_1} ... U_{v_{k-1} v_k}: carries a value at v_k to v_0
+  for (std::size_t k = 0; k < walk.size(); ++k) {
+    const auto [u, v] = walk[k];
+    const auto [index, sign] = steps[k];
+    // The edge's value sits at its base vertex min(u, v); U_{u, min(u,v)}
+    // carries it to the step's source u: the identity when u is the base,
+    // the link U_{uv} of the step when the step runs against the orientation.
+    const Complex toSource = (u < v) ? Complex(1.0, 0.0) : link(u, v);
+    total += sign * toBase * toSource * cochain(index);
+    toBase *= link(u, v);
+  }
+  return total;
+}
+
 // ---------------------------------------------------------------- CovariantChainHodge
 
 struct CovariantChainHodge::Factorization {

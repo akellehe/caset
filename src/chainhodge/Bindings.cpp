@@ -256,6 +256,18 @@ normalized or conjugated.)doc")
       .def("inverse", &Connection::inverse)
       .def("gauge", &Connection::gauge, py::arg("g"))
       .def("curvature", &Connection::curvature, py::arg("p"), py::arg("q"), py::arg("r"))
+      .def("holonomy", &Connection::holonomy, py::arg("walk"),
+           "The ordered product of the links along a closed walk of directed steps (u, v): "
+           "U_{v0 v1} U_{v1 v2} ... U_{v_{n-1} v0}, the Wilson loop in the walk's direction; exactly 1 on "
+           "every closed walk iff the connection is a pure gauge.")
+      .def("transportedPeriod", &Connection::transportedPeriod, py::arg("cochain"), py::arg("walk"),
+           "The period of a 1-cochain (indexed like links(), each edge's value in the frame at its base "
+           "vertex min(x, y)) over a closed walk of directed steps (u, v), taken with parallel transport to "
+           "the walk's first vertex: sum_k s_k (U_{v0 v1} ... U_{v_{k-1} v_k}) U_{v_k, min(v_k, v_{k+1})} "
+           "omega_k with s_k = +1 when v_k < v_{k+1} and -1 otherwise (the Edge.walkLoop convention). "
+           "The plain signed sum on the trivial connection; g_{v0}^{-1} times the untwisted period under "
+           "a pure gauge U_xy = g_x^{-1} g_y on a twisted-kernel cochain, so ratios of periods over walks "
+           "with a common base point are gauge invariant.")
       .def("isUnitary", &Connection::isUnitary, py::arg("tolerance") = 1e-12);
 
   py::class_<CovarianceCertificate>(m, "CovarianceCertificate",

@@ -32,6 +32,7 @@
 #include "observables/WilsonLoop.h"
 #include "observables/Spectral.h"
 #include "observables/SimplicialQubit.h"
+#include "chainhodge/CovariantChainHodge.h"
 #include "observables/Record.h"
 #include "observables/ClusterRegister.h"
 #include "observables/RegisterContext.h"
@@ -1083,7 +1084,8 @@ Args:
       .def("reset", &VolumeProfile::reset,
            "Reset the accumulated measurements.");
   // ========================================
-  // Simplicial qubit (#955): docs/design/simplicial_qubit_spec.md, section 14 API
+  // Simplicial qubit (#955): docs/design/simplicial_qubit_spec.md, section 14 API;
+  // complex geometry and pure-gauge link phases (#976): section 16
   // ========================================
   {
     auto emitWarnings = [](const SimplicialQubit &q) {
@@ -1095,25 +1097,59 @@ Args:
       }
       py::module_::import("warnings").attr("warn")(text);
     };
+    // On the real locus (real lengths, no phases) every stored matrix is real
+    // and the construction is bit-identical to the real-length one: hand the
+    // real part back (exact); off it the complex matrix.
+    auto realOr = [](const SimplicialQubit &q, const Eigen::MatrixXcd &m) -> py::object {
+      if (q.onRealLocus()) return py::cast(Eigen::MatrixXd(m.real()));
+      return py::cast(Eigen::MatrixXcd(m));
+    };
+    auto realOrVector = [](const SimplicialQubit &q, const Eigen::VectorXcd &v) -> py::object {
+      if (q.onRealLocus()) return py::cast(Eigen::VectorXd(v.real()));
+      return py::cast(Eigen::VectorXcd(v));
+    };
+    auto realOrList = [](const SimplicialQubit &q, const std::vector<std::complex<double>> &v) -> py::object {
+      py::list out;
+      for (const auto &z : v) {
+        if (q.onRealLocus())
+          out.append(z.real());
+        else
+          out.append(z);
+      }
+      return out;
+    };
     py::class_<SimplicialQubit>(m, "SimplicialQubit",
         "A single qubit state encoded as the holomorphic line in the harmonic space of the "
         "metric Hodge Laplacian on a triangulated torus (docs/design/simplicial_qubit_spec.md). "
         "Input: vertices 0..nV-1, edges (i, j) with i < j, consistently oriented faces (i, j, k), "
-        "real positive edge lengths, and marked cycles A, B as (edge_index, sign) lists with "
-        "A.B = +1. Computed on load: the section-2 validations; d0, d1; per-face angles, Heron "
-        "areas and local layouts; cotangent weights M1 = diag(w_e) (negative weights and "
-        "Delaunay violations flagged); the harmonic space H = null_space([d1; d0.T M1]) of "
-        "dimension 2; the Whitney-form L2 inner product at barycenters; the complex structure "
-        "J = G^{-1} R.T by rotate-then-project with its residual ||J J + I||_F; the holomorphic "
-        "line, periods, tau = P_B / P_A in the upper half plane; the state, Bloch vector and "
-        "density matrix; and the section-13 degeneration warnings. The optional intrinsic "
-        "Delaunay edge-flip pass is intrinsic_delaunay(). Alternatively read a Spacetime of "
-        "dimension 2 directly (its faces are oriented by the fundamental class; reversed=True "
-        "selects the other hemisphere).")
+        "edge lengths (real positive, or complex per section 16), and marked cycles A, B as "
+        "(edge_index, sign) lists with A.B = +1. Computed on load: the section-2 validations; d0, d1; "
+        "per-face angles, Heron areas and local layouts; cotangent weights M1 = diag(w_e) (negative "
+        "weights and Delaunay violations flagged on the real locus); the harmonic space "
+        "H = null_space([d1; d0.T M1]) of dimension 2; the Whitney-form L2 inner product at barycenters; "
+        "the complex structure J = G^{-1} R.T by rotate-then-project with its residual ||J J + I||_F; the "
+        "holomorphic line, periods, tau = P_B / P_A (in the upper half plane on the real locus); the "
+        "state, Bloch vector and density matrix; and the section-13 degeneration warnings. The optional "
+        "intrinsic Delaunay edge-flip pass is intrinsic_delaunay(). Alternatively read a Spacetime of "
+        "dimension 2 directly (its faces are oriented by the fundamental class; reversed=True selects "
+        "the other hemisphere; its edge phases are the pure-gauge link connection of section 16).\n\n"
+        "Section 16 (complex geometry): off the REAL LOCUS (real lengths, no phases) every formula of "
+        "sections 4-9 runs over C. The real reference is the same complex with every squared length 1 "
+        "(the unit equilateral reference simplex of chainhodge.WhitneyMass); angles are the principal "
+        "acos, Heron areas the continuation branch of sqrt(det G)/2 (WhitneyMass.volumeOnBranch) along "
+        "the straight segment in the squared lengths from the reference, pairings are the transpose "
+        "(bilinear) pairing, the harmonic space a complex null space, and the eigenline of section 9 is "
+        "chosen by continuity from the reference (the Im tau > 0 rule holds on the real locus only). Link "
+        "phases must be a pure gauge (flux or holonomy is refused by name): they twist the incidences and "
+        "the Whitney pairing (against the kernel of the inverse links, dual_harmonic_basis()) and the "
+        "periods are taken with parallel transport along the marked cycles from one base point "
+        "(base_vertex()), which leaves tau, the state and the coefficient pairs in the period frame "
+        "invariant. On the real locus the matrix-valued reads return real arrays, bit-identical to the "
+        "real-length construction; off it complex arrays.")
         .def(py::init([emitWarnings](std::vector<std::uint64_t> vertices,
                                      std::vector<SimplicialQubit::EdgePair> edges,
                                      std::vector<SimplicialQubit::Face> faces,
-                                     std::vector<double> lengths, SimplicialQubit::Cycle cycle_A,
+                                     std::vector<std::complex<double>> lengths, SimplicialQubit::Cycle cycle_A,
                                      SimplicialQubit::Cycle cycle_B, double degeneracy_threshold) {
                SimplicialQubit q(std::move(vertices), std::move(edges), std::move(faces),
                                  std::move(lengths), std::move(cycle_A), std::move(cycle_B),
@@ -1123,8 +1159,9 @@ Args:
              }),
              py::arg("vertices"), py::arg("edges"), py::arg("faces"), py::arg("lengths"),
              py::arg("cycle_A"), py::arg("cycle_B"), py::arg("degeneracy_threshold") = 1e8,
-             "The section-2 / section-14 constructor. Raises ValueError when a validation of "
-             "section 2 fails and RuntimeError when dim H != 2 (section 6).")
+             "The section-2 / section-14 constructor; lengths real positive or complex (section 16), the "
+             "trivial connection. Raises ValueError when a validation of section 2 or a continuation of "
+             "section 16 fails and RuntimeError when dim H != 2 (section 6).")
         .def(py::init([emitWarnings](const std::shared_ptr<Spacetime> &spacetime,
                                      SimplicialQubit::Cycle cycle_A, SimplicialQubit::Cycle cycle_B,
                                      bool reversed, double degeneracy_threshold) {
@@ -1137,23 +1174,32 @@ Args:
              py::arg("degeneracy_threshold") = 1e8,
              "Read a Spacetime of dimension 2: vertices by ascending id, edges in ascending (i, j) "
              "order (the order the cycles index), faces oriented by the fundamental class "
-             "(reversed flips them), real positive lengths required.")
+             "(reversed flips them), lengths real positive or complex, edge phases as the pure-gauge "
+             "link connection (flux or holonomy refused by name).")
         // ---- section 14
-        .def("harmonic_basis", &SimplicialQubit::harmonicBasis, "H: nE x 2 real (section 6).")
-        .def("complex_structure", &SimplicialQubit::complexStructure, "J: 2 x 2 real (section 8).")
+        .def("harmonic_basis", [realOr](const SimplicialQubit &q) { return realOr(q, q.harmonicBasis()); },
+             "H: nE x 2 (section 6); real on the real locus.")
+        .def("dual_harmonic_basis",
+             [realOr](const SimplicialQubit &q) { return realOr(q, q.dualHarmonicBasis()); },
+             "H^vee: nE x 2, the kernel twisted by the inverse links that the section-7/8 pairings are "
+             "taken against (section 16); harmonic_basis() itself on the trivial connection.")
+        .def("complex_structure", [realOr](const SimplicialQubit &q) { return realOr(q, q.complexStructure()); },
+             "J: 2 x 2 (section 8); real on the real locus.")
         .def("j_residual", &SimplicialQubit::jResidual, "||J @ J + I||_F (section 8).")
         .def("holomorphic_form", &SimplicialQubit::holomorphicForm, "omega: nE complex (section 9).")
-        .def("periods", &SimplicialQubit::periods, "(P_A, P_B) (section 9).")
+        .def("periods", &SimplicialQubit::periods,
+             "(P_A, P_B) (section 9); transported from base_vertex() under a nontrivial connection.")
         .def("tau", &SimplicialQubit::tau, "P_B / P_A (section 9).")
-        .def("period_frame", &SimplicialQubit::periodFrame,
-             "F: nE x 2 real, the period frame (qubit cobordism spec D3) - the basis (f_A, f_B) of the "
-             "harmonic space with periods (1, 0) and (0, 1) over the marking in force, harmonic_basis() "
-             "times the inverse period matrix, in the torus's edge order. The coordinates a state is "
-             "written in: holomorphic_form() == period_frame() @ (P_A, P_B), i.e. P_A * F @ (1, tau), "
+        .def("period_frame", [realOr](const SimplicialQubit &q) { return realOr(q, q.periodFrame()); },
+             "F: nE x 2 (real on the real locus), the period frame (qubit cobordism spec D3) - the basis "
+             "(f_A, f_B) of the harmonic space with periods (1, 0) and (0, 1) over the marking in force, "
+             "harmonic_basis() times the inverse period matrix, in the torus's edge order. The coordinates a "
+             "state is written in: holomorphic_form() == period_frame() @ (P_A, P_B), i.e. P_A * F @ (1, tau), "
              "the qubit |0> + tau|1> read as a 1-form (f_A <-> |0>, f_B <-> |1>); the frame a two-body "
-             "target chi compares with the transfer in (MultiCobordism.set_input_frame).")
+             "target chi compares with the transfer in (MultiCobordism.set_input_frame). Under a nontrivial "
+             "connection the periods are the transported ones from base_vertex().")
         .def("state", &SimplicialQubit::state, "(|0> + tau|1>) / sqrt(1 + |tau|^2) (section 10).")
-        .def("bloch", &SimplicialQubit::bloch, "The Bloch vector (section 10).")
+        .def("bloch", &SimplicialQubit::bloch, "The Bloch vector (section 10), a unit vector for every tau.")
         .def("density_matrix", &SimplicialQubit::densityMatrix, "rho = (I + r . sigma) / 2 (section 10).")
         .def_static("flat_torus",
                     [emitWarnings](std::complex<double> tau, int nx, int ny) {
@@ -1173,31 +1219,56 @@ Args:
                return r;
              },
              "Flip every edge with alpha_e + beta_e > pi until none remains (marked cycles "
-             "rerouted); returns the qubit of the flipped triangulation (section 5).")
+             "rerouted); returns the qubit of the flipped triangulation (section 5). Real locus only.")
         .def("delaunay_flip_count", &SimplicialQubit::delaunayFlipCount)
         // ---- inputs
         .def("vertices", &SimplicialQubit::vertices)
         .def("edges", &SimplicialQubit::edges, "E = [(i, j)], the order the cycles index.")
         .def("faces", &SimplicialQubit::faces, "F = [(i, j, k)], consistently oriented.")
-        .def("lengths", &SimplicialQubit::lengths)
+        .def("lengths", [realOrList](const SimplicialQubit &q) { return realOrList(q, q.lengths()); },
+             "The edge lengths in edge order (floats on the real locus, complex off it).")
+        .def("links", &SimplicialQubit::links,
+             "The links U_ij of the connection in edge order (all 1 on the trivial connection).")
+        .def("canonical_edge_index", &SimplicialQubit::canonicalEdgeIndex, py::arg("e"),
+             "The canonical (ChainComplex, lexicographic) index of edge e of edges(), the order "
+             "connection().links() and Connection.transportedPeriod use.")
+        .def("connection", &SimplicialQubit::connection, py::return_value_policy::reference_internal,
+             "The chainhodge.Connection over the torus's chain complex (canonical edge order).")
         .def("cycle_A", &SimplicialQubit::cycleA)
         .def("cycle_B", &SimplicialQubit::cycleB)
+        .def("walk_A", &SimplicialQubit::walkA,
+             "Cycle A as a closed walk of directed vertex steps (section 16); starts at base_vertex() "
+             "under a nontrivial connection.")
+        .def("walk_B", &SimplicialQubit::walkB, "Cycle B as a closed walk (section 16).")
+        .def("base_vertex", &SimplicialQubit::baseVertex,
+             "The common base point of the transported periods: the first vertex of A's walk on B's.")
         .def("degeneracy_threshold", &SimplicialQubit::degeneracyThreshold)
-        .def("spacetime", &SimplicialQubit::spacetime, "The Spacetime holding vertices, edges, lengths.")
+        .def("spacetime", &SimplicialQubit::spacetime, "The Spacetime holding vertices, edges, lengths, phases.")
+        .def("on_real_locus", &SimplicialQubit::onRealLocus,
+             "True when every length is real and every link is 1: the real-number construction ran, "
+             "bit-identical to the real-length one (section 16).")
+        .def("trivial_connection", &SimplicialQubit::trivialConnection, "True when every link is 1.")
         // ---- intermediate quantities
         .def("d0", &SimplicialQubit::d0, "nE x nV (section 3).")
         .def("d1", &SimplicialQubit::d1, "nF x nE (section 3).")
-        .def("angles", &SimplicialQubit::angles, "Per face (alpha_i, alpha_j, alpha_k) (section 4).")
-        .def("areas", &SimplicialQubit::areas, "Per face the Heron area (section 4).")
-        .def("layout", &SimplicialQubit::layout, "Per face (p_i, p_j, p_k) in its local frame (section 4).")
-        .def("barycentric_gradients", &SimplicialQubit::barycentricGradients,
+        .def("angles", [realOr](const SimplicialQubit &q) { return realOr(q, q.angles()); },
+             "Per face (alpha_i, alpha_j, alpha_k) (section 4); the principal acos off the real locus.")
+        .def("areas", [realOrVector](const SimplicialQubit &q) { return realOrVector(q, q.areas()); },
+             "Per face the Heron area (section 4); the continuation branch off the real locus.")
+        .def("layout", [realOr](const SimplicialQubit &q) { return realOr(q, q.layout()); },
+             "Per face (p_i, p_j, p_k) in its local frame (section 4).")
+        .def("barycentric_gradients",
+             [realOr](const SimplicialQubit &q) { return realOr(q, q.barycentricGradients()); },
              "Per face (grad lambda_i, grad lambda_j, grad lambda_k) (section 7).")
-        .def("weights", &SimplicialQubit::weights, "The cotangent weights w_e (section 5).")
+        .def("weights", [realOrVector](const SimplicialQubit &q) { return realOrVector(q, q.weights()); },
+             "The cotangent weights w_e (section 5).")
         .def("negative_weight_edges", &SimplicialQubit::negativeWeightEdges)
         .def("non_delaunay_edges", &SimplicialQubit::nonDelaunayEdges,
-             "Edges with alpha_e + beta_e > pi (section 5).")
-        .def("gram", &SimplicialQubit::gram, "G[a][b] = <h_a, h_b> (section 8).")
-        .def("rotation_pairing", &SimplicialQubit::rotationPairing,
+             "Edges with alpha_e + beta_e > pi (section 5); evaluated on the real locus only.")
+        .def("gram", [realOr](const SimplicialQubit &q) { return realOr(q, q.gram()); },
+             "G[a][b] = <h_a, h_b> (section 8): the transpose pairing, between the dual kernel and the "
+             "kernel under a nontrivial connection (section 16).")
+        .def("rotation_pairing", [realOr](const SimplicialQubit &q) { return realOr(q, q.rotationPairing()); },
              "R[a][b] = sum_t A_t rot90(W_t(h_a)) . W_t(h_b) (section 8).")
         .def("marking_swapped", &SimplicialQubit::markingSwapped,
              "True when |P_A| vanished and -1/tau of the given marking is reported (section 9).")
