@@ -13,6 +13,8 @@
 
 #include <Eigen/Dense>
 
+#include "chainhodge/CovariantChainHodge.h"
+#include "chainhodge/WhitneyMass.h"
 #include "cobordism/ChainComplex.h"
 #include "mesh/Edge.h"
 #include "mesh/EdgeList.h"
@@ -26,11 +28,21 @@ namespace tessera::observables {
 namespace {
 
 using Complex = std::complex<double>;
+using chainhodge::Connection;
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kEps = std::numeric_limits<double>::epsilon();
+/// Rounding tolerance of the pure-gauge certificate (spec section 16): a
+/// gauge phi_e = g(target) - g(source) evaluated in doubles closes every loop
+/// to a few ulps; flux or holonomy of physical size sits far above this.
+constexpr double kGaugeTolerance = 1e-10;
 
 /// rot90(x, y) = (-y, x): the +90 degree rotation of spec §7 / §8.
 Eigen::Vector2d rot90(const Eigen::Vector2d &v) { return Eigen::Vector2d(-v(1), v(0)); }
+Eigen::Vector2cd rot90c(const Eigen::Vector2cd &v) { return Eigen::Vector2cd(-v(1), v(0)); }
+
+/// The transpose (bilinear) pairing of spec §16: a . b = a_1 b_1 + a_2 b_2,
+/// never a conjugate (Eigen's dot() conjugates its first argument).
+Complex pairT(const Eigen::Vector2cd &a, const Eigen::Vector2cd &b) { return a(0) * b(0) + a(1) * b(1); }
 
 std::string edgeText(std::uint64_t u, std::uint64_t v) {
   return "(" + std::to_string(u) + "," + std::to_string(v) + ")";
@@ -38,6 +50,12 @@ std::string edgeText(std::uint64_t u, std::uint64_t v) {
 
 std::string faceText(const SimplicialQubit::Face &f) {
   return "(" + std::to_string(f[0]) + "," + std::to_string(f[1]) + "," + std::to_string(f[2]) + ")";
+}
+
+std::string complexText(Complex z) {
+  std::ostringstream s;
+  s << z.real() << (z.imag() < 0 ? "-" : "+") << std::abs(z.imag()) << "i";
+  return s.str();
 }
 
 /// The face's boundary traversal (spec §3): local edge slots 0, 1, 2 are
@@ -70,14 +88,59 @@ int numericalRank(const Eigen::MatrixXd &m) {
   return static_cast<int>(lu.rank());
 }
 
+/// The principal square root with a real argument kept on the +0 side of the
+/// cut (the `WhitneyMass` convention): a negative real squared length gives
+/// +i times the root, never -i through a signed zero.
+Complex principalSqrt(Complex z) {
+  if (z.imag() == 0.0) z = Complex(z.real(), 0.0);
+  return std::sqrt(z);
+}
+
+/// scipy.linalg.null_space over C: the right singular vectors of the singular
+/// values at or below eps * max(M, N) * sigma_max (spec §6, §16).
+Eigen::MatrixXcd complexNullSpace(const Eigen::MatrixXcd &S) {
+  Eigen::BDCSVD<Eigen::MatrixXcd> svd(S, Eigen::ComputeFullV);
+  const Eigen::VectorXd sigma = svd.singularValues();
+  const double tolerance = kEps * static_cast<double>(std::max(S.rows(), S.cols())) *
+                           (sigma.size() > 0 ? sigma(0) : 0.0);
+  Eigen::Index rank = 0;
+  for (Eigen::Index n = 0; n < sigma.size(); ++n)
+    if (sigma(n) > tolerance) ++rank;
+  return svd.matrixV().rightCols(S.cols() - rank);
+}
+
+/// The Hermitian overlap |<a, b>| / (|a| |b|) of two lines (the tracking
+/// criterion of spec §16's continuity rule; a numerical criterion, not a
+/// pairing of the construction).
+double lineOverlap(const Eigen::VectorXcd &a, const Eigen::VectorXcd &b) {
+  const double scale = a.norm() * b.norm();
+  return scale > 0.0 ? std::abs(a.dot(b)) / scale : 0.0;
+}
+
 }  // namespace
+
+/// The §4–§8 quantities of the complex path at one point of the segment from
+/// the real reference (spec §16).
+struct SimplicialQubit::ComplexStage {
+  Eigen::MatrixXcd angles;
+  Eigen::VectorXcd areas;
+  Eigen::MatrixXcd layout;
+  Eigen::MatrixXcd gradients;
+  Eigen::VectorXcd weights;
+  Eigen::MatrixXcd H;
+  Eigen::MatrixXcd Hdual;
+  Eigen::MatrixXcd G;
+  Eigen::MatrixXcd R;
+  Eigen::MatrixXcd J;
+  double jResidual{0.0};
+};
 
 // ============================================================================
 // Constructors
 // ============================================================================
 
 SimplicialQubit::SimplicialQubit(std::vector<std::uint64_t> vertices, std::vector<EdgePair> edges,
-                                 std::vector<Face> faces, std::vector<double> lengths, Cycle cycleA,
+                                 std::vector<Face> faces, std::vector<Complex> lengths, Cycle cycleA,
                                  Cycle cycleB, double degeneracyThreshold)
     : vertices_(std::move(vertices)),
       edges_(std::move(edges)),
@@ -90,7 +153,7 @@ SimplicialQubit::SimplicialQubit(std::vector<std::uint64_t> vertices, std::vecto
   validateCombinatorics();
   // The container: the faces as cells, then the lengths onto its edges. The
   // container keeps its own (sorted) vertex order per face; the oriented faces
-  // stay in faces_.
+  // stay in faces_. The phases are zero: the trivial connection.
   std::vector<std::vector<std::uint64_t>> cells;
   cells.reserve(faces_.size());
   for (const Face &f : faces_) cells.push_back({f[0], f[1], f[2]});
@@ -98,9 +161,10 @@ SimplicialQubit::SimplicialQubit(std::vector<std::uint64_t> vertices, std::vecto
   for (mesh::Edge *edge : spacetime_->getEdgeList()->toVector()) {
     const std::uint64_t u = edge->getSource()->getId();
     const std::uint64_t v = edge->getTarget()->getId();
-    edge->setLength(Complex(lengths_[edgeIndexOf(std::min(u, v), std::max(u, v))], 0.0));
+    edge->setLength(lengths_[edgeIndexOf(std::min(u, v), std::max(u, v))]);
     edge->setPhase(Complex(0.0, 0.0));
   }
+  buildConnection({});
   initialize();
 }
 
@@ -112,7 +176,8 @@ SimplicialQubit::SimplicialQubit(const std::shared_ptr<Spacetime> &spacetime, Cy
       spacetime_(spacetime) {
   if (!spacetime_) throw std::invalid_argument("SimplicialQubit: null spacetime");
 
-  // Vertices: V = [0 .. nV-1] by ascending id.
+  // Vertices: V = [0 .. nV-1] by ascending id (an order-preserving relabeling,
+  // so the canonical edge order over ids and over indices coincide).
   std::vector<std::uint64_t> ids;
   for (const auto *vertex : spacetime_->getVertexList()->liveVector()) ids.push_back(vertex->getId());
   std::sort(ids.begin(), ids.end());
@@ -121,20 +186,15 @@ SimplicialQubit::SimplicialQubit(const std::shared_ptr<Spacetime> &spacetime, Cy
   vertices_.resize(ids.size());
   for (std::size_t n = 0; n < ids.size(); ++n) vertices_[n] = n;
 
-  // Edges (i < j, ascending) with their real positive lengths.
-  std::vector<std::pair<EdgePair, double>> edgeLengths;
+  // Edges (i < j, ascending) with their lengths (validated in indexEdges).
+  std::vector<std::pair<EdgePair, Complex>> edgeLengths;
   for (const mesh::Edge *edge : spacetime_->getEdgeList()->toVector()) {
     const std::uint64_t a = indexOfId.at(edge->getSource()->getId());
     const std::uint64_t b = indexOfId.at(edge->getTarget()->getId());
-    const Complex length = edge->getLength();
-    if (length.imag() != 0.0 || !(length.real() > 0.0) || !std::isfinite(length.real()))
-      throw std::invalid_argument("SimplicialQubit: edge " + edgeText(std::min(a, b), std::max(a, b)) +
-                                  " has length " + std::to_string(length.real()) +
-                                  (length.imag() < 0 ? "-" : "+") + std::to_string(std::abs(length.imag())) +
-                                  "i; the lengths must be real and positive (spec section 2)");
-    edgeLengths.push_back({{std::min(a, b), std::max(a, b)}, length.real()});
+    edgeLengths.push_back({{std::min(a, b), std::max(a, b)}, edge->getLength()});
   }
-  std::sort(edgeLengths.begin(), edgeLengths.end());
+  std::sort(edgeLengths.begin(), edgeLengths.end(),
+            [](const auto &x, const auto &y) { return x.first < y.first; });
   for (const auto &[pair, length] : edgeLengths) {
     edges_.push_back(pair);
     lengths_.push_back(length);
@@ -142,13 +202,17 @@ SimplicialQubit::SimplicialQubit(const std::shared_ptr<Spacetime> &spacetime, Cy
 
   // Faces: the triangles, consistently oriented by the fundamental class
   // (the container sorts vertex orders, so orientation is derived here).
-  std::vector<std::vector<std::uint64_t>> cells;
+  std::vector<std::vector<std::uint64_t>> cells, cellsById;
   for (const auto &simplex : spacetime_->getSimplices()) {
     if (simplex->size() != 3) continue;
-    std::vector<std::uint64_t> cell;
-    for (const auto &vertex : simplex->getVertices()) cell.push_back(indexOfId.at(vertex->getId()));
+    std::vector<std::uint64_t> cell, byId;
+    for (const auto &vertex : simplex->getVertices()) {
+      cell.push_back(indexOfId.at(vertex->getId()));
+      byId.push_back(vertex->getId());
+    }
     std::sort(cell.begin(), cell.end());
     cells.push_back(std::move(cell));
+    cellsById.push_back(std::move(byId));
   }
   if (cells.empty()) throw std::invalid_argument("SimplicialQubit: the spacetime has no triangles");
   const cobordism::ChainComplex K = cobordism::ChainComplex::fromTopCells(cells);
@@ -168,16 +232,64 @@ SimplicialQubit::SimplicialQubit(const std::shared_ptr<Spacetime> &spacetime, Cy
 
   indexEdges();
   validateCombinatorics();
+  // The link phases (spec §16), by the Connection::fromSpacetime convention
+  // over the ids; the relabeling is monotone, so the canonical order over ids
+  // is the canonical order over indices.
+  buildConnection(Connection::fromSpacetime(*spacetime_, cobordism::ChainComplex::fromTopCells(cellsById)).links());
   initialize();
+}
+
+void SimplicialQubit::buildConnection(std::vector<Complex> canonicalLinks) {
+  std::vector<std::vector<std::uint64_t>> cells;
+  cells.reserve(faces_.size());
+  for (const Face &f : faces_) cells.push_back({f[0], f[1], f[2]});
+  const cobordism::ChainComplex K = cobordism::ChainComplex::fromTopCells(cells);
+  const auto canonical = K.kSimplexVertices(1);
+  if (canonical.size() != edges_.size())
+    throw std::logic_error("SimplicialQubit: the chain complex has " + std::to_string(canonical.size()) +
+                           " edges for " + std::to_string(edges_.size()) + " of E");
+  if (canonicalLinks.empty()) canonicalLinks.assign(canonical.size(), Complex(1.0, 0.0));
+  if (canonicalLinks.size() != canonical.size())
+    throw std::logic_error("SimplicialQubit: one link per canonical edge is required");
+  canonicalOf_.assign(edges_.size(), 0);
+  links_.assign(edges_.size(), Complex(1.0, 0.0));
+  for (std::size_t j = 0; j < canonical.size(); ++j) {
+    const std::size_t e = edgeIndexOf(canonical[j][0], canonical[j][1]);
+    canonicalOf_[e] = j;
+    links_[e] = canonicalLinks[j];
+  }
+  connection_ = std::make_shared<const Connection>(K, std::move(canonicalLinks));
+  trivialConnection_ = std::all_of(links_.begin(), links_.end(),
+                                   [](Complex u) { return u == Complex(1.0, 0.0); });
+  real_ = trivialConnection_ &&
+          std::all_of(lengths_.begin(), lengths_.end(), [](Complex l) { return l.imag() == 0.0; });
 }
 
 void SimplicialQubit::initialize() {
   buildIncidence();
   validateCycles();
-  buildFaceGeometry();
-  buildWeights();
-  buildHarmonicSpace();
-  buildComplexStructure();
+  validatePureGauge();
+  buildWalks();
+  if (real_) {
+    buildFaceGeometry();
+    buildWeights();
+    buildHarmonicSpace();
+    buildComplexStructure();
+  } else {
+    // Spec §16: every formula of §4–§8 over C, on the twisted complex.
+    ComplexStage stage = complexStageAt(lengths_);
+    angles_ = std::move(stage.angles);
+    areas_ = std::move(stage.areas);
+    layout_ = std::move(stage.layout);
+    gradients_ = std::move(stage.gradients);
+    weights_ = std::move(stage.weights);
+    H_ = std::move(stage.H);
+    Hdual_ = std::move(stage.Hdual);
+    G_ = std::move(stage.G);
+    R_ = std::move(stage.R);
+    J_ = std::move(stage.J);
+    jResidual_ = stage.jResidual;
+  }
   buildHolomorphicLine();
   buildPeriodFrame();
   diagnoseDegeneration();
@@ -207,11 +319,17 @@ void SimplicialQubit::indexEdges() {
     throw std::invalid_argument("SimplicialQubit: expected one length per edge (" +
                                 std::to_string(edges_.size()) + "), got " +
                                 std::to_string(lengths_.size()));
-  for (std::size_t e = 0; e < edges_.size(); ++e)
-    if (!(lengths_[e] > 0.0) || !std::isfinite(lengths_[e]))
-      throw std::invalid_argument("SimplicialQubit: edge " + edgeText(edges_[e].first, edges_[e].second) +
-                                  " has length " + std::to_string(lengths_[e]) +
-                                  "; lengths must be real and positive");
+  for (std::size_t e = 0; e < edges_.size(); ++e) {
+    const Complex length = lengths_[e];
+    const std::string where = "SimplicialQubit: edge " + edgeText(edges_[e].first, edges_[e].second) +
+                              " has length " + complexText(length);
+    if (!std::isfinite(length.real()) || !std::isfinite(length.imag()) || length == Complex(0.0, 0.0))
+      throw std::invalid_argument(where + "; lengths must be nonzero and finite");
+    // Spec §2 on the real locus; §16 admits any nonzero complex length (only
+    // its square enters the construction).
+    if (length.imag() == 0.0 && !(length.real() > 0.0))
+      throw std::invalid_argument(where + "; real lengths must be real and positive (spec section 2)");
+  }
 }
 
 std::size_t SimplicialQubit::edgeIndexOf(std::uint64_t u, std::uint64_t v) const {
@@ -270,11 +388,15 @@ void SimplicialQubit::validateCombinatorics() {
     throw std::invalid_argument("SimplicialQubit: nV - nE + nF = " + std::to_string(chi) +
                                 "; a torus needs Euler characteristic 0");
 
-  // The strict triangle inequality on every face.
+  // The strict triangle inequality on every face, on real lengths (§2); off
+  // the real locus the admissibility of a face is the existence of its
+  // continuation from the real reference (§16, buildFaceGeometry).
+  const bool allReal = std::all_of(lengths_.begin(), lengths_.end(), [](Complex l) { return l.imag() == 0.0; });
+  if (!allReal) return;
   for (const Face &f : faces_) {
-    const double a = lengths_[edgeIndexOf(f[1], f[2])];
-    const double b = lengths_[edgeIndexOf(f[2], f[0])];
-    const double c = lengths_[edgeIndexOf(f[0], f[1])];
+    const double a = lengths_[edgeIndexOf(f[1], f[2])].real();
+    const double b = lengths_[edgeIndexOf(f[2], f[0])].real();
+    const double c = lengths_[edgeIndexOf(f[0], f[1])].real();
     if (!(a < b + c && b < c + a && c < a + b)) {
       std::ostringstream s;
       s << "SimplicialQubit: face " << faceText(f) << " violates the strict triangle inequality (a = "
@@ -325,6 +447,150 @@ void SimplicialQubit::validateCycles() const {
 }
 
 // ============================================================================
+// Spec section 16: the link phases must be a pure gauge
+// ============================================================================
+
+void SimplicialQubit::validatePureGauge() const {
+  if (trivialConnection_) return;
+  // Flux: the curvature of every face must be 1.
+  for (const Face &f : faces_) {
+    std::array<std::uint64_t, 3> s = f;
+    std::sort(s.begin(), s.end());
+    const Complex F = connection_->curvature(s[0], s[1], s[2]);
+    if (std::abs(F - Complex(1.0, 0.0)) > kGaugeTolerance)
+      throw std::invalid_argument("SimplicialQubit: the link phases are not a pure gauge: face " +
+                                  edgeText(s[0], s[1]).substr(0, edgeText(s[0], s[1]).size() - 1) + "," +
+                                  std::to_string(s[2]) + ") carries flux F = U_rq U_qp U_pr = " +
+                                  complexText(F) + " (|F - 1| = " +
+                                  std::to_string(std::abs(F - Complex(1.0, 0.0))) +
+                                  "); the twisted harmonic space of a torus with flux does not have "
+                                  "dimension 2 (spec section 16)");
+  }
+  // Holonomy: a flat connection is a pure gauge U_xy = g_x^{-1} g_y iff the
+  // gauge propagated along a spanning tree (g_y = g_x U_xy) closes every
+  // non-tree edge; the defect of an edge is the holonomy around the cycle it
+  // closes. The root is a choice; the verdict is not.
+  const std::size_t nV = vertices_.size();
+  std::vector<std::vector<std::pair<std::uint64_t, std::size_t>>> adjacency(nV);
+  for (std::size_t e = 0; e < edges_.size(); ++e) {
+    adjacency[edges_[e].first].push_back({edges_[e].second, e});
+    adjacency[edges_[e].second].push_back({edges_[e].first, e});
+  }
+  std::vector<Complex> g(nV, Complex(0.0, 0.0));
+  std::vector<bool> treeEdge(edges_.size(), false);
+  std::deque<std::uint64_t> queue;
+  g[0] = Complex(1.0, 0.0);
+  queue.push_back(0);
+  while (!queue.empty()) {
+    const std::uint64_t x = queue.front();
+    queue.pop_front();
+    for (const auto &[y, e] : adjacency[x]) {
+      if (g[y] != Complex(0.0, 0.0)) continue;
+      g[y] = g[x] * connection_->link(x, y);
+      treeEdge[e] = true;
+      queue.push_back(y);
+    }
+  }
+  for (std::size_t e = 0; e < edges_.size(); ++e) {
+    if (treeEdge[e]) continue;
+    const auto [x, y] = edges_[e];
+    if (g[x] == Complex(0.0, 0.0) || g[y] == Complex(0.0, 0.0))
+      throw std::invalid_argument("SimplicialQubit: the 1-skeleton is not connected");
+    const Complex h = g[x] * connection_->link(x, y) / g[y];
+    if (std::abs(h - Complex(1.0, 0.0)) > kGaugeTolerance)
+      throw std::invalid_argument("SimplicialQubit: the link phases are not a pure gauge: the connection is flat "
+                                  "but has holonomy h = " + complexText(h) + " around the cycle closed by edge " +
+                                  edgeText(x, y) + " (|h - 1| = " +
+                                  std::to_string(std::abs(h - Complex(1.0, 0.0))) +
+                                  "); a flat connection with holonomy has no twisted harmonic space of "
+                                  "dimension 2 (spec section 16)");
+  }
+}
+
+// ============================================================================
+// Spec section 16: the marked cycles as closed walks with a common base point
+// ============================================================================
+
+SimplicialQubit::Walk SimplicialQubit::walkOf(const Cycle &cycle, const char *name,
+                                              std::string &obstruction) const {
+  // Hierholzer over the multigraph of the cycle's directed steps (the net
+  // degree of every vertex is zero, validateCycles): the circuit starts at the
+  // first step's source and follows the given order whenever it chains.
+  const std::size_t n = cycle.size();
+  std::vector<std::uint64_t> from(n), to(n);
+  std::vector<std::vector<std::size_t>> out(vertices_.size());
+  for (std::size_t k = 0; k < n; ++k) {
+    const auto [e, sign] = cycle[k];
+    from[k] = sign > 0 ? edges_[e].first : edges_[e].second;
+    to[k] = sign > 0 ? edges_[e].second : edges_[e].first;
+    out[from[k]].push_back(k);
+  }
+  std::vector<std::size_t> next(vertices_.size(), 0);
+  std::vector<std::uint64_t> vertexStack = {from[0]};
+  std::vector<std::size_t> stepStack, circuit;
+  while (!vertexStack.empty()) {
+    const std::uint64_t v = vertexStack.back();
+    if (next[v] < out[v].size()) {
+      const std::size_t k = out[v][next[v]++];
+      vertexStack.push_back(to[k]);
+      stepStack.push_back(k);
+    } else {
+      vertexStack.pop_back();
+      if (!stepStack.empty()) {
+        circuit.push_back(stepStack.back());
+        stepStack.pop_back();
+      }
+    }
+  }
+  std::reverse(circuit.begin(), circuit.end());
+  if (circuit.size() != n) {
+    obstruction = std::string("cycle ") + name + " does not form one closed walk: its steps fall into more than "
+                  "one connected component";
+    return {};
+  }
+  Walk walk;
+  walk.reserve(n);
+  for (const std::size_t k : circuit) walk.push_back({from[k], to[k]});
+  return walk;
+}
+
+void SimplicialQubit::buildWalks() {
+  walkObstruction_.clear();
+  baseVertex_.reset();
+  walkA_ = walkOf(cycleA_, "A", walkObstruction_);
+  if (walkObstruction_.empty()) walkB_ = walkOf(cycleB_, "B", walkObstruction_);
+  if (walkObstruction_.empty()) {
+    // The common base point: the first vertex of A's walk that lies on B's;
+    // both walks are rotated to start there.
+    std::set<std::uint64_t> onB;
+    for (const auto &step : walkB_) onB.insert(step.first);
+    for (std::size_t k = 0; k < walkA_.size() && !baseVertex_; ++k)
+      if (onB.count(walkA_[k].first)) baseVertex_ = walkA_[k].first;
+    if (baseVertex_) {
+      auto rotate = [&](Walk &walk) {
+        std::size_t k = 0;
+        while (walk[k].first != *baseVertex_) ++k;
+        std::rotate(walk.begin(), walk.begin() + static_cast<std::ptrdiff_t>(k), walk.end());
+      };
+      rotate(walkA_);
+      rotate(walkB_);
+    } else {
+      walkObstruction_ = "cycles A and B share no vertex, so their transported periods have no common base "
+                         "point (A . B = +1 requires them to meet)";
+    }
+  }
+  if (!walkObstruction_.empty() && !trivialConnection_)
+    throw std::invalid_argument("SimplicialQubit: " + walkObstruction_ +
+                                "; the periods under a nontrivial connection are taken with parallel transport "
+                                "along the cycles (spec section 16)");
+}
+
+std::uint64_t SimplicialQubit::baseVertex() const {
+  if (!baseVertex_) throw std::logic_error("SimplicialQubit::baseVertex: " + walkObstruction_);
+  return *baseVertex_;
+}
+
+// ============================================================================
 // Spec section 3: incidence matrices
 // ============================================================================
 
@@ -349,74 +615,80 @@ void SimplicialQubit::buildIncidence() {
 }
 
 // ============================================================================
-// Spec section 4 (per-triangle geometry) and section 7 (barycentric gradients)
+// Spec section 4 (per-triangle geometry) and section 7 (barycentric gradients),
+// the real locus
 // ============================================================================
 
 void SimplicialQubit::buildFaceGeometry() {
   const std::size_t nF = faces_.size();
-  angles_.resize(static_cast<Eigen::Index>(nF), 3);
-  areas_.resize(static_cast<Eigen::Index>(nF));
-  layout_.resize(static_cast<Eigen::Index>(nF), 6);
-  gradients_.resize(static_cast<Eigen::Index>(nF), 6);
+  Eigen::MatrixXd angles(static_cast<Eigen::Index>(nF), 3);
+  Eigen::VectorXd areas(static_cast<Eigen::Index>(nF));
+  Eigen::MatrixXd layout(static_cast<Eigen::Index>(nF), 6);
+  Eigen::MatrixXd gradients(static_cast<Eigen::Index>(nF), 6);
   double gradientScale = 0.0, gradientDefect = 0.0;
   for (std::size_t t = 0; t < nF; ++t) {
     const Face &f = faces_[t];
-    const double a = lengths_[edgeIndexOf(f[1], f[2])];  // l(jk)
-    const double b = lengths_[edgeIndexOf(f[2], f[0])];  // l(ki)
-    const double c = lengths_[edgeIndexOf(f[0], f[1])];  // l(ij)
+    const double a = lengths_[edgeIndexOf(f[1], f[2])].real();  // l(jk)
+    const double b = lengths_[edgeIndexOf(f[2], f[0])].real();  // l(ki)
+    const double c = lengths_[edgeIndexOf(f[0], f[1])].real();  // l(ij)
     const Eigen::Index row = static_cast<Eigen::Index>(t);
 
     const std::array<double, 3> alpha = anglesOf(a, b, c);
-    angles_(row, 0) = alpha[0];
-    angles_(row, 1) = alpha[1];
-    angles_(row, 2) = alpha[2];
+    angles(row, 0) = alpha[0];
+    angles(row, 1) = alpha[1];
+    angles(row, 2) = alpha[2];
 
     const double s = 0.5 * (a + b + c);
     const double area = std::sqrt(s * (s - a) * (s - b) * (s - c));
-    areas_(row) = area;
+    areas(row) = area;
 
     const Eigen::Vector2d pi(0.0, 0.0);
     const Eigen::Vector2d pj(c, 0.0);
     const Eigen::Vector2d pk(b * std::cos(alpha[0]), b * std::sin(alpha[0]));
-    layout_.row(row) << pi(0), pi(1), pj(0), pj(1), pk(0), pk(1);
+    layout.row(row) << pi(0), pi(1), pj(0), pj(1), pk(0), pk(1);
 
     const Eigen::Vector2d gi = rot90(pk - pj) / (2.0 * area);
     const Eigen::Vector2d gj = rot90(pi - pk) / (2.0 * area);
     const Eigen::Vector2d gk = rot90(pj - pi) / (2.0 * area);
-    gradients_.row(row) << gi(0), gi(1), gj(0), gj(1), gk(0), gk(1);
+    gradients.row(row) << gi(0), gi(1), gj(0), gj(1), gk(0), gk(1);
     gradientScale = std::max(gradientScale, gi.norm() + gj.norm() + gk.norm());
     gradientDefect = std::max(gradientDefect, (gi + gj + gk).norm());
   }
   // Verify grad_lambda_i + grad_lambda_j + grad_lambda_k == 0.
   if (gradientDefect > 1e-10 * std::max(gradientScale, 1.0))
     throw std::logic_error("SimplicialQubit: the barycentric gradients of a face do not sum to zero");
+  angles_ = angles.cast<Complex>();
+  areas_ = areas.cast<Complex>();
+  layout_ = layout.cast<Complex>();
+  realGradients_ = std::move(gradients);
+  gradients_ = realGradients_.cast<Complex>();
 }
 
 // ============================================================================
-// Spec section 5: cotangent weights
+// Spec section 5: cotangent weights, the real locus
 // ============================================================================
 
 void SimplicialQubit::buildWeights() {
   const std::size_t nE = edges_.size();
-  weights_.resize(static_cast<Eigen::Index>(nE));
+  Eigen::VectorXd weights(static_cast<Eigen::Index>(nE));
   negativeWeightEdges_.clear();
   nonDelaunayEdges_.clear();
   std::vector<double> angleSums(nE, 0.0);
   for (std::size_t e = 0; e < nE; ++e) {
     double cotangentSum = 0.0;
     for (const auto &[t, slot] : edgeFaces_[e]) {
-      const double angle = angles_(static_cast<Eigen::Index>(t), oppositeVertexSlot(slot));
+      const double angle = angles_(static_cast<Eigen::Index>(t), oppositeVertexSlot(slot)).real();
       cotangentSum += std::cos(angle) / std::sin(angle);
       angleSums[e] += angle;
     }
-    weights_(static_cast<Eigen::Index>(e)) = 0.5 * cotangentSum;
+    weights(static_cast<Eigen::Index>(e)) = 0.5 * cotangentSum;
   }
   // Flags at rounding tolerance: an edge with alpha_e + beta_e = pi exactly
   // (a co-circular quadrilateral, e.g. every diagonal of a square grid) has
   // weight zero, not a negative weight, however the last bits fall.
-  const double scale = std::max(weights_.cwiseAbs().maxCoeff(), 1.0);
+  const double scale = std::max(weights.cwiseAbs().maxCoeff(), 1.0);
   for (std::size_t e = 0; e < nE; ++e) {
-    if (weights_(static_cast<Eigen::Index>(e)) < -1e-12 * scale) negativeWeightEdges_.push_back(e);
+    if (weights(static_cast<Eigen::Index>(e)) < -1e-12 * scale) negativeWeightEdges_.push_back(e);
     if (angleSums[e] > kPi + 1e-12) nonDelaunayEdges_.push_back(e);
   }
   if (!nonDelaunayEdges_.empty() || !negativeWeightEdges_.empty()) {
@@ -427,18 +699,20 @@ void SimplicialQubit::buildWeights() {
       << "(apply the intrinsic Delaunay edge-flip pass)";
     warnings_.push_back(w.str());
   }
+  weights_ = weights.cast<Complex>();
 }
 
 // ============================================================================
-// Spec section 6: harmonic space
+// Spec section 6: harmonic space, the real locus
 // ============================================================================
 
 void SimplicialQubit::buildHarmonicSpace() {
   const Eigen::Index nE = static_cast<Eigen::Index>(edges_.size());
   // S = vstack([d1, d0.T @ M1]); H = null_space(S).
+  const Eigen::VectorXd weights = weights_.real();
   Eigen::MatrixXd S(d1_.rows() + d0_.cols(), nE);
   S.topRows(d1_.rows()) = d1_;
-  S.bottomRows(d0_.cols()) = d0_.transpose() * weights_.asDiagonal();
+  S.bottomRows(d0_.cols()) = d0_.transpose() * weights.asDiagonal();
   Eigen::BDCSVD<Eigen::MatrixXd> svd(S, Eigen::ComputeFullV);
   const Eigen::VectorXd sigma = svd.singularValues();
   // scipy.linalg.null_space: rcond = eps * max(M, N), tolerance rcond * sigma_max.
@@ -447,14 +721,17 @@ void SimplicialQubit::buildHarmonicSpace() {
   Eigen::Index rank = 0;
   for (Eigen::Index n = 0; n < sigma.size(); ++n)
     if (sigma(n) > tolerance) ++rank;
-  H_ = svd.matrixV().rightCols(nE - rank);
-  if (H_.cols() != 2)
-    throw std::runtime_error("SimplicialQubit: dim H = " + std::to_string(H_.cols()) +
+  const Eigen::MatrixXd H = svd.matrixV().rightCols(nE - rank);
+  if (H.cols() != 2)
+    throw std::runtime_error("SimplicialQubit: dim H = " + std::to_string(H.cols()) +
                              " != 2; the input is not a torus or the weights are degenerate");
+  H_ = H.cast<Complex>();
+  Hdual_ = H_;
 }
 
 // ============================================================================
-// Spec section 7 (Whitney interpolant, L2 inner product) and section 8 (J)
+// Spec section 7 (Whitney interpolant, L2 inner product) and section 8 (J),
+// the real locus
 // ============================================================================
 
 template <typename Scalar>
@@ -466,7 +743,7 @@ Eigen::Matrix<Scalar, 2, 1> SimplicialQubit::whitneyAtBarycenter(
   const Face &f = faces_[t];
   const Eigen::Index row = static_cast<Eigen::Index>(t);
   auto gradient = [&](int vertexSlot) {
-    return Eigen::Vector2d(gradients_(row, 2 * vertexSlot), gradients_(row, 2 * vertexSlot + 1));
+    return Eigen::Vector2d(realGradients_(row, 2 * vertexSlot), realGradients_(row, 2 * vertexSlot + 1));
   };
   Eigen::Matrix<Scalar, 2, 1> w = Eigen::Matrix<Scalar, 2, 1>::Zero();
   for (int slot = 0; slot < 3; ++slot) {
@@ -480,52 +757,229 @@ Eigen::Matrix<Scalar, 2, 1> SimplicialQubit::whitneyAtBarycenter(
 }
 
 void SimplicialQubit::buildComplexStructure() {
+  // The real path, kept in the real-length construction's own form (member
+  // accumulators, the same expressions) so that it stays bit-identical to it
+  // under the compiler's floating-point contraction.
   const std::size_t nF = faces_.size();
-  G_ = Eigen::MatrixXd::Zero(2, 2);
-  R_ = Eigen::MatrixXd::Zero(2, 2);
+  const Eigen::MatrixXd H = H_.real();
+  const Eigen::VectorXd areas = areas_.real();
+  realG_ = Eigen::MatrixXd::Zero(2, 2);
+  realR_ = Eigen::MatrixXd::Zero(2, 2);
   for (std::size_t t = 0; t < nF; ++t) {
-    const double area = areas_(static_cast<Eigen::Index>(t));
-    const Eigen::Vector2d w0 = whitneyAtBarycenter<double>(t, H_.col(0));
-    const Eigen::Vector2d w1 = whitneyAtBarycenter<double>(t, H_.col(1));
+    const double area = areas(static_cast<Eigen::Index>(t));
+    const Eigen::Vector2d w0 = whitneyAtBarycenter<double>(t, H.col(0));
+    const Eigen::Vector2d w1 = whitneyAtBarycenter<double>(t, H.col(1));
     const std::array<Eigen::Vector2d, 2> w = {w0, w1};
     for (int a = 0; a < 2; ++a)
       for (int b = 0; b < 2; ++b) {
-        G_(a, b) += area * w[a].dot(w[b]);
-        R_(a, b) += area * rot90(w[a]).dot(w[b]);
+        realG_(a, b) += area * w[a].dot(w[b]);
+        realR_(a, b) += area * rot90(w[a]).dot(w[b]);
       }
   }
   // J = G^{-1} @ R.T; the residual is exposed, never symmetrized away.
-  J_ = G_.inverse() * R_.transpose();
-  jResidual_ = (J_ * J_ + Eigen::MatrixXd::Identity(2, 2)).norm();
+  realJ_ = realG_.inverse() * realR_.transpose();
+  jResidual_ = (realJ_ * realJ_ + Eigen::MatrixXd::Identity(2, 2)).norm();
+  G_ = realG_.cast<Complex>();
+  R_ = realR_.cast<Complex>();
+  J_ = realJ_.cast<Complex>();
+}
+
+// ============================================================================
+// Spec section 16: sections 4–8 over C on the twisted complex, at one point of
+// the segment from the real reference
+// ============================================================================
+
+Eigen::Vector2cd SimplicialQubit::twistedWhitneyAtBarycenter(std::size_t t, const Eigen::MatrixXcd &gradients,
+                                                             const Eigen::VectorXcd &omega, bool dual) const {
+  // W_t^U(omega): each edge value carried to the face's base vertex by
+  // U_{b(t) b(e)} (the inverse link for the dual), then the interpolant of §7.
+  const Face &f = faces_[t];
+  const Eigen::Index row = static_cast<Eigen::Index>(t);
+  const std::uint64_t base = std::min({f[0], f[1], f[2]});
+  auto gradient = [&](int vertexSlot) {
+    return Eigen::Vector2cd(gradients(row, 2 * vertexSlot), gradients(row, 2 * vertexSlot + 1));
+  };
+  Eigen::Vector2cd w = Eigen::Vector2cd::Zero();
+  for (int slot = 0; slot < 3; ++slot) {
+    const int from = slot, to = (slot + 1) % 3;
+    const auto [u, v] = traversal(f, slot);
+    const std::uint64_t edgeBase = std::min(u, v);
+    const Complex carry = trivialConnection_ ? Complex(1.0, 0.0)
+                          : dual                ? connection_->link(edgeBase, base)
+                                                : connection_->link(base, edgeBase);
+    const Complex value = (u < v ? Complex(1.0, 0.0) : Complex(-1.0, 0.0)) * carry *
+                          omega(static_cast<Eigen::Index>(edgeIndexOf(u, v)));
+    w += value * (gradient(to) - gradient(from));
+  }
+  return w / Complex(3.0, 0.0);
+}
+
+SimplicialQubit::ComplexStage SimplicialQubit::complexStageAt(const std::vector<Complex> &lengths) const {
+  const std::size_t nF = faces_.size();
+  const std::size_t nE = edges_.size();
+  const Eigen::Index nV = static_cast<Eigen::Index>(vertices_.size());
+  ComplexStage stage;
+  stage.angles.resize(static_cast<Eigen::Index>(nF), 3);
+  stage.areas.resize(static_cast<Eigen::Index>(nF));
+  stage.layout.resize(static_cast<Eigen::Index>(nF), 6);
+  stage.gradients.resize(static_cast<Eigen::Index>(nF), 6);
+  Eigen::MatrixXcd cotangents(static_cast<Eigen::Index>(nF), 3);
+  double gradientScale = 0.0, gradientDefect = 0.0;
+
+  // §4 over C. The face's Gram matrix in the WhitneyMass convention, local
+  // vertices (0, 1, 2) = (i, j, k): s_01 = c^2, s_02 = b^2, s_12 = a^2.
+  for (std::size_t t = 0; t < nF; ++t) {
+    const Face &f = faces_[t];
+    const Complex a = lengths[edgeIndexOf(f[1], f[2])];  // l(jk)
+    const Complex b = lengths[edgeIndexOf(f[2], f[0])];  // l(ki)
+    const Complex c = lengths[edgeIndexOf(f[0], f[1])];  // l(ij)
+    const Complex sa = a * a, sb = b * b, sc = c * c;
+    const Eigen::Index row = static_cast<Eigen::Index>(t);
+
+    Eigen::MatrixXcd gram(2, 2);
+    gram << sc, 0.5 * (sc + sb - sa), 0.5 * (sc + sb - sa), sb;
+    bool ambiguous = false;
+    // Heron on the continuation branch: sqrt(det g)/2 continued from the unit
+    // equilateral reference along the straight segment in the squared lengths.
+    const Complex area = chainhodge::WhitneyMass::volumeOnBranch(gram, chainhodge::Branch::Continuation,
+                                                                 &ambiguous);
+    if (ambiguous || area == Complex(0.0, 0.0) || !std::isfinite(area.real()) || !std::isfinite(area.imag()))
+      throw std::invalid_argument("SimplicialQubit: face " + faceText(f) +
+                                  ": the continuation of the Heron root from the real reference meets a root "
+                                  "of det G on the segment in the squared lengths (a degenerate triangle on "
+                                  "the way, or at the end); no continuous branch (spec section 16)");
+    stage.areas(row) = area;
+
+    // The principal branch of acos of the complex cosine of the law of cosines.
+    const Complex cosI = (sb + sc - sa) / (2.0 * b * c);
+    const Complex cosJ = (sc + sa - sb) / (2.0 * c * a);
+    const Complex cosK = (sa + sb - sc) / (2.0 * a * b);
+    stage.angles(row, 0) = std::acos(cosI);
+    stage.angles(row, 1) = std::acos(cosJ);
+    stage.angles(row, 2) = std::acos(cosK);
+
+    // The layout with b sin(alpha_i) := 2 A_t / c on the continuation branch,
+    // so that A_t = (1/2) b c sin(alpha_i) holds exactly; the cotangents on
+    // the same branch: cot(alpha_v) = (adjacent^2 + adjacent^2 - opposite^2) / (4 A_t).
+    const Eigen::Vector2cd pi(Complex(0.0, 0.0), Complex(0.0, 0.0));
+    const Eigen::Vector2cd pj(c, Complex(0.0, 0.0));
+    const Eigen::Vector2cd pk(b * cosI, 2.0 * area / c);
+    stage.layout.row(row) << pi(0), pi(1), pj(0), pj(1), pk(0), pk(1);
+    cotangents(row, 0) = (sb + sc - sa) / (4.0 * area);
+    cotangents(row, 1) = (sc + sa - sb) / (4.0 * area);
+    cotangents(row, 2) = (sa + sb - sc) / (4.0 * area);
+
+    // §7: the barycentric gradients in the local frame.
+    const Eigen::Vector2cd gi = rot90c(Eigen::Vector2cd(pk - pj)) / (2.0 * area);
+    const Eigen::Vector2cd gj = rot90c(Eigen::Vector2cd(pi - pk)) / (2.0 * area);
+    const Eigen::Vector2cd gk = rot90c(Eigen::Vector2cd(pj - pi)) / (2.0 * area);
+    stage.gradients.row(row) << gi(0), gi(1), gj(0), gj(1), gk(0), gk(1);
+    gradientScale = std::max(gradientScale, gi.norm() + gj.norm() + gk.norm());
+    gradientDefect = std::max(gradientDefect, Eigen::Vector2cd(gi + gj + gk).norm());
+  }
+  if (gradientDefect > 1e-10 * std::max(gradientScale, 1.0))
+    throw std::logic_error("SimplicialQubit: the barycentric gradients of a face do not sum to zero");
+
+  // §5 over C: w_e = (cot alpha_e + cot beta_e) / 2 on the continuation branch.
+  stage.weights.resize(static_cast<Eigen::Index>(nE));
+  for (std::size_t e = 0; e < nE; ++e) {
+    Complex cotangentSum(0.0, 0.0);
+    for (const auto &[t, slot] : edgeFaces_[e])
+      cotangentSum += cotangents(static_cast<Eigen::Index>(t), oppositeVertexSlot(slot));
+    stage.weights(static_cast<Eigen::Index>(e)) = 0.5 * cotangentSum;
+  }
+
+  // §6 over C on the twisted complex: S^U = [d_1^U; ∂_1^U M_1] with
+  // (d_1^U)_{te} = (d_1)_{te} U_{b(t) b(e)} and (∂_1^U M_1)_{ve} = (∂_1)_{ve} U_{v b(e)} w_e;
+  // the dual kernel is the same construction under U^{-1}.
+  auto stacked = [&](bool dual) {
+    Eigen::MatrixXcd S = Eigen::MatrixXcd::Zero(d1_.rows() + nV, static_cast<Eigen::Index>(nE));
+    for (std::size_t t = 0; t < nF; ++t) {
+      const Face &f = faces_[t];
+      const std::uint64_t base = std::min({f[0], f[1], f[2]});
+      for (int slot = 0; slot < 3; ++slot) {
+        const auto [u, v] = traversal(f, slot);
+        const std::size_t e = edgeIndexOf(u, v);
+        const std::uint64_t edgeBase = std::min(u, v);
+        const Complex carry = trivialConnection_ ? Complex(1.0, 0.0)
+                              : dual                ? connection_->link(edgeBase, base)
+                                                    : connection_->link(base, edgeBase);
+        S(static_cast<Eigen::Index>(t), static_cast<Eigen::Index>(e)) =
+            d1_(static_cast<Eigen::Index>(t), static_cast<Eigen::Index>(e)) * carry;
+      }
+    }
+    for (std::size_t e = 0; e < nE; ++e) {
+      const auto [x, y] = edges_[e];
+      const Complex w = stage.weights(static_cast<Eigen::Index>(e));
+      const Complex carryY = trivialConnection_ ? Complex(1.0, 0.0)
+                             : dual                ? connection_->link(x, y)
+                                                   : connection_->link(y, x);
+      S(d1_.rows() + static_cast<Eigen::Index>(x), static_cast<Eigen::Index>(e)) = -w;
+      S(d1_.rows() + static_cast<Eigen::Index>(y), static_cast<Eigen::Index>(e)) = carryY * w;
+    }
+    return S;
+  };
+  stage.H = complexNullSpace(stacked(false));
+  if (stage.H.cols() != 2)
+    throw std::runtime_error("SimplicialQubit: dim H = " + std::to_string(stage.H.cols()) +
+                             " != 2; the input is not a torus or the weights are degenerate" +
+                             (trivialConnection_ ? "" : " (twisted by the link phases)"));
+  if (trivialConnection_) {
+    stage.Hdual = stage.H;
+  } else {
+    stage.Hdual = complexNullSpace(stacked(true));
+    if (stage.Hdual.cols() != 2)
+      throw std::runtime_error("SimplicialQubit: dim H^vee = " + std::to_string(stage.Hdual.cols()) +
+                               " != 2 for the kernel twisted by the inverse links");
+  }
+
+  // §7, §8 over C: the transpose pairing between the dual kernel and the
+  // kernel; J = G^{-1} R^T, its residual exposed.
+  stage.G = Eigen::MatrixXcd::Zero(2, 2);
+  stage.R = Eigen::MatrixXcd::Zero(2, 2);
+  for (std::size_t t = 0; t < nF; ++t) {
+    const Complex area = stage.areas(static_cast<Eigen::Index>(t));
+    std::array<Eigen::Vector2cd, 2> w, wd;
+    for (int a = 0; a < 2; ++a) {
+      w[static_cast<std::size_t>(a)] = twistedWhitneyAtBarycenter(t, stage.gradients, stage.H.col(a), false);
+      wd[static_cast<std::size_t>(a)] = twistedWhitneyAtBarycenter(t, stage.gradients, stage.Hdual.col(a), true);
+    }
+    for (int a = 0; a < 2; ++a)
+      for (int b = 0; b < 2; ++b) {
+        stage.G(a, b) += area * pairT(wd[static_cast<std::size_t>(a)], w[static_cast<std::size_t>(b)]);
+        stage.R(a, b) += area * pairT(rot90c(w[static_cast<std::size_t>(a)]), wd[static_cast<std::size_t>(b)]);
+      }
+  }
+  stage.J = stage.G.inverse() * stage.R.transpose();
+  stage.jResidual = (stage.J * stage.J + Eigen::MatrixXcd::Identity(2, 2)).norm();
+  return stage;
 }
 
 // ============================================================================
 // Spec section 9: holomorphic line and period ratio
 // ============================================================================
 
-Complex SimplicialQubit::periodOf(const Eigen::VectorXcd &omega, const Cycle &cycle) const {
-  Complex total(0.0, 0.0);
-  for (const auto &[e, sign] : cycle) total += static_cast<double>(sign) * omega(static_cast<Eigen::Index>(e));
-  return total;
+Complex SimplicialQubit::periodOf(const Eigen::VectorXcd &omega, const Cycle &cycle, const Walk &walk) const {
+  if (trivialConnection_) {
+    // The plain signed sum of §9.
+    Complex total(0.0, 0.0);
+    for (const auto &[e, sign] : cycle) total += static_cast<double>(sign) * omega(static_cast<Eigen::Index>(e));
+    return total;
+  }
+  // §16: with parallel transport along the cycle's walk from the base point,
+  // the cochain handed over in the connection's canonical edge order.
+  Eigen::VectorXcd canonical(omega.size());
+  for (std::size_t e = 0; e < edges_.size(); ++e)
+    canonical(static_cast<Eigen::Index>(canonicalOf_[e])) = omega(static_cast<Eigen::Index>(e));
+  return connection_->transportedPeriod(canonical, walk);
 }
 
 void SimplicialQubit::buildHolomorphicLine() {
-  // Complexify: the eigenvector of J for the eigenvalue closest to -i.
-  Eigen::EigenSolver<Eigen::MatrixXd> eig(J_);
-  const Eigen::VectorXcd lambda = eig.eigenvalues();
-  int branch = 0;
-  for (int b = 1; b < lambda.size(); ++b)
-    if (std::abs(lambda(b) - Complex(0.0, -1.0)) < std::abs(lambda(branch) - Complex(0.0, -1.0)))
-      branch = b;
-  Eigen::VectorXcd c = eig.eigenvectors().col(branch);
-
-  auto evaluate = [&](const Eigen::VectorXcd &coefficients, Eigen::VectorXcd &omega, Complex &pA,
-                      Complex &pB, bool &swapped) {
-    omega = H_.cast<Complex>() * coefficients;  // omega = c[0] h1 + c[1] h2
-    const Complex rawA = periodOf(omega, cycleA_);
-    const Complex rawB = periodOf(omega, cycleB_);
-    // |P_A| near zero: the marking is degenerate for this metric; swap the
-    // roles of A and B — the marking (B, -A) — and report -1/tau.
+  // The periods of a candidate form over the marking, with the §9 rule for a
+  // vanishing |P_A| (the marking (B, -A), reporting -1/tau).
+  auto evaluate = [&](const Eigen::VectorXcd &omega, Complex &pA, Complex &pB, bool &swapped) {
+    const Complex rawA = periodOf(omega, cycleA_, walkA_);
+    const Complex rawB = periodOf(omega, cycleB_, walkB_);
     swapped = std::abs(rawA) <= 1e-12 * (std::abs(rawA) + std::abs(rawB));
     if (swapped) {
       pA = rawB;
@@ -540,16 +994,122 @@ void SimplicialQubit::buildHolomorphicLine() {
   Eigen::VectorXcd omega;
   Complex pA, pB;
   bool swapped = false;
-  Complex tau = evaluate(c, omega, pA, pB, swapped);
-  // Require Im(tau) > 0; otherwise the surface orientation or the eigenvalue
-  // branch is flipped: take the conjugate eigenvector and recompute.
-  if (tau.imag() < 0.0) {
-    c = c.conjugate();
-    tau = evaluate(c, omega, pA, pB, swapped);
-    warnings_.push_back(
-        "Im tau < 0 on the eigenvector nearest -i: the surface orientation or the eigenvalue branch is "
-        "flipped; the conjugate eigenvector was taken");
+  Complex tau;
+
+  if (real_) {
+    // Complexify: the eigenvector of J for the eigenvalue closest to -i.
+    Eigen::EigenSolver<Eigen::MatrixXd> eig(realJ_);
+    const Eigen::VectorXcd lambda = eig.eigenvalues();
+    int branch = 0;
+    for (int b = 1; b < lambda.size(); ++b)
+      if (std::abs(lambda(b) - Complex(0.0, -1.0)) < std::abs(lambda(branch) - Complex(0.0, -1.0)))
+        branch = b;
+    Eigen::VectorXcd c = eig.eigenvectors().col(branch);
+    omega = H_ * c;  // omega = c[0] h1 + c[1] h2
+    tau = evaluate(omega, pA, pB, swapped);
+    // Require Im(tau) > 0; otherwise the surface orientation or the eigenvalue
+    // branch is flipped: take the conjugate eigenvector and recompute.
+    if (tau.imag() < 0.0) {
+      c = c.conjugate();
+      omega = H_ * c;
+      tau = evaluate(omega, pA, pB, swapped);
+      warnings_.push_back(
+          "Im tau < 0 on the eigenvector nearest -i: the surface orientation or the eigenvalue branch is "
+          "flipped; the conjugate eigenvector was taken");
+    }
+  } else {
+    // Spec §16: the eigenline chosen by continuity from the real reference
+    // along the straight segment s_e(t) = (1 - t) + t l_e^2 in the squared
+    // lengths, with the marking and the links held fixed.
+    const std::size_t nE = edges_.size();
+    auto lengthsAt = [&](double t) {
+      std::vector<Complex> at(nE);
+      for (std::size_t e = 0; e < nE; ++e)
+        at[e] = principalSqrt((1.0 - t) * Complex(1.0, 0.0) + t * lengths_[e] * lengths_[e]);
+      return at;
+    };
+    struct Eigenlines {
+      std::array<Eigen::VectorXcd, 2> coefficients;
+      std::array<Eigen::VectorXcd, 2> forms;
+      std::array<Complex, 2> eigenvalues;
+    };
+    auto eigenlinesOf = [&](const Eigen::MatrixXcd &J, const Eigen::MatrixXcd &H) {
+      Eigen::ComplexEigenSolver<Eigen::MatrixXcd> eig(J);
+      Eigenlines lines;
+      for (int m = 0; m < 2; ++m) {
+        lines.eigenvalues[static_cast<std::size_t>(m)] = eig.eigenvalues()(m);
+        lines.coefficients[static_cast<std::size_t>(m)] = eig.eigenvectors().col(m);
+        lines.forms[static_cast<std::size_t>(m)] = H * eig.eigenvectors().col(m);
+      }
+      return lines;
+    };
+
+    // At the real reference: the §9 rule selects the line.
+    const ComplexStage reference = complexStageAt(std::vector<Complex>(nE, Complex(1.0, 0.0)));
+    Eigenlines lines = eigenlinesOf(reference.J, reference.H);
+    std::size_t pick = std::abs(lines.eigenvalues[1] - Complex(0.0, -1.0)) <
+                               std::abs(lines.eigenvalues[0] - Complex(0.0, -1.0))
+                           ? 1
+                           : 0;
+    {
+      Complex rA, rB;
+      bool rSwapped = false;
+      const Complex tauReference = evaluate(lines.forms[pick], rA, rB, rSwapped);
+      if (tauReference.imag() < 0.0) {
+        pick = 1 - pick;
+        warnings_.push_back(
+            "Im tau < 0 at the real reference on the eigenvector nearest -i: the surface orientation or the "
+            "eigenvalue branch is flipped; the other eigenline was taken and continued (spec section 16)");
+      }
+    }
+    Eigen::VectorXcd tracked = lines.forms[pick];
+
+    // Track the line by overlap along the segment, halving the step until the
+    // overlap with the previous point exceeds 0.99.
+    constexpr double kStep = 0.125;
+    constexpr double kMinimumStep = 1e-6;
+    constexpr double kOverlap = 0.99;
+    double t = 0.0, step = kStep;
+    while (t < 1.0) {
+      const double next = std::min(1.0, t + step);
+      const bool last = next >= 1.0;
+      Eigenlines candidate = last ? eigenlinesOf(J_, H_) : [&] {
+        const ComplexStage stage = complexStageAt(lengthsAt(next));
+        return eigenlinesOf(stage.J, stage.H);
+      }();
+      const std::array<double, 2> overlap = {lineOverlap(tracked, candidate.forms[0]),
+                                             lineOverlap(tracked, candidate.forms[1])};
+      const std::size_t best = overlap[1] > overlap[0] ? 1 : 0;
+      if (overlap[best] < kOverlap) {
+        if (step / 2.0 < kMinimumStep)
+          throw std::runtime_error(
+              "SimplicialQubit: the eigenline cannot be continued from the real reference: at t = " +
+              std::to_string(next) + " of the segment in the squared lengths the overlap with the tracked "
+              "line is " + std::to_string(overlap[best]) + " below " + std::to_string(kOverlap) +
+              " at the minimum step (spec section 16)");
+        step /= 2.0;
+        continue;
+      }
+      if (overlap[1 - best] >= overlap[best] - 1e-9)
+        throw std::runtime_error(
+            "SimplicialQubit: the eigenline cannot be continued from the real reference: at t = " +
+            std::to_string(next) + " of the segment in the squared lengths the two eigenlines of J cannot be "
+            "told apart (overlaps " + std::to_string(overlap[0]) + ", " + std::to_string(overlap[1]) +
+            "); the complex structure is degenerate there (spec section 16)");
+      tracked = candidate.forms[best];
+      lines = candidate;
+      pick = best;
+      t = next;
+      step = kStep;
+    }
+    omega = lines.forms[pick];
+    tau = evaluate(omega, pA, pB, swapped);
+    if (!(tau.imag() > 0.0) && std::isfinite(tau.imag()))
+      warnings_.push_back("Im tau = " + std::to_string(tau.imag()) +
+                          " <= 0 off the real locus: the state lies in the other hemisphere; the eigenline "
+                          "is the continuation of the real reference's, not chosen by Im tau (spec section 16)");
   }
+
   if (!std::isfinite(tau.real()) || !std::isfinite(tau.imag()))
     throw std::runtime_error("SimplicialQubit: the period ratio is not finite (both periods vanish)");
   if (tau.imag() == 0.0)
@@ -562,7 +1122,8 @@ void SimplicialQubit::buildHolomorphicLine() {
   tau_ = tau;
   swapped_ = swapped;
 
-  // Section 10's assertion: |r| == 1 to machine precision.
+  // Section 10's assertion: |r| == 1 to machine precision (an identity in
+  // tau, on and off the real locus).
   const double blochNorm = bloch().norm();
   if (std::abs(blochNorm - 1.0) > 1e-12)
     throw std::logic_error("SimplicialQubit: the Bloch vector is not a unit vector (|r| = " +
@@ -656,12 +1217,12 @@ SimplicialQubit SimplicialQubit::flatTorus(std::complex<double> tau, int nx, int
       faces.push_back({vid(i, j), vid(i1, j1), vid(i, j1)});
     }
   std::vector<EdgePair> edges;
-  std::vector<double> lengths;
+  std::vector<Complex> lengths;
   std::map<EdgePair, std::size_t> index;
   for (const auto &[pair, length] : lengthOf) {
     index[pair] = edges.size();
     edges.push_back(pair);
-    lengths.push_back(length);
+    lengths.push_back(Complex(length, 0.0));
   }
 
   // Marked cycles: A the row loop along 1 (j = 0), B the column loop along
@@ -682,9 +1243,15 @@ SimplicialQubit SimplicialQubit::flatTorus(std::complex<double> tau, int nx, int
 // ============================================================================
 
 SimplicialQubit SimplicialQubit::intrinsicDelaunay() const {
+  if (!real_)
+    throw std::invalid_argument(
+        "SimplicialQubit::intrinsicDelaunay: the intrinsic Delaunay condition alpha_e + beta_e <= pi is an "
+        "inequality on real angles; the pass is defined on the real locus only (real lengths, no phases)");
   std::vector<EdgePair> edges = edges_;
   std::vector<Face> faces = faces_;
-  std::vector<double> lengths = lengths_;
+  std::vector<double> lengths;
+  lengths.reserve(lengths_.size());
+  for (const Complex l : lengths_) lengths.push_back(l.real());
   Cycle cycleA = cycleA_, cycleB = cycleB_;
   std::map<EdgePair, std::size_t> index = edgeIndex_;
   std::vector<std::vector<std::pair<std::size_t, int>>> incidence = edgeFaces_;
@@ -802,35 +1369,57 @@ SimplicialQubit SimplicialQubit::intrinsicDelaunay() const {
     }
   }
 
-  SimplicialQubit result(vertices_, std::move(edges), std::move(faces), std::move(lengths), std::move(cycleA),
-                         std::move(cycleB), degeneracyThreshold_);
+  std::vector<Complex> complexLengths;
+  complexLengths.reserve(lengths.size());
+  for (const double l : lengths) complexLengths.push_back(Complex(l, 0.0));
+  SimplicialQubit result(vertices_, std::move(edges), std::move(faces), std::move(complexLengths),
+                         std::move(cycleA), std::move(cycleB), degeneracyThreshold_);
   result.flips_ = flips;
   result.warnings_.insert(result.warnings_.end(), skipped.begin(), skipped.end());
   return result;
 }
 
 // ============================================================================
-// Spec section 13: degeneration diagnostics
+// The period frame (qubit cobordism spec D3) and spec section 13 diagnostics
 // ============================================================================
 
 void SimplicialQubit::buildPeriodFrame() {
   // Pi_{ca} = the period of h_a over cycle c, the cycles in force: (A, B), or
   // (B, -A) when section 9 swapped the marking (|P_A| vanished), so that the
-  // frame is the basis tau() is a coordinate in.
-  Eigen::Matrix2d Pi;
+  // frame is the basis tau() is a coordinate in. The period map of the
+  // harmonic space over a homology basis is an isomorphism (section 2 checked
+  // the cycles' independence), so Pi is invertible whenever dim H = 2.
+  if (real_) {
+    Eigen::Matrix2d Pi;
+    for (Eigen::Index a = 0; a < 2; ++a) {
+      const Eigen::VectorXcd h = H_.col(a);
+      const double pA = periodOf(h, cycleA_, walkA_).real();
+      const double pB = periodOf(h, cycleB_, walkB_).real();
+      Pi(0, a) = swapped_ ? pB : pA;
+      Pi(1, a) = swapped_ ? -pA : pB;
+    }
+    const double det = Pi.determinant();
+    if (!std::isfinite(det) || det == 0.0)
+      throw std::runtime_error("SimplicialQubit: the period matrix of the harmonic basis over the marking is "
+                               "singular; the marked cycles do not span the torus's homology");
+    // The real basis materialized first, so the product is the one the
+    // real-length construction evaluates (bit-identical on the real locus).
+    const Eigen::MatrixXd H = H_.real();
+    const Eigen::MatrixXd F = H * Pi.inverse();
+    F_ = F.cast<Complex>();
+    return;
+  }
+  // §16: the transported periods (a common base point), complex.
+  Eigen::Matrix2cd Pi;
   for (Eigen::Index a = 0; a < 2; ++a) {
-    const Eigen::VectorXcd h = H_.col(a).cast<Complex>();
-    const double pA = periodOf(h, cycleA_).real();
-    const double pB = periodOf(h, cycleB_).real();
+    const Eigen::VectorXcd h = H_.col(a);
+    const Complex pA = periodOf(h, cycleA_, walkA_);
+    const Complex pB = periodOf(h, cycleB_, walkB_);
     Pi(0, a) = swapped_ ? pB : pA;
     Pi(1, a) = swapped_ ? -pA : pB;
   }
-  // F = H Pi^{-1}: the period of column c of F over cycle c' is
-  // sum_a Pi_{c'a} (Pi^{-1})_{ac} = delta_{c'c}. The period map of the
-  // harmonic space over a homology basis is an isomorphism (section 2 checked
-  // the cycles' independence), so Pi is invertible whenever dim H = 2.
-  const double det = Pi.determinant();
-  if (!std::isfinite(det) || det == 0.0)
+  const Complex det = Pi.determinant();
+  if (!std::isfinite(det.real()) || !std::isfinite(det.imag()) || det == Complex(0.0, 0.0))
     throw std::runtime_error("SimplicialQubit: the period matrix of the harmonic basis over the marking is "
                              "singular; the marked cycles do not span the torus's homology");
   F_ = H_ * Pi.inverse();
@@ -840,8 +1429,14 @@ void SimplicialQubit::diagnoseDegeneration() {
   const Eigen::VectorXd magnitudes = weights_.cwiseAbs();
   const double smallest = magnitudes.minCoeff();
   condM1_ = smallest > 0.0 ? magnitudes.maxCoeff() / smallest : std::numeric_limits<double>::infinity();
-  Eigen::JacobiSVD<Eigen::MatrixXd> svd(G_);
-  const Eigen::VectorXd sigma = svd.singularValues();
+  Eigen::VectorXd sigma;
+  if (real_) {
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(realG_);
+    sigma = svd.singularValues();
+  } else {
+    Eigen::JacobiSVD<Eigen::MatrixXcd> svd(G_);
+    sigma = svd.singularValues();
+  }
   condG_ = sigma(1) > 0.0 ? sigma(0) / sigma(1) : std::numeric_limits<double>::infinity();
   nearDegenerate_ = condM1_ > degeneracyThreshold_ || condG_ > degeneracyThreshold_;
   if (nearDegenerate_) {

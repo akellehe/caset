@@ -64,6 +64,63 @@ class Connection {
   [[nodiscard]] Connection gauge(const std::map<std::uint64_t, Complex> &g) const;
   /// \f$ \mathcal F_t = U_{rq}U_{qp}U_{pr} \f$ for the triangle \f$ [p<q<r] \f$.
   [[nodiscard]] Complex curvature(std::uint64_t p, std::uint64_t q, std::uint64_t r) const;
+
+  /// A closed walk on the 1-skeleton as directed steps \f$ (u \to v) \f$:
+  /// consecutive steps chain (the target of one step is the source of the
+  /// next) and the last target is the first source, the walk's BASE POINT.
+  /// The engine's loop convention (`mesh::Edge::walkLoop`, the cycles of a
+  /// `cobordism::MultiCobordism::Marking`): a step \f$ u \to v \f$ traverses
+  /// the canonical edge \f$ [\min(u,v) < \max(u,v)] \f$ with sign \f$ +1 \f$
+  /// when \f$ u < v \f$ (along the reference orientation) and \f$ -1 \f$
+  /// otherwise.
+  using Walk = std::vector<std::pair<std::uint64_t, std::uint64_t>>;
+  /// The holonomy of a closed walk: the ordered product of the links read
+  /// along its steps, \f$ U_{v_0v_1}U_{v_1v_2}\cdots U_{v_{n-1}v_0} \f$ — for a
+  /// U(1) connection \f$ e^{i\sum_k \pm\varphi_k} \f$, the Wilson loop in the
+  /// walk's direction (`observables::WilsonMode::U1_CONNECTION`). It is
+  /// exactly 1 on every closed walk iff the connection is a pure gauge
+  /// \f$ U = 1^g \f$.
+  /// @throws std::invalid_argument when the walk is empty, does not chain or
+  ///   close, or steps across a pair that is not an edge.
+  [[nodiscard]] Complex holonomy(const Walk &walk) const;
+  /// The TRANSPORTED PERIOD of a 1-cochain over a closed walk.
+  ///
+  /// WHAT: \p cochain is indexed like `links()` (the canonical edge order), and
+  /// its value on an edge \f$ \sigma \f$ is expressed in the frame at the
+  /// edge's base vertex \f$ b(\sigma) = \min\sigma \f$ — the convention of
+  /// the twisted incidences \f$ (\partial_k^U)_{\tau\sigma} =
+  /// (\partial_k)_{\tau\sigma}\,U_{b(\tau)b(\sigma)} \f$ (`CovariantChainHodge`),
+  /// under which a link \f$ U_{xy} \f$ carries a value at \f$ y \f$ to
+  /// \f$ x \f$. For the walk \f$ v_0 \to v_1 \to \cdots \to v_n = v_0 \f$
+  /// with steps across the edges \f$ \sigma_k \f$ and signs \f$ s_k \f$,
+  /// \f[
+  ///   P = \sum_k s_k\,\bigl(U_{v_0v_1}U_{v_1v_2}\cdots U_{v_{k-1}v_k}\bigr)\,
+  ///       U_{v_k\,b(\sigma_k)}\,\omega_{\sigma_k},
+  /// \f]
+  /// the value in the frame at the base point \f$ v_0 \f$: each step's value
+  /// is moved from the edge's base vertex to the step's source
+  /// (\f$ U_{v_k b(\sigma_k)} \f$: the identity along the edge's orientation,
+  /// the link \f$ U_{v_kv_{k+1}} \f$ against it) and then back along the walk
+  /// to \f$ v_0 \f$.
+  ///
+  /// WHY: with the trivial connection this is the plain signed sum
+  /// \f$ \sum_k s_k\,\omega_{\sigma_k} \f$ of
+  /// `cobordism::EigenstateSynthesis::periodsOfCochainOverLoops` and
+  /// `cobordism::MultiCobordism::monodromy`. Under a pure gauge
+  /// \f$ U = 1^g \f$, \f$ U_{xy} = g_x^{-1}g_y \f$, on a cochain of the twisted
+  /// kernel (\f$ \omega^U = \rho_1\omega \f$, \f$ \omega^U_\sigma =
+  /// g_{b(\sigma)}^{-1}\omega_\sigma \f$) every term collapses to
+  /// \f$ g_{v_0}^{-1} s_k\omega_{\sigma_k} \f$: the transported period is
+  /// \f$ g_{v_0}^{-1} \f$ times the plain period of the untwisted cochain —
+  /// the base-point gauge factor only — so the ratio of the periods over two
+  /// walks with a COMMON base point (\f$ \tau = P_B/P_A \f$ of a qubit torus,
+  /// the coefficient pair of a state in a period frame) is gauge invariant.
+  /// This is the one place the engine takes a period with parallel transport
+  /// (`observables::SimplicialQubit`, the qubit spec §16; the period frames
+  /// and the monodromy read of the cobordism spec §2, D3).
+  /// @throws std::invalid_argument when the cochain has the wrong length or
+  ///   the walk is empty, does not chain or close, or steps across a non-edge.
+  [[nodiscard]] Complex transportedPeriod(const Eigen::VectorXcd &cochain, const Walk &walk) const;
   /// True when every link has unit modulus (a U(1) connection).
   [[nodiscard]] bool isUnitary(double tolerance = 1e-12) const;
 
@@ -74,6 +131,9 @@ class Connection {
   std::map<std::pair<std::uint64_t, std::uint64_t>, int> index_;
   std::vector<std::pair<std::uint64_t, std::uint64_t>> edges_;
   Connection() = default;
+  // Checks that a walk is non-empty, chains, closes, and steps along edges;
+  // returns the canonical index and sign of every step.
+  [[nodiscard]] std::vector<std::pair<int, double>> checkWalk(const Walk &walk, const char *who) const;
 };
 
 /// The residuals of the exact properties of specification Prop. 5.1, measured

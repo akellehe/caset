@@ -295,7 +295,16 @@ def test_reading_the_spacetime_directly_gives_the_same_state():
     # Exactly one of the two orientations agrees with the marking's A.B = +1;
     # the other is caught by the Im tau < 0 rule of section 9.
     assert sum(any("conjugate" in w for w in x.warnings()) for x in (direct, flipped)) == 1
+    # A complex length is read (section 16, test_simplicial_qubit_complex_python.py);
+    # a real non-positive one is still refused by section 2.
+    edges = list(st.getEdgeList().toVector())
+    original = edges[0].getLength()
+    edges[0].setLength(complex(original) * (1 + 0.1j))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        off = SimplicialQubit(st, list(q.cycle_A()), list(q.cycle_B()))
+    assert not off.on_real_locus() and direct.on_real_locus()
+    edges[0].setLength(-abs(complex(original)))
     with pytest.raises(ValueError, match="real and positive"):
-        edges = list(st.getEdgeList().toVector())
-        edges[0].setLength(complex(edges[0].getLength()) * (1 + 0.1j))
         SimplicialQubit(st, list(q.cycle_A()), list(q.cycle_B()))
+    edges[0].setLength(original)
