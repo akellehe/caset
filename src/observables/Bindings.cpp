@@ -31,6 +31,7 @@
 #include "observables/VolumeProfile.h"
 #include "observables/WilsonLoop.h"
 #include "observables/Spectral.h"
+#include "observables/SimplicialQubit.h"
 #include "observables/Record.h"
 #include "observables/ClusterRegister.h"
 #include "observables/RegisterContext.h"
@@ -1081,6 +1082,129 @@ Args:
            "Compute and accumulate a volume profile measurement for averaging.")
       .def("reset", &VolumeProfile::reset,
            "Reset the accumulated measurements.");
+  // ========================================
+  // Simplicial qubit (#955): docs/design/simplicial_qubit_spec.md, section 14 API
+  // ========================================
+  {
+    auto emitWarnings = [](const SimplicialQubit &q) {
+      if (q.warnings().empty()) return;
+      std::string text;
+      for (const auto &w : q.warnings()) {
+        if (!text.empty()) text += " | ";
+        text += w;
+      }
+      py::module_::import("warnings").attr("warn")(text);
+    };
+    py::class_<SimplicialQubit>(m, "SimplicialQubit",
+        "A single qubit state encoded as the holomorphic line in the harmonic space of the "
+        "metric Hodge Laplacian on a triangulated torus (docs/design/simplicial_qubit_spec.md). "
+        "Input: vertices 0..nV-1, edges (i, j) with i < j, consistently oriented faces (i, j, k), "
+        "real positive edge lengths, and marked cycles A, B as (edge_index, sign) lists with "
+        "A.B = +1. Computed on load: the section-2 validations; d0, d1; per-face angles, Heron "
+        "areas and local layouts; cotangent weights M1 = diag(w_e) (negative weights and "
+        "Delaunay violations flagged); the harmonic space H = null_space([d1; d0.T M1]) of "
+        "dimension 2; the Whitney-form L2 inner product at barycenters; the complex structure "
+        "J = G^{-1} R.T by rotate-then-project with its residual ||J J + I||_F; the holomorphic "
+        "line, periods, tau = P_B / P_A in the upper half plane; the state, Bloch vector and "
+        "density matrix; and the section-13 degeneration warnings. The optional intrinsic "
+        "Delaunay edge-flip pass is intrinsic_delaunay(). Alternatively read a Spacetime of "
+        "dimension 2 directly (its faces are oriented by the fundamental class; reversed=True "
+        "selects the other hemisphere).")
+        .def(py::init([emitWarnings](std::vector<std::uint64_t> vertices,
+                                     std::vector<SimplicialQubit::EdgePair> edges,
+                                     std::vector<SimplicialQubit::Face> faces,
+                                     std::vector<double> lengths, SimplicialQubit::Cycle cycle_A,
+                                     SimplicialQubit::Cycle cycle_B, double degeneracy_threshold) {
+               SimplicialQubit q(std::move(vertices), std::move(edges), std::move(faces),
+                                 std::move(lengths), std::move(cycle_A), std::move(cycle_B),
+                                 degeneracy_threshold);
+               emitWarnings(q);
+               return q;
+             }),
+             py::arg("vertices"), py::arg("edges"), py::arg("faces"), py::arg("lengths"),
+             py::arg("cycle_A"), py::arg("cycle_B"), py::arg("degeneracy_threshold") = 1e8,
+             "The section-2 / section-14 constructor. Raises ValueError when a validation of "
+             "section 2 fails and RuntimeError when dim H != 2 (section 6).")
+        .def(py::init([emitWarnings](const std::shared_ptr<Spacetime> &spacetime,
+                                     SimplicialQubit::Cycle cycle_A, SimplicialQubit::Cycle cycle_B,
+                                     bool reversed, double degeneracy_threshold) {
+               SimplicialQubit q(spacetime, std::move(cycle_A), std::move(cycle_B), reversed,
+                                 degeneracy_threshold);
+               emitWarnings(q);
+               return q;
+             }),
+             py::arg("spacetime"), py::arg("cycle_A"), py::arg("cycle_B"), py::arg("reversed") = false,
+             py::arg("degeneracy_threshold") = 1e8,
+             "Read a Spacetime of dimension 2: vertices by ascending id, edges in ascending (i, j) "
+             "order (the order the cycles index), faces oriented by the fundamental class "
+             "(reversed flips them), real positive lengths required.")
+        // ---- section 14
+        .def("harmonic_basis", &SimplicialQubit::harmonicBasis, "H: nE x 2 real (section 6).")
+        .def("complex_structure", &SimplicialQubit::complexStructure, "J: 2 x 2 real (section 8).")
+        .def("j_residual", &SimplicialQubit::jResidual, "||J @ J + I||_F (section 8).")
+        .def("holomorphic_form", &SimplicialQubit::holomorphicForm, "omega: nE complex (section 9).")
+        .def("periods", &SimplicialQubit::periods, "(P_A, P_B) (section 9).")
+        .def("tau", &SimplicialQubit::tau, "P_B / P_A (section 9).")
+        .def("state", &SimplicialQubit::state, "(|0> + tau|1>) / sqrt(1 + |tau|^2) (section 10).")
+        .def("bloch", &SimplicialQubit::bloch, "The Bloch vector (section 10).")
+        .def("density_matrix", &SimplicialQubit::densityMatrix, "rho = (I + r . sigma) / 2 (section 10).")
+        .def_static("flat_torus",
+                    [emitWarnings](std::complex<double> tau, int nx, int ny) {
+                      SimplicialQubit q = SimplicialQubit::flatTorus(tau, nx, ny);
+                      emitWarnings(q);
+                      return q;
+                    },
+                    py::arg("tau"), py::arg("nx"), py::arg("ny"),
+                    "The flat torus C / (Z + tau Z): unit cell spanned by 1 and tau as an nx x ny "
+                    "grid split by its diagonals, sides identified, marked by the row loop A and "
+                    "the column loop B (section 12). Exact: returns tau to rounding.")
+        // ---- section 5: the optional preprocessing pass
+        .def("intrinsic_delaunay",
+             [emitWarnings](const SimplicialQubit &q) {
+               SimplicialQubit r = q.intrinsicDelaunay();
+               emitWarnings(r);
+               return r;
+             },
+             "Flip every edge with alpha_e + beta_e > pi until none remains (marked cycles "
+             "rerouted); returns the qubit of the flipped triangulation (section 5).")
+        .def("delaunay_flip_count", &SimplicialQubit::delaunayFlipCount)
+        // ---- inputs
+        .def("vertices", &SimplicialQubit::vertices)
+        .def("edges", &SimplicialQubit::edges, "E = [(i, j)], the order the cycles index.")
+        .def("faces", &SimplicialQubit::faces, "F = [(i, j, k)], consistently oriented.")
+        .def("lengths", &SimplicialQubit::lengths)
+        .def("cycle_A", &SimplicialQubit::cycleA)
+        .def("cycle_B", &SimplicialQubit::cycleB)
+        .def("degeneracy_threshold", &SimplicialQubit::degeneracyThreshold)
+        .def("spacetime", &SimplicialQubit::spacetime, "The Spacetime holding vertices, edges, lengths.")
+        // ---- intermediate quantities
+        .def("d0", &SimplicialQubit::d0, "nE x nV (section 3).")
+        .def("d1", &SimplicialQubit::d1, "nF x nE (section 3).")
+        .def("angles", &SimplicialQubit::angles, "Per face (alpha_i, alpha_j, alpha_k) (section 4).")
+        .def("areas", &SimplicialQubit::areas, "Per face the Heron area (section 4).")
+        .def("layout", &SimplicialQubit::layout, "Per face (p_i, p_j, p_k) in its local frame (section 4).")
+        .def("barycentric_gradients", &SimplicialQubit::barycentricGradients,
+             "Per face (grad lambda_i, grad lambda_j, grad lambda_k) (section 7).")
+        .def("weights", &SimplicialQubit::weights, "The cotangent weights w_e (section 5).")
+        .def("negative_weight_edges", &SimplicialQubit::negativeWeightEdges)
+        .def("non_delaunay_edges", &SimplicialQubit::nonDelaunayEdges,
+             "Edges with alpha_e + beta_e > pi (section 5).")
+        .def("gram", &SimplicialQubit::gram, "G[a][b] = <h_a, h_b> (section 8).")
+        .def("rotation_pairing", &SimplicialQubit::rotationPairing,
+             "R[a][b] = sum_t A_t rot90(W_t(h_a)) . W_t(h_b) (section 8).")
+        .def("marking_swapped", &SimplicialQubit::markingSwapped,
+             "True when |P_A| vanished and -1/tau of the given marking is reported (section 9).")
+        .def("condition_m1", &SimplicialQubit::conditionM1, "cond(M1) (section 13).")
+        .def("condition_g", &SimplicialQubit::conditionG, "cond(G) (section 13).")
+        .def("near_degenerate", &SimplicialQubit::nearDegenerate)
+        .def("warnings", &SimplicialQubit::warnings, "Every warning the construction raised.");
+    m.def("fubini_study_distance", &SimplicialQubit::fubiniStudyDistance, py::arg("q1"), py::arg("q2"),
+          "arccos(|1 + conj(tau1) tau2| / sqrt((1+|tau1|^2)(1+|tau2|^2))): distinguishability, "
+          "curvature +4 (section 11).");
+    m.def("weil_petersson_distance", &SimplicialQubit::weilPeterssonDistance, py::arg("q1"), py::arg("q2"),
+          "arccosh(1 + |tau1 - tau2|^2 / (2 Im tau1 Im tau2)): the moduli distance between shapes, "
+          "curvature -1 (section 11).");
+  }
   // ========================================
   // Hodge spectral Observables (#95): scalars over cobordism::HodgeLaplacian
   // ========================================

@@ -123,6 +123,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} Spectral.h
 ```
+```{doxygenfile} SimplicialQubit.h
+```
 ```{doxygenfile} WilsonLoop.h
 ```
 ```{doxygenfile} MIUnits.hpp

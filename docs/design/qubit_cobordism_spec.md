@@ -1,0 +1,301 @@
+# Qubit cobordism — standalone spec (follow-up to #955)
+
+This document is the single source of truth for the experiment that puts the
+simplicial qubit (`simplicial_qubit_spec.md`, implemented in
+`observables::SimplicialQubit`, PR #957) into the cobordism engine. It is
+written to be picked up from scratch: read it before touching code, audit the
+work against it before and after, and treat every "Do not" as binding. Where
+it names engine facts, they were verified in the tree at `origin/main`
+`d8d87ec` (2026-09-05); re-verify line-level details, not the facts.
+
+## 1. What is being built, in one paragraph
+
+Two qubits are two 2-tori with real edge lengths whose degree-1 harmonic
+spaces (the zero modes of their own Laplacians) are the states, τ being the
+coordinate of the holomorphic line in each torus's marking. They are the
+boundary of a 3-complex W. The bulk of W is *drawn* between them by gated
+bridging cells and then synthesized by the engine's stage 1 (combinatorial
+moves) and stage 2 (length relaxation) against the algebraic two-body target.
+The output state is the degree-1 zero mode of the Laplacian of the **entire**
+W, bulk and boundary edges together. Throughout, each torus keeps
+representing its input state through the zero mode of its **own** Laplacian
+(a residual in the objective), and nothing is pinned. The run is driven and
+displayed by `examples/cobordism/emergence_animation.py`, one implementation.
+
+## 2. Vocabulary (use these words, no others)
+
+- **State**: a zero mode (harmonic chain/form) of a Laplacian. Never a
+  coordinate vector chosen by hand, never a period vector, never a cochain
+  with coefficients constructed outside the geometry.
+- **Qubit torus**: a closed oriented triangulated 2-torus with real positive
+  edge lengths and a marking (A, B), A·B = +1, as in the qubit spec. Its state
+  is its holomorphic line ω (the −i eigenline of the complex structure on its
+  harmonic space). τ = P_B/P_A is that line's coordinate; the marking exists
+  so τ can be *reported*, nothing else.
+- **Input block**: a boundary component of W carrying an input qubit torus.
+  A block is a vertex set plus the fiber it carries (engine `BoundaryBlock`).
+- **The whole**: W with every edge, boundary included, in one Laplacian. The
+  output state is its zero mode.
+- **Own Laplacian of a block**: the Laplacian of the block's surface, the
+  2-complex of its own triangles with the host's current lengths.
+- **Fiber**: engine `BoundaryFiber`: a degree, a list of k-cells, and image
+  columns on those cells. At degree 1 the cells are edges.
+- **Leak / fiber residual**: the least-squares residual of a fiber's images
+  inside the zero-mode band of a pencil restricted to the fiber's cells.
+- **Bridge**: a top cell whose vertices are split across two blocks
+  (tetrahedra: 1+3, 2+2, 3+1), created on existing vertices only.
+- **Gate**: the manifold check `ChainComplex::dualComplexIsValid` (facet
+  coface counts in {1, 2}, ridge links paths or cycles, vertex links disks or
+  spheres), the only thing that decides whether a move may be applied.
+
+## 3. Rules from the owner (binding; quotes from 2026-09-05)
+
+R1. The output state is the whole's zero mode: "the output/target state is the
+    zero mode of the ENTIRE cobordism, bulk + boundary." Restriction to a
+    boundary component is a *read-out channel*, never the definition.
+
+R2. Fixed does not mean excluded: "the boundary … is what stays fixed. but
+    staying fixed does NOT exclude it from the output state readout of the
+    laplacian harmonic over the ENTIRE cobordism (bulk + boundary)."
+
+R3. Boundary cells may change: "pinned cells should change, but we must
+    continue to minimize their residuals (for their representation of their
+    initial/input states via their own laplacian's harmonic) alongside the
+    bulk." Hence: no pinned regions; the block's own-Laplacian residual is in
+    the objective next to the bulk terms.
+
+R4. The bulk is drawn, not templated: "choose a vertex on one of the boundary
+    blocks. cone it into 4 vertices on the other. or choose 2 and 3 or 3 and 2.
+    you just have to continue asserting the manifold condition as a gate."
+    (For tetrahedra the splits are 1+3, 2+2, 3+1.)
+
+R5. Do not split implementations: reuse the fiber machinery ("why do we need
+    to replace the fiber machinery?"), reuse MultiCobordism, reuse
+    `emergence_animation.py` ("run this as an animation in the same way").
+
+R6. States are zero modes, not cochains with hand-made coefficients ("it
+    sounds like you might be slipping into using cochains (with extra
+    machinery for coefficients) and skipping using the laplacian harmonic as
+    the states").
+
+R7. The zero mode, not the band above it (earlier: "i wanted the zero mode").
+
+R8. Program-wide rules that still apply: hosts and bulks are emergent (no
+    hand-built prisms or collars); no runtime guards or clamps in the
+    dynamics, only configuration-space gates (the manifold check) and
+    variational acceptance (ΔF); Lorentzian machinery is the default (the tori
+    here are real and spacelike; nothing is added for phases unless asked).
+
+## 4. The construction, step by step
+
+S1. **Inputs.** For each input state τ_in ∈ upper half plane, build the qubit
+    torus with `SimplicialQubit.flat_torus(tau_in, n, n)` (exact: the read
+    returns τ_in to rounding). Its edges, faces (counterclockwise), lengths
+    and cycles are its own data; its holomorphic form on its edges is the
+    state fiber. Both tori must have Im τ > 0 (the representable hemisphere);
+    the poles |0⟩, |1⟩ are limits reached by pinching, not inputs.
+
+S2. **Host initialization.** One 3-dimensional `Spacetime` containing both tori
+    as 2-simplices (their triangles, edges, vertices) with their lengths and
+    zero phases, disjoint vertex id ranges, and no 3-cells yet. Each torus's
+    vertex set is one input block (`seed_inputs`); its state fiber is
+    attached to its edges at degree 1 (`attach_input_fiber`) with the
+    **harmonic contour** (`PencilLayer.harmonic_contour` / `band_contour(…, 0)`)
+    set on the fiber; the metric source is the Whitney pencil. The two-body
+    target χ is set (S5). `use_fiber_residuals(True)`.
+
+S3. **Drawing the bulk (bridge phase).** Stage 1 with bridge moves: draw a
+    candidate top cell on existing vertices, k from one block and 4 − k from
+    the other, apply, run the gate, score by ΔF, keep or roll back. Repeat
+    until *completion*: every face of both tori has exactly one 3-cell on it
+    and no other boundary face exists, so ∂W = T_A ⊔ T_B. During drawing the
+    uncovered torus faces are not faces of any top cell; the gate is run on
+    the top cells that exist. An additional gate condition holds throughout:
+    the sub-complex on each block's vertex set is exactly its torus (no chord
+    edge or face inside a block is ever created). Record Betti numbers and the
+    monodromy (S6) of the drawn manifold: the topology is emergent and may or
+    may not be the collar.
+
+S4. **Synthesis.** Per frame: ordinary stage 1 (adds, flips, cone-outs,
+    cone-ins with fresh vertices; bridges no longer needed), then stage 2 on
+    all edges. The objective is the engine's: Regge stationarity plus Γ·r_U,
+    where r_U under fiber residuals is the sum of each block's own-Laplacian
+    fiber residual (weight `inputResidualWeight`), the whole-complex fiber
+    residual if a whole-complex target is set, and the two-body residual.
+    Stage 1 runs before stage 2 within a frame (a committed stage-1 move
+    rebuilds the complex with lengths only).
+
+S5. **Target.** The two-qubit XY flip-flop, mirroring the spin-3/2 experiment:
+    H_int = ħJ(σ₁⁺σ₂⁻ + σ₁⁻σ₂⁺), first-order amplitude A = −iJt χ with
+    χ = (σ⁻ψ)(σ⁺φ)ᵀ + (σ⁺ψ)(σ⁻φ)ᵀ in the |0⟩, |1⟩ bases of the two qubits
+    (ψ = (1, τ_A)/√(1+|τ_A|²), φ likewise), exact evolution by the
+    total-magnetization blocks (sizes 1, 2, 1). χ is the two-body target
+    (`set_two_body_target(chi, choi_decomposed)`), compared with the transfer
+    read in the tori's period frames (S6) by the engine's projective leak.
+
+S6. **Read-outs, every frame.**
+    - Per block: its own-Laplacian fiber residual; the qubit read
+      (`SimplicialQubit(surface, cycle_A, cycle_B)`) on the block's surface
+      with the live lengths: τ̂, d_FS and d_WP to τ_in, Delaunay flags, the
+      spec's J residual. The marking is the flat torus's cycle pair; its edges
+      persist under every engine move (see §6), so the read is always defined.
+    - The whole: Betti numbers, boundary components, completion status, the
+      rank of the degree-1 harmonic band, the leak of each input line in the
+      whole's zero mode restricted to that torus's edges (a channel, per R1),
+      the transfer T in the period frames (2×2), its projective leak against
+      χ, the Schmidt spectrum and rank (Choi flag), the monodromy: the
+      integer matrix relating the two markings through the whole's zero mode,
+      M = P_B P_A⁻¹ from the periods of the whole's harmonic forms over the
+      two tori's cycles (an element of SL(2, Z) when W is an I-bundle).
+    - The objective and its terms.
+
+S7. **Recursion.** As in `recursion_as_propagation.py`: the whole's zero mode
+    read on the tori (period coordinates in their markings) is the next
+    layer's input; `velocity` = fresh node per layer, `extend` = the same
+    cobordism continued. Nothing new is designed here until S1–S6 run.
+
+## 5. Engine deltas (all additive; nothing else changes)
+
+D1. **Bridge move** (`cobordism::SurgicalCone`, next to `coneOut`/`coneIn`):
+    create the top cell on d + 1 existing vertices, auto-wiring missing edges
+    with the engine's auto-wired length; gate with `dualComplexIsValid` plus
+    the no-chord condition of S3; roll back bit-exactly (remove the cell and
+    every edge it alone introduced). Stage 1 draws bridge candidates from
+    vertex splits across the two input blocks while any torus face is
+    uncovered (a `BuildAction`/move kind, scored by ΔF like `cone_out`), and a
+    completion test reports ∂W = T_A ⊔ T_B.
+
+D2. **Block surface complex.** `blockSubcomplexWithGeometry` extracts the top
+    cells inside a block's vertex set, which is empty for a surface block in a
+    3-complex. For a block whose fiber degree is below the host dimension, the
+    block's own complex is the 2-complex of its own triangles inside its
+    vertex set, with the host's lengths and phases. The per-block fiber
+    residual and its gradient then read the torus's own Laplacian, which is
+    R3.
+
+D3. **Transfer in period frames.** `frameTransferOn` uses identity frames on
+    the fibers' cells (an edge-by-edge block at degree 1). Each block supplies
+    a frame: the basis of its own harmonic space with periods (1, 0) and
+    (0, 1) over its marking (the qubit read's `harmonic_basis` times the
+    inverse period matrix), images on its edges with dual images. The
+    transfer is read in those frames (2×2), which is what χ is written in.
+    The state fibers stay rank one; the frames are separate data.
+
+D4. **Animation.** `emergence_animation.py` gains a qubit input mode:
+    `--inputs qubit --tau-a --tau-b --grid --J --time`, a node factory in
+    `drive` (default = the current host/node), frame channels for the S6
+    read-outs, panels for the residual traces, the two τ̂ trajectories on the
+    upper half plane and the Bloch hemisphere, the transfer versus χ, and the
+    drawn boundary highlighted in the layout. Headless and `--live` paths are
+    the same loop. Records go under `~/cobordism-runs/qubit-cobordism/`
+    (never `/tmp`).
+
+## 6. Engine facts to rely on (verified 2026-09-05)
+
+- Fibers are degree-generic; cells are any k-cells of the live complex, edges
+  included; a listed cell that does not exist gives the full leak 1.0.
+- The default fiber contour is band 1 (above the zero mode); the harmonic
+  contour must be set explicitly on every fiber and read (R7).
+- All fiber and two-body paths require the Whitney pencil metric source.
+- Under fiber residuals the engine skips the hole-forcing near-kernel term and
+  demands no register count.
+- Pinned regions only zero stage-2 descent on edges inside one region; they
+  are not used in this experiment (R3).
+- Stage 1 candidates: add, remove, flip, iflip, cone_out (random top cell),
+  cone_in (fresh apex on a boundary face); the gate is the manifold check;
+  Pachner moves preserve Betti numbers; a cone-out raises b₂, a cone-in
+  lowers it. No existing move creates genus, which is why the tori are inputs
+  and the bulk is drawn (R4).
+- Under these moves a torus edge is never removed: cone-in on a face keeps
+  the face's edges on the boundary; a cone-out dent keeps them; 3-2 flips act
+  on interior edges; 4-1 removals act on interior vertices. So edge-indexed
+  fibers and markings survive; the surface gains vertices and faces.
+- A committed stage-1 move restores lengths only (phases reset to zero);
+  irrelevant for real tori, but run stage 1 before stage 2 in a frame.
+- The zero mode of the whole restricted to the boundary is topological: half
+  of the boundary's harmonic space extends into W. The bulk metric shapes the
+  representative on the edges and the transfer block, not the periods. A
+  collar-like drawing transmits τ unchanged; a drawing with monodromy applies
+  a modular transformation. This is a fact to report, not a defect.
+- The qubit read uses the spec's cotangent operator on the torus; the engine
+  uses the Whitney pencil. On flat tori both harmonic spaces are the constant
+  forms exactly; on a deformed torus they differ at mesh order. Report both.
+- Analytic gradients exist for the fiber and two-body residuals
+  (`BandDerivative`); no finite differences.
+- GIL: `run_stage1`, `run_stage2`, `two_body_residual`, `read_two_body`,
+  `whole_complex_fiber_residual`, `read_whole_complex_fiber` release it;
+  `build_step`, `attach_input_fiber`, `read_output_fiber` do not.
+
+## 7. Do not
+
+- Do not pin regions, freeze the tori, or exclude boundary edges from the
+  whole's Laplacian.
+- Do not build the bulk from `prismCells`, a collar, or any template; do not
+  add a tube/genus move; do not glue external complexes.
+- Do not add a modulus (τ) residual or any distance-in-moduli objective; τ is
+  read-out only. Markings never enter the relaxation.
+- Do not define the output state by restriction; do not read states as
+  period vectors in the relaxation.
+- Do not leave a fiber on the default band-1 contour.
+- Do not fork `emergence_animation.py`; parametrize it.
+- Do not replace or bypass the fiber residual machinery, MultiCobordism's
+  stages, or the two-body read.
+- Do not widen core classes for one consumer beyond D1–D4; extend, never wrap.
+- Do not introduce complex lengths or link phases on the tori unless asked.
+
+## 8. Checks that decide whether it worked
+
+C1. Drawing completes from two spec tori with the gate never bypassed; the
+    drawn W is a manifold with ∂W = T_A ⊔ T_B; its Betti numbers and monodromy
+    are recorded. Rollback is bit-exact (round trip leaves lengths and cells
+    identical).
+
+C2. Each block's own-Laplacian residual stays at its floor through drawing and
+    synthesis, and τ̂ on each torus equals τ_in within tolerance after
+    synthesis (the tori kept representing their inputs while their cells and
+    lengths moved).
+
+C3. With trivial monodromy, the whole's zero mode carries both input lines
+    (restricted leaks at rounding) and the transfer in period frames is
+    diagonal; with monodromy M, the periods transform by M.
+
+C4. The two-body leak against χ decreases under synthesis; its floor and the
+    Schmidt spectrum are recorded next to the χ of the algebra.
+
+C5. `emergence_animation.py --inputs qubit` runs headless and `--live` with
+    every channel present or `Absent(reason)`, and the existing run mode is
+    bit-identical to before.
+
+## 9. Existing code to start from
+
+- `examples/cobordism/two_body_xy_flip_flop.py`: single-seed growth, per-input
+  fibers on frames, `set_two_body_target`, `read_two_body`, residual traces.
+- `examples/cobordism/choi_encoding.py`: two prepared boundary components as
+  inputs, the whole complex as output (its prism host is what R4 replaces).
+- `examples/cobordism/emergence_animation.py`: `drive`, `EmergenceFrame`,
+  `_PANELS`, `drive_live`, `render`.
+- `include/cobordism/MultiCobordism.h`: `seedInputs`, `attachInputFiber`,
+  `setWholeComplexFiberTarget`, `setTwoBodyTarget`, `readTwoBody`,
+  `useFiberResiduals`, `runStage1`, `runStage2`, `fiberModeAscent`,
+  `blockSubcomplexWithGeometry`, `frameTransferOn`.
+- `include/cobordism/SurgicalCone.h`: `coneOut`, `coneIn`, rollback, gate.
+- `include/cobordism/PencilLayer.h`: `BoundaryFiber`, `harmonicContour`,
+  `bandContour`, `indicesOf`, `transfer`.
+- `include/observables/SimplicialQubit.h`: `flatTorus`, `harmonicBasis`,
+  `holomorphicForm`, `periods`, `tau`, the `Spacetime` constructor.
+- `docs/design/cobordism.md` (historical MergeCobordism note): boundary
+  components as the states, the whole as the output; its prism/icosahedron
+  start and its period readouts are superseded by R1, R3, R4.
+
+## 10. Ticket order
+
+T1. Bridge move (D1) with tests: gate, rollback, completion on two spec tori,
+    no-chord condition, monodromy read on the drawn manifold.
+T2. Block surface complex (D2) with tests: own-Laplacian residual of a torus
+    block before and after bridging equals the standalone torus read.
+T3. Transfer in period frames (D3) with tests: identity on a trivially drawn
+    collar, χ comparison shape 2×2.
+T4. Animation qubit mode (D4) with tests: existing mode unchanged; qubit mode
+    produces every channel headless.
+T5. The run: records, findings note `docs/design/qubit_cobordism_findings.md`,
+    C1–C5 answered with numbers.
