@@ -248,7 +248,13 @@ These are properties of the construction, not bugs to work around.
 Lengths may be complex. Every formula of §4–§9 is taken over C: the principal
 branch of acos in §4, the continuation branch (from the real reference) of the
 square roots in §4 (Heron) and §9, the transpose (bilinear, not Hermitian)
-pairing in §7 and §8, a complex null space in §6. Link phases are a pure gauge;
-they enter only the periods of §9, taken with parallel transport, and leave
-`tau` invariant. The eigenline of §9 is chosen by continuity from the real
+pairing in §7 and §8, a complex null space in §6. Link phases are a pure gauge.
+They enter through the twisted incidences of §3 and §6 (each edge value
+carried to its cell's base vertex by the link), through the pairings of §7 and
+§8 taken between the kernel and the dual kernel (the same construction under
+the inverse links), and through the periods of §9, taken with parallel
+transport from one common base point of the two cycles; together these leave
+`tau`, the state and the coefficients in the period frame invariant. A
+connection that is not a pure gauge (flux through a face, or holonomy around a
+cycle) is refused by name. The eigenline of §9 is chosen by continuity from the real
 reference, since `Im(tau) > 0` is not a criterion off the real locus.
