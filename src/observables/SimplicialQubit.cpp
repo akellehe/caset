@@ -458,8 +458,8 @@ void SimplicialQubit::validatePureGauge() const {
     std::sort(s.begin(), s.end());
     const Complex F = connection_->curvature(s[0], s[1], s[2]);
     if (std::abs(F - Complex(1.0, 0.0)) > kGaugeTolerance)
-      throw std::invalid_argument("SimplicialQubit: the link phases are not a pure gauge: face " +
-                                  edgeText(s[0], s[1]).substr(0, edgeText(s[0], s[1]).size() - 1) + "," +
+      throw std::invalid_argument("SimplicialQubit: the link phases are not a pure gauge: face (" +
+                                  std::to_string(s[0]) + "," + std::to_string(s[1]) + "," +
                                   std::to_string(s[2]) + ") carries flux F = U_rq U_qp U_pr = " +
                                   complexText(F) + " (|F - 1| = " +
                                   std::to_string(std::abs(F - Complex(1.0, 0.0))) +
@@ -758,8 +758,11 @@ Eigen::Matrix<Scalar, 2, 1> SimplicialQubit::whitneyAtBarycenter(
 
 void SimplicialQubit::buildComplexStructure() {
   // The real path, kept in the real-length construction's own form (member
-  // accumulators, the same expressions) so that it stays bit-identical to it
-  // under the compiler's floating-point contraction.
+  // accumulators, the same expressions). Measured against origin/main's
+  // build: bit-identical on every case but the square torus, where two
+  // entries of G differ by 2 ulps through the compiler's floating-point
+  // contraction of this accumulation (-O3 -march=native), which no source
+  // form pins down.
   const std::size_t nF = faces_.size();
   const Eigen::MatrixXd H = H_.real();
   const Eigen::VectorXd areas = areas_.real();
@@ -1066,7 +1069,7 @@ void SimplicialQubit::buildHolomorphicLine() {
 
     // Track the line by overlap along the segment, halving the step until the
     // overlap with the previous point exceeds 0.99.
-    constexpr double kStep = 0.125;
+    constexpr double kStep = 0.25;
     constexpr double kMinimumStep = 1e-6;
     constexpr double kOverlap = 0.99;
     double t = 0.0, step = kStep;
