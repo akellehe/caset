@@ -1,38 +1,43 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
-"""The bridge move: drawing the bulk between two boundary blocks (#960, T1 of
+"""The bridge move and the collar seed (#960, T1 of
 ``docs/design/qubit_cobordism_spec.md``).
 
-Two qubit tori (``SimplicialQubit.flat_torus``) are seeded into one
+Two qubit tori (``SimplicialQubit.flat_torus``) can be seeded into one
 3-dimensional host as their own triangles with their lengths and no 3-cell
-(``MultiCobordism.seed_from_surfaces``), each torus one input block. The bulk
-is DRAWN: ``SurgicalCone.bridge`` creates a tetrahedron on existing vertices
-split across the two blocks (1+3, 2+2, 3+1), gated by the manifold check and
-nothing else, rolled back bit-exactly on refusal; ``draw_bridges`` repeats it
-until every torus face has exactly one 3-cell on it and no other boundary face
-exists, so the boundary of W is exactly the two tori. The drawn topology is
-emergent: its Betti numbers and the monodromy of the whole's degree-1 zero
-mode between the two markings are recorded, never prescribed.
+(``MultiCobordism.seed_from_surfaces``), each torus one input block; that is
+the host the bridge primitive is exercised on. ``SurgicalCone.bridge`` creates
+a tetrahedron on existing vertices split across the two blocks (1+3, 2+2,
+3+1), gated by the manifold check and nothing else, rolled back bit-exactly
+on refusal. The experiment's host is the COLLAR (``MultiCobordism.seed_collar``,
+spec S3): the minimal manifold connecting the two tori, the prism over their
+shared triangulation created as one gated whole, so that the boundary of W is
+exactly the two tori by construction; everything after it is emergent, with
+``bridge`` one more gated stage-1 move kind. A per-cell drawing from nothing
+cannot reach that boundary (a cell the gate accepts meets the complex along a
+disk, so the drawing stays a ball), which is why the collar is the seed.
 
 Coverage:
 
-* the seed holds each torus exactly (faces, edges, lengths, zero phases,
+* the bare seed holds each torus exactly (faces, edges, lengths, zero phases,
   disjoint id ranges, no 3-cell) and the blocks' own surfaces are the tori;
 * the gate refuses a non-manifold bridge (a cell sharing only a vertex or only
   an edge with the drawing, a third cell on a face) and malformed input,
   leaving the complex unchanged;
 * an accepted bridge round-trips bit-exactly, including after the cell's face
   lattice was materialized by a read, and LIFO with a second bridge;
-* a drawing from a 3x3 and a 4x4 torus is gated (a manifold-with-boundary),
-  chordless (each block's sub-complex on its vertex set is still exactly its
-  torus), every cell straddles the blocks, no vertex is buried, the tori's
-  lengths never move, and the Betti numbers and monodromy read are reported;
-  completion itself is a strict expected failure carrying the finding that
-  random gated bridging does not complete (``COMPLETION_FINDING``);
-* the monodromy read is checked on a prism collar of known topology (identity,
-  and the swap matrix under a re-marked far end);
-* stage 1 never sees the bridge kind on an ordinary node, and a rebuild after
-  a committed move keeps the uncovered torus faces.
+* the collar seed from 3x3 and from 4x4 tori is a manifold with boundary
+  exactly T_A and T_B, complete by construction, chordless, every cell
+  straddling the blocks, the tori's lengths verbatim and the interior edges
+  auto-wired, Betti numbers [1, 2, 1, 0], monodromy the identity for the
+  markings carried through the id maps (swap and reversal of the far marking
+  give the swap and sign matrices); interior layers are fresh vertices; a
+  mismatched pair is refused by name;
+* on the collar every bridge the gate refuses is refused by name with the
+  complex unchanged, an accepted one rolls back bit-exactly, the stage-1
+  bridge kind has nothing to draw, and a cone-out dent reopens the phase;
+* stage 1 never sees the bridge kind on an ordinary node, and a committed
+  rebuild keeps uncovered torus faces.
 """
 import math
 import os
