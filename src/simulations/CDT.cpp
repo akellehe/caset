@@ -268,51 +268,46 @@ int CDT::sweep() {
   return accepted;
 }
 
-double CDT::measureVolumeDrift(int windowSweeps, std::size_t floorVolume) {
+double CDT::measureVolumeDrift(int windowSweeps, std::size_t floorVolume,
+                               std::size_t ceilingVolume) {
   auto volume = [this] {
-    return static_cast<double>(spacetime->getN41() + spacetime->getN32());
+    return spacetime->getN41() + spacetime->getN32();
   };
-  const double before = std::max(volume(), 1.0);
+  const double before = std::max(static_cast<double>(volume()), 1.0);
   int done = 0;
   for (int i = 0; i < windowSweeps; ++i) {
     sweep();
     ++done;
-    if (spacetime->getN41() + spacetime->getN32() < floorVolume) break;
+    const std::size_t now = volume();
+    if (now < floorVolume || now > ceilingVolume) break;
   }
-  const double after = volume();
+  const double after = static_cast<double>(volume());
   return (after - before) / (before * static_cast<double>(std::max(done, 1)));
 }
 
-void CDT::tune(std::function<void(int,int)> progress) {
-  int d = getDim(spacetime);
-  if (d <= 1) return;  // CDT requires d >= 2
-
-  // The action's per-simplex cost alone puts k4 here: it is where a single
-  // (2,2d) add move has dS_Regge = -(k0+6Δ) + (2d-2)(k4+2Δ) = 0. That ignores
-  // the entropy of the triangulations reachable at this volume, which is what
-  // actually sets the pseudo-critical coupling, so this value only starts the
-  // search (#965).
-  k4 = (k0 + 6.0 * delta) / (2.0 * d - 2.0) - 2.0 * delta;
-
-  // Criticality is a property of k4 against the entropy, so the volume-fixing
-  // term plays no part in locating it.
+void CDT::locatePseudoCriticalCoupling(int windowSweeps, int bisectionSteps,
+                                      double tolerance,
+                                      const std::function<void()> &report) {
+  // Criticality is a property of k4 against the entropy of the triangulations,
+  // so the volume-fixing term plays no part in locating it.
   const double configuredEpsilon = epsilon;
   epsilon = 0.0;
 
-  // Never let a coupling far above critical dismantle the configuration the
-  // caller is about to run: hold half the volume tuning started with.
-  const std::size_t floorVolume =
-      std::max<std::size_t>((spacetime->getN41() + spacetime->getN32()) / 2, 1);
-
-  const int totalSteps = kTuneMaxBracketSteps + kTuneBisectionSteps;
-  int step = 0;
-  auto report = [&progress, &step, totalSteps] {
-    if (progress) progress(std::min(++step, totalSteps), totalSteps);
-  };
+  // Hold the configuration inside a band around the volume this search starts
+  // at: a coupling far below critical inflates the complex, one far above
+  // dismantles it, and the sign of the drift is settled long before the volume
+  // leaves the band.
+  const double entryVolume =
+      static_cast<double>(spacetime->getN41() + spacetime->getN32());
+  const std::size_t floorVolume = std::max<std::size_t>(
+      static_cast<std::size_t>(entryVolume * (1.0 - kTuneVolumeBand)), 1);
+  const std::size_t ceilingVolume = std::max<std::size_t>(
+      static_cast<std::size_t>(entryVolume * (1.0 + kTuneVolumeBand)),
+      floorVolume + 1);
 
   // Bracket the drift sign change. Below the pseudo-critical coupling the
   // volume grows and k4 has to rise; above it the volume shrinks.
-  double drift = measureVolumeDrift(kTuneWindowSweeps, floorVolume);
+  double drift = measureVolumeDrift(windowSweeps, floorVolume, ceilingVolume);
   report();
   double below = k4, above = k4;
   double width = 1.0;
@@ -326,7 +321,7 @@ void CDT::tune(std::function<void(int,int)> progress) {
       k4 -= width;
     }
     width *= 2.0;
-    drift = measureVolumeDrift(kTuneWindowSweeps, floorVolume);
+    drift = measureVolumeDrift(windowSweeps, floorVolume, ceilingVolume);
     report();
     if (startsBelowCritical ? (drift <= 0.0) : (drift > 0.0)) {
       (startsBelowCritical ? above : below) = k4;
@@ -334,13 +329,12 @@ void CDT::tune(std::function<void(int,int)> progress) {
     }
   }
 
-  // If the sign never changed the bracket is open on one side; the last k4
-  // tried is the best estimate available and the bisection below is skipped.
+  // If the sign never changed the bracket is open on one side and the last k4
+  // tried is the best estimate available, so the bisection is skipped.
   if (below < above) {
-    for (int i = 0; i < kTuneBisectionSteps && above - below > kTuneTolerance;
-         ++i) {
+    for (int i = 0; i < bisectionSteps && above - below > tolerance; ++i) {
       k4 = 0.5 * (below + above);
-      drift = measureVolumeDrift(kTuneWindowSweeps, floorVolume);
+      drift = measureVolumeDrift(windowSweeps, floorVolume, ceilingVolume);
       report();
       if (drift > 0.0) below = k4;
       else above = k4;
@@ -349,6 +343,33 @@ void CDT::tune(std::function<void(int,int)> progress) {
   }
 
   epsilon = configuredEpsilon;
+}
+
+void CDT::tune(std::function<void(int,int)> progress) {
+  int d = getDim(spacetime);
+  if (d <= 1) return;  // CDT requires d >= 2
+
+  // The action's per-simplex cost alone puts k4 here: it is where a single
+  // (2,2d) add move has dS_Regge = -(k0+6Δ) + (2d-2)(k4+2Δ) = 0. That ignores
+  // the entropy of the triangulations reachable at this volume, which is what
+  // actually sets the pseudo-critical coupling, so this value only starts the
+  // search (#965).
+  k4 = (k0 + 6.0 * delta) / (2.0 * d - 2.0) - 2.0 * delta;
+
+  const int totalSteps = kTuneMaxBracketSteps + kTuneBisectionSteps;
+  int step = 0;
+  auto report = [&progress, &step, totalSteps] {
+    if (progress) progress(std::min(++step, totalSteps), totalSteps);
+  };
+
+  // The search runs at the volume the complex was built at. The pseudo-critical
+  // coupling does depend on the volume, but weakly -- measured, it moves by
+  // -0.023 between N4 = 1.5k and N4 = 6k -- while searching at the target volume
+  // instead measures the (3,2) sector relaxing toward its equilibrium, which is
+  // a transient over thousands of sweeps and not a property of the coupling.
+  locatePseudoCriticalCoupling(kTuneWindowSweeps, kTuneBisectionSteps,
+                               kTuneTolerance, report);
+
   if (progress) progress(totalSteps, totalSteps);
 }
 

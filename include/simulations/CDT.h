@@ -4,6 +4,7 @@
 #ifndef TESSERA_CDT_H
 #define TESSERA_CDT_H
 
+#include <functional>
 #include "simulations/Simulation.h"
 #include "spacetime/Spacetime.h"
 #include <cmath>
@@ -287,8 +288,9 @@ class CDT : public Simulation {
     bool relabelVertices_{true};
     std::mt19937 rng{std::random_device{}()};
 
-    /// Sweeps to run per drift measurement while tuning.
+    /// Sweeps to run per drift measurement.
     static constexpr int kTuneWindowSweeps = 25;
+
     /// Doubling steps allowed while bracketing the drift sign change.
     static constexpr int kTuneMaxBracketSteps = 12;
     /// Bisection steps taken once the sign change is bracketed.
@@ -296,15 +298,33 @@ class CDT : public Simulation {
     /// Width in \f$ k_4 \f$ below which the bracket is considered located.
     static constexpr double kTuneTolerance = 0.01;
 
+    /// Fraction of the volume a drift measurement is allowed to move before
+    /// it stops early. Only the sign of the drift is used, and the sign is
+    /// settled well before this, so the band keeps tuning cheap and keeps it
+    /// from reshaping the configuration it was handed.
+    static constexpr double kTuneVolumeBand = 0.25;
+
     /// Mean relative change in the four-volume per sweep, measured over
     /// @p windowSweeps sweeps at the current couplings. Positive means the
     /// volume is growing, so \f$ k_4 \f$ is below its pseudo-critical value.
     ///
-    /// The measurement stops early if the volume falls below @p floorVolume,
-    /// reporting the drift accumulated so far, so that a coupling far above
-    /// critical cannot dismantle the configuration being tuned.
+    /// The measurement stops as soon as the volume leaves
+    /// [@p floorVolume, @p ceilingVolume], reporting the drift accumulated so
+    /// far: a coupling far from critical settles the sign in a few sweeps, and
+    /// stopping there stops it from dismantling or inflating the complex.
     [[nodiscard]] double measureVolumeDrift(int windowSweeps,
-                                            std::size_t floorVolume);
+                                            std::size_t floorVolume,
+                                            std::size_t ceilingVolume);
+
+    /// Set \f$ k_4 \f$ to the coupling at which the four-volume drift changes
+    /// sign, by bracketing that sign change in doubling steps from the current
+    /// value and bisecting to @p tolerance. Runs with the volume-fixing term
+    /// inactive and restores the configured \f$ \varepsilon \f$ before
+    /// returning. @p report is called once per drift measurement.
+    void locatePseudoCriticalCoupling(int windowSweeps, int bisectionSteps,
+                                      double tolerance,
+                                      const std::function<void()> &report);
+
 
     /// Metropolis-Hastings acceptance test.
     ///
