@@ -1150,7 +1150,14 @@ assertion. Every pairing is the transpose.)doc")
                              [](const MultiCobordism::BoundaryBlock &block) {
                                return block.fiber;
                              },
-                             "The fiber form of the target (#916), or None.");
+                             "The fiber form of the target (#916), or None.")
+      .def_property_readonly("surface",
+                             [](const MultiCobordism::BoundaryBlock &block) {
+                               return block.surface;
+                             },
+                             "True for an input SURFACE block (the region form of "
+                             "seed_inputs on a seed_from_surfaces host): its faces are "
+                             "cells of the host the bulk is drawn onto by bridges.");
   py::class_<MultiCobordism::FixedBoundaryEigenstateResult>(
       m, "FixedBoundaryEigenstateResult",
       "Witness from the historical fixed-boundary Rayleigh-residual "
@@ -1257,6 +1264,35 @@ assertion. Every pairing is the transpose.)doc")
       .def(py::init<>())
       .def_readwrite("chi", &MultiCobordism::TwoBodyTarget::chi)
       .def_readwrite("choi_decomposed", &MultiCobordism::TwoBodyTarget::choiDecomposed);
+  py::class_<MultiCobordism::SurfaceSeed>(m, "SurfaceSeed",
+      "A host seeded from boundary surfaces (qubit cobordism spec S2): `host` is ONE "
+      "d-dimensional Spacetime holding every surface as its own simplices (triangles, "
+      "edges, vertices with the surface's lengths and zero phases) on disjoint vertex id "
+      "ranges and NO d-cell; `vertex_ids[s]` maps surface s's vertex ids to the host's.")
+      .def_readonly("host", &MultiCobordism::SurfaceSeed::host)
+      .def_readonly("vertex_ids", &MultiCobordism::SurfaceSeed::vertexIds);
+  py::class_<MultiCobordism::BlockSurface>(m, "BlockSurface",
+      "A block's own surface (spec D2, the enumeration half): its (d-1)-faces and its "
+      "edges inside its vertex set, as sorted vertex-id tuples.")
+      .def_readonly("faces", &MultiCobordism::BlockSurface::faces)
+      .def_readonly("edges", &MultiCobordism::BlockSurface::edges);
+  py::class_<MultiCobordism::MonodromyRead>(m, "MonodromyRead",
+      "The monodromy of a drawn cobordism between two marked surfaces (spec S6): the "
+      "whole's degree-1 ZERO MODE (the harmonic contour of the Whitney pencil, bulk and "
+      "boundary edges in one operator) read on both markings' edges, its periods "
+      "periods_a (|A| x rank) and periods_b, and the matrix M with P_B = M P_A "
+      "(M = P_B P_A^-1 for a rank-2 zero mode, least squares otherwise), with its integer "
+      "rounding and rounding residual; Betti numbers of the whole come with it. A read that "
+      "cannot be made names its `obstruction` instead of guessing.")
+      .def_readonly("betti", &MultiCobordism::MonodromyRead::betti)
+      .def_readonly("harmonic_rank", &MultiCobordism::MonodromyRead::harmonicRank)
+      .def_readonly("periods_a", &MultiCobordism::MonodromyRead::periodsA)
+      .def_readonly("periods_b", &MultiCobordism::MonodromyRead::periodsB)
+      .def_readonly("monodromy", &MultiCobordism::MonodromyRead::monodromy)
+      .def_readonly("rounded", &MultiCobordism::MonodromyRead::rounded)
+      .def_readonly("rounding_residual", &MultiCobordism::MonodromyRead::roundingResidual)
+      .def_readonly("fit_residual", &MultiCobordism::MonodromyRead::fitResidual)
+      .def_readonly("obstruction", &MultiCobordism::MonodromyRead::obstruction);
   py::class_<MultiCobordism::TwoBodyRead>(m, "TwoBodyRead",
       "The reading of the bulk between two attached input frames (#941): the frame transfer "
       "T_AB (operator reading), vec(T_AB) (Choi-decomposed state reading), its Schmidt spectrum "
@@ -1569,6 +1605,27 @@ assertion. Every pairing is the transpose.)doc")
       .def_static("seed_simplex", &MultiCobordism::seedSimplex, py::arg("dimension"),
            py::arg("balanced_edges") = false,
            "A single dimension-simplex host with a uniform Lorentzian metric: the canonical seed.")
+      .def_static("seed_from_surfaces", &MultiCobordism::seedFromSurfaces, py::arg("surfaces"),
+           "The SurfaceSeed of closed (d-1)-dimensional Spacetimes (e.g. "
+           "SimplicialQubit.flat_torus(tau, n, n).spacetime()): one d-dimensional host holding "
+           "every surface as its own simplices with its lengths and zero phases on disjoint "
+           "vertex id ranges, and no d-cell -- the bulk is drawn afterwards by gated bridges.")
+      .def_static("seed_collar", &MultiCobordism::seedCollar, py::arg("surface_a"), py::arg("surface_b"),
+           py::arg("layers") = 1,
+           "The SurfaceSeed of the COLLAR between two surfaces of identical combinatorics (spec S3): "
+           "T^2 x I over their shared triangulation (Spacetime.prismCells, `layers` product layers), "
+           "layer 0 = surface A, last layer = surface B, the surfaces' lengths verbatim, the auto-wired "
+           "length on every other edge, zero phases, gated once as a whole by dualComplexIsValid and "
+           "refused by name; a combinatorial mismatch is refused by name. Seed both id sets as input "
+           "blocks with seed_inputs; bridge_phase_complete() then holds by construction.")
+      .def_static("block_surface", &MultiCobordism::blockSurface, py::arg("block"), py::arg("spacetime"),
+           "The block's own surface: its (d-1)-faces (registered ones and facets of top cells "
+           "inside the block) and its edges inside its vertex set, as sorted vertex tuples.")
+      .def_static("monodromy", &MultiCobordism::monodromy, py::arg("spacetime"), py::arg("marking_a"),
+           py::arg("marking_b"), py::call_guard<py::gil_scoped_release>(),
+           "The MonodromyRead of `spacetime` between two markings given in host vertex ids as "
+           "cycles of directed steps (u, v): a step contributes +h(u,v) when u < v and -h(u,v) "
+           "otherwise. Read-only; the Whitney pencil's harmonic contour is the zero mode.")
       .def("set_input_fiber", &MultiCobordism::setInputFiber, py::arg("index"), py::arg("fiber"),
            "Attach the fiber form of an input block's target (#916).")
       .def("set_output_fiber", &MultiCobordism::setOutputFiber, py::arg("index"), py::arg("fiber"))
@@ -1739,7 +1796,24 @@ assertion. Every pairing is the transpose.)doc")
       .def_property_readonly("regge_weight", &MultiCobordism::reggeWeight)
       .def("set_input_residual_weight", &MultiCobordism::setInputResidualWeight,
            py::arg("weight"))
-      .def("seed_inputs", &MultiCobordism::seedInputs, py::arg("seeds"))
+      .def("seed_inputs",
+           py::overload_cast<const std::vector<std::uint64_t> &>(&MultiCobordism::seedInputs),
+           py::arg("seeds"),
+           "Seed one INPUT block per seed vertex (region = the seed's cell neighbourhood).")
+      .def("seed_inputs",
+           py::overload_cast<const std::vector<std::vector<std::uint64_t>> &>(
+               &MultiCobordism::seedInputs),
+           py::arg("regions"),
+           "Seed one INPUT block per explicit vertex region -- the surface inputs of a "
+           "seed_from_surfaces host (each block is marked `surface`).")
+      .def("has_surface_inputs", &MultiCobordism::hasSurfaceInputs,
+           "At least two input blocks are surface blocks; only then does stage 1 offer bridges.")
+      .def("uncovered_input_faces", &MultiCobordism::uncoveredInputFaces,
+           "The faces of the surface input blocks that no top cell covers.")
+      .def("bridge_phase_complete", &MultiCobordism::bridgePhaseComplete,
+           "Every surface face has exactly one top cell on it and getBoundary() is exactly the "
+           "union of the surface faces: the boundary of W is the surfaces. True by construction "
+           "on a collar seed; false without surface inputs.")
       .def("seed_outputs", &MultiCobordism::seedOutputs, py::arg("seeds"))
       // Long pure-C++ compute: release the GIL for the duration so a background thread can
       // drive a pass (a single call, per the register-growth constraint) without blocking the
@@ -2599,6 +2673,14 @@ invariant.)doc")
            "(ok, reason): gated surgical cone-in -- create a fresh vertex, join "
            "it to the d `target_verts` to form a new top cell. Accepts only a "
            "valid manifold-with-boundary; otherwise undoes the additions.")
+      .def("bridge", &SurgicalCone::bridge, py::arg("cell_vertices"),
+           "(ok, reason): gated surgical bridge (qubit cobordism spec D1) -- "
+           "create the top cell on the d+1 EXISTING vertices `cell_vertices` "
+           "(no fresh apex), auto-wiring the edges it lacks with the engine's "
+           "auto-wired length. Accepts only a valid manifold-with-boundary; "
+           "otherwise removes the cell and every edge it alone introduced, "
+           "bit-exactly. Whether the vertices split across two boundary blocks "
+           "without a chord is the caller's draw, not this gate.")
       .def("rollback", &SurgicalCone::rollback,
            "Undo the last accepted move (LIFO), restoring the complex bit-for-"
            "bit (edge lengths and phases). False if nothing is applied.")

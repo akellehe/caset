@@ -13,9 +13,11 @@ it names engine facts, they were verified in the tree at `origin/main`
 Two qubits are two 2-tori with real edge lengths whose degree-1 harmonic
 spaces (the zero modes of their own Laplacians) are the states, τ being the
 coordinate of the holomorphic line in each torus's marking. They are the
-boundary of a 3-complex W. The bulk of W is *drawn* between them by gated
-bridging cells and then synthesized by the engine's stage 1 (combinatorial
-moves) and stage 2 (length relaxation) against the algebraic two-body target.
+boundary of a 3-complex W. The bulk of W starts as the *collar* between them
+— the minimal manifold connecting the two boundaries, created as one gated
+whole (S3) — and is then synthesized by the engine's stage 1 (combinatorial
+moves, the gated `bridge` move among them) and stage 2 (length relaxation)
+against the algebraic two-body target.
 The output state is the degree-1 zero mode of the Laplacian of the **entire**
 W, bulk and boundary edges together. Throughout, each torus keeps
 representing its input state through the zero mode of its **own** Laplacian
@@ -44,6 +46,8 @@ displayed by `examples/cobordism/emergence_animation.py`, one implementation.
   inside the zero-mode band of a pencil restricted to the fiber's cells.
 - **Bridge**: a top cell whose vertices are split across two blocks
   (tetrahedra: 1+3, 2+2, 3+1), created on existing vertices only.
+- **Collar**: the minimal manifold connecting the two blocks, T²×I over their
+  shared triangulation (`Spacetime::prismCells`); the seed of W.
 - **Gate**: the manifold check `ChainComplex::dualComplexIsValid` (facet
   coface counts in {1, 2}, ridge links paths or cycles, vertex links disks or
   spheres), the only thing that decides whether a move may be applied.
@@ -80,8 +84,9 @@ R6. States are zero modes, not cochains with hand-made coefficients ("it
 
 R7. The zero mode, not the band above it (earlier: "i wanted the zero mode").
 
-R8. Program-wide rules that still apply: hosts and bulks are emergent (no
-    hand-built prisms or collars); no runtime guards or clamps in the
+R8. Program-wide rules that still apply: hosts and bulks are emergent beyond
+    the collar seed of S3 (no template beyond the collar between the given
+    surfaces); no runtime guards or clamps in the
     dynamics, only configuration-space gates (the manifold check) and
     variational acceptance (ΔF); Lorentzian machinery is the default (the tori
     here are real and spacelike; nothing is added for phases unless asked).
@@ -104,21 +109,33 @@ S2. **Host initialization.** One 3-dimensional `Spacetime` containing both tori
     set on the fiber; the metric source is the Whitney pencil. The two-body
     target χ is set (S5). `use_fiber_residuals(True)`.
 
-S3. **Drawing the bulk (bridge phase).** Stage 1 with bridge moves: draw a
-    candidate top cell on existing vertices, k from one block and 4 − k from
-    the other, apply, run the gate, score by ΔF, keep or roll back. Repeat
-    until *completion*: every face of both tori has exactly one 3-cell on it
-    and no other boundary face exists, so ∂W = T_A ⊔ T_B. During drawing the
-    uncovered torus faces are not faces of any top cell; the gate is run on
-    the top cells that exist. An additional gate condition holds throughout:
-    the sub-complex on each block's vertex set is exactly its torus (no chord
-    edge or face inside a block is ever created). Record Betti numbers and the
-    monodromy (S6) of the drawn manifold: the topology is emergent and may or
-    may not be the collar.
+S3. **The collar.** The bulk between the two surfaces starts as the minimal
+    manifold connecting them: T²×I over the tori's shared triangulation,
+    `Spacetime::prismCells` over the base faces with the surfaces' own
+    lengths at the two ends and the engine's auto-wired length on the
+    interior edges (`MultiCobordism::seedCollar`), created as ONE gated
+    whole — the full manifold check (`ChainComplex::dualComplexIsValid`) on
+    the result, refused by name if it fails; a pair of surfaces whose
+    combinatorics differ is refused by name. `bridgePhaseComplete()` (every
+    face of both tori has exactly one 3-cell on it and no other boundary face
+    exists, so ∂W = T_A ⊔ T_B) holds by construction, and so does the no-chord
+    condition: the sub-complex on each block's vertex set is exactly its
+    torus. From here everything is emergent: stage 1 refines and surgers the
+    interior, stage 2 relaxes every edge, and `bridge` is one more gated
+    stage-1 move kind — a candidate top cell on existing vertices, k from one
+    block and 4 − k from the other, applied through `SurgicalCone::bridge`,
+    gated by the manifold check, scored by ΔF, offered while a face of a
+    surface block is uncovered (after a cone-out dent, for instance). The
+    per-cell drawing of the bulk from nothing is withdrawn (§6): a cell the
+    gate accepts meets the complex along a disk, so such a drawing stays a
+    ball and never reaches ∂W = T_A ⊔ T_B. Record the Betti numbers and the
+    monodromy (S6) of the seed ([1, 2, 1, 0] and the identity for matched
+    markings) and again after every frame: the topology of the synthesized W
+    is emergent from there.
 
 S4. **Synthesis.** Per frame: ordinary stage 1 (adds, flips, cone-outs,
-    cone-ins with fresh vertices; bridges no longer needed), then stage 2 on
-    all edges. The objective is the engine's: Regge stationarity plus Γ·r_U,
+    cone-ins with fresh vertices, and `bridge` while a surface face is
+    uncovered), then stage 2 on all edges. The objective is the engine's: Regge stationarity plus Γ·r_U,
     where r_U under fiber residuals is the sum of each block's own-Laplacian
     fiber residual (weight `inputResidualWeight`), the whole-complex fiber
     residual if a whole-complex target is set, and the two-body residual.
@@ -156,14 +173,19 @@ S7. **Recursion.** As in `recursion_as_propagation.py`: the whole's zero mode
 
 ## 5. Engine deltas (all additive; nothing else changes)
 
-D1. **Bridge move** (`cobordism::SurgicalCone`, next to `coneOut`/`coneIn`):
-    create the top cell on d + 1 existing vertices, auto-wiring missing edges
-    with the engine's auto-wired length; gate with `dualComplexIsValid` plus
-    the no-chord condition of S3; roll back bit-exactly (remove the cell and
-    every edge it alone introduced). Stage 1 draws bridge candidates from
-    vertex splits across the two input blocks while any torus face is
-    uncovered (a `BuildAction`/move kind, scored by ΔF like `cone_out`), and a
-    completion test reports ∂W = T_A ⊔ T_B.
+D1. **Bridge primitive and collar seed** (`cobordism::SurgicalCone`, next to
+    `coneOut`/`coneIn`; `MultiCobordism::seedCollar`, next to `seedSimplex`):
+    `bridge` creates the top cell on d + 1 existing vertices, auto-wiring
+    missing edges with the engine's auto-wired length, gated with
+    `dualComplexIsValid` and nothing else, rolled back bit-exactly (remove the
+    cell and every edge it alone introduced). The seed of W is the collar of
+    S3, one gated whole; there is no drawing search. Stage 1 draws bridge
+    candidates from vertex splits across the two input blocks while any
+    torus face is uncovered (a move kind, scored by ΔF like `cone_out`; the
+    split is taken inside the blocks' own simplices, so the no-chord
+    condition of S3 holds by construction), and `bridgePhaseComplete()`
+    reports ∂W = T_A ⊔ T_B. `seedFromSurfaces` seeds the bare surfaces (no
+    3-cell) for the primitive's own tests.
 
 D2. **Block surface complex.** `blockSubcomplexWithGeometry` extracts the top
     cells inside a block's vertex set, which is empty for a surface block in a
@@ -225,13 +247,29 @@ D4. **Animation.** `emergence_animation.py` gains a qubit input mode:
 - GIL: `run_stage1`, `run_stage2`, `two_body_residual`, `read_two_body`,
   `whole_complex_fiber_residual`, `read_whole_complex_fiber` release it;
   `build_step`, `attach_input_fiber`, `read_output_fiber` do not.
+- A bulk drawn one gated cell at a time from a single cell stays a ball: a
+  tetrahedron the manifold gate accepts meets the complex along a disk (any
+  two of its faces share an edge; a cell touching the complex anywhere else
+  is a pinch the gate refuses), and a shellable 3-manifold is a ball, so
+  ∂W = T_A ⊔ T_B is unreachable by such a drawing — even the prism cannot be
+  built cell by cell under the gate. Measured on #960 before the collar was
+  adopted: under the manifold gate per cell, a depth-first search over
+  frontier-adjacent split cells (close-most-faces first, random ties, no
+  buried vertex) completed 0 of 6 seeds within 3·10⁵ gated attempts each on
+  3×3 vs 4×4 tori, and 0 of 80 greedy restarts on 3×3 vs 3×3 and 3×3 vs 4×4;
+  under a facets-only gate (coface counts ≤ 2, no link checks) the same
+  drawing completed 40 of 40 restarts within 50 attempts each — one cell per
+  surface face and no 2+2 cell — and 0 of those 40 were manifolds (edge links
+  disconnected). The collar is the seed because of this fact, not for
+  convenience.
 
 ## 7. Do not
 
 - Do not pin regions, freeze the tori, or exclude boundary edges from the
   whole's Laplacian.
-- Do not build the bulk from `prismCells`, a collar, or any template; do not
-  add a tube/genus move; do not glue external complexes.
+- No template beyond the collar between the given surfaces: the collar is
+  the minimal manifold connecting the boundaries, and nothing more is
+  templated; do not add a tube/genus move; do not glue external complexes.
 - Do not add a modulus (τ) residual or any distance-in-moduli objective; τ is
   read-out only. Markings never enter the relaxation.
 - Do not define the output state by restriction; do not read states as
@@ -245,10 +283,9 @@ D4. **Animation.** `emergence_animation.py` gains a qubit input mode:
 
 ## 8. Checks that decide whether it worked
 
-C1. Drawing completes from two spec tori with the gate never bypassed; the
-    drawn W is a manifold with ∂W = T_A ⊔ T_B; its Betti numbers and monodromy
-    are recorded. Rollback is bit-exact (round trip leaves lengths and cells
-    identical).
+C1. The collar seed is a manifold with ∂W = T_A ⊔ T_B, Betti numbers
+    [1, 2, 1, 0], and monodromy the identity for matched markings; a bridge
+    rolls back bit-exactly (a round trip leaves lengths and cells identical).
 
 C2. Each block's own-Laplacian residual stays at its floor through drawing and
     synthesis, and τ̂ on each torus equals τ_in within tolerance after
@@ -277,8 +314,10 @@ C5. `emergence_animation.py --inputs qubit` runs headless and `--live` with
 - `include/cobordism/MultiCobordism.h`: `seedInputs`, `attachInputFiber`,
   `setWholeComplexFiberTarget`, `setTwoBodyTarget`, `readTwoBody`,
   `useFiberResiduals`, `runStage1`, `runStage2`, `fiberModeAscent`,
-  `blockSubcomplexWithGeometry`, `frameTransferOn`.
-- `include/cobordism/SurgicalCone.h`: `coneOut`, `coneIn`, rollback, gate.
+  `blockSubcomplexWithGeometry`, `frameTransferOn`, `seedCollar`,
+  `seedFromSurfaces`, `blockSurface`, `bridgePhaseComplete`, `monodromy`.
+- `include/cobordism/SurgicalCone.h`: `coneOut`, `coneIn`, `bridge`, rollback,
+  gate.
 - `include/cobordism/PencilLayer.h`: `BoundaryFiber`, `harmonicContour`,
   `bandContour`, `indicesOf`, `transfer`.
 - `include/observables/SimplicialQubit.h`: `flatTorus`, `harmonicBasis`,
@@ -289,13 +328,16 @@ C5. `emergence_animation.py --inputs qubit` runs headless and `--live` with
 
 ## 10. Ticket order
 
-T1. Bridge move (D1) with tests: gate, rollback, completion on two spec tori,
-    no-chord condition, monodromy read on the drawn manifold.
-T2. Block surface complex (D2) with tests: own-Laplacian residual of a torus
+T1. (#960) Bridge primitive and collar seed (D1) with tests: gate, bit-exact
+    rollback, the collar seed from two spec tori (a manifold with
+    ∂W = T_A ⊔ T_B, Betti numbers [1, 2, 1, 0], identity monodromy), the
+    no-chord condition, a mismatched pair refused by name, bridge on the
+    collar.
+T2. (#961) Block surface complex (D2) with tests: own-Laplacian residual of a torus
     block before and after bridging equals the standalone torus read.
-T3. Transfer in period frames (D3) with tests: identity on a trivially drawn
+T3. (#962) Transfer in period frames (D3) with tests: identity on a trivially drawn
     collar, χ comparison shape 2×2.
-T4. Animation qubit mode (D4) with tests: existing mode unchanged; qubit mode
+T4. (#963) Animation qubit mode (D4) with tests: existing mode unchanged; qubit mode
     produces every channel headless.
-T5. The run: records, findings note `docs/design/qubit_cobordism_findings.md`,
+T5. (#964) The run: records, findings note `docs/design/qubit_cobordism_findings.md`,
     C1–C5 answered with numbers.
