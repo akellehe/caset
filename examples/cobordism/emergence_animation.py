@@ -1930,8 +1930,9 @@ def drive(config, progress=False, on_frame=None):
     for step in range(1, config["steps"] + 1):
         before = _objective_total(frames[-1])
         # Stage 1 before stage 2 within a unit (spec S4): a committed
-        # combinatorial move rebuilds the complex with lengths only, and
-        # stage 2 then relaxes every edge of the rebuilt complex.
+        # combinatorial move rebuilds the complex from a snapshot of its
+        # cells and every edge's length and phase, and stage 2 then relaxes
+        # every edge of the rebuilt complex.
         list(node.run_stage1(max_steps=config["stage1_iters"],
                              n_candidate_moves=config["candidate_moves"],
                              max_lookahead=config["surgical_depth"]))
