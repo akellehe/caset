@@ -513,44 +513,21 @@ void SimplicialQubit::validatePureGauge() const {
 
 SimplicialQubit::Walk SimplicialQubit::walkOf(const Cycle &cycle, const char *name,
                                               std::string &obstruction) const {
-  // Hierholzer over the multigraph of the cycle's directed steps (the net
-  // degree of every vertex is zero, validateCycles): the circuit starts at the
-  // first step's source and follows the given order whenever it chains.
-  const std::size_t n = cycle.size();
-  std::vector<std::uint64_t> from(n), to(n);
-  std::vector<std::vector<std::size_t>> out(vertices_.size());
-  for (std::size_t k = 0; k < n; ++k) {
-    const auto [e, sign] = cycle[k];
-    from[k] = sign > 0 ? edges_[e].first : edges_[e].second;
-    to[k] = sign > 0 ? edges_[e].second : edges_[e].first;
-    out[from[k]].push_back(k);
-  }
-  std::vector<std::size_t> next(vertices_.size(), 0);
-  std::vector<std::uint64_t> vertexStack = {from[0]};
-  std::vector<std::size_t> stepStack, circuit;
-  while (!vertexStack.empty()) {
-    const std::uint64_t v = vertexStack.back();
-    if (next[v] < out[v].size()) {
-      const std::size_t k = out[v][next[v]++];
-      vertexStack.push_back(to[k]);
-      stepStack.push_back(k);
-    } else {
-      vertexStack.pop_back();
-      if (!stepStack.empty()) {
-        circuit.push_back(stepStack.back());
-        stepStack.pop_back();
-      }
-    }
-  }
-  std::reverse(circuit.begin(), circuit.end());
-  if (circuit.size() != n) {
+  // The cycle's directed steps in the given order; `Connection::closedWalkOf`
+  // (Hierholzer over their multigraph; the net degree of every vertex is zero,
+  // validateCycles) starts the circuit at the first step's source and follows
+  // the given order whenever it chains.
+  Walk steps;
+  steps.reserve(cycle.size());
+  for (const auto &[e, sign] : cycle)
+    steps.push_back(sign > 0 ? std::make_pair(edges_[e].first, edges_[e].second)
+                             : std::make_pair(edges_[e].second, edges_[e].first));
+  Walk walk = Connection::closedWalkOf(steps);
+  if (walk.size() != steps.size()) {
     obstruction = std::string("cycle ") + name + " does not form one closed walk: its steps fall into more than "
                   "one connected component";
     return {};
   }
-  Walk walk;
-  walk.reserve(n);
-  for (const std::size_t k : circuit) walk.push_back({from[k], to[k]});
   return walk;
 }
 
@@ -561,19 +538,13 @@ void SimplicialQubit::buildWalks() {
   if (walkObstruction_.empty()) walkB_ = walkOf(cycleB_, "B", walkObstruction_);
   if (walkObstruction_.empty()) {
     // The common base point: the first vertex of A's walk that lies on B's;
-    // both walks are rotated to start there.
-    std::set<std::uint64_t> onB;
-    for (const auto &step : walkB_) onB.insert(step.first);
-    for (std::size_t k = 0; k < walkA_.size() && !baseVertex_; ++k)
-      if (onB.count(walkA_[k].first)) baseVertex_ = walkA_[k].first;
+    // both walks are rotated to start there (`Connection::commonBasePoint`,
+    // the one rule every reader of a marking uses).
+    std::vector<Walk> walks = {walkA_, walkB_};
+    baseVertex_ = Connection::commonBasePoint(walks);
     if (baseVertex_) {
-      auto rotate = [&](Walk &walk) {
-        std::size_t k = 0;
-        while (walk[k].first != *baseVertex_) ++k;
-        std::rotate(walk.begin(), walk.begin() + static_cast<std::ptrdiff_t>(k), walk.end());
-      };
-      rotate(walkA_);
-      rotate(walkB_);
+      walkA_ = std::move(walks[0]);
+      walkB_ = std::move(walks[1]);
     } else {
       walkObstruction_ = "cycles A and B share no vertex, so their transported periods have no common base "
                          "point (A . B = +1 requires them to meet)";

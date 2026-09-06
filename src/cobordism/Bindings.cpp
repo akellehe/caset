@@ -1147,6 +1147,49 @@ assertion. Every pairing is the transpose.)doc")
       .def_readonly("images", &MultiCobordism::BlockFrame::images)
       .def_readonly("dual_images", &MultiCobordism::BlockFrame::dualImages)
       .def("rank", &MultiCobordism::BlockFrame::rank);
+  py::class_<MultiCobordism::BlockMarking>(m, "BlockMarking",
+      "A block's MARKING with its input coefficients (qubit cobordism spec D2/D3 as revised): "
+      "`cycles`, each one closed walk of directed host steps (u, v) starting at `base_vertex` (the "
+      "first vertex of the first cycle's walk that lies on every other cycle's walk), and "
+      "`coefficients` (a, b), one per cycle -- (1, tau_in) for an input torus. The engine derives the "
+      "block's frame from it live (MultiCobordism.derive_input_frame) and scores the leak of the "
+      "coefficients, written through that frame, in the WHOLE's zero mode on the block's edges "
+      "(input_state_residual). Nothing about the marking is scored.")
+      .def_readonly("cycles", &MultiCobordism::BlockMarking::cycles)
+      .def_readonly("coefficients", &MultiCobordism::BlockMarking::coefficients)
+      .def_readonly("base_vertex", &MultiCobordism::BlockMarking::baseVertex)
+      .def("rank", &MultiCobordism::BlockMarking::rank);
+  py::class_<MultiCobordism::DerivedFrame>(m, "DerivedFrame",
+      "The frame the engine DERIVES for a marked block from its live own complex (spec section 2 "
+      "'Frame of a block', D3): `frame` (BlockFrame on the block's own edges) with images F = Z inv(Pi), Z "
+      "the images of the zero mode of the block's own covariant Whitney pencil and Pi its transported "
+      "periods over the marking's cycles from the common base point, so column b has period delta_cb; "
+      "dual images from the DUAL kernel (the zero mode under the inverse links) normalized so that "
+      "F^vee.T @ M_1^U @ F == I; `periods` = Pi; `kernel_rank` = the own zero mode's rank. An obstructed "
+      "derivation (kernel rank other than the marking's, a marking edge absent, singular periods, an "
+      "isotropic pairing) names `obstruction` and `derived()` is False; the block then reads the full leak.")
+      .def_readonly("frame", &MultiCobordism::DerivedFrame::frame)
+      .def_readonly("periods", &MultiCobordism::DerivedFrame::periods)
+      .def_readonly("kernel_rank", &MultiCobordism::DerivedFrame::kernelRank)
+      .def_readonly("obstruction", &MultiCobordism::DerivedFrame::obstruction)
+      .def("derived", &MultiCobordism::DerivedFrame::derived);
+  py::class_<MultiCobordism::InputStateRead>(m, "InputStateRead",
+      "The state at a marked block (spec section 2 'State at a block', S6): `coefficients` = the "
+      "coefficients of the WHOLE's zero mode in the block's live frame -- the transported periods over "
+      "the marking's cycles of the least-squares combination of the whole's zero mode fitting the "
+      "block's target edge values (its `input` coefficients through the live frame) on the block's "
+      "edges -- next to `input`; `residual` = that fit's leak, the block residual of D2 scored at "
+      "`weight` in r_U; `harmonic_rank` of the whole, `frame_rank` of the own kernel, `base_vertex`; an "
+      "obstructed read names `obstruction` and reads the full leak 1.0.")
+      .def_readonly("block", &MultiCobordism::InputStateRead::block)
+      .def_readonly("input", &MultiCobordism::InputStateRead::input)
+      .def_readonly("coefficients", &MultiCobordism::InputStateRead::coefficients)
+      .def_readonly("residual", &MultiCobordism::InputStateRead::residual)
+      .def_readonly("weight", &MultiCobordism::InputStateRead::weight)
+      .def_readonly("harmonic_rank", &MultiCobordism::InputStateRead::harmonicRank)
+      .def_readonly("frame_rank", &MultiCobordism::InputStateRead::frameRank)
+      .def_readonly("base_vertex", &MultiCobordism::InputStateRead::baseVertex)
+      .def_readonly("obstruction", &MultiCobordism::InputStateRead::obstruction);
 
   py::class_<MultiCobordism::BoundaryBlock>(m, "MultiCobordismBlock",
       "An emergent boundary block of a MultiCobordism (an input or output): the "
@@ -1187,7 +1230,14 @@ assertion. Every pairing is the transpose.)doc")
                                return block.frame;
                              },
                              "The block's frame for the two-body transfer (BlockFrame, spec D3), "
-                             "set by set_input_frame, or None.");
+                             "set by set_input_frame, or None; never read on a block that carries "
+                             "a marking (its frame is derived live).")
+      .def_property_readonly("marking",
+                             [](const MultiCobordism::BoundaryBlock &block) {
+                               return block.marking;
+                             },
+                             "The block's marking with its input coefficients (BlockMarking, spec "
+                             "D2/D3 as revised), set by set_input_marking, or None.");
   py::class_<MultiCobordism::FixedBoundaryEigenstateResult>(
       m, "FixedBoundaryEigenstateResult",
       "Witness from the historical fixed-boundary Rayleigh-residual "
@@ -1330,14 +1380,20 @@ assertion. Every pairing is the transpose.)doc")
       .def_readonly("choi_decomposed", &MultiCobordism::TwoBodyRead::choiDecomposed)
       .def_readonly("transfer", &MultiCobordism::TwoBodyRead::transfer)
       .def_readonly("in_frames", &MultiCobordism::TwoBodyRead::inFrames,
-                    "True when `transfer` was read in the blocks' frames (set_input_frame on both), "
-                    "false when in identity frames on the cells.")
+                    "True when `transfer` was read in the blocks' frames (a marking by set_input_marking "
+                    "or a frame by set_input_frame, on both), false when in identity frames on the cells.")
+      .def_readonly("derived_frames", &MultiCobordism::TwoBodyRead::derivedFrames,
+                    "True when both frames were derived live from the blocks' markings (spec D3 as revised).")
+      .def_readonly("input_states", &MultiCobordism::TwoBodyRead::inputStates,
+                    "The state at every marked input block (InputStateRead, block order).")
       .def_readonly("choi_state", &MultiCobordism::TwoBodyRead::choiState)
       .def_readonly("singular_values", &MultiCobordism::TwoBodyRead::singularValues)
       .def_readonly("schmidt_rank", &MultiCobordism::TwoBodyRead::schmidtRank)
       .def_readonly("reversal_residual", &MultiCobordism::TwoBodyRead::reversalResidual)
       .def_readonly("residual", &MultiCobordism::TwoBodyRead::residual)
-      .def_readonly("input_fiber_residuals", &MultiCobordism::TwoBodyRead::inputFiberResiduals)
+      .def_readonly("input_fiber_residuals", &MultiCobordism::TwoBodyRead::inputFiberResiduals,
+                    "The leak of each attached input fiber in its block's OWN kernel (T2): a geometric "
+                    "diagnostic on a marked block, whose scored residual is in input_states.")
       .def_readonly("cells_a", &MultiCobordism::TwoBodyRead::cellsA)
       .def_readonly("cells_b", &MultiCobordism::TwoBodyRead::cellsB);
   py::class_<MultiCobordism::WholeComplexReadoutResult>(
@@ -1631,6 +1687,50 @@ assertion. Every pairing is the transpose.)doc")
            py::arg("index"), "The frame of input block `index` (BlockFrame), or None.")
       .def("clear_input_frame", &MultiCobordism::clearInputFrame, py::arg("index"),
            "Drop the frame of input block `index`: the transfer returns to identity frames on the cells.")
+      .def("set_input_marking", &MultiCobordism::setInputMarking, py::arg("index"), py::arg("cycles"),
+           py::arg("coefficients"),
+           "Set the MARKING of input block `index` with its input coefficients (BlockMarking, spec D2/D3 "
+           "as revised): `cycles` in host vertex ids as lists of directed steps (u, v) (the monodromy "
+           "convention: +h(u,v) when u < v, -h(u,v) otherwise), `coefficients` one per cycle -- (1, tau_in) "
+           "for an input torus. Each cycle is ordered into one closed walk and rotated to the common base "
+           "point. From then on the block's term of r_U is input_state_residual (the leak of the "
+           "coefficients written through the LIVE frame in the whole's zero mode on the block's edges, in "
+           "place of the own-kernel leak), its stage-2 direction carries the frame's motion, and the "
+           "two-body transfer is read in the derived frame. Refuses by name: no attached fiber, a fiber "
+           "not at degree 1, no cycle, a coefficient count other than the cycle count, non-finite or "
+           "all-zero coefficients, a self-loop, a step that is not a live edge inside the block, a cycle "
+           "that is not one closed walk, cycles sharing no vertex.")
+      .def("input_marking", [](const MultiCobordism &self, std::size_t i) { return self.inputMarking(i); },
+           py::arg("index"), "The marking of input block `index` (BlockMarking), or None.")
+      .def("clear_input_marking", &MultiCobordism::clearInputMarking, py::arg("index"),
+           "Drop the marking of input block `index`: its scoring and transfer return to what they were.")
+      .def_static("derive_frame", &MultiCobordism::deriveFrame, py::arg("block"), py::arg("spacetime"),
+           py::call_guard<py::gil_scoped_release>(),
+           "The live frame of a marked block on `spacetime` (DerivedFrame); read-only on the geometry.")
+      .def("derive_input_frame", &MultiCobordism::deriveInputFrame, py::arg("index"),
+           py::call_guard<py::gil_scoped_release>(),
+           "derive_frame of input block `index` on the live complex.")
+      .def("input_state_residual", &MultiCobordism::inputStateResidual, py::arg("index"),
+           py::call_guard<py::gil_scoped_release>(),
+           "The block residual of input block `index` (spec D2 as revised): the leak of its input "
+           "coefficients, written on its edges through its live frame, in the zero mode of the ENTIRE "
+           "cobordism at the whole's harmonic contour restricted to those edges; 1.0 when the frame "
+           "cannot be derived. What r_U scores for the block at the input residual weight.")
+      .def("read_input_state", &MultiCobordism::readInputState, py::arg("index"),
+           py::call_guard<py::gil_scoped_release>(),
+           "The state at input block `index` (InputStateRead): the coefficients of the whole's zero mode "
+           "in the block's live frame, next to its input coefficients and its residual.")
+      .def("input_state_residual_gradient",
+           [](const MultiCobordism &self, std::size_t index) {
+             if (index >= self.inputs().size()) throw std::out_of_range("input block index out of range");
+             py::gil_scoped_release release;
+             const auto g = self.inputStateResidualGradientOn(self.spacetime(), self.inputs()[index]);
+             return std::make_pair(g.lengths, g.phases);
+           }, py::arg("index"),
+           "Analytic gradient of input_state_residual(index) on the live complex: (lengths, phases) in "
+           "EdgeList order, each entry (d/dRe, d/dIm) packed as a complex number, the whole's band "
+           "derivative with the MOVING target (the frame's own derivative on the block's edges); phases "
+           "empty at degree 1.")
       .def_static("dual_frame", &MultiCobordism::dualFrame, py::arg("complex"), py::arg("degree"),
            py::arg("cells"), py::arg("images"),
            "The dual of a frame under the transpose pairing of `complex`'s own chain-level Whitney "

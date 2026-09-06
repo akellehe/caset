@@ -9,6 +9,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -121,6 +122,28 @@ class Connection {
   /// @throws std::invalid_argument when the cochain has the wrong length or
   ///   the walk is empty, does not chain or close, or steps across a non-edge.
   [[nodiscard]] Complex transportedPeriod(const Eigen::VectorXcd &cochain, const Walk &walk) const;
+  /// The steps of a closed walk, given in ANY order, as one closed walk:
+  /// Hierholzer's circuit over the multigraph of the directed steps, started
+  /// at the first step's source and taking each vertex's outgoing steps in
+  /// the given order, so steps that already chain as given come back as
+  /// given (the circuit of a simple cycle is its own step list). Empty when
+  /// the steps do not form one closed walk: a vertex whose in- and
+  /// out-degrees differ, or steps in more than one connected component.
+  ///
+  /// WHY: a marking's cycles are stated as edge steps whose order is a
+  /// convenience (`observables::SimplicialQubit`'s cycles, the qubit spec
+  /// §16; `cobordism::MultiCobordism::Marking`), while `transportedPeriod`
+  /// walks the cycle in the order it is traversed, so every reader orders
+  /// the steps by this one rule and two readers of one marking walk it the
+  /// same way.
+  [[nodiscard]] static Walk closedWalkOf(const Walk &steps);
+  /// The common base point of several closed walks (the qubit spec §16): the
+  /// first vertex of `walks[0]` that lies on every other walk, every walk
+  /// rotated in place to start there — so that the transported periods of a
+  /// twisted section over all of them carry one and the same base-point
+  /// gauge factor and their ratios are gauge invariant. None when no vertex
+  /// of the first walk lies on all the others (the walks are left as given).
+  [[nodiscard]] static std::optional<std::uint64_t> commonBasePoint(std::vector<Walk> &walks);
   /// True when every link has unit modulus (a U(1) connection).
   [[nodiscard]] bool isUnitary(double tolerance = 1e-12) const;
 
