@@ -3733,18 +3733,134 @@ void MultiCobordism::attachInputFiber(std::size_t index, BoundaryFiber fiber,
     for (const std::uint64_t v : c) inputBlocks_[index].vertices.insert(v);
   fiber.cells = std::move(cells);
   inputBlocks_[index].fiber = std::move(fiber);
+  // A frame's rows are the cells of the attachment they were stated for.
+  inputBlocks_[index].frame.reset();
+}
+
+void MultiCobordism::setInputFrame(std::size_t index, std::vector<std::vector<std::uint64_t>> cells,
+                                   Eigen::MatrixXcd images, Eigen::MatrixXcd dualImages) {
+  if (index >= inputBlocks_.size())
+    throw std::out_of_range("MultiCobordism::setInputFrame: input block index out of range");
+  const auto &fiber = inputBlocks_[index].fiber;
+  if (!fiber || fiber->images.cols() == 0)
+    throw std::logic_error("MultiCobordism::setInputFrame: input block " + std::to_string(index) +
+                           " carries no attached fiber; attach the fiber first (attachInputFiber)");
+  if (cells.size() != fiber->cells.size())
+    throw std::invalid_argument("MultiCobordism::setInputFrame: the frame names " + std::to_string(cells.size()) +
+                                " cells but input block " + std::to_string(index) + "'s fiber is attached to " +
+                                std::to_string(fiber->cells.size()));
+  for (std::size_t i = 0; i < cells.size(); ++i) {
+    std::sort(cells[i].begin(), cells[i].end());
+    if (cells[i] != fiber->cells[i])
+      throw std::invalid_argument("MultiCobordism::setInputFrame: frame row " + std::to_string(i) +
+                                  " is not input block " + std::to_string(index) +
+                                  "'s attached fiber cell at that row (same cells in the attachment order)");
+  }
+  const auto rows = static_cast<Eigen::Index>(cells.size());
+  if (images.rows() != rows || dualImages.rows() != rows)
+    throw std::invalid_argument("MultiCobordism::setInputFrame: the images (" + std::to_string(images.rows()) +
+                                " rows) and the dual images (" + std::to_string(dualImages.rows()) +
+                                " rows) must have one row per cell (" + std::to_string(rows) + ")");
+  if (images.cols() == 0)
+    throw std::invalid_argument("MultiCobordism::setInputFrame: the frame has no columns");
+  if (dualImages.cols() != images.cols())
+    throw std::invalid_argument("MultiCobordism::setInputFrame: the dual images have " +
+                                std::to_string(dualImages.cols()) + " columns but the images have " +
+                                std::to_string(images.cols()) + " (a frame and its dual share the rank)");
+  if (!images.allFinite() || !dualImages.allFinite())
+    throw std::invalid_argument("MultiCobordism::setInputFrame: a frame entry is not finite");
+  inputBlocks_[index].frame = BlockFrame{std::move(cells), std::move(images), std::move(dualImages)};
+}
+
+const std::optional<MultiCobordism::BlockFrame> &MultiCobordism::inputFrame(std::size_t index) const {
+  if (index >= inputBlocks_.size())
+    throw std::out_of_range("MultiCobordism::inputFrame: input block index out of range");
+  return inputBlocks_[index].frame;
+}
+
+void MultiCobordism::clearInputFrame(std::size_t index) {
+  if (index >= inputBlocks_.size())
+    throw std::out_of_range("MultiCobordism::clearInputFrame: input block index out of range");
+  inputBlocks_[index].frame.reset();
+}
+
+Eigen::MatrixXcd MultiCobordism::dualFrame(const std::shared_ptr<Spacetime> &complex, int degree,
+                                           const std::vector<std::vector<std::uint64_t>> &cells,
+                                           const Eigen::MatrixXcd &images) {
+  if (!complex) throw std::invalid_argument("MultiCobordism::dualFrame: null complex");
+  if (images.cols() == 0) throw std::invalid_argument("MultiCobordism::dualFrame: the frame has no columns");
+  if (static_cast<std::size_t>(images.rows()) != cells.size())
+    throw std::invalid_argument("MultiCobordism::dualFrame: one image row per cell (" +
+                                std::to_string(images.rows()) + " rows, " + std::to_string(cells.size()) + " cells)");
+  const AssembledPencil assembled = PencilLayer::assemble({complex});
+  if (degree < 0 || degree > assembled.dimension())
+    throw std::invalid_argument("MultiCobordism::dualFrame: degree " + std::to_string(degree) +
+                                " is outside the complex's dimension " + std::to_string(assembled.dimension()));
+  std::vector<std::vector<std::uint64_t>> sorted = cells;
+  for (auto &c : sorted) std::sort(c.begin(), c.end());
+  // A cell absent from the complex at this degree is refused by name here.
+  const std::vector<int> idx = PencilLayer::indicesOf(assembled, degree, sorted);
+  // B = Z^T M_k Z on the cells: the frame's pairing under the transpose pairing
+  // of the complex's own pencil (M_k the Whitney mass matrix, the chain
+  // metric's inverse, as PencilLayer::readBoundaryFiber's Gram uses it).
+  const Eigen::MatrixXcd M(assembled.op->Minv(degree));
+  const auto n = static_cast<Eigen::Index>(idx.size());
+  Eigen::MatrixXcd MBB(n, n);
+  for (Eigen::Index i = 0; i < n; ++i)
+    for (Eigen::Index j = 0; j < n; ++j)
+      MBB(i, j) = M(idx[static_cast<std::size_t>(i)], idx[static_cast<std::size_t>(j)]);
+  const Eigen::MatrixXcd pairing = images.transpose() * MBB * images;
+  Eigen::FullPivLU<Eigen::MatrixXcd> lu(pairing);
+  if (!lu.isInvertible())
+    throw std::runtime_error("MultiCobordism::dualFrame: the frame's pairing Z^T M Z is singular (an isotropic "
+                             "frame); no dual under the transpose pairing exists");
+  // Z^vee = Z B^{-T}, i.e. (Z^vee)^T = B^{-1} Z^T, so that (Z^vee)^T M Z = B^{-1} B = I.
+  return lu.solve(images.transpose()).transpose();
+}
+
+Eigen::MatrixXcd MultiCobordism::inputFrameDual(std::size_t index, const Eigen::MatrixXcd &images) const {
+  if (index >= inputBlocks_.size())
+    throw std::out_of_range("MultiCobordism::inputFrameDual: input block index out of range");
+  const BoundaryBlock &block = inputBlocks_[index];
+  if (!block.fiber || block.fiber->images.cols() == 0)
+    throw std::logic_error("MultiCobordism::inputFrameDual: input block " + std::to_string(index) +
+                           " carries no attached fiber");
+  const auto own = blockComplexWithGeometry(block, spacetime_);
+  if (!own)
+    throw std::logic_error("MultiCobordism::inputFrameDual: input block " + std::to_string(index) +
+                           " has no own complex to pair on");
+  return dualFrame(own, block.fiber->degree, block.fiber->cells, images);
+}
+
+std::optional<MultiCobordism::TransferShape> MultiCobordism::transferShape() const {
+  std::vector<const BoundaryBlock *> attached;
+  for (const auto &block : inputBlocks_)
+    if (block.fiber && block.fiber->images.cols() > 0) attached.push_back(&block);
+  if (attached.size() != 2) return std::nullopt;
+  const BoundaryBlock &A = *attached[0], &B = *attached[1];
+  if (A.frame && B.frame) return TransferShape{A.frame->images.cols(), B.frame->images.cols(), true};
+  if (!A.frame && !B.frame)
+    return TransferShape{static_cast<Eigen::Index>(A.fiber->cells.size()),
+                         static_cast<Eigen::Index>(B.fiber->cells.size()), false};
+  return std::nullopt;
 }
 
 void MultiCobordism::setTwoBodyTarget(Eigen::MatrixXcd chi, bool choiDecomposed) {
   if (chi.rows() == 0 || chi.cols() == 0 || !(chi.squaredNorm() > 0.0))
     throw std::invalid_argument("MultiCobordism::setTwoBodyTarget: the target must be a nonzero matrix");
+  if (const auto shape = transferShape(); shape && (chi.rows() != shape->rows || chi.cols() != shape->cols))
+    throw std::invalid_argument("MultiCobordism::setTwoBodyTarget: the target is " + std::to_string(chi.rows()) + "x" +
+                                std::to_string(chi.cols()) + " but the attached " +
+                                (shape->framed ? "frames give " : "cells give ") + std::to_string(shape->rows) +
+                                "x" + std::to_string(shape->cols));
   twoBodyTarget_ = TwoBodyTarget{std::move(chi), choiDecomposed};
 }
 
-std::pair<const BoundaryFiber *, const BoundaryFiber *> MultiCobordism::attachedInputFibers() const {
-  std::vector<const BoundaryFiber *> attached;
+std::pair<const MultiCobordism::BoundaryBlock *, const MultiCobordism::BoundaryBlock *>
+MultiCobordism::attachedInputBlocks() const {
+  std::vector<const BoundaryBlock *> attached;
   for (const auto &block : inputBlocks_)
-    if (block.fiber && block.fiber->images.cols() > 0) attached.push_back(&*block.fiber);
+    if (block.fiber && block.fiber->images.cols() > 0) attached.push_back(&block);
   if (attached.size() != 2)
     throw std::logic_error("MultiCobordism: the two-body map needs exactly two attached input fibers; " +
                            std::to_string(attached.size()) + " found");
@@ -3752,31 +3868,45 @@ std::pair<const BoundaryFiber *, const BoundaryFiber *> MultiCobordism::attached
 }
 
 chainhodge::TransferResult MultiCobordism::frameTransferOn(const std::shared_ptr<Spacetime> &spacetime,
-                                                            const BoundaryFiber &A,
-                                                            const BoundaryFiber &B) const {
+                                                            const BoundaryBlock &A,
+                                                            const BoundaryBlock &B) const {
   if (metricSource_ != HodgeLaplacian::MetricSource::WhitneyPencil)
     throw std::logic_error("MultiCobordism: the two-body map is read on the chain-level Whitney pencil; "
                            "this node uses the diagonal-weight metric");
-  if (A.degree != B.degree)
+  if (A.fiber->degree != B.fiber->degree)
     throw std::logic_error("MultiCobordism: the two attached fibers are at different degrees");
+  if (A.frame.has_value() != B.frame.has_value())
+    throw std::logic_error("MultiCobordism: the two-body transfer is read in the blocks' frames only when both "
+                           "input blocks carry one (setInputFrame on both, or on neither)");
   const AssembledPencil assembled = PencilLayer::assemble({spacetime});
-  // The full frames on the attached cells: unit images (and unit dual images),
-  // so the transfer is the coupling block of the whole between the two frames.
-  auto frame = [&](const BoundaryFiber &f) {
+  // Without frames, the full frames on the attached cells: unit images (and
+  // unit dual images), so the transfer is the coupling block of the whole
+  // between the two cell sets. With frames, the blocks' images and dual images
+  // on those same cells (BlockFrame), so the transfer is that block in the
+  // frames' coordinates.
+  auto frame = [&](const BoundaryBlock &block) {
+    const BoundaryFiber &f = *block.fiber;
     BoundaryFiber out;
     out.degree = f.degree;
     out.cells = f.cells;
+    if (block.frame) {
+      if (static_cast<std::size_t>(block.frame->images.rows()) != f.cells.size())
+        throw std::logic_error("MultiCobordism: a block's frame has a row count other than its attached cells");
+      out.images = block.frame->images;
+      out.dualImages = block.frame->dualImages;
+      return out;
+    }
     const Eigen::Index r = static_cast<Eigen::Index>(f.cells.size());
     out.images = Eigen::MatrixXcd::Identity(r, r);
     out.dualImages = Eigen::MatrixXcd::Identity(r, r);
     return out;
   };
-  return PencilLayer::transfer(assembled, A.degree, frame(A), frame(B));
+  return PencilLayer::transfer(assembled, A.fiber->degree, frame(A), frame(B));
 }
 
 double MultiCobordism::twoBodyResidualOn(const std::shared_ptr<Spacetime> &spacetime,
                                          const TwoBodyTarget &target) const {
-  const auto [A, B] = attachedInputFibers();
+  const auto [A, B] = attachedInputBlocks();
   if (!spacetime) return 1.0;
   Eigen::MatrixXcd T;
   try {
@@ -3805,11 +3935,12 @@ double MultiCobordism::twoBodyResidual() const {
 }
 
 MultiCobordism::TwoBodyRead MultiCobordism::readTwoBody() const {
-  const auto [A, B] = attachedInputFibers();
+  const auto [A, B] = attachedInputBlocks();
   const chainhodge::TransferResult transfer = frameTransferOn(spacetime_, *A, *B);
   TwoBodyRead read;
   read.choiDecomposed = twoBodyTarget_ ? twoBodyTarget_->choiDecomposed : true;
   read.transfer = transfer.forward;
+  read.inFrames = A->frame.has_value() && B->frame.has_value();
   read.choiState = Eigen::Map<const Eigen::VectorXcd>(transfer.forward.data(), transfer.forward.size());
   Eigen::JacobiSVD<Eigen::MatrixXcd> svd(transfer.forward);
   const Eigen::VectorXd sv = svd.singularValues();
@@ -3823,8 +3954,8 @@ MultiCobordism::TwoBodyRead MultiCobordism::readTwoBody() const {
   for (const auto &block : inputBlocks_)
     if (block.fiber && block.fiber->images.cols() > 0)
       read.inputFiberResiduals.push_back(fiberResidualForBoundaryBlock(block, spacetime_));
-  read.cellsA = A->cells;
-  read.cellsB = B->cells;
+  read.cellsA = A->fiber->cells;
+  read.cellsB = B->fiber->cells;
   return read;
 }
 
@@ -3899,8 +4030,13 @@ MultiCobordism::ResidualGradient MultiCobordism::fiberResidualGradientOn(
 
 MultiCobordism::ResidualGradient MultiCobordism::twoBodyResidualGradientOn(
     const std::shared_ptr<Spacetime> &spacetime, const TwoBodyTarget &target) const {
-  const auto [A, B] = attachedInputFibers();
+  const auto [blockA, blockB] = attachedInputBlocks();
+  const BoundaryFiber *A = &*blockA->fiber, *B = &*blockB->fiber;
   if (!spacetime) throw std::invalid_argument("MultiCobordism::twoBodyResidualGradientOn: null spacetime");
+  if (blockA->frame.has_value() != blockB->frame.has_value())
+    throw std::logic_error("MultiCobordism: the two-body transfer is read in the blocks' frames only when both "
+                           "input blocks carry one (setInputFrame on both, or on neither)");
+  const bool framed = blockA->frame.has_value();
   const auto edges = spacetime->getEdgeList()->toVector();
   ResidualGradient gradient;
   gradient.lengths = Eigen::VectorXcd::Zero(static_cast<Eigen::Index>(edges.size()));
@@ -3909,11 +4045,15 @@ MultiCobordism::ResidualGradient MultiCobordism::twoBodyResidualGradientOn(
   const std::vector<int> ia = PencilLayer::indicesOf(assembled, A->degree, A->cells);
   const std::vector<int> ib = PencilLayer::indicesOf(assembled, B->degree, B->cells);
   const Eigen::MatrixXcd Atilde = PencilLayer::pencil(assembled, A->degree).A;
+  // The (A, B) block of an operator on the whole, in the blocks' frames when
+  // both carry one: (Z_A^vee)^T X_AB Z_B, the frames held constant (they are
+  // coordinates, not geometry), so d T = (Z_A^vee)^T dA~_AB Z_B.
   const auto block = [&](const Eigen::MatrixXcd &full) {
     Eigen::MatrixXcd out(static_cast<Eigen::Index>(ia.size()), static_cast<Eigen::Index>(ib.size()));
     for (std::size_t i = 0; i < ia.size(); ++i)
       for (std::size_t j = 0; j < ib.size(); ++j)
         out(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) = full(ia[i], ib[j]);
+    if (framed) return Eigen::MatrixXcd(blockA->frame->dualImages.transpose() * out * blockB->frame->images);
     return out;
   };
   const Eigen::MatrixXcd T = block(Atilde);

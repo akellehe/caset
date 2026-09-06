@@ -67,6 +67,36 @@ class MultiCobordism {
   /// demand from `vertices` by `subcomplexWithinVertexSet` (the ambient complex's top
   /// cells whose vertices all lie in the set), so the vertex set — together with the
   /// ambient triangulation — determines the block's complex.
+  /// A FRAME on a block's attached cells (qubit cobordism spec D3): the
+  /// coordinates the two-body transfer is read in. `images` \f$ Z \f$ is one
+  /// column per basis element on the block's fiber cells (\f$ |cells|
+  /// \times r \f$, the rows in the fiber's attachment order); `dualImages`
+  /// \f$ Z^\vee \f$ is the frame's left partner under the transpose pairing,
+  /// the contract \f$ (Z^\vee)^T M_k Z = I_r \f$ with \f$ M_k \f$ the chain
+  /// metric's inverse (the Whitney mass matrix) of the block's OWN pencil on
+  /// the cells — `dualFrame` builds it, `inputFrameDual` on the block's own
+  /// complex. WHAT the transfer then is: \f$ T_{AB} = (Z_A^\vee)^T
+  /// (\tilde A)_{AB} Z_B \f$ (`chainhodge::PencilSchur::transfer`), the
+  /// block of the whole's pencil operator between the two frames, which
+  /// under the contract is the matrix of that block in the frames' coordinates
+  /// (the whitepaper's \f$ M_{AB} = \tilde\Phi_A^T T_{AB} \Phi_B \f$; a
+  /// change of frame \f$ Z_A \mapsto Z_A g_A \f$, \f$ Z_B \mapsto Z_B g_B \f$
+  /// gives \f$ g_A^{-1} T g_B \f$). For two qubit tori the frames are their
+  /// period frames (`observables::SimplicialQubit::periodFrame`, carried
+  /// through the collar's id map) and \f$ T \f$ is \f$ 2 \times 2 \f$ in the
+  /// \f$ |0\rangle, |1\rangle \f$ bases a two-body target \f$ \chi \f$ is
+  /// written in. WHY separate from the fiber: the fiber is the rank-one
+  /// state the block keeps representing and is scored by its residual; the
+  /// frame is the basis that state is a coordinate vector in and is never
+  /// scored (nothing about a marking enters the relaxation).
+  struct BlockFrame {
+    /// The block's attached fiber cells (sorted vertex tuples), one per row.
+    std::vector<std::vector<std::uint64_t>> cells;
+    Eigen::MatrixXcd images;
+    Eigen::MatrixXcd dualImages;
+    [[nodiscard]] int rank() const noexcept { return static_cast<int>(images.cols()); }
+  };
+
   struct BoundaryBlock {
     std::set<std::uint64_t> vertices;
     std::vector<std::complex<double>> target;
@@ -98,6 +128,14 @@ class MultiCobordism {
     /// set. Nothing here is pinned or scored: the list names the surface, the
     /// residual holds the state.
     std::vector<std::vector<std::uint64_t>> faces;
+    /// The block's frame for the two-body transfer (`BlockFrame`, spec D3),
+    /// set by `setInputFrame` on the cells of its attached fiber. Held
+    /// constant by the engine: no stage moves it, and the block's own
+    /// residual is what keeps it valid as the lengths move. Absent on every
+    /// block a caller has not framed; when either input block lacks one the
+    /// transfer is read in identity frames on the cells, bit-identical to a
+    /// node without frames.
+    std::optional<BlockFrame> frame;
   };
 
   /// An ordered, explicit period constraint evaluated by the existing
@@ -1114,9 +1152,14 @@ class MultiCobordism {
   /// The reading of the bulk between the two attached input frames.
   struct TwoBodyRead {
     bool choiDecomposed{true};
-    /// \f$ T_{AB} = (Z_A^\vee)^T(\tilde A^U)_{AB}Z_B \f$ with the full frames on
-    /// the two attached cell sets (the coupling block of the whole between them).
+    /// \f$ T_{AB} = (Z_A^\vee)^T(\tilde A^U)_{AB}Z_B \f$: with the full frames on
+    /// the two attached cell sets (the coupling block of the whole between
+    /// them, \f$ |A| \times |B| \f$) when the blocks carry no frame, or in the
+    /// blocks' frames (\f$ r_A \times r_B \f$, `BlockFrame`) when both do.
     Eigen::MatrixXcd transfer{};
+    /// True when `transfer` was read in the blocks' frames (`setInputFrame`
+    /// on both), false when in identity frames on the cells.
+    bool inFrames{false};
     /// \f$ \mathrm{vec}(T_{AB}) \f$, column-major, the Choi-decomposed state.
     Eigen::VectorXcd choiState{};
     /// Singular values of \f$ T_{AB} \f$: the Schmidt spectrum of the state.
@@ -1142,9 +1185,68 @@ class MultiCobordism {
   /// input fiber's cells.
   void attachInputFiber(std::size_t index, BoundaryFiber fiber,
                         std::vector<std::vector<std::uint64_t>> cells);
+  /// Set the FRAME the two-body transfer is read in on input block \p index
+  /// (`BlockFrame`, qubit cobordism spec D3): \p images and \p dualImages on
+  /// \p cells, which must be the block's attached fiber cells in the
+  /// attachment order (the rows of the transfer's operands are those cells).
+  /// The frame is data the caller states at attachment — a torus's period
+  /// frame carried through the collar's id map, its dual from
+  /// `inputFrameDual` — and the engine holds it constant from then on. When
+  /// both input blocks carry a frame, `readTwoBody`, `twoBodyResidual` and
+  /// `twoBodyResidualGradientOn` read the transfer in the frames
+  /// (\f$ r_A \times r_B \f$; the gradient differentiates the pencil operator
+  /// only, the frames being constants); re-attaching the block's fiber clears
+  /// its frame, since the rows referred to the previous attachment.
+  /// @throws std::out_of_range on the index; std::logic_error when the block
+  ///   carries no attached fiber; std::invalid_argument, by name, when the
+  ///   cells are not the fiber's attached cells in their order, when the
+  ///   images or the dual images have another row count, when the two have
+  ///   different column counts or none, or when an entry is not finite.
+  void setInputFrame(std::size_t index, std::vector<std::vector<std::uint64_t>> cells,
+                     Eigen::MatrixXcd images, Eigen::MatrixXcd dualImages);
+  /// The frame of input block \p index, or none. @throws std::out_of_range.
+  [[nodiscard]] const std::optional<BlockFrame> &inputFrame(std::size_t index) const;
+  /// Drop the frame of input block \p index: the transfer returns to identity
+  /// frames on the cells. @throws std::out_of_range.
+  void clearInputFrame(std::size_t index);
+  /// The DUAL of a frame under the transpose pairing of \p complex's own
+  /// chain-level Whitney pencil at degree \p degree: with \f$ M_k \f$ the
+  /// pencil's chain-metric inverse (`CovariantChainHodge::Minv`, the Whitney
+  /// mass matrix) restricted to \p cells and \f$ B = Z^T M_k Z \f$ the frame's
+  /// pairing, \f$ Z^\vee = Z\,B^{-T} \f$, so that \f$ (Z^\vee)^T M_k Z = I \f$
+  /// (the `BlockFrame` contract; the whitepaper's canonical left frame
+  /// \f$ \tilde\Phi = G^{U^{-1}}\Phi^\vee B^{-T} \f$ at \f$ U = 1 \f$, where the
+  /// dual band's images are the band's own, `PencilLayer::readBoundaryFiber`).
+  /// WHY this pairing: `chainhodge::PencilSchur::transfer` pairs the dual
+  /// images of one fiber against the pencil operator applied to the other's
+  /// images by the transpose and normalizes nothing, so a frame paired with
+  /// its plain images gives \f$ Z_A^T \tilde A Z_B \f$ (a bilinear form that
+  /// transforms by \f$ g_A^T T g_B \f$), while the dual under this contract
+  /// gives the matrix of the operator block in the frames' coordinates
+  /// (\f$ g_A^{-1} T g_B \f$), which is what a target written in those
+  /// coordinates compares with. Read-only on \p complex.
+  /// @throws std::invalid_argument on a null complex, a degree above its
+  ///   dimension, a frame without columns, a row count other than the cell
+  ///   count, or a cell absent from the complex at that degree
+  ///   (`PencilLayer::indicesOf`, by name); std::runtime_error when the
+  ///   pairing is singular (an isotropic frame).
+  [[nodiscard]] static Eigen::MatrixXcd dualFrame(const std::shared_ptr<Spacetime> &complex, int degree,
+                                                  const std::vector<std::vector<std::uint64_t>> &cells,
+                                                  const Eigen::MatrixXcd &images);
+  /// `dualFrame` of \p images on input block \p index's OWN pencil — its own
+  /// complex with the live lengths (`blockComplexWithGeometry`: a surface
+  /// block's surface, an ordinary block's sub-complex) on its attached fiber
+  /// cells at the fiber's degree. Call it at attachment, when the block's
+  /// lengths are the surface's own. @throws std::out_of_range on the index;
+  ///   std::logic_error without an attached fiber or an own complex; and
+  ///   what `dualFrame` throws.
+  [[nodiscard]] Eigen::MatrixXcd inputFrameDual(std::size_t index, const Eigen::MatrixXcd &images) const;
   /// Set the two-body target; scored inside `rU` under `useFiberResiduals`
   /// once two input fibers are attached. @throws std::invalid_argument on an
-  /// empty target.
+  /// empty target, and, by name, on a shape that disagrees with the transfer's
+  /// when two input fibers are attached: the frames' ranks \f$ r_A \times
+  /// r_B \f$ when both blocks carry a frame, the cell counts otherwise (with
+  /// one frame set the shape is settled at read time, which refuses by name).
   void setTwoBodyTarget(Eigen::MatrixXcd chi, bool choiDecomposed = true);
   [[nodiscard]] const std::optional<TwoBodyTarget> &twoBodyTarget() const noexcept {
     return twoBodyTarget_;
@@ -2104,14 +2206,29 @@ class MultiCobordism {
   bool fiberPhaseDescent_{false};
   std::optional<BoundaryFiber> wholeFiberTarget_;
   std::optional<TwoBodyTarget> twoBodyTarget_;
-  /// The transfer between the full frames on the two attached input fibers'
-  /// cells, on \p spacetime; refused geometries throw std::runtime_error.
+  /// The transfer between the two attached input blocks on \p spacetime: in
+  /// the blocks' frames when both carry one (`BlockFrame`), in the full
+  /// (identity) frames on the fibers' cells when neither does; refused
+  /// geometries throw std::runtime_error. @throws std::logic_error when only
+  /// one block carries a frame.
   [[nodiscard]] chainhodge::TransferResult frameTransferOn(
-      const std::shared_ptr<Spacetime> &spacetime, const BoundaryFiber &A,
-      const BoundaryFiber &B) const;
+      const std::shared_ptr<Spacetime> &spacetime, const BoundaryBlock &A,
+      const BoundaryBlock &B) const;
   [[nodiscard]] double twoBodyResidualOn(const std::shared_ptr<Spacetime> &spacetime,
                                          const TwoBodyTarget &target) const;
-  [[nodiscard]] std::pair<const BoundaryFiber *, const BoundaryFiber *> attachedInputFibers() const;
+  /// The two input blocks carrying an attached fiber, in block order.
+  /// @throws std::logic_error unless exactly two do.
+  [[nodiscard]] std::pair<const BoundaryBlock *, const BoundaryBlock *> attachedInputBlocks() const;
+  /// The shape the transfer between two attached input blocks has: the
+  /// frames' ranks when both carry one (`framed`), the cell counts when
+  /// neither does; none when only one does (settled at read time) or when
+  /// fewer than two fibers are attached.
+  struct TransferShape {
+    Eigen::Index rows{0};
+    Eigen::Index cols{0};
+    bool framed{false};
+  };
+  [[nodiscard]] std::optional<TransferShape> transferShape() const;
 
   /// The fiber residual of \p fiber read on \p spacetime in \p band (see
   /// `useFiberResiduals`, `FiberBand`).

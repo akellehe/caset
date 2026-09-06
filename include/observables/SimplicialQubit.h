@@ -155,6 +155,38 @@ class SimplicialQubit {
     }
     /// \f$ \tau = P_B / P_A \f$ (§9).
     [[nodiscard]] std::complex<double> tau() const noexcept { return tau_; }
+    /// The PERIOD FRAME of the torus (qubit cobordism spec D3): the basis
+    /// \f$ (f_A, f_B) \f$ of its harmonic space with periods \f$ (1, 0) \f$
+    /// and \f$ (0, 1) \f$ over the marking in force, an \f$ n_E \times 2 \f$
+    /// real matrix in the torus's edge order — `harmonicBasis()` times the
+    /// inverse of the period matrix, \f$ F = H\,\Pi^{-1} \f$ with
+    /// \f$ \Pi_{ca} = \oint_c h_a \f$ (rows = the cycles \f$ A, B \f$,
+    /// columns = the basis elements \f$ h_1, h_2 \f$), so that
+    /// \f$ \oint_A f_A = 1,\ \oint_B f_A = 0,\ \oint_A f_B = 0,\ \oint_B f_B = 1 \f$.
+    ///
+    /// WHAT it is for: the coordinates a state is written in. Every harmonic
+    /// form is \f$ \omega = P_A f_A + P_B f_B \f$ with its own periods as the
+    /// coefficients, so the holomorphic line is the column combination
+    /// \f$ (1, \tau) \f$ of the frame: `holomorphicForm()`
+    /// \f$ = \f$ `periodFrame()` \f$ \cdot (P_A, P_B)^T = P_A\,F (1, \tau)^T \f$,
+    /// the qubit \f$ |0\rangle + \tau|1\rangle \f$ of §10 read as a 1-form
+    /// with \f$ f_A \leftrightarrow |0\rangle \f$ and
+    /// \f$ f_B \leftrightarrow |1\rangle \f$. A two-body target \f$ \chi \f$
+    /// is written in the \f$ |0\rangle, |1\rangle \f$ bases of two qubits,
+    /// so the transfer of a cobordism between two tori compares with it when
+    /// it is read in the period frames of the two boundary tori
+    /// (`cobordism::MultiCobordism::setInputFrame`), where it is
+    /// \f$ 2 \times 2 \f$. WHY over the marking in force: \f$ \tau \f$ is
+    /// reported over the marking in force (§9: \f$ (B, -A) \f$ when
+    /// \f$ |P_A| \f$ vanishes, `markingSwapped()`), and the frame is the
+    /// basis \f$ \tau \f$ is a coordinate in, so `periods()` are always the
+    /// coefficients of `holomorphicForm()` in it. The frame is real (the
+    /// harmonic basis and the periods are), invariant under a common scale of
+    /// the lengths (the harmonic space and the periods are), independent of
+    /// the orthonormal basis §6 happens to return, and always defined: the
+    /// period map of the harmonic space over a homology basis is an
+    /// isomorphism, which §2's independence check guarantees.
+    [[nodiscard]] const Eigen::MatrixXd &periodFrame() const noexcept { return F_; }
     /// \f$ (|0\rangle + \tau|1\rangle)/\sqrt{1+|\tau|^2} \f$ (§10).
     [[nodiscard]] Eigen::VectorXcd state() const;
     /// \f$ (2\,\mathrm{Re}\,\tau,\ 2\,\mathrm{Im}\,\tau,\ 1 - |\tau|^2)/(1+|\tau|^2) \f$ (§10).
@@ -286,6 +318,8 @@ class SimplicialQubit {
     std::complex<double> periodB_{0.0, 0.0};
     std::complex<double> tau_{0.0, 0.0};
     bool swapped_{false};
+    /// The period frame \f$ F = H\,\Pi^{-1} \f$ over the marking in force (`periodFrame`).
+    Eigen::MatrixXd F_;
     // §13
     double condM1_{0.0};
     double condG_{0.0};
@@ -309,6 +343,7 @@ class SimplicialQubit {
     void buildHarmonicSpace();                  // §6
     void buildComplexStructure();               // §7, §8
     void buildHolomorphicLine();                // §9
+    void buildPeriodFrame();                    // qubit cobordism spec D3
     void diagnoseDegeneration();                // §13
     [[nodiscard]] std::size_t edgeIndexOf(std::uint64_t u, std::uint64_t v) const;
     [[nodiscard]] std::complex<double> periodOf(const Eigen::VectorXcd &omega, const Cycle &cycle) const;

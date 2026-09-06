@@ -179,6 +179,7 @@ void SimplicialQubit::initialize() {
   buildHarmonicSpace();
   buildComplexStructure();
   buildHolomorphicLine();
+  buildPeriodFrame();
   diagnoseDegeneration();
 }
 
@@ -811,6 +812,29 @@ SimplicialQubit SimplicialQubit::intrinsicDelaunay() const {
 // ============================================================================
 // Spec section 13: degeneration diagnostics
 // ============================================================================
+
+void SimplicialQubit::buildPeriodFrame() {
+  // Pi_{ca} = the period of h_a over cycle c, the cycles in force: (A, B), or
+  // (B, -A) when section 9 swapped the marking (|P_A| vanished), so that the
+  // frame is the basis tau() is a coordinate in.
+  Eigen::Matrix2d Pi;
+  for (Eigen::Index a = 0; a < 2; ++a) {
+    const Eigen::VectorXcd h = H_.col(a).cast<Complex>();
+    const double pA = periodOf(h, cycleA_).real();
+    const double pB = periodOf(h, cycleB_).real();
+    Pi(0, a) = swapped_ ? pB : pA;
+    Pi(1, a) = swapped_ ? -pA : pB;
+  }
+  // F = H Pi^{-1}: the period of column c of F over cycle c' is
+  // sum_a Pi_{c'a} (Pi^{-1})_{ac} = delta_{c'c}. The period map of the
+  // harmonic space over a homology basis is an isomorphism (section 2 checked
+  // the cycles' independence), so Pi is invertible whenever dim H = 2.
+  const double det = Pi.determinant();
+  if (!std::isfinite(det) || det == 0.0)
+    throw std::runtime_error("SimplicialQubit: the period matrix of the harmonic basis over the marking is "
+                             "singular; the marked cycles do not span the torus's homology");
+  F_ = H_ * Pi.inverse();
+}
 
 void SimplicialQubit::diagnoseDegeneration() {
   const Eigen::VectorXd magnitudes = weights_.cwiseAbs();

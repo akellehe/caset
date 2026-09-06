@@ -1131,6 +1131,23 @@ assertion. Every pairing is the transpose.)doc")
            py::arg("B"), py::arg("tolerance") = 1e-8)
       .def_static("pencil", &PencilLayer::pencil, py::arg("assembled"), py::arg("k"));
 
+  py::class_<MultiCobordism::BlockFrame>(m, "BlockFrame",
+      "A frame on a block's attached cells (qubit cobordism spec D3): the coordinates the two-body "
+      "transfer is read in. `images` Z is one column per basis element on the block's fiber cells "
+      "(rows in the attachment order); `dual_images` Z^vee is the frame's left partner under the "
+      "transpose pairing, the contract Z^vee.T @ M_k @ Z == I with M_k the Whitney mass matrix of "
+      "the block's OWN pencil on the cells (MultiCobordism.dual_frame / input_frame_dual). With both "
+      "input blocks framed the transfer is T_AB = Z_A^vee.T @ A~_AB @ Z_B, the whole's pencil-operator "
+      "block in the frames' coordinates (a change of frame g_A, g_B gives g_A^-1 T g_B); for two "
+      "qubit tori the frames are their period frames (SimplicialQubit.period_frame) and T is 2x2 in "
+      "the |0>, |1> bases a two-body target chi is written in. Separate from the fiber: the fiber is "
+      "the rank-one state the block keeps representing (scored), the frame is the basis that state "
+      "is a coordinate vector in (never scored).")
+      .def_readonly("cells", &MultiCobordism::BlockFrame::cells)
+      .def_readonly("images", &MultiCobordism::BlockFrame::images)
+      .def_readonly("dual_images", &MultiCobordism::BlockFrame::dualImages)
+      .def("rank", &MultiCobordism::BlockFrame::rank);
+
   py::class_<MultiCobordism::BoundaryBlock>(m, "MultiCobordismBlock",
       "An emergent boundary block of a MultiCobordism (an input or output): the "
       "vertex set whose own sub-complex carries the block, and its target period "
@@ -1164,7 +1181,13 @@ assertion. Every pairing is the transpose.)doc")
                              },
                              "A surface block's own faces as seeded (sorted vertex tuples), "
                              "carried by the block so its own complex is the surface whatever "
-                             "the host registers; empty for an ordinary block.");
+                             "the host registers; empty for an ordinary block.")
+      .def_property_readonly("frame",
+                             [](const MultiCobordism::BoundaryBlock &block) {
+                               return block.frame;
+                             },
+                             "The block's frame for the two-body transfer (BlockFrame, spec D3), "
+                             "set by set_input_frame, or None.");
   py::class_<MultiCobordism::FixedBoundaryEigenstateResult>(
       m, "FixedBoundaryEigenstateResult",
       "Witness from the historical fixed-boundary Rayleigh-residual "
@@ -1306,6 +1329,9 @@ assertion. Every pairing is the transpose.)doc")
       "and rank, the reversal residual, the fit residual, and the input blocks' fiber residuals.")
       .def_readonly("choi_decomposed", &MultiCobordism::TwoBodyRead::choiDecomposed)
       .def_readonly("transfer", &MultiCobordism::TwoBodyRead::transfer)
+      .def_readonly("in_frames", &MultiCobordism::TwoBodyRead::inFrames,
+                    "True when `transfer` was read in the blocks' frames (set_input_frame on both), "
+                    "false when in identity frames on the cells.")
       .def_readonly("choi_state", &MultiCobordism::TwoBodyRead::choiState)
       .def_readonly("singular_values", &MultiCobordism::TwoBodyRead::singularValues)
       .def_readonly("schmidt_rank", &MultiCobordism::TwoBodyRead::schmidtRank)
@@ -1589,12 +1615,42 @@ assertion. Every pairing is the transpose.)doc")
       .def("attach_input_fiber", &MultiCobordism::attachInputFiber, py::arg("index"), py::arg("fiber"),
            py::arg("cells"),
            "Attach a piped input fiber to THIS complex's cells (one per fiber row, in the attachment "
-           "order = the attachment permutation); refuses overlaps with other attached input fibers.")
+           "order = the attachment permutation); refuses overlaps with other attached input fibers. "
+           "Clears the block's frame (set_input_frame), whose rows referred to the previous attachment.")
+      .def("set_input_frame", &MultiCobordism::setInputFrame, py::arg("index"), py::arg("cells"),
+           py::arg("images"), py::arg("dual_images"),
+           "Set the frame (BlockFrame, spec D3) the two-body transfer is read in on input block `index`: "
+           "images and dual images on `cells`, which must be the block's attached fiber cells in the "
+           "attachment order. Stated by the caller at attachment (a torus's period frame through the "
+           "collar's id map, its dual from input_frame_dual) and held constant by the engine. With both "
+           "input blocks framed, read_two_body, two_body_residual and the two-body gradient read the "
+           "transfer in the frames (r_A x r_B; the gradient differentiates the pencil operator only). "
+           "Refuses by name: no attached fiber, cells that are not the fiber's in its order, row counts "
+           "other than the cell count, differing or zero column counts, non-finite entries.")
+      .def("input_frame", [](const MultiCobordism &self, std::size_t i) { return self.inputFrame(i); },
+           py::arg("index"), "The frame of input block `index` (BlockFrame), or None.")
+      .def("clear_input_frame", &MultiCobordism::clearInputFrame, py::arg("index"),
+           "Drop the frame of input block `index`: the transfer returns to identity frames on the cells.")
+      .def_static("dual_frame", &MultiCobordism::dualFrame, py::arg("complex"), py::arg("degree"),
+           py::arg("cells"), py::arg("images"),
+           "The dual of a frame under the transpose pairing of `complex`'s own chain-level Whitney "
+           "pencil at `degree`: with M_k the pencil's Whitney mass matrix (CovariantChainHodge.Minv, "
+           "PencilLayer.pencil(...).B) restricted to `cells` and B = Z.T @ M_k @ Z the frame's pairing, "
+           "Z^vee = Z @ inv(B).T, so that Z^vee.T @ M_k @ Z == I (the BlockFrame contract; the "
+           "whitepaper's canonical left frame at U = 1). Read-only on the complex. Refuses by name a "
+           "null complex, a degree above its dimension, a frame without columns, a row count other than "
+           "the cell count, a cell absent at that degree, and a singular pairing (an isotropic frame).")
+      .def("input_frame_dual", &MultiCobordism::inputFrameDual, py::arg("index"), py::arg("images"),
+           "dual_frame of `images` on input block `index`'s OWN pencil - its own complex with the live "
+           "lengths (block_surface_subcomplex for a surface block, the sub-complex for an ordinary one) "
+           "on its attached fiber cells at the fiber's degree. Call it at attachment.")
       .def("set_two_body_target", &MultiCobordism::setTwoBodyTarget, py::arg("chi"),
            py::arg("choi_decomposed") = true,
            "The two-body target chi on the pair of attached frames; choi_decomposed selects the reading "
            "(vec(T_AB) as a state on the pair space, or the operator T_AB). Scored inside r_U under "
-           "use_fiber_residuals once two input fibers are attached.")
+           "use_fiber_residuals once two input fibers are attached. With two fibers attached, a shape "
+           "other than the transfer's (the frames' ranks r_A x r_B when both blocks carry a frame, the "
+           "cell counts otherwise) is refused by name.")
       .def("two_body_target", &MultiCobordism::twoBodyTarget)
       .def("two_body_residual", &MultiCobordism::twoBodyResidual, py::call_guard<py::gil_scoped_release>(),
            "The projective Frobenius leak of chi against the frame transfer T_AB on the live complex.")

@@ -160,10 +160,14 @@ class TestAttachmentAndResidual:
             node.two_body_residual()
         with pytest.raises(ValueError, match="nonzero matrix"):
             node.set_two_body_target(np.zeros((4, 4), dtype=complex))
-        node.set_two_body_target(np.eye(3, dtype=complex))
+        # with two fibers attached the target's shape is checked against the
+        # transfer's at set time (the cell counts here; the frames' ranks once
+        # both blocks carry a frame, test_period_frame_transfer_python.py)
+        with pytest.raises(ValueError, match="attached cells give 4x4"):
+            node.set_two_body_target(np.eye(3, dtype=complex))
+        node.set_two_body_target(np.eye(4, dtype=complex))
         node.use_fiber_residuals(True)
-        with pytest.raises(RuntimeError, match="attached frames give 4x4"):
-            node.two_body_residual()
+        assert 0.0 <= node.two_body_residual() <= 1.0
 
 
 class TestDrive:
