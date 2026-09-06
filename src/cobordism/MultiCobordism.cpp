@@ -2384,28 +2384,65 @@ MultiCobordism::Snapshot MultiCobordism::snapshotOf(
   // simplex it is. Absent on every node without surface inputs.
   for (const auto &face : uncoveredInputFacesOn(spacetime))
     cellVertexTuples.push_back(face);
-  std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> lengthsByEdge;
+  // Every edge's length AND phase, verbatim and branch-exact: the phase is a
+  // live field of the geometry (the tori's pure-gauge links), and a record
+  // that dropped it would rebuild a different operator.
+  std::map<std::pair<std::uint64_t, std::uint64_t>, EdgeGeometry> geometryByEdge;
   for (const auto *edge : spacetime.getEdgeList()->toVector())
-    lengthsByEdge[edgeKey(edge)] = edge->getLength();  // verbatim, branch-exact
-  return {std::move(cellVertexTuples), std::move(lengthsByEdge)};
+    geometryByEdge[edgeKey(edge)] = edgeGeometryOf(*edge);
+  return {std::move(cellVertexTuples), std::move(geometryByEdge)};
 }
 
 MultiCobordism::Snapshot MultiCobordism::snapshot() const {
   return snapshotOf(*spacetime_);
 }
 
-std::shared_ptr<Spacetime> MultiCobordism::build(
-    const Snapshot &complexSnapshot) const {
-  auto rebuiltSpacetime = Spacetime::fromCells(spacetime_->getDimensions(),
-                                               complexSnapshot.first, 1.0, 0.0);
-  // Candidate clones inherit the wiring mode so COMBINATORIAL MOVES scored on
-  // them wire their new edges under the same convention (#690).
-  rebuiltSpacetime->setBalancedEdgeWiring(balancedEdgeWiring_);
+complexd MultiCobordism::inverseLinkPhase(complexd phase) noexcept {
+  // 0 - phi, not -phi: IEEE negation of +0 is -0, and a -0 phase would make
+  // an untouched all-zero connection differ bit for bit from the rebuilt one
+  // (a signed zero survives exp and prints as such); 0 - x equals -x exactly
+  // for every nonzero x and is +0 for either zero.
+  return complexd(0.0, 0.0) - phase;
+}
+
+MultiCobordism::EdgeGeometry MultiCobordism::edgeGeometryOf(
+    const ::tessera::mesh::Edge &edge) {
+  const auto sourceVertexId = edge.getSource()->getId();
+  const auto targetVertexId = edge.getTarget()->getId();
+  return {edge.getLength(), sourceVertexId < targetVertexId
+                                ? edge.getPhase()
+                                : inverseLinkPhase(edge.getPhase())};
+}
+
+void MultiCobordism::restoreEdgeGeometry(::tessera::mesh::Edge &edge,
+                                         const EdgeGeometry &geometry) {
+  const auto sourceVertexId = edge.getSource()->getId();
+  const auto targetVertexId = edge.getTarget()->getId();
+  edge.setLength(geometry.length);  // verbatim, branch-exact
+  edge.setPhase(sourceVertexId < targetVertexId
+                    ? geometry.phase
+                    : inverseLinkPhase(geometry.phase));
+}
+
+std::shared_ptr<Spacetime> MultiCobordism::rebuild(
+    int dimensions, const Snapshot &complexSnapshot) {
+  auto rebuiltSpacetime =
+      Spacetime::fromCells(dimensions, complexSnapshot.first, 1.0,
+                           complexd(0.0, 0.0));
   for (auto *edge : rebuiltSpacetime->getEdgeList()->toVector()) {
     const auto savedEntry = complexSnapshot.second.find(edgeKey(edge));
     if (savedEntry != complexSnapshot.second.end())
-      edge->setLength(savedEntry->second);  // verbatim, branch-exact
+      restoreEdgeGeometry(*edge, savedEntry->second);
   }
+  return rebuiltSpacetime;
+}
+
+std::shared_ptr<Spacetime> MultiCobordism::build(
+    const Snapshot &complexSnapshot) const {
+  auto rebuiltSpacetime = rebuild(spacetime_->getDimensions(), complexSnapshot);
+  // Candidate clones inherit the wiring mode so COMBINATORIAL MOVES scored on
+  // them wire their new edges under the same convention (#690).
+  rebuiltSpacetime->setBalancedEdgeWiring(balancedEdgeWiring_);
   return rebuiltSpacetime;
 }
 
@@ -3648,8 +3685,9 @@ bool MultiCobordism::adoptParentEdgeGeometry(Spacetime &child, const Spacetime &
   for (auto *edge : child.getEdgeList()->toVector()) {
     const auto found = parentEdges.find(edgeKey(edge));
     if (found == parentEdges.end()) return false;
-    edge->setLength(found->second->getLength());
-    edge->setPhase(found->second->getPhase());
+    // Through the canonical record, so a parent edge stored the other way
+    // round from the child's hands over the phase on the child's orientation.
+    restoreEdgeGeometry(*edge, edgeGeometryOf(*found->second));
   }
   return true;
 }
