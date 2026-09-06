@@ -9,9 +9,11 @@ the neutral host by default, ``build_qubit_node`` for ``--inputs qubit`` --
 and the loop, the engine calls and the frames are the same either way. The
 qubit factory is the T1-T3 setup: two ``SimplicialQubit.flat_torus`` inputs,
 their collar as the host, each torus one input block with its holomorphic
-form attached as a degree-1 fiber on the harmonic contour, its period frame
-with the dual on the block's own pencil, chi of spec S5 as the two-body
-target, fiber residuals at the input weight, the node's default objective.
+form attached as a degree-1 fiber on the harmonic contour, its marking with
+the input coefficients (1, tau_in) on the block (the engine derives the
+frame live, spec D2/D3 as revised), chi of spec S5 as the two-body target,
+the block residuals at the input weight, the node's default objective on the
+complex locus.
 
 Coverage:
 
@@ -19,15 +21,18 @@ Coverage:
   each to the live callback as it completes, and every channel of spec S6
   is a measurement or an ``Absent`` with a named reason;
 * frame 0 is the collar seed: each block's tau-hat equals tau_in to 1e-9
-  with both distances at zero, the own-Laplacian residuals at their floor,
-  the monodromy the identity, Betti numbers [1, 2, 1, 0], the boundary two
-  tori (Euler characteristic 0 each), the two-body read in the period frames
-  (2 x 2, Schmidt rank 2), the restricted leaks recorded (they are NOT at
-  rounding on the collar seed -- 3.1e-3 and 9.3e-3 on 3x3 tori -- because the
-  whole's harmonic representative restricted to a torus differs from the
-  torus's own; a finding for T5, not a rule here);
-* after synthesis every channel is still read, the block residuals hold
-  below the weight's level and the surfaces are still the tori;
+  with both distances at zero, the block residuals (the whole's zero mode
+  against (1, tau_in) in the live frame) at T4's restricted leaks -- 3.1e-3
+  and 9.3e-3 on 3x3 tori, NOT at rounding, because the whole's harmonic
+  representative restricted to a torus differs from the torus's own -- with
+  the coefficients of the whole's zero mode reported next to the inputs and
+  the own-kernel leaks at their floor as diagnostics, the monodromy the
+  identity, Betti numbers [1, 2, 1, 0], the boundary two tori (Euler
+  characteristic 0 each), the two-body read in the derived period frames
+  (2 x 2, Schmidt rank 2), r_U the weighted block residuals plus the
+  two-body leak;
+* after synthesis every channel is still read, the block residuals descend
+  from their seed values (spec C2) and the surfaces are still the tori;
 * the algebra: chi of spec S5 against an explicit computation, the exact
   block evolution against first order at small J t, the selection rule;
 * ``to_json`` round-trips through ``json.dumps`` with complex numbers as
@@ -62,6 +67,9 @@ TAU_B = complex(-0.2, 0.8)
 GRID = 3
 STEPS = 2
 FLOOR = 1e-24
+#: The block residuals on the 3x3 collar seed (T2-bis): the restricted leaks
+#: of the input lines in the whole's zero mode, which T4 measured.
+SEED_RESIDUALS = (3.099981154846e-3, 9.344558825278e-3)
 
 _CACHE = {}
 
@@ -116,7 +124,7 @@ def test_every_channel_is_a_measurement_or_a_named_absence():
         for row in frame.blocks:
             assert row["label"] in ea.DECLARED_TORUS_LABELS
             assert isinstance(row["reversed"], bool)
-            for key in ("residual", "read"):
+            for key in ("residual", "coefficients", "own_kernel_leak", "read"):
                 value = row[key]
                 assert _present(value) or value.reason.strip(), key
         # the neutral mode's certificates are absent by name here
@@ -141,7 +149,15 @@ def test_frame_zero_is_the_collar_seed():
     for index, tau_in in enumerate((TAU_A, TAU_B)):
         row = frame.blocks[index]
         assert row["tau_in"] == tau_in and row["weight"] == ea.DECLARED_INPUT_WEIGHT
-        assert row["residual"] < FLOOR, row["residual"]
+        assert row["input"] == [1.0 + 0j, tau_in] == inputs.coefficients_in[index]
+        # the block residual (spec D2 as revised): the whole's zero mode against
+        # (1, tau_in) in the live frame -- T4's restricted leak on the seed, not zero
+        assert row["residual"] == pytest.approx(SEED_RESIDUALS[index], rel=1e-6), row["residual"]
+        assert row["harmonic_rank"] == 2 and row["frame_rank"] == 2
+        coefficients = np.asarray(row["coefficients"])
+        assert np.abs(coefficients - np.array([1.0, tau_in])).max() < 0.03
+        # the former own-kernel leak is a diagnostic at its floor
+        assert row["own_kernel_leak"] < FLOOR, row["own_kernel_leak"]
         read = _read(frame, index)
         assert abs(read["tau"] - tau_in) < 1e-9, read["tau"]
         assert read["fubini_study_distance"] < 1e-9 and read["weil_petersson_distance"] < 1e-9
@@ -162,12 +178,15 @@ def test_frame_zero_is_the_collar_seed():
     assert frame.monodromy["rounded"] == [[1, 0], [0, 1]]
     assert frame.monodromy["rounding_residual"] < 1e-9 and frame.monodromy["fit_residual"] < 1e-9
     assert _present(frame.leaks) and frame.leaks["harmonic_rank"] == 2
-    for row in frame.leaks["per_block"]:
+    for index, row in enumerate(frame.leaks["per_block"]):
         assert _present(row) and 0.0 <= row["leak"] <= 1.0 and row["rank"] == 2
+        # the leak of the input line is the block residual on the seed (the same target up to scale)
+        assert row["leak"] == pytest.approx(frame.blocks[index]["residual"], rel=1e-9)
     # the two-body read in the period frames against chi of spec S5
     two_body = frame.two_body
     assert _present(two_body), two_body
-    assert two_body["in_frames"] and two_body["choi_decomposed"] and two_body["shape"] == [2, 2]
+    assert two_body["in_frames"] and two_body["derived_frames"] and two_body["choi_decomposed"]
+    assert two_body["shape"] == [2, 2]
     assert 0.0 <= two_body["residual"] <= 1.0
     assert two_body["schmidt_rank"] == 2 and len(two_body["singular_values"]) == 2
     assert two_body["reversal_residual"] < 1e-8
@@ -177,8 +196,12 @@ def test_frame_zero_is_the_collar_seed():
     # the objective: the node's default, Regge stationarity plus Gamma r_U
     assert frame.objective["total"] is not None
     assert frame.objective["regge_stationarity"] > 0
-    assert frame.objective["register_residual"] == pytest.approx(two_body["residual"], rel=1e-9)
-    print("\n[T4] seed: leaks %s, two-body %.6f, T %s" % (
+    # r_U: the two block residuals at their weight plus the two-body residual
+    expected = two_body["residual"] + ea.DECLARED_INPUT_WEIGHT * sum(frame.blocks[i]["residual"] for i in range(2))
+    assert frame.objective["register_residual"] == pytest.approx(expected, rel=1e-9)
+    print("\n[T4] seed: blocks %s (weight %g), coefficients %s, leaks %s, two-body %.6f, T %s" % (
+        ["%.3e" % frame.blocks[i]["residual"] for i in range(2)], ea.DECLARED_INPUT_WEIGHT,
+        [np.round(np.asarray(frame.blocks[i]["coefficients"]), 4).tolist() for i in range(2)],
         ["%.3e" % r["leak"] for r in frame.leaks["per_block"]], two_body["residual"],
         np.round(transfer.real, 6).tolist()))
 
@@ -189,14 +212,18 @@ def test_synthesis_reads_every_channel_and_holds_the_tori():
     last = frames[-1]
     for index, tau_in in enumerate((TAU_A, TAU_B)):
         row = last.blocks[index]
-        assert isinstance(row["residual"], float) and row["residual"] < 1e-3, row["residual"]
+        # the block residual descends from its seed value under synthesis (spec C2)
+        assert isinstance(row["residual"], float) and row["residual"] < frames[0].blocks[index]["residual"], \
+            (row["residual"], frames[0].blocks[index]["residual"])
+        assert _present(row["coefficients"]) and len(row["coefficients"]) == 2
+        assert isinstance(row["own_kernel_leak"], float)
         read = _read(last, index)
         assert (read["vertices"], read["edges"], read["faces"]) >= (9, 27, 18), "the surface keeps the torus"
         assert read["weil_petersson_distance"] >= 0.0 and read["fubini_study_distance"] >= 0.0
         assert abs(np.linalg.norm(read["bloch"]) - 1.0) < 1e-12
     assert _present(last.monodromy) and _present(last.two_body) and _present(last.leaks)
     assert _present(last.boundary) and _present(last.completion) and _present(last.betti)
-    assert last.two_body["in_frames"] and last.two_body["shape"] == [2, 2]
+    assert last.two_body["in_frames"] and last.two_body["derived_frames"] and last.two_body["shape"] == [2, 2]
     totals = [f.objective["total"] for f in frames]
     assert all(t is not None for t in totals) and totals[-1] < totals[0]
     print("\n[T4] after %d units: objective %s, blocks %s, two-body %s, tau-hat %s, monodromy %s" % (
