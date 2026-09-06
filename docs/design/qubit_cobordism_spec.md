@@ -351,8 +351,12 @@ C2. Each block's own-Laplacian residual stays at its floor through drawing and
     lengths moved).
 
 C3. With trivial monodromy, the whole's zero mode carries both input lines
-    (restricted leaks at rounding) and the transfer in period frames is
-    diagonal; with monodromy M, the periods transform by M.
+    (restricted leaks at rounding) and the monodromy read is the identity;
+    with monodromy M, the periods transform by M. The transfer in period
+    frames is a different object — the whole's pencil-operator block between
+    the two frames through the collar's cells, a metric quantity — and is NOT
+    diagonal on the collar (measured on T3: off-diagonal/diagonal 1.22 on the
+    3×3 collar, 0.76 on the 4×4). Record it; do not expect it to be diagonal.
 
 C4. The two-body leak against χ decreases under synthesis; its floor and the
     Schmidt spectrum are recorded next to the χ of the algebra.
