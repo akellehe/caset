@@ -268,24 +268,88 @@ int CDT::sweep() {
   return accepted;
 }
 
+double CDT::measureVolumeDrift(int windowSweeps, std::size_t floorVolume) {
+  auto volume = [this] {
+    return static_cast<double>(spacetime->getN41() + spacetime->getN32());
+  };
+  const double before = std::max(volume(), 1.0);
+  int done = 0;
+  for (int i = 0; i < windowSweeps; ++i) {
+    sweep();
+    ++done;
+    if (spacetime->getN41() + spacetime->getN32() < floorVolume) break;
+  }
+  const double after = volume();
+  return (after - before) / (before * static_cast<double>(std::max(done, 1)));
+}
+
 void CDT::tune(std::function<void(int,int)> progress) {
-  // Tune k4 to its pseudo-critical value using proportional feedback.
-  // For the (2,2d) add move: dS_Regge ≈ -(k0+6Δ) + (2d-2)(k4+2Δ)
-  // Setting this near 0 for d=4: k4_crit ≈ (k0+6Δ)/(2d-2) - 2Δ
   int d = getDim(spacetime);
   if (d <= 1) return;  // CDT requires d >= 2
+
+  // The action's per-simplex cost alone puts k4 here: it is where a single
+  // (2,2d) add move has dS_Regge = -(k0+6Δ) + (2d-2)(k4+2Δ) = 0. That ignores
+  // the entropy of the triangulations reachable at this volume, which is what
+  // actually sets the pseudo-critical coupling, so this value only starts the
+  // search (#965).
   k4 = (k0 + 6.0 * delta) / (2.0 * d - 2.0) - 2.0 * delta;
 
-  // Fine-tune with short feedback sweeps
-  constexpr int nTuneSteps = 20;
-  double target = static_cast<double>(targetN41);
-  for (int i = 0; i < nTuneSteps; ++i) {
-    sweep();
-    double n41 = static_cast<double>(spacetime->getN41());
-    double error = (n41 - target) / target;  // normalized error
-    k4 += 0.01 * error;
-    if (progress) progress(i + 1, nTuneSteps);
+  // Criticality is a property of k4 against the entropy, so the volume-fixing
+  // term plays no part in locating it.
+  const double configuredEpsilon = epsilon;
+  epsilon = 0.0;
+
+  // Never let a coupling far above critical dismantle the configuration the
+  // caller is about to run: hold half the volume tuning started with.
+  const std::size_t floorVolume =
+      std::max<std::size_t>((spacetime->getN41() + spacetime->getN32()) / 2, 1);
+
+  const int totalSteps = kTuneMaxBracketSteps + kTuneBisectionSteps;
+  int step = 0;
+  auto report = [&progress, &step, totalSteps] {
+    if (progress) progress(std::min(++step, totalSteps), totalSteps);
+  };
+
+  // Bracket the drift sign change. Below the pseudo-critical coupling the
+  // volume grows and k4 has to rise; above it the volume shrinks.
+  double drift = measureVolumeDrift(kTuneWindowSweeps, floorVolume);
+  report();
+  double below = k4, above = k4;
+  double width = 1.0;
+  const bool startsBelowCritical = drift > 0.0;
+  for (int i = 1; i < kTuneMaxBracketSteps; ++i) {
+    if (startsBelowCritical) {
+      below = k4;
+      k4 += width;
+    } else {
+      above = k4;
+      k4 -= width;
+    }
+    width *= 2.0;
+    drift = measureVolumeDrift(kTuneWindowSweeps, floorVolume);
+    report();
+    if (startsBelowCritical ? (drift <= 0.0) : (drift > 0.0)) {
+      (startsBelowCritical ? above : below) = k4;
+      break;
+    }
   }
+
+  // If the sign never changed the bracket is open on one side; the last k4
+  // tried is the best estimate available and the bisection below is skipped.
+  if (below < above) {
+    for (int i = 0; i < kTuneBisectionSteps && above - below > kTuneTolerance;
+         ++i) {
+      k4 = 0.5 * (below + above);
+      drift = measureVolumeDrift(kTuneWindowSweeps, floorVolume);
+      report();
+      if (drift > 0.0) below = k4;
+      else above = k4;
+    }
+    k4 = 0.5 * (below + above);
+  }
+
+  epsilon = configuredEpsilon;
+  if (progress) progress(totalSteps, totalSteps);
 }
 
 void CDT::thermalize() {

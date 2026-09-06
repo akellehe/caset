@@ -200,10 +200,26 @@ class CDT : public Simulation {
     [[nodiscard]] std::unique_ptr<class ::tessera::spacetime::PachnerMove> proposeIflip();
     [[nodiscard]] std::unique_ptr<class ::tessera::spacetime::PachnerMove> proposeShift();
 
-    /// Adjust the cosmological coupling \f$ k_4 \f$ to drive the total four-volume
-    /// \f$ N_4 \f$ toward the target \f$ \bar{N}_4 \f$. Uses a proportional controller
-    /// that increases \f$ k_4 \f$ when volume exceeds the target (making growth
-    /// more expensive) and decreases it when volume is below target.
+    /// Set the cosmological coupling \f$ k_4 \f$ to its pseudo-critical value:
+    /// the coupling at which the four-volume neither grows nor shrinks under the
+    /// bare action.
+    ///
+    /// The pseudo-critical coupling is fixed by the competition between the
+    /// action's cost per four-simplex and the entropy of the triangulations
+    /// available at that volume, so it cannot be written down in closed form
+    /// from the action alone; it is located by measuring the sign of the
+    /// four-volume drift. This method brackets the sign change by stepping
+    /// \f$ k_4 \f$ away from an initial estimate, then bisects to
+    /// ::kTuneTolerance. Measurements run with the volume-fixing term switched
+    /// off, since criticality is a property of \f$ k_4 \f$ alone; the
+    /// configured \f$ \varepsilon \f$ is restored before returning.
+    ///
+    /// Running below the pseudo-critical coupling leaves the (3,2) sector
+    /// unbounded: the volume-fixing term constrains \f$ N_4^{(4,1)} \f$ only,
+    /// so \f$ N_4^{(3,2)} \f$ grows without limit and no observable
+    /// equilibrates (#965).
+    ///
+    /// @param progress Called as (step, totalSteps) once per drift measurement.
     void tune(std::function<void(int,int)> progress = nullptr) override;
 
     /// Run Monte Carlo sweeps until the action \f$ S \f$ stabilizes, indicating
@@ -270,6 +286,25 @@ class CDT : public Simulation {
     bool quadraticVolumeFix;
     bool relabelVertices_{true};
     std::mt19937 rng{std::random_device{}()};
+
+    /// Sweeps to run per drift measurement while tuning.
+    static constexpr int kTuneWindowSweeps = 25;
+    /// Doubling steps allowed while bracketing the drift sign change.
+    static constexpr int kTuneMaxBracketSteps = 12;
+    /// Bisection steps taken once the sign change is bracketed.
+    static constexpr int kTuneBisectionSteps = 12;
+    /// Width in \f$ k_4 \f$ below which the bracket is considered located.
+    static constexpr double kTuneTolerance = 0.01;
+
+    /// Mean relative change in the four-volume per sweep, measured over
+    /// @p windowSweeps sweeps at the current couplings. Positive means the
+    /// volume is growing, so \f$ k_4 \f$ is below its pseudo-critical value.
+    ///
+    /// The measurement stops early if the volume falls below @p floorVolume,
+    /// reporting the drift accumulated so far, so that a coupling far above
+    /// critical cannot dismantle the configuration being tuned.
+    [[nodiscard]] double measureVolumeDrift(int windowSweeps,
+                                            std::size_t floorVolume);
 
     /// Metropolis-Hastings acceptance test.
     ///
