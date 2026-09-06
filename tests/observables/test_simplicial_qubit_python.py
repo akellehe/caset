@@ -1,12 +1,12 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
-"""The simplicial qubit (#955): a marked torus's harmonic zero mode read as a
-point of CP^1. The flat torus C/(Z + tau Z) is the exact reference (the
-construction is exact there, so those are equality tests to rounding); the
-remaining statements are the specification's invariances, certificates and
-refusals (docs/design/simplicial_qubit_spec.md, sections 12-15)."""
+"""The simplicial qubit (#955), docs/design/simplicial_qubit_spec.md: the
+section-12 reference cases and assertions, the section-2 validations, the
+section-5 flags and Delaunay pass, the section-13 degeneration behaviour, and
+the section-14 API."""
 import cmath
 import math
+import warnings
 
 import numpy as np
 import pytest
@@ -16,7 +16,7 @@ from tessera import observables as obs
 
 SimplicialQubit = obs.SimplicialQubit
 
-# (name, tau, expected Bloch vector) -- specification section 12.
+# Spec section 12: (name, tau, expected Bloch vector).
 REFERENCE = [
     ("square", 1j, (0.0, 1.0, 0.0)),
     ("rectangle r=2", 2j, (0.0, 4.0 / 5.0, -3.0 / 5.0)),
@@ -25,266 +25,277 @@ REFERENCE = [
 ]
 
 
-def _read(tau, nx=4, ny=4):
-    torus = SimplicialQubit.flatTorus(tau, nx, ny)
-    return torus, torus.qubit.read(torus.spacetime)
+def flat(tau, nx=4, ny=4):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SimplicialQubit.flat_torus(tau, nx, ny)
 
 
-def _edges(st):
-    return list(st.getEdgeList().toVector())
+def rebuilt(q, lengths=None, faces=None, cycle_A=None, cycle_B=None, edges=None, vertices=None,
+            **kwargs):
+    """The same qubit through the section-2 constructor, with substitutions."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SimplicialQubit(
+            list(q.vertices()) if vertices is None else vertices,
+            list(q.edges()) if edges is None else edges,
+            list(q.faces()) if faces is None else faces,
+            list(q.lengths()) if lengths is None else lengths,
+            list(q.cycle_A()) if cycle_A is None else cycle_A,
+            list(q.cycle_B()) if cycle_B is None else cycle_B,
+            **kwargs)
 
 
 # ---------------------------------------------------------------------------
-# The flat torus: exact reference cases
+# Section 12: reference test cases (exact on flat tori)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("name,tau,bloch", REFERENCE, ids=[r[0] for r in REFERENCE])
 def test_flat_torus_reference_table(name, tau, bloch):
-    torus, r = _read(tau)
-    assert r.holds(), r.refusal
-    assert r.harmonicRank == 2 and r.twistedHarmonicRank == 2
-    assert r.betti == [1, 2, 1] and r.eulerCharacteristic == 0
-    assert (r.vertices, r.edges, r.faces) == (16, 48, 32)
-    assert abs(r.intersectionNumber - 1) < 1e-9
-    assert not r.markingSwapped
-    # Exact on a flat torus: J^2 = -I and tau to rounding.
-    assert r.complexStructureResidual < 1e-10
-    assert abs(r.tau - tau) < 1e-10
-    assert np.allclose(r.bloch, bloch, atol=1e-10)
-    assert abs(r.blochNorm - 1.0) < 1e-12
-    rho = np.asarray(r.density)
-    assert np.allclose(rho, rho.conj().T) and abs(np.trace(rho) - 1) < 1e-12
-    assert np.allclose(rho @ rho, rho, atol=1e-12)
-    psi = np.asarray(r.state)
-    assert np.allclose(np.outer(psi, psi.conj()), rho)
-    assert abs(SimplicialQubit.periodRatioOf(psi) - tau) < 1e-10
-    # The headline scalar is the residual.
-    assert torus.qubit.compute(torus.spacetime) == pytest.approx(r.complexStructureResidual)
+    q = flat(tau)
+    assert abs(q.tau() - tau) < 1e-10
+    assert np.allclose(q.bloch(), bloch, atol=1e-10)
+    assert abs(np.linalg.norm(q.bloch()) - 1.0) < 1e-12
+    assert q.j_residual() < 1e-10
+    assert not q.marking_swapped()
+    P_A, P_B = q.periods()
+    assert abs(P_B / P_A - tau) < 1e-10
+    psi = q.state()
+    expected = np.array([1.0, tau]) / math.sqrt(1 + abs(tau) ** 2)
+    assert np.allclose(psi, expected)
+    rho = q.density_matrix()
+    r = q.bloch()
+    sigma = [np.array([[0, 1], [1, 0]]), np.array([[0, -1j], [1j, 0]]), np.array([[1, 0], [0, -1]])]
+    assert np.allclose(rho, 0.5 * (np.eye(2) + sum(ri * si for ri, si in zip(r, sigma))))
+    assert np.allclose(rho, np.outer(psi, psi.conj()))
 
 
-def test_tau_is_refinement_invariant_on_a_flat_torus():
+def test_dim_h_is_two_and_the_basis_is_orthonormal():
+    for tau in (1j, 0.3 + 1.2j, cmath.exp(1j * math.pi / 3)):
+        q = flat(tau)
+        H = q.harmonic_basis()
+        assert H.shape == (len(q.edges()), 2)
+        assert np.allclose(H.T @ H, np.eye(2), atol=1e-12)
+        J = q.complex_structure()
+        assert J.shape == (2, 2)
+        assert np.linalg.norm(J @ J + np.eye(2)) == pytest.approx(q.j_residual())
+        assert q.holomorphic_form().shape == (len(q.edges()),)
+
+
+def test_tau_is_invariant_under_refinement_at_fixed_geometry():
     tau = 0.3 + 1.2j
     for nx, ny in [(3, 3), (4, 6), (8, 8)]:
-        _, r = _read(tau, nx, ny)
-        assert r.holds(), r.refusal
-        assert abs(r.tau - tau) < 1e-9, (nx, ny, r.tau)
-        assert r.complexStructureResidual < 1e-9
+        q = flat(tau, nx, ny)
+        assert abs(q.tau() - tau) < 1e-9, (nx, ny, q.tau())
+        assert q.j_residual() < 1e-9
 
 
 def test_tau_is_invariant_under_uniform_scaling():
-    tau = 0.2 + 0.9j
-    torus, before = _read(tau)
-    for e in _edges(torus.spacetime):
-        e.setLength(2.7 * e.getLength())
-    after = torus.qubit.read(torus.spacetime)
-    assert after.holds()
-    assert abs(after.tau - before.tau) < 1e-10
-    # The Gram scales, the intersection form does not.
-    assert np.allclose(np.asarray(after.intersection), np.asarray(before.intersection), atol=1e-12)
+    q = flat(0.2 + 0.9j)
+    scaled = rebuilt(q, lengths=[2.7 * l for l in q.lengths()])
+    assert abs(scaled.tau() - q.tau()) < 1e-10
+    # The Whitney L2 pairings of 1-forms are dimensionless, so G and R are
+    # scale-invariant up to the orthogonal freedom of the null-space basis:
+    # compare their O(2) invariants.
+    G, Gs = q.gram(), scaled.gram()
+    assert np.linalg.det(Gs) == pytest.approx(np.linalg.det(G), rel=1e-10)
+    assert np.trace(Gs) == pytest.approx(np.trace(G), rel=1e-10)
+    assert abs(scaled.rotation_pairing()[0, 1]) == pytest.approx(abs(q.rotation_pairing()[0, 1]), rel=1e-10)
+    assert scaled.j_residual() == pytest.approx(q.j_residual(), abs=1e-12)
 
 
-def test_modular_transformations_of_the_marking():
+def test_modular_transformations():
     tau = 0.35 + 1.1j
-    torus, base = _read(tau)
-    a, b, reversed_ = torus.qubit.cycleA(), torus.qubit.cycleB(), torus.qubit.reversed()
-    # A' = B, B' = -A  ->  tau' = -1/tau (A'.B' = +1 still).
-    swapped = SimplicialQubit(list(b), list(reversed(a)), reversed_)
-    r = swapped.read(torus.spacetime)
-    assert r.holds(), r.refusal
-    assert abs(r.tau - (-1.0 / tau)) < 1e-9
-    # B' = A + B (the concatenated closed walk)  ->  tau' = tau + 1.
-    shifted = SimplicialQubit(list(a), list(a) + list(b), reversed_)
-    r = shifted.read(torus.spacetime)
-    assert r.holds(), r.refusal
-    assert abs(r.tau - (tau + 1.0)) < 1e-9
-    assert abs(SimplicialQubit.fubiniStudyDistance(base.tau, base.tau)) < 1e-12
+    q = flat(tau)
+    A, B = list(q.cycle_A()), list(q.cycle_B())
+    minus_A = [(e, -s) for (e, s) in A]
+    # A' = B, B' = -A  ->  -1/tau
+    q_s = rebuilt(q, cycle_A=B, cycle_B=minus_A)
+    assert abs(q_s.tau() - (-1.0 / tau)) < 1e-9
+    # B' = A + B  ->  tau + 1
+    q_t = rebuilt(q, cycle_A=A, cycle_B=A + B)
+    assert abs(q_t.tau() - (tau + 1.0)) < 1e-9
 
 
-# ---------------------------------------------------------------------------
-# A non-flat metric: the residual is a discretization error
-# ---------------------------------------------------------------------------
-
-def _conformal_square_torus(n, amplitude=0.3):
+def _conformal(n, amplitude=0.3):
     """The square torus with lengths scaled by exp(phi) at each edge midpoint,
-    phi = amplitude sin(2 pi x) cos(2 pi y): a conformally flat metric, whose
-    conformal structure is still that of tau = i."""
-    torus = SimplicialQubit.flatTorus(1j, n, n)
+    phi = amplitude sin(2 pi x) cos(2 pi y): conformally flat, conformal
+    structure still tau = i, but not flat, so J is only approximately a
+    complex structure."""
+    q = flat(1j, n, n)
 
     def reduce(delta):
-        if delta == n - 1:
-            return -1
-        if delta == -(n - 1):
-            return 1
-        return delta
+        return -1 if delta == n - 1 else (1 if delta == -(n - 1) else delta)
 
-    for e in _edges(torus.spacetime):
-        u, v = e.getSource().getId(), e.getTarget().getId()
+    lengths = []
+    for (u, v), length in zip(q.edges(), q.lengths()):
         iu, ju = divmod(u, n)
         iv, jv = divmod(v, n)
         di, dj = reduce(iv - iu), reduce(jv - ju)
-        x = (iu + 0.5 * di) / n
-        y = (ju + 0.5 * dj) / n
-        phi = amplitude * math.sin(2 * math.pi * x) * math.cos(2 * math.pi * y)
-        e.setLength(e.getLength() * math.exp(phi))
-    return torus
+        x, y = (iu + 0.5 * di) / n, (ju + 0.5 * dj) / n
+        lengths.append(length * math.exp(amplitude * math.sin(2 * math.pi * x) * math.cos(2 * math.pi * y)))
+    return rebuilt(q, lengths=lengths)
 
 
-def test_residual_and_tau_converge_under_refinement_for_a_conformal_metric():
+def test_j_residual_decreases_monotonically_under_uniform_refinement():
     residuals, errors = [], []
     for n in (4, 8, 16):
-        torus = _conformal_square_torus(n)
-        r = torus.qubit.read(torus.spacetime)
-        assert r.holds(), r.refusal
-        residuals.append(r.complexStructureResidual)
-        errors.append(abs(r.tau - 1j))
-    assert residuals[0] > 1e-6  # a genuinely non-flat mesh
+        q = _conformal(n)
+        residuals.append(q.j_residual())
+        errors.append(abs(q.tau() - 1j))
+    assert residuals[0] > 1e-6
     assert residuals[0] > residuals[1] > residuals[2]
     assert errors[0] > errors[1] > errors[2]
 
 
 # ---------------------------------------------------------------------------
-# Phases on: pure gauge is invisible, holonomy and flux refuse by name
+# Sections 3, 4, 7: incidence, per-face geometry, barycentric gradients
 # ---------------------------------------------------------------------------
 
-def test_pure_gauge_phases_leave_tau_invariant():
-    tau = 0.1 + 1.3j
-    torus, before = _read(tau)
-    rng = np.random.default_rng(3)
-    g = {v.getId(): rng.uniform(-1.5, 1.5) for v in torus.spacetime.getVertexList().toVector()}
-    for e in _edges(torus.spacetime):  # phi_e = g(target) - g(source): a gauge
-        e.setPhase(complex(g[e.getTarget().getId()] - g[e.getSource().getId()], 0.0))
-    after = torus.qubit.read(torus.spacetime)
-    assert after.holds(), after.refusal
-    assert after.twistedHarmonicRank == 2
-    assert abs(after.tau - before.tau) < 1e-10
-
-
-def test_flux_refuses_by_name():
-    torus, _ = _read(1j)
-    edges = _edges(torus.spacetime)
-    edges[0].setPhase(complex(0.7, 0.0))  # curvature on the two faces of one edge
-    r = torus.qubit.read(torus.spacetime)
-    assert not r.holds()
-    assert "holonomy or flux" in r.refusal
-    assert r.twistedHarmonicRank < 2
-    assert math.isnan(torus.qubit.compute(torus.spacetime))
-
-
-def test_flat_holonomy_refuses_by_name():
-    n = 4
-    torus, _ = _read(1j, n, n)
-    # A flat connection with holonomy around the row loop: the same phase on
-    # every edge crossing the seam between columns n-1 and 0.
-    for e in _edges(torus.spacetime):
-        iu, iv = e.getSource().getId() // n, e.getTarget().getId() // n
-        if {iu, iv} == {0, n - 1}:
-            e.setPhase(complex(0.9 if iu == 0 else -0.9, 0.0))
-    r = torus.qubit.read(torus.spacetime)
-    assert not r.holds()
-    assert "holonomy or flux" in r.refusal
+def test_incidence_matrices_and_per_face_geometry():
+    q = flat(0.3 + 1j, 4, 5)
+    nV, nE, nF = len(q.vertices()), len(q.edges()), len(q.faces())
+    assert (nV, nE, nF) == (20, 60, 40) and nV - nE + nF == 0
+    d0, d1 = q.d0(), q.d1()
+    assert d0.shape == (nE, nV) and d1.shape == (nF, nE)
+    assert np.all(d1 @ d0 == 0)
+    assert np.all(np.abs(d1).sum(axis=1) == 3) and np.all(np.abs(d0).sum(axis=1) == 2)
+    # Angles sum to pi; Heron areas agree with the container's own Simplex.area().
+    assert np.allclose(q.angles().sum(axis=1), math.pi)
+    by_set = {}
+    for s in q.spacetime().getSimplices():
+        ids = tuple(sorted(v.getId() for v in s.getVertices()))
+        if len(ids) == 3:
+            by_set[ids] = s.area().real
+    for face, area in zip(q.faces(), q.areas()):
+        assert area == pytest.approx(by_set[tuple(sorted(face))], rel=1e-12)
+    # Local layout: p_i = 0, p_j = (c, 0), p_k above the edge.
+    layout = q.layout()
+    assert np.allclose(layout[:, 0:2], 0.0) and np.allclose(layout[:, 3], 0.0) and np.all(layout[:, 5] > 0)
+    # grad_lambda_i + grad_lambda_j + grad_lambda_k == 0.
+    g = q.barycentric_gradients()
+    assert np.allclose(g[:, 0:2] + g[:, 2:4] + g[:, 4:6], 0.0, atol=1e-12)
 
 
 # ---------------------------------------------------------------------------
-# Degeneration and distances
+# Section 5: cotangent weights, flags, and the intrinsic Delaunay pass
+# ---------------------------------------------------------------------------
+
+def test_cotangent_weights_and_delaunay_flags():
+    # Square torus: axis edges see 45 + 45 degrees (w = 1), diagonals 90 + 90 (w = 0).
+    q = flat(1j)
+    assert set(np.round(q.weights(), 12)) == {0.0, 1.0}
+    assert q.non_delaunay_edges() == [] and q.negative_weight_edges() == []
+    # The hexagonal lattice cut along the long diagonal: 30-30-120 triangles,
+    # the diagonal opposite 120 + 120 > 180 degrees, negative weights, flagged.
+    with pytest.warns(UserWarning, match="Delaunay"):
+        h = SimplicialQubit.flat_torus(cmath.exp(1j * math.pi / 3), 4, 4)
+    assert len(h.non_delaunay_edges()) == 16 and len(h.negative_weight_edges()) == 16
+    assert any("Delaunay" in w for w in h.warnings())
+
+
+def test_intrinsic_delaunay_pass_repairs_the_hexagonal_torus():
+    tau = cmath.exp(1j * math.pi / 3)
+    h = flat(tau)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        d = h.intrinsic_delaunay()
+    assert d.delaunay_flip_count() == 16
+    assert d.non_delaunay_edges() == [] and d.negative_weight_edges() == []
+    assert np.allclose(d.lengths(), 0.25)            # every triangle equilateral
+    assert np.allclose(d.angles(), math.pi / 3)
+    assert abs(d.tau() - tau) < 1e-10                # the intrinsic geometry is unchanged
+    assert abs(h.tau() - tau) < 1e-10
+    assert len(d.cycle_A()) >= len(h.cycle_A()) and len(d.edges()) == len(h.edges())
+    # Already Delaunay: nothing to do.
+    s = flat(1j)
+    assert s.intrinsic_delaunay().delaunay_flip_count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Section 2: validation on load
+# ---------------------------------------------------------------------------
+
+def test_validation_on_load():
+    q = flat(1j)
+    faces = list(q.faces())
+    with pytest.raises(ValueError, match="belongs to 1 faces"):
+        rebuilt(q, faces=faces[:-1])
+    with pytest.raises(ValueError, match="inconsistent"):
+        rebuilt(q, faces=[faces[0][::-1]] + faces[1:])
+    with pytest.raises(ValueError, match="triangle inequality"):
+        rebuilt(q, lengths=[10.0] + list(q.lengths())[1:])
+    with pytest.raises(ValueError, match="real and positive"):
+        rebuilt(q, lengths=[-1.0] + list(q.lengths())[1:])
+    with pytest.raises(ValueError, match="not closed"):
+        rebuilt(q, cycle_A=list(q.cycle_A())[:-1])
+    with pytest.raises(ValueError, match="not independent"):
+        rebuilt(q, cycle_B=list(q.cycle_A()))
+    with pytest.raises(ValueError, match="0 .. nV-1"):
+        rebuilt(q, vertices=list(q.vertices())[1:] + [99])
+    with pytest.raises(ValueError, match="not in E"):
+        rebuilt(q, edges=list(q.edges())[1:], lengths=list(q.lengths())[1:])
+    # The 2-sphere: every edge in two faces, chi = 2.
+    sphere = [[0, 1, 2], [0, 2, 3], [0, 3, 1], [1, 3, 2]]
+    edges = sorted({tuple(sorted((f[a], f[(a + 1) % 3]))) for f in sphere for a in range(3)})
+    with pytest.raises(ValueError, match="Euler characteristic"):
+        SimplicialQubit([0, 1, 2, 3], edges, sphere, [1.0] * 6, [(0, 1)], [(1, 1)])
+    with pytest.raises(ValueError):
+        SimplicialQubit.flat_torus(-1j, 4, 4)
+    with pytest.raises(ValueError):
+        SimplicialQubit.flat_torus(1j, 2, 4)
+
+
+# ---------------------------------------------------------------------------
+# Section 13: degeneration behaviour
 # ---------------------------------------------------------------------------
 
 def test_pinching_cycle_warns_and_moves_the_state_to_a_pole():
-    torus = SimplicialQubit.flatTorus(0.05j, 4, 4)
-    strict = SimplicialQubit(torus.qubit.cycleA(), torus.qubit.cycleB(), torus.qubit.reversed(),
-                             degeneracy_threshold=10.0)
-    r = strict.read(torus.spacetime)
-    assert r.holds(), r.refusal          # a warning, never a failure
-    assert r.nearDegenerate and "pinching" in r.warning
-    assert abs(r.tau - 0.05j) < 1e-9
-    assert r.bloch[2] > 0.99             # towards |0>
-    assert math.isfinite(SimplicialQubit.fubiniStudyDistance(r.tau, 1j))
-    assert SimplicialQubit.weilPeterssonDistance(r.tau, 1j) > SimplicialQubit.weilPeterssonDistance(0.5j, 1j)
+    q = flat(1j)
+    thin = flat(0.05j)
+    with pytest.warns(UserWarning, match="near-degenerate"):
+        p = SimplicialQubit(list(thin.vertices()), list(thin.edges()), list(thin.faces()),
+                            list(thin.lengths()), list(thin.cycle_A()), list(thin.cycle_B()),
+                            degeneracy_threshold=10.0)
+    assert p.near_degenerate() and p.condition_m1() > 10.0
+    assert abs(p.tau() - 0.05j) < 1e-9
+    assert p.bloch()[2] > 0.99                        # towards |0>
+    assert math.isfinite(obs.fubini_study_distance(p, q))
+    assert obs.weil_petersson_distance(p, q) > obs.weil_petersson_distance(flat(0.5j), q)
+    assert abs(np.linalg.norm(p.bloch()) - 1.0) < 1e-12
 
+
+# ---------------------------------------------------------------------------
+# Section 11: the two metrics
+# ---------------------------------------------------------------------------
 
 def test_distances():
-    assert SimplicialQubit.weilPeterssonDistance(1j, 2j) == pytest.approx(math.log(2))
-    assert SimplicialQubit.weilPeterssonDistance(1j, 1j) == 0.0
-    assert SimplicialQubit.fubiniStudyDistance(1j, 1j) == 0.0
-    # |0>-like against |1>-like: antipodal states are pi/2 apart.
-    assert SimplicialQubit.fubiniStudyDistance(1e-9j, 1e9j) == pytest.approx(math.pi / 2, abs=1e-6)
-    assert SimplicialQubit.fubiniStudyDistance(1j, 2j) == SimplicialQubit.fubiniStudyDistance(2j, 1j)
-    with pytest.raises(ValueError):
-        SimplicialQubit.weilPeterssonDistance(1j, -1j)
-    with pytest.raises(ValueError):
-        SimplicialQubit.periodRatioOf(np.array([0.0, 1.0], dtype=complex))
+    a, b = flat(1j), flat(2j)
+    assert obs.fubini_study_distance(a, a) == 0.0
+    assert obs.weil_petersson_distance(a, a) == 0.0
+    assert obs.weil_petersson_distance(a, b) == pytest.approx(math.log(2))
+    assert obs.fubini_study_distance(a, b) == obs.fubini_study_distance(b, a)
+    assert obs.fubini_study_distance(a, b) == pytest.approx(math.acos(3 / math.sqrt(10)))
 
 
 # ---------------------------------------------------------------------------
-# Certificates and refusals
+# The Spacetime constructor
 # ---------------------------------------------------------------------------
 
-def test_marking_certificates():
-    torus, _ = _read(1j)
-    a, b, rev = torus.qubit.cycleA(), torus.qubit.cycleB(), torus.qubit.reversed()
-    r = SimplicialQubit(list(a), list(a), rev).read(torus.spacetime)
-    assert "dependent" in r.refusal
-    r = SimplicialQubit(list(b), list(a), rev).read(torus.spacetime)
-    assert "A·B = -1" in r.refusal
-    r = SimplicialQubit(list(a), list(b), not rev).read(torus.spacetime)
-    assert "A·B = -1" in r.refusal
-    with pytest.raises(ValueError):
-        SimplicialQubit([0, 10], list(b), rev).read(torus.spacetime)  # (0,0)-(2,2) is no edge
-    with pytest.raises(ValueError):
-        SimplicialQubit([0], list(b), rev).read(torus.spacetime)
-
-
-def test_not_a_torus_refuses_by_name():
-    cells = [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]]  # the 2-sphere
-    st = tessera.Spacetime.fromCells(2, cells, 1.0, 0.0)
-    r = SimplicialQubit([0, 1, 2], [0, 1, 3]).read(st)
-    assert "not a torus" in r.refusal
-    assert r.betti == [1, 0, 1]
-    # A disk: boundary.
-    st = tessera.Spacetime.fromCells(2, [[0, 1, 2], [0, 2, 3]], 1.0, 0.0)
-    r = SimplicialQubit([0, 1, 2], [0, 2, 3]).read(st)
-    assert "boundary" in r.refusal
-    with pytest.raises(ValueError):
-        SimplicialQubit.flatTorus(-1j, 4, 4)
-    with pytest.raises(ValueError):
-        SimplicialQubit.flatTorus(1j, 2, 4)
-
-
-def test_record_splits_complex_channels():
-    _, r = _read(0.4 + 1.5j)
-    rec = r.toRecord()
-    assert rec["refusal"] == "" and rec["harmonic_rank"] == 2
-    assert rec["tau_re"] == pytest.approx(0.4) and rec["tau_im"] == pytest.approx(1.5)
-    assert len(rec["holomorphic_form_re"]) == r.edges
-    assert len(rec["state_re"]) == 2 and len(rec["density_im"]) == 4
-    assert rec["bloch"] == pytest.approx(list(r.bloch))
-
-
-# ---------------------------------------------------------------------------
-# The building blocks
-# ---------------------------------------------------------------------------
-
-def test_polygon_circle_product_is_the_grid_torus():
-    with pytest.raises(ValueError):
-        tessera.PolygonCircle(2).build(tessera.Spacetime(), 0)
-    _, r = _read(1j, 5, 3)
-    assert (r.vertices, r.edges, r.faces) == (15, 45, 30)
-    assert r.holds()
-
-
-def test_cup_product_form_is_the_intersection_form():
-    torus, r = _read(0.3 + 1j)
-    K = tessera.chainhodge.WhitneyMass.complexOf(torus.spacetime)
-    form = K.cupProductForm(1)
-    assert form.degree == 1 and form.rows == form.cols == r.edges
-    assert len(form.front) == r.faces and set(form.orientation) <= {-1, 1}
-    Z = np.asarray(r.harmonicImages)
-    z0, z1 = [complex(v) for v in Z[:, 0]], [complex(v) for v in Z[:, 1]]
-    r01 = form.evaluate(z0, z1)
-    r10 = form.evaluate(z1, z0)
-    assert abs(r01 + r10) < 1e-12 and abs(form.evaluate(z0, z0)) < 1e-12
-    sign = -1.0 if torus.qubit.reversed() else 1.0
-    assert abs(sign * r01 - np.asarray(r.intersection)[0, 1]) < 1e-12
-    with pytest.raises(ValueError):
-        form.evaluate(z0[:-1], z1)
-    with pytest.raises(RuntimeError):  # a disk has no fundamental class
-        tessera.cobordism.ChainComplex.fromTopCells([[0, 1, 2], [0, 2, 3]]).cupProductForm(1)
+def test_reading_the_spacetime_directly_gives_the_same_state():
+    tau = 0.3 + 1.2j
+    q = flat(tau)
+    st = q.spacetime()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        direct = SimplicialQubit(st, list(q.cycle_A()), list(q.cycle_B()))
+        flipped = SimplicialQubit(st, list(q.cycle_A()), list(q.cycle_B()), reversed=True)
+    assert list(direct.edges()) == list(q.edges())
+    assert abs(direct.tau() - tau) < 1e-10 and abs(flipped.tau() - tau) < 1e-10
+    # Exactly one of the two orientations agrees with the marking's A.B = +1;
+    # the other is caught by the Im tau < 0 rule of section 9.
+    assert sum(any("conjugate" in w for w in x.warnings()) for x in (direct, flipped)) == 1
+    with pytest.raises(ValueError, match="real and positive"):
+        edges = list(st.getEdgeList().toVector())
+        edges[0].setLength(complex(edges[0].getLength()) * (1 + 0.1j))
+        SimplicialQubit(st, list(q.cycle_A()), list(q.cycle_B()))

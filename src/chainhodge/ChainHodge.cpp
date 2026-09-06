@@ -258,20 +258,7 @@ HarmonicRead ChainHodge::harmonicChains(int k, double kappa, bool forceSparse) c
   read.degree = k;
   const bool dense = !forceSparse && n < crossover_;
   read.dense = dense;
-  const Eigen::MatrixXcd kernel = stackedKernel(stackedMatrix(k), n, kappa, dense, read);
-  read.nullity = static_cast<int>(kernel.cols());
-  if (preset_ == Preset::L2) {
-    read.images = kernel;                                      // z = ker S
-    read.chains = sparse_[static_cast<std::size_t>(k)] * kernel;  // h = M_k z
-  } else {
-    read.chains = kernel;                                       // h = ker S
-    read.images = sparse_[static_cast<std::size_t>(k)] * kernel;  // G_k h
-  }
-  return read;
-}
-
-Eigen::MatrixXcd ChainHodge::stackedKernel(const Eigen::MatrixXcd &S, int n, double kappa,
-                                           bool dense, HarmonicRead &read) {
+  const Eigen::MatrixXcd S = stackedMatrix(k);
   Eigen::MatrixXcd kernel;
   if (S.rows() == 0) {
     kernel = Eigen::MatrixXcd::Identity(n, n);
@@ -310,7 +297,15 @@ Eigen::MatrixXcd ChainHodge::stackedKernel(const Eigen::MatrixXcd &S, int n, dou
     kernel = Q.rightCols(n - r);
     read.gap = std::numeric_limits<double>::quiet_NaN();
   }
-  return kernel;
+  read.nullity = static_cast<int>(kernel.cols());
+  if (preset_ == Preset::L2) {
+    read.images = kernel;                                      // z = ker S
+    read.chains = sparse_[static_cast<std::size_t>(k)] * kernel;  // h = M_k z
+  } else {
+    read.chains = kernel;                                       // h = ker S
+    read.images = sparse_[static_cast<std::size_t>(k)] * kernel;  // G_k h
+  }
+  return read;
 }
 
 Eigen::MatrixXcd ChainHodge::geometricImage(int k, const Eigen::MatrixXcd &H) const {

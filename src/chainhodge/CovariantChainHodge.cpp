@@ -421,49 +421,6 @@ Eigen::MatrixXcd CovariantChainHodge::covariantOperator(int k) const {
   return applyH(k, Eigen::MatrixXcd::Identity(n, n));
 }
 
-HarmonicRead CovariantChainHodge::harmonicChains(int k, double kappa, bool forceSparse) const {
-  if (k < 0 || k > dimension()) throw std::invalid_argument("CovariantChainHodge: degree out of range");
-  const int d = dimension();
-  const int n = base_->size(k);
-  const SparseMatrix &Mk = dressed_[static_cast<std::size_t>(k)];
-  // The twisted stacked constraints are read off the dressed pencil: on images
-  // the up-term of pencil(k) is ∂_{k+1}^U M_{k+1}^U (∂_{k+1}^{U^{-1}})^T, so the
-  // twisted coboundary applied to z is (∂_{k+1}^{U^{-1}})^T z, and the down-term
-  // M_k^U (∂_k^{U^{-1}})^T (M_{k-1}^U)^{-1} ∂_k^U M_k^U applies ∂_k^U M_k^U z. The
-  // Grassmann preset has the two factors on the other side (chains).
-  Eigen::MatrixXcd top, bottom;
-  if (preset() == Preset::L2) {
-    // S^U = [(∂_{k+1}^{U^{-1}})^T ; ∂_k^U M_k^U]
-    if (k < d)
-      top = Eigen::MatrixXcd(SparseMatrix(twistedDual_[static_cast<std::size_t>(k) + 1].transpose()));
-    if (k >= 1) bottom = Eigen::MatrixXcd(twisted_[static_cast<std::size_t>(k)] * Mk);
-  } else {
-    // S^U = [∂_k^U ; (∂_{k+1}^{U^{-1}})^T G_k^U]
-    if (k >= 1) top = Eigen::MatrixXcd(twisted_[static_cast<std::size_t>(k)]);
-    if (k < d)
-      bottom = Eigen::MatrixXcd(
-          SparseMatrix(twistedDual_[static_cast<std::size_t>(k) + 1].transpose()) * Mk);
-  }
-  Eigen::MatrixXcd S(top.rows() + bottom.rows(), n);
-  if (top.rows() > 0) S.topRows(top.rows()) = top;
-  if (bottom.rows() > 0) S.bottomRows(bottom.rows()) = bottom;
-
-  HarmonicRead read;
-  read.degree = k;
-  const bool dense = !forceSparse && n < base_->crossoverDimension();
-  read.dense = dense;
-  const Eigen::MatrixXcd kernel = ChainHodge::stackedKernel(S, n, kappa, dense, read);
-  read.nullity = static_cast<int>(kernel.cols());
-  if (preset() == Preset::L2) {
-    read.images = kernel;         // z = ker S^U
-    read.chains = Mk * kernel;    // h = M_k^U z
-  } else {
-    read.chains = kernel;         // h = ker S^U
-    read.images = Mk * kernel;    // G_k^U h
-  }
-  return read;
-}
-
 Pencil CovariantChainHodge::pencil(int k) const {
   if (k < 0 || k > dimension()) throw std::invalid_argument("CovariantChainHodge: degree out of range");
   const int n = base_->size(k);

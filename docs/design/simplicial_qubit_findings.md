@@ -1,88 +1,78 @@
-# Simplicial qubit — implementation notes and measurements (#955)
+# Simplicial qubit — implementation map and measurements (#955)
 
-The theory is `simplicial_qubit_spec.md` (this directory). This note records
-where the construction lives in the code, the two places the implementation
-departs from the spec's letter and why, and the numbers the tests rest on.
+The construction is `simplicial_qubit_spec.md` (this directory), implemented
+section by section in `observables::SimplicialQubit`. This note records where
+each section lives, what the tests check, and the numbers behind the
+section-12 assertions.
 
-## Where it lives
+## Section by section
 
-| Spec object | Code |
+| Spec | Implementation |
 |---|---|
-| triangulated torus, discrete metric | a `Spacetime` of dimension 2: complex edge lengths and link phases on `Edge` |
-| `flat_torus(tau, nx, ny)` | `observables::SimplicialQubit::flatTorus` over `SimplicialProduct(PolygonCircle(nx), PolygonCircle(ny))` |
-| validation on load (§2) | `Spacetime::getBoundary`, `ChainComplex::{eulerCharacteristic, bettiNumbers, dualComplexIsValid, fundamentalClass}`, `WhitneyMass` certificate |
-| incidence matrices (§3) | `ChainComplex::boundaryMatrix`, canonical ascending-id orientation |
-| harmonic space (§6) | `ChainHodge::harmonicChains(1)`: the exact zero mode, images = edge integrals, chains = `M_1` × images |
-| L² inner product on 1-cochains (§7) | `WhitneyMass::assemble(K, s, 1)`; on the basis `ChainHodge::harmonicGram` |
-| rotation pairing and `J` (§8) | `ChainComplex::cupProductForm(1)` (the pairing) and `J = G^{-1} R^T` in `SimplicialQubit::read` |
-| periods, `tau` (§9) | signed walk sums over the marking (the `EdgeLoop` sign rule) in `SimplicialQubit::read` |
-| state, Bloch, density (§10) | `SimplicialQubit::{stateOf, blochOf, densityOf}` |
-| the two metrics (§11) | `SimplicialQubit::{fubiniStudyDistance, weilPeterssonDistance}` |
-| degeneration (§13) | `SimplicialQubitRead::{metricCondition, gramCondition, nearDegenerate, warning}` |
-| phases on | `CovariantChainHodge::harmonicChains(1)`: the twisted zero mode; rank 2 certifies a pure gauge |
+| §2 input data structures | the constructor `SimplicialQubit(vertices, edges, faces, lengths, cycle_A, cycle_B)`; a `Spacetime` of dimension 2 holds vertices, edges and lengths underneath (`spacetime()`), and can be read directly by the second constructor |
+| §2 validation on load | every edge in exactly 2 faces, χ = 0, consistent face orientations (opposite traversal of every edge), strict triangle inequality, closed cycles, independent homology classes (rank of [d1ᵀ \| c_A \| c_B]); each failure is a `ValueError` naming the offending element |
+| §3 incidence matrices | `d0()`, `d1()`, and the exact check d1·d0 = 0 |
+| §4 per-triangle geometry | `angles()` (law of cosines), `areas()` (Heron), `layout()` (p_i = 0, p_j = (c, 0), p_k = (b cos α_i, b sin α_i)); every per-face vector lives in that frame |
+| §5 cotangent weights | `weights()` = ½(cot α_e + cot β_e); `negative_weight_edges()`, `non_delaunay_edges()` flagged with a warning; the optional pass `intrinsic_delaunay()` flips α_e + β_e > π edges until none remain, rerouting the marked cycles through the quadrilateral |
+| §6 harmonic space | `harmonic_basis()`: the SVD null space of [d1; d0ᵀ M1] at scipy's tolerance, asserted two-dimensional (`RuntimeError` otherwise) |
+| §7 L² inner product | `barycentric_gradients()` (rot90 of the opposite edge over 2A_t, sum verified zero), the Whitney interpolant at the barycenter, ⟨ω, η⟩ = Σ_t A_t W_t(ω)·W_t(η) |
+| §8 complex structure | `gram()`, `rotation_pairing()`, `complex_structure()` = G⁻¹Rᵀ, `j_residual()` = ‖J² + I‖_F reported, never symmetrized |
+| §9 holomorphic line | eigenvector nearest −i, `holomorphic_form()`, `periods()`, `tau()`; conjugate eigenvector when Im τ < 0 (a warning names it); marking (B, −A) and −1/τ when \|P_A\| vanishes (`marking_swapped()`) |
+| §10 qubit state | `state()`, `bloch()` (unit norm asserted), `density_matrix()` |
+| §11 metrics | module functions `fubini_study_distance(q1, q2)` and `weil_petersson_distance(q1, q2)` |
+| §12 reference cases | `SimplicialQubit.flat_torus(tau, nx, ny)` and the tests below |
+| §13 degeneration | `condition_m1()`, `condition_g()`, `near_degenerate()` against `degeneracy_threshold` (a Python `UserWarning`, never a failure) |
+| §14 public API | the names above, snake_case, in `tessera.observables` |
+| §15 scope | the other hemisphere is the opposite face orientation (or `reversed=True` when reading a `Spacetime`); gates act on `state()` |
 
-## Two departures from the spec's letter
+The `Spacetime` container sorts the vertex order of every face, so the
+consistently oriented faces of §2 are kept on the qubit; reading a `Spacetime`
+derives an orientation from the fundamental class (`ChainComplex`).
 
-**Whitney mass for harmonicity, not diagonal cotangent weights (§5).** The
-spec takes the harmonic space with the DEC weights `diag(w_e)` and the inner
-product with Whitney forms. The pencil already carries one consistent metric,
-the Whitney mass `M_1`, positive definite for every nondegenerate real metric
-and complex symmetric for complex lengths; using it for both keeps the zero
-mode and the Gram in one convention and removes the stability caveat the
-optional Delaunay flip pass addresses (negative cotangent weights). The DEC
-route exists as `HodgeLaplacian::MetricSource::DiagonalWeights` and is not
-wired here.
+## Measurements
 
-**The rotation pairing is integrated exactly (§8).** "Rotate each per-face
-vector by 90° and project back" is, with the integrals done exactly,
-`R_ab = ∫ W(z_a) ∧ W(z_b)`, and on closed cochains that equals the cup-product
-pairing of the classes ⟨z_a ∪ z_b, [K]⟩ — a metric-free integer-combinatorial
-form. So `R` carries no discretization error at all; the geometry enters only
-through the Gram. A scratch check of the per-triangle Whitney wedge gave the
-coefficient matrix (1/6)[[0,1,1],[−1,0,−1],[−1,1,0]] on edges (01,12,02) and
-reproduced the intersection number +1.000 on the four reference tori, the same
-number the cup product gives. For a 2×2 antisymmetric `R` the algebra closes:
-`J² = −(r²/det G)·I` with `r = R_01`, so the spec's residual `‖J² + I‖_F =
-√2·|1 − r²/det G|` is the Riemann-bilinear defect of the discrete harmonic
-forms, and in the period-dual basis `τ = (−g_12 + i√det G)/g_22`.
+Reference table (§12), 4 × 4 grid:
 
-## Measurements (4 × 4 grid unless noted)
-
-Reference table (spec §12), exact to rounding:
-
-| torus | \|τ̂ − τ\| | ‖J² + I‖_F | A·B | cond M₁ | cond G |
+| torus | \|τ̂ − τ\| | ‖J² + I‖_F | \|r\| − 1 | non-Delaunay edges | cond G |
 |---|---|---|---|---|---|
-| square, τ = i | 5.5e-17 | 1.5e-15 | +1.000000000000 | 3.00 | 1.29 |
-| rectangle, τ = 2i | 2.0e-15 | 6.8e-15 | +1.000000000000 | 6.17 | 4.11 |
-| shear, τ = 0.3 + i | 3.7e-16 | 1.2e-15 | +1.000000000000 | 5.03 | 2.33 |
-| hexagonal, τ = e^{iπ/3} | 4.5e-16 | 1.2e-15 | +1.000000000000 | 8.00 | 3.86 |
+| square, τ = i | 5.4e-16 | 3.2e-16 | 0 | 0 | 3.0 |
+| rectangle, τ = 2i | 1.3e-15 | 6.3e-16 | 0 | 0 | 6.2 |
+| shear, τ = 0.3 + i | 6.3e-16 | 8.1e-16 | 1e-16 | 16 (negative weights) | 5.4 |
+| hexagonal, τ = e^{iπ/3} | 2.5e-15 | 1.2e-15 | 1e-16 | 16 (negative weights) | 9.0 |
 
-Conformally flat square torus, lengths scaled by exp(φ) at edge midpoints with
-φ = 0.3 sin(2πx) cos(2πy) (conformal structure still τ = i):
+The construction is exact on flat tori whether or not the triangulation is
+Delaunay: negative cotangent weights are flagged, as §5 says, and change
+nothing on a flat metric. `intrinsic_delaunay()` on the hexagonal torus makes
+16 flips, leaves every edge at length 1/4 (equilateral triangles), no
+violations, and τ̂ − τ at 4e-15.
 
-| N | n₁ | ‖J² + I‖_F | \|τ̂ − i\| | rate (residual / τ) |
+Refinement (§12) on a non-flat metric — the square torus with lengths scaled by
+exp(φ) at edge midpoints, φ = 0.3 sin(2πx) cos(2πy) (conformally flat, so the
+conformal structure is still τ = i):
+
+| N | n_E | ‖J² + I‖_F | \|τ̂ − i\| | rates |
 |---|---|---|---|---|
-| 4 | 48 | 2.92e-2 | 1.94e-2 | — |
-| 8 | 192 | 1.59e-2 | 3.76e-4 | 0.87 / 5.69 |
-| 16 | 768 | 4.66e-3 | 2.81e-5 | 1.78 / 3.75 |
-| 32 | 3072 | 1.21e-3 | 3.52e-6 | 1.94 / 3.00 |
+| 4 | 48 | 3.87e-2 | 1.45e-2 | |
+| 8 | 192 | 1.60e-2 | 1.21e-3 | 1.28 / 3.57 |
+| 16 | 768 | 4.66e-3 | 8.24e-5 | 1.78 / 3.88 |
+| 32 | 3072 | 1.21e-3 | 5.26e-6 | 1.94 / 3.97 |
 
-The residual settles to second order in the mesh size and τ to third; the spec
-promises first order. Above the dense crossover (n₁ ≥ 512) the kernel comes
-from the sparse rank-revealing QR (gap unmeasured) and the metric condition
-number is not reported.
+Both decrease monotonically; the residual tends to second order in the mesh
+size and τ to fourth. The spec promises first order.
 
-Phases on: a phase of 0.7 on one edge of the square torus drops the twisted
-harmonic rank to 0 and the read refuses by name; a pure-gauge assignment
-φ_e = g(target) − g(source) leaves τ unchanged to 1e-10 with rank 2; a flat
-holonomy across the seam refuses.
+Pinching (§13), τ = ir on the 4 × 4 grid:
 
-Pinching, τ = 0.05 i: τ̂ = 0.05 i to 1e-9, Bloch (0, 0.0998, 0.995) (towards
-|0⟩), cond M₁ = 5.3e2, cond G = 4.1e2, d_FS(τ̂, i) = 0.735 finite while
-d_WP(τ̂, i) = 3.00 and growing like −log Im τ.
+| r | τ̂ | r_z | cond G | d_FS to the square | d_WP to the square |
+|---|---|---|---|---|---|
+| 0.5 | 0.5i | 0.600 | 6.2 | 0.322 | 0.693 |
+| 0.1 | 0.1i | 0.980 | 134 | 0.686 | 2.303 |
+| 0.02 | 0.02i | 0.9992 | 3333 | 0.765 | 3.912 |
 
-## Out of scope here
+The state converges to |0⟩, d_FS stays finite and d_WP grows like −log r.
 
-Relaxing a torus toward a target τ (state → geometry by descent) is the
-cobordism engine's job; the representation is what it will be read against.
-Gates act on `state()`; they have no realization as metric deformations.
+One property of the §13 detector on the §12 construction is worth knowing:
+every diagonal of an axis-aligned rectangular grid is opposite a right angle in
+both of its triangles, so its cotangent weight is exactly zero and
+cond(M1) is ~1e16 for every rectangular torus, pinched or not. The warning
+fires (as the spec prescribes; the message says which weights vanish), the
+state is exact, and cond(G) is the number that tracks the pinching.

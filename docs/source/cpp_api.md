@@ -91,8 +91,6 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} SimplexBoundarySphere.h
 ```
-```{doxygenfile} PolygonCircle.h
-```
 ```{doxygenfile} SolidSimplex.h
 ```
 ```{doxygenfile} StellarSubdivision.h

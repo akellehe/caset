@@ -368,12 +368,6 @@ images and the exact properties of Prop. 5.1 measured on every instance.)doc")
            py::arg("tolerance") = 1e-10, "The measured metric regime of the pencil at degree k.")
       .def("resolvent", &CovariantChainHodge::resolvent, py::arg("k"), py::arg("zeta"), py::arg("c"),
            "(zeta I - h_k)^{-1} c = M^U (zeta M^U - A~^U)^{-1} c by one sparse bordered factorization.")
-      .def("harmonicChains", &CovariantChainHodge::harmonicChains, py::arg("k"), py::arg("kappa") = 10.0,
-           py::arg("force_sparse") = false,
-           "The twisted harmonic chains H_k^U = M_k^U ker S^U, S^U = [(d_{k+1}^{U^-1})^T ; d_k^U M_k^U] "
-           "(Whitney): the exact zero mode with the link phases on, certified by the same tolerance "
-           "rule as ChainHodge.harmonicChains. Its nullity is the twisted Betti number (b_k iff U is "
-           "pure gauge).")
       .def("band", &CovariantChainHodge::band, py::arg("k"), py::arg("contour"), py::arg("kappa") = 10.0,
            py::arg("isotropy_tolerance") = 1e-10,
            "The Riesz band of the contour: P, Phi, Phi^vee, Z, B_C, Phi~, J, Gamma, certificates.")

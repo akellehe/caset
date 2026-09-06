@@ -518,61 +518,6 @@ int ChainComplex::signature() const {
   return numPositive - numNegative;
 }
 
-std::complex<double> ChainComplex::CupProductForm::evaluate(
-    const std::vector<std::complex<double>> &a,
-    const std::vector<std::complex<double>> &b) const {
-  if (a.size() != rows || b.size() != cols)
-    throw std::invalid_argument(
-        "ChainComplex::CupProductForm::evaluate: expected a " + std::to_string(rows) +
-        "-cochain and a " + std::to_string(cols) + "-cochain, got " +
-        std::to_string(a.size()) + " and " + std::to_string(b.size()));
-  std::complex<double> total(0.0, 0.0);
-  for (std::size_t t = 0; t < front.size(); ++t)
-    total += static_cast<double>(orientation[t]) * a[static_cast<std::size_t>(front[t])] *
-             b[static_cast<std::size_t>(back[t])];
-  return total;
-}
-
-ChainComplex::CupProductForm ChainComplex::cupProductForm(int k) const {
-  const int d = dimension_;
-  if (k < 0 || k > d)
-    throw std::invalid_argument("ChainComplex::cupProductForm: degree k=" + std::to_string(k) +
-                                " outside [0, " + std::to_string(d) + "]");
-  // ε_t: the coherent orientation of the top simplices. Throws (by name) when
-  // the complex is not a closed connected oriented manifold, which is exactly
-  // when "evaluate on the fundamental class" has no meaning.
-  const std::vector<int> epsilon = fundamentalClass();
-
-  CupProductForm form;
-  form.degree = k;
-  form.rows = counts_[static_cast<std::size_t>(k)];
-  form.cols = counts_[static_cast<std::size_t>(d - k)];
-
-  // Canonical index of a k-face and of a (d-k)-face from its sorted vertices.
-  auto indexOf = [this](int degree) {
-    std::map<Face, int> index;
-    const auto &faces = faceVerts_[static_cast<std::size_t>(degree)];
-    for (int j = 0; j < static_cast<int>(faces.size()); ++j) index[faces[static_cast<std::size_t>(j)]] = j;
-    return index;
-  };
-  const std::map<Face, int> frontIndex = indexOf(k);
-  const std::map<Face, int> backIndex = (d - k == k) ? frontIndex : indexOf(d - k);
-
-  const auto &tops = faceVerts_[static_cast<std::size_t>(d)];
-  form.front.reserve(tops.size());
-  form.back.reserve(tops.size());
-  form.orientation.reserve(tops.size());
-  for (std::size_t t = 0; t < tops.size(); ++t) {
-    const Face &vertices = tops[t];  // sorted ascending: the reference orientation
-    const Face frontFace(vertices.begin(), vertices.begin() + k + 1);
-    const Face backFace(vertices.begin() + k, vertices.end());
-    form.front.push_back(frontIndex.at(frontFace));
-    form.back.push_back(backIndex.at(backFace));
-    form.orientation.push_back(epsilon[t]);
-  }
-  return form;
-}
-
 std::vector<long> ChainComplex::torsion(int k) const {
   std::vector<long> out;
   if (k < 0 || k + 1 > dimension_) return out;  // torsion of H_k comes from ∂_{k+1}
