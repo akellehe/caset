@@ -1145,6 +1145,13 @@ Args:
         .def("holomorphic_form", &SimplicialQubit::holomorphicForm, "omega: nE complex (section 9).")
         .def("periods", &SimplicialQubit::periods, "(P_A, P_B) (section 9).")
         .def("tau", &SimplicialQubit::tau, "P_B / P_A (section 9).")
+        .def("period_frame", &SimplicialQubit::periodFrame,
+             "F: nE x 2 real, the period frame (qubit cobordism spec D3) - the basis (f_A, f_B) of the "
+             "harmonic space with periods (1, 0) and (0, 1) over the marking in force, harmonic_basis() "
+             "times the inverse period matrix, in the torus's edge order. The coordinates a state is "
+             "written in: holomorphic_form() == period_frame() @ (P_A, P_B), i.e. P_A * F @ (1, tau), "
+             "the qubit |0> + tau|1> read as a 1-form (f_A <-> |0>, f_B <-> |1>); the frame a two-body "
+             "target chi compares with the transfer in (MultiCobordism.set_input_frame).")
         .def("state", &SimplicialQubit::state, "(|0> + tau|1>) / sqrt(1 + |tau|^2) (section 10).")
         .def("bloch", &SimplicialQubit::bloch, "The Bloch vector (section 10).")
         .def("density_matrix", &SimplicialQubit::densityMatrix, "rho = (I + r . sigma) / 2 (section 10).")
