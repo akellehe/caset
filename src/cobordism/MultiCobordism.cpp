@@ -5004,9 +5004,9 @@ MultiCobordism::MonodromyRead MultiCobordism::monodromy(const std::shared_ptr<Sp
     return read;
   }
   read.betti = betti(*spacetime);
-  // The edges both markings walk, as sorted tuples: the cells the zero mode is
-  // read on.
-  std::map<std::vector<std::uint64_t>, Eigen::Index> rowOf;
+  // The edges both markings walk, as sorted tuples: every one must be an
+  // edge of the whole before any operator is built.
+  std::set<std::vector<std::uint64_t>> seen;
   std::vector<std::vector<std::uint64_t>> cells;
   for (const Marking *marking : {&markingA, &markingB})
     for (const auto &cycle : *marking)
@@ -5016,8 +5016,7 @@ MultiCobordism::MonodromyRead MultiCobordism::monodromy(const std::shared_ptr<Sp
           return read;
         }
         std::vector<std::uint64_t> edge = {std::min(u, v), std::max(u, v)};
-        if (rowOf.emplace(edge, static_cast<Eigen::Index>(cells.size())).second)
-          cells.push_back(std::move(edge));
+        if (seen.insert(edge).second) cells.push_back(std::move(edge));
       }
   if (cells.empty()) {
     read.obstruction = "empty markings";

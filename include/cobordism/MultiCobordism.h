@@ -99,7 +99,8 @@ class MultiCobordism {
   /// written in. WHY separate from the fiber: the fiber is the rank-one
   /// state the block keeps representing and is scored by its residual; the
   /// frame is the basis that state is a coordinate vector in and is never
-  /// scored (nothing about a marking enters the relaxation).
+  /// scored (a marking enters the relaxation only through the frame it
+  /// normalizes, `BlockMarking`).
   struct BlockFrame {
     /// The block's attached fiber cells (sorted vertex tuples), one per row.
     std::vector<std::vector<std::uint64_t>> cells;
@@ -2447,10 +2448,11 @@ class MultiCobordism {
   std::optional<BoundaryFiber> wholeFiberTarget_;
   std::optional<TwoBodyTarget> twoBodyTarget_;
   /// The transfer between the two attached input blocks on \p spacetime: in
-  /// the blocks' frames when both carry one (`BlockFrame`), in the full
-  /// (identity) frames on the fibers' cells when neither does; refused
-  /// geometries throw std::runtime_error. @throws std::logic_error when only
-  /// one block carries a frame.
+  /// the blocks' frames when both carry one (`transferOperand`: derived live
+  /// from a marking, or the supplied `BlockFrame`), in the full (identity)
+  /// frames on the fibers' cells when neither does; refused geometries throw
+  /// std::runtime_error. @throws std::logic_error when only one block
+  /// carries a frame.
   [[nodiscard]] chainhodge::TransferResult frameTransferOn(
       const std::shared_ptr<Spacetime> &spacetime, const BoundaryBlock &A,
       const BoundaryBlock &B) const;
