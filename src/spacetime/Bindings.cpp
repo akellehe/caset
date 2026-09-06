@@ -13,6 +13,7 @@
 #include "spacetime/topologies/Sphere.h"
 #include "spacetime/topologies/Toroid.h"
 #include "spacetime/topologies/SimplexBoundarySphere.h"
+#include "spacetime/topologies/PolygonCircle.h"
 #include "spacetime/topologies/SolidSimplex.h"
 #include "spacetime/topologies/RealProjectivePlane.h"
 #include "spacetime/topologies/RealProjectiveSpace.h"
@@ -107,6 +108,19 @@ Pachner moves (add, remove, flip, iflip, shift).)doc")
       .def("build", &SimplexBoundarySphere::build, py::arg("spacetime"),
            py::arg("numSimplices") = 0,
            "Build S^n = ∂Δ^{n+1} (numSimplices ignored).");
+
+  py::class_<PolygonCircle, Topology, std::shared_ptr<PolygonCircle> >(
+      m, "PolygonCircle",
+      "S^1 as an n-gon (n >= 3): vertices 0..n-1, edges {i, i+1 mod n}. n = 3 is "
+      "SimplexBoundarySphere(1). Exact and pre-geometric; build() ignores "
+      "numSimplices. SimplicialProduct(PolygonCircle(nx), PolygonCircle(ny)) is the "
+      "nx x ny diagonal-split grid torus — the resolution knob the simplicial-qubit "
+      "refinement statements are tested on.")
+      .def(py::init<int>(), py::arg("n"))
+      .def("n", &PolygonCircle::n, "Number of vertices (and edges) of the polygon.")
+      .def("build", &PolygonCircle::build, py::arg("spacetime"),
+           py::arg("numSimplices") = 0,
+           "Build the n-gon (numSimplices ignored); raises ValueError for n < 3.");
 
   py::class_<SolidSimplex, Topology, std::shared_ptr<SolidSimplex> >(
       m, "SolidSimplex",

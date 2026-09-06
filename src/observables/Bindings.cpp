@@ -31,6 +31,7 @@
 #include "observables/VolumeProfile.h"
 #include "observables/WilsonLoop.h"
 #include "observables/Spectral.h"
+#include "observables/SimplicialQubit.h"
 #include "observables/Record.h"
 #include "observables/ClusterRegister.h"
 #include "observables/RegisterContext.h"
@@ -1081,6 +1082,101 @@ Args:
            "Compute and accumulate a volume profile measurement for averaging.")
       .def("reset", &VolumeProfile::reset,
            "Reset the accumulated measurements.");
+  // ========================================
+  // Simplicial qubit (#955): a marked torus's harmonic zero mode as a point of CP^1
+  // ========================================
+  py::class_<SimplicialQubitRead>(m, "SimplicialQubitRead",
+      "One read of a marked torus: combinatorial certificates, the harmonic basis "
+      "(chains and images), the Whitney Gram G, the intersection form R, the complex "
+      "structure J = G^{-1} R^T with its residual ||J^2 + I||_F, the periods over the "
+      "marking and the recovered A.B, the holomorphic form, tau = P_B / P_A, the state, "
+      "Bloch vector and density matrix, degeneration diagnostics, and the refusal reason "
+      "(empty when the read holds). Complex leaves of toRecord() are split _re/_im.")
+      .def_readonly("vertices", &SimplicialQubitRead::vertices)
+      .def_readonly("edges", &SimplicialQubitRead::edges)
+      .def_readonly("faces", &SimplicialQubitRead::faces)
+      .def_readonly("eulerCharacteristic", &SimplicialQubitRead::eulerCharacteristic)
+      .def_readonly("betti", &SimplicialQubitRead::betti)
+      .def_readonly("harmonicRank", &SimplicialQubitRead::harmonicRank)
+      .def_readonly("harmonicGap", &SimplicialQubitRead::harmonicGap)
+      .def_readonly("twistedHarmonicRank", &SimplicialQubitRead::twistedHarmonicRank)
+      .def_readonly("harmonicChains", &SimplicialQubitRead::harmonicChains)
+      .def_readonly("harmonicImages", &SimplicialQubitRead::harmonicImages)
+      .def_readonly("gram", &SimplicialQubitRead::gram)
+      .def_readonly("intersection", &SimplicialQubitRead::intersection)
+      .def_readonly("complexStructure", &SimplicialQubitRead::complexStructure)
+      .def_readonly("complexStructureResidual", &SimplicialQubitRead::complexStructureResidual)
+      .def_readonly("periods", &SimplicialQubitRead::periods)
+      .def_readonly("intersectionNumber", &SimplicialQubitRead::intersectionNumber)
+      .def_readonly("holomorphicForm", &SimplicialQubitRead::holomorphicForm)
+      .def_readonly("periodA", &SimplicialQubitRead::periodA)
+      .def_readonly("periodB", &SimplicialQubitRead::periodB)
+      .def_readonly("tau", &SimplicialQubitRead::tau)
+      .def_readonly("markingSwapped", &SimplicialQubitRead::markingSwapped)
+      .def_readonly("state", &SimplicialQubitRead::state)
+      .def_readonly("bloch", &SimplicialQubitRead::bloch)
+      .def_readonly("blochNorm", &SimplicialQubitRead::blochNorm)
+      .def_readonly("density", &SimplicialQubitRead::density)
+      .def_readonly("metricCondition", &SimplicialQubitRead::metricCondition)
+      .def_readonly("gramCondition", &SimplicialQubitRead::gramCondition)
+      .def_readonly("nearDegenerate", &SimplicialQubitRead::nearDegenerate)
+      .def_readonly("warning", &SimplicialQubitRead::warning)
+      .def_readonly("refusal", &SimplicialQubitRead::refusal)
+      .def("holds", &SimplicialQubitRead::holds, "True when the read was not refused.")
+      .def("toRecord",
+           [](const SimplicialQubitRead &self) { return recordToPython(self.toRecord()); },
+           "The JSON-able record (complex leaves split _re/_im).");
+  py::class_<SimplicialQubit, std::shared_ptr<SimplicialQubit>>(m, "SimplicialQubit",
+      "Observable: a single qubit as the intrinsic geometry of a marked triangulated "
+      "torus. The harmonic 1-chains of the Whitney chain-Hodge pencil (the exact zero "
+      "mode, dimension 2) carry the complex structure J = G^{-1} R^T induced by the "
+      "metric through the Whitney Gram G and the metric-free intersection form R; the "
+      "period ratio tau = P_B / P_A of the holomorphic line over the marked cycles "
+      "(A, B), A.B = +1, is a point of CP^1 and the state is (|0> + tau|1>) / "
+      "sqrt(1 + |tau|^2). With the link phases on, the twisted zero mode must keep rank "
+      "2 (a pure-gauge connection) or the read refuses by name. compute() returns the "
+      "complex-structure residual ||J^2 + I||_F (0 on a flat torus, decreasing under "
+      "refinement; NaN when refused). Nothing here moves a length: the representation "
+      "is what geometric relaxation will later be read against.")
+      .def(py::init<SimplicialQubit::Cycle, SimplicialQubit::Cycle, bool, double>(),
+           py::arg("cycle_a"), py::arg("cycle_b"), py::arg("reversed") = false,
+           py::arg("degeneracy_threshold") = 1e8,
+           "Marking: two closed vertex walks (every consecutive pair an edge; the last "
+           "closes to the first) with A.B = +1, the orientation flag for the other "
+           "hemisphere, and the condition-number level above which a read warns.")
+      .def("read", &SimplicialQubit::read, py::arg("spacetime"), "The full read of a torus.")
+      .def("compute", &SimplicialQubit::compute, py::arg("spacetime"),
+           "Headline: ||J^2 + I||_F, NaN when the read is refused.")
+      .def("cycleA", &SimplicialQubit::cycleA)
+      .def("cycleB", &SimplicialQubit::cycleB)
+      .def("reversed", &SimplicialQubit::reversed)
+      .def("degeneracyThreshold", &SimplicialQubit::degeneracyThreshold)
+      .def_static("flatTorus", &SimplicialQubit::flatTorus, py::arg("tau"), py::arg("nx"),
+                  py::arg("ny"),
+                  "The marked flat torus C / (Z + tau Z) as an nx x ny grid (SimplicialProduct "
+                  "of two PolygonCircles) with Euclidean lattice edge lengths; exact: the read "
+                  "returns tau to rounding at every resolution. Raises ValueError unless "
+                  "Im tau > 0 and nx, ny >= 3.")
+      .def_static("stateOf", &SimplicialQubit::stateOf, py::arg("tau"),
+                  "(|0> + tau|1>) / sqrt(1 + |tau|^2).")
+      .def_static("blochOf", &SimplicialQubit::blochOf, py::arg("tau"),
+                  "(2 Re tau, 2 Im tau, 1 - |tau|^2) / (1 + |tau|^2).")
+      .def_static("densityOf", &SimplicialQubit::densityOf, py::arg("tau"), "|psi><psi|.")
+      .def_static("periodRatioOf", &SimplicialQubit::periodRatioOf, py::arg("state"),
+                  "beta / alpha of a state (alpha, beta); raises ValueError at the cusp alpha = 0.")
+      .def_static("fubiniStudyDistance", &SimplicialQubit::fubiniStudyDistance, py::arg("tau1"),
+                  py::arg("tau2"),
+                  "arccos(|1 + conj(tau1) tau2| / sqrt((1+|tau1|^2)(1+|tau2|^2))): "
+                  "distinguishability, curvature +4.")
+      .def_static("weilPeterssonDistance", &SimplicialQubit::weilPeterssonDistance,
+                  py::arg("tau1"), py::arg("tau2"),
+                  "arccosh(1 + |tau1 - tau2|^2 / (2 Im tau1 Im tau2)): moduli distance, "
+                  "curvature -1; raises ValueError off the upper half plane.");
+  py::class_<MarkedTorus>(m, "MarkedTorus",
+      "A torus with the qubit observable that reads it (what SimplicialQubit.flatTorus "
+      "returns), so the marking travels with the complex it was built for.")
+      .def_readonly("spacetime", &MarkedTorus::spacetime)
+      .def_readonly("qubit", &MarkedTorus::qubit);
   // ========================================
   // Hodge spectral Observables (#95): scalars over cobordism::HodgeLaplacian
   // ========================================

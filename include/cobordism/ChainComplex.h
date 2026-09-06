@@ -4,6 +4,7 @@
 #ifndef TESSERA_COBORDISM_CHAINCOMPLEX_H
 #define TESSERA_COBORDISM_CHAINCOMPLEX_H
 
+#include <complex>
 #include <cstdint>
 #include <map>
 #include <string>
@@ -195,6 +196,58 @@ class ChainComplex {
     /// Signature \f$ \sigma = b_+ - b_- \f$ of the intersection form
     /// (Sylvester inertia). 0 when \f$ n \neq 4 \f$ or \f$ b_2 = 0 \f$.
     [[nodiscard]] int signature() const;
+
+    /// # Cup-product pairing against the fundamental class
+    ///
+    /// The bilinear form \f$ \langle a \cup b, [K] \rangle = \sum_t
+    /// \varepsilon_t\, a(\text{front}_k t)\, b(\text{back}_{d-k} t) \f$ on
+    /// \f$ C^k \times C^{d-k} \f$ of a closed connected oriented
+    /// \f$ d \f$-manifold, kept in its sparse combinatorial form: one term per
+    /// top simplex \f$ t = [v_0 < \cdots < v_d] \f$, whose *front* face is
+    /// \f$ [v_0 \ldots v_k] \f$ and *back* face \f$ [v_k \ldots v_d] \f$ (the
+    /// Alexander–Whitney product; both faces inherit the ascending reference
+    /// orientation, so no extra sign enters), weighted by the fundamental-class
+    /// sign \f$ \varepsilon_t \f$ of ``fundamentalClass()``.
+    ///
+    /// WHY it is exposed on cochains rather than on a cohomology basis (as
+    /// ``intersectionForm()`` is): a metric picks *representatives*. The
+    /// Whitney chain-Hodge pencil hands back the harmonic images
+    /// \f$ z_a \f$ of a given geometry, and the surface's complex structure is
+    /// the pairing of those images, \f$ R_{ab} = \int W(z_a) \wedge W(z_b) =
+    /// \langle z_a \cup z_b, [K] \rangle \f$ — an identity on closed cochains
+    /// because both sides are the cup-product pairing of the classes. The
+    /// pairing is metric-free, so it is the one piece of the complex structure
+    /// that carries no discretization error; the geometry enters only through
+    /// the harmonic Gram. For \f$ d = 2, k = 1 \f$ it is the (antisymmetric)
+    /// intersection form of the surface. The 4-manifold ``intersectionForm()``
+    /// is its \f$ d = 4, k = 2 \f$ case restricted to a basis of \f$ H^2 \f$.
+    struct CupProductForm {
+        /// The front degree \f$ k \f$; the back degree is \f$ d - k \f$.
+        int degree{0};
+        /// \f$ |C_k| \f$ and \f$ |C_{d-k}| \f$: the lengths ``evaluate`` expects.
+        std::size_t rows{0};
+        std::size_t cols{0};
+        /// Per top simplex (canonical \f$ C_d \f$ order): the canonical index of
+        /// its front \f$ k \f$-face, its back \f$ (d-k) \f$-face, and
+        /// \f$ \varepsilon_t \in \{\pm 1\} \f$.
+        std::vector<int> front{};
+        std::vector<int> back{};
+        std::vector<int> orientation{};
+        /// \f$ \sum_t \varepsilon_t\, a[\text{front}_t]\, b[\text{back}_t] \f$
+        /// for a \f$ k \f$-cochain \f$ a \f$ and a \f$ (d-k) \f$-cochain
+        /// \f$ b \f$ in canonical order.
+        /// @throws std::invalid_argument on a length mismatch.
+        [[nodiscard]] std::complex<double> evaluate(
+            const std::vector<std::complex<double>> &a,
+            const std::vector<std::complex<double>> &b) const;
+    };
+
+    /// The cup-product pairing \f$ C^k \times C^{d-k} \to \mathbb{R} \f$ of
+    /// this complex against its fundamental class.
+    /// @throws std::invalid_argument when \f$ k \notin [0, d] \f$;
+    ///   std::runtime_error when the complex has no fundamental class (not a
+    ///   closed connected oriented manifold; see ``fundamentalClass()``).
+    [[nodiscard]] CupProductForm cupProductForm(int k) const;
 
     /// Mod-2 Stiefel–Whitney numbers of a closed PL \f$ n \f$-manifold:
     /// \f$ \langle w_{i_1}\cdots w_{i_r}, [K] \rangle \in \mathbb{Z}/2 \f$ for

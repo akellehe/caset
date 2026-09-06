@@ -91,6 +91,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} SimplexBoundarySphere.h
 ```
+```{doxygenfile} PolygonCircle.h
+```
 ```{doxygenfile} SolidSimplex.h
 ```
 ```{doxygenfile} StellarSubdivision.h
@@ -122,6 +124,8 @@ exclusions to see the entire interface.
 ```{doxygenfile} SpacetimeVolume.h
 ```
 ```{doxygenfile} Spectral.h
+```
+```{doxygenfile} SimplicialQubit.h
 ```
 ```{doxygenfile} WilsonLoop.h
 ```

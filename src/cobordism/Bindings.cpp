@@ -140,6 +140,20 @@ Spacetime's declared metric dimension.)doc")
 
   // ----- Homology backbone (#64): chain complex + exact linear algebra -----
 
+  py::class_<ChainComplex::CupProductForm>(m, "CupProductForm",
+      "The cup-product pairing <a u b, [K]> of a closed oriented manifold in sparse "
+      "combinatorial form: per top simplex the canonical index of its front k-face, its "
+      "back (d-k)-face and the fundamental-class sign. evaluate(a, b) sums "
+      "eps_t a[front_t] b[back_t] for a k-cochain a and a (d-k)-cochain b in canonical order.")
+      .def_readonly("degree", &ChainComplex::CupProductForm::degree)
+      .def_readonly("rows", &ChainComplex::CupProductForm::rows)
+      .def_readonly("cols", &ChainComplex::CupProductForm::cols)
+      .def_readonly("front", &ChainComplex::CupProductForm::front)
+      .def_readonly("back", &ChainComplex::CupProductForm::back)
+      .def_readonly("orientation", &ChainComplex::CupProductForm::orientation)
+      .def("evaluate", &ChainComplex::CupProductForm::evaluate, py::arg("a"), py::arg("b"),
+           "sum_t eps_t a[front_t] b[back_t]; raises ValueError on a length mismatch.");
+
   py::class_<ChainComplex>(m, "ChainComplex",
       R"doc(Simplicial chain complex of a triangulation.
 
@@ -226,6 +240,12 @@ numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and th
            "oriented 4-manifold; empty if n != 4 or b2 == 0.")
       .def("signature", &ChainComplex::signature,
            "Signature b+ - b- of the intersection form (0 if n != 4 or b2 == 0).")
+      .def("cupProductForm", &ChainComplex::cupProductForm, py::arg("k"),
+           "The cup-product pairing <a u b, [K]> on C^k x C^{d-k} against the fundamental "
+           "class, in sparse combinatorial form (one term per top simplex: front k-face, "
+           "back (d-k)-face, orientation sign). Metric-free; on a closed oriented surface "
+           "at k = 1 it is the intersection form evaluated on cochain representatives. "
+           "Raises RuntimeError when the complex has no fundamental class.")
       .def("stiefelWhitneyNumbers", &ChainComplex::stiefelWhitneyNumbers,
            "Mod-2 Stiefel-Whitney numbers <w_{i1}..w_{ir}, [K]> keyed by "
            "monomial (e.g. 'w4', 'w2^2'); empty for the empty complex. Raises "

@@ -209,6 +209,21 @@ class ChainHodge {
   /// with the same threshold supplies it (gap unmeasured).
   [[nodiscard]] HarmonicRead harmonicChains(int k, double kappa = 10.0,
                                             bool forceSparse = false) const;
+  /// The numerical kernel of a stacked constraint matrix \f$ S \f$ with
+  /// \f$ n \f$ columns — the rank-revealing core `harmonicChains` and
+  /// `CovariantChainHodge::harmonicChains` share, so the untwisted and the
+  /// twisted zero modes are certified by the SAME tolerance rule
+  /// (\f$ \kappa\,\max(m,n)\,\epsilon_m\,\varsigma_{\max} \f$) and the same
+  /// dense-SVD / sparse-QR switch. Fills \p read's `rank`, `tolerance` and
+  /// `gap` (the SVD gap; NaN on the sparse path); an empty \f$ S \f$ (no
+  /// constraints) yields the identity with an infinite gap.
+  /// @param dense Take the dense SVD (below the crossover) rather than the
+  ///   sparse rank-revealing QR of \f$ S^T \f$.
+  /// @return The \f$ n \times \text{nullity} \f$ kernel basis.
+  /// @throws std::runtime_error when the sparse QR fails.
+  [[nodiscard]] static Eigen::MatrixXcd stackedKernel(const Eigen::MatrixXcd &S, int n,
+                                                      double kappa, bool dense,
+                                                      HarmonicRead &read);
   /// \f$ G_k H \f$ (equals `applyG`).
   [[nodiscard]] Eigen::MatrixXcd geometricImage(int k, const Eigen::MatrixXcd &H) const;
   /// The harmonic Gram \f$ \Phi^T G_k \Phi = Z^T M_k Z \f$ of a harmonic read

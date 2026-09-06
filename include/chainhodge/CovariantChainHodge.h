@@ -236,6 +236,26 @@ class CovariantChainHodge {
   ///   \f$ \zeta \f$ is an eigenvalue (singular bordered system).
   [[nodiscard]] Eigen::MatrixXcd resolvent(int k, Complex zeta, const Eigen::MatrixXcd &c) const;
 
+  /// The twisted harmonic chains — the exact zero mode of \f$ h_k(s, U) \f$ with
+  /// the link phases ON: \f$ H_k^U = M_k^U \ker S^U \f$ with \f$ S^U =
+  /// [(\partial_{k+1}^{U^{-1}})^T;\ \partial_k^U M_k^U] \f$ (Whitney) or
+  /// \f$ \ker[\partial_k^U;\ (\partial_{k+1}^{U^{-1}})^T G_k^U] \f$ (Grassmann):
+  /// the twisted closedness and co-closedness the dressed pencil `pencil(k)`
+  /// is built from, certified by `ChainHodge::stackedKernel` with the same
+  /// tolerance rule as the untwisted read. At \f$ U = 1 \f$ it reproduces
+  /// `base().harmonicChains(k)`.
+  ///
+  /// WHY a kernel read rather than a Riesz band at the harmonic contour: the
+  /// zero mode is the object (eigenvalue 0, not the lowest band above it), and
+  /// a contour quadrature approximates the projector while the stacked kernel
+  /// is exact to the rank tolerance. Its nullity is the twisted Betti number:
+  /// on a closed surface it equals \f$ b_k \f$ exactly when the connection is
+  /// pure gauge, and drops when \f$ U \f$ carries holonomy or flux — that is
+  /// the certificate the simplicial-qubit read uses to refuse a torus whose
+  /// phases are not a gauge.
+  [[nodiscard]] HarmonicRead harmonicChains(int k, double kappa = 10.0,
+                                            bool forceSparse = false) const;
+
   /// The Riesz band of the contour (specification §6): \f$ P_C(U) =
   /// \sum_j w_j (\zeta_j I - h_k)^{-1} \f$ by the contour's quadrature rule, one
   /// sparse factorization per node, applied to the identity; the right frame
