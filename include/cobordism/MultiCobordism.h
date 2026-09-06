@@ -27,6 +27,7 @@
 #include <vector>
 
 namespace tessera::spacetime { class Spacetime; }
+namespace tessera::mesh { class Edge; }
 
 namespace tessera::cobordism {
 using ::tessera::spacetime::Spacetime;
@@ -1909,10 +1910,31 @@ class MultiCobordism {
   [[nodiscard]] int lastStage1Lookahead() const { return lastStage1LookaheadDepth_; }
 
  private:
+  /// One edge's geometry as a snapshot records it: the complex length, which
+  /// is orientation-free, and the connection phase on the CANONICAL min->max
+  /// orientation of the edge's vertex pair. `mesh::Edge` stores its phase on
+  /// its own source->target orientation (the convention
+  /// `chainhodge::Connection::fromSpacetime` reads), and the link on the
+  /// reverse orientation is the inverse, so an edge stored max->min records
+  /// its phase negated (`edgeGeometryOf`) and takes it back negated
+  /// (`restoreEdgeGeometry`). Keyed by vertex pair, the record is a pure
+  /// function of the geometry, exactly as the checkpoint's `raw_complex` is.
+  struct EdgeGeometry {
+    std::complex<double> length;
+    std::complex<double> phase;
+  };
+  /// A committed stage-1 move's record of a complex: its top cells (followed,
+  /// on a node with surface inputs, by the uncovered surface faces) and every
+  /// edge's `EdgeGeometry` keyed by vertex pair. BOTH fields of an edge are
+  /// carried, because the tori of the qubit cobordism carry pure-gauge link
+  /// phases and, under the Whitney pencil, the operator depends on them at
+  /// every degree: a rebuild that restored lengths only reset every phase to
+  /// zero on the first committed move and changed the physics of the state
+  /// the tori carry (their input fibers are zero modes of the TWISTED
+  /// Laplacian, not of the untwisted one).
   using Snapshot =
       std::pair<std::vector<std::vector<std::uint64_t>>,
-                std::map<std::pair<std::uint64_t, std::uint64_t>,
-                         std::complex<double>>>;
+                std::map<std::pair<std::uint64_t, std::uint64_t>, EdgeGeometry>>;
   using MoveSpec = std::pair<std::string, std::vector<std::uint64_t>>;
 
   // ---- the pieces of residualOfTargetStateAgainstHarmonic ----
@@ -2011,8 +2033,32 @@ class MultiCobordism {
   [[nodiscard]] std::vector<std::vector<std::uint64_t>> bridgeCandidatesOn(
       const Spacetime &spacetime) const;
 
+  /// The phase of the inverse link, \f$ -\varphi \f$, computed as
+  /// \f$ 0 - \varphi \f$ so that a zero phase stays \f$ +0 \f$ on either
+  /// orientation: an all-zero connection round-trips bit-identically, with no
+  /// signed zero introduced by the orientation rule.
+  [[nodiscard]] static std::complex<double> inverseLinkPhase(
+      std::complex<double> phase) noexcept;
+  /// \p edge's length and its phase on the canonical min->max orientation.
+  [[nodiscard]] static EdgeGeometry edgeGeometryOf(const ::tessera::mesh::Edge &edge);
+  /// Write \p geometry onto \p edge: the length verbatim, the phase back on
+  /// the edge's own orientation (negated when the edge is stored max->min).
+  static void restoreEdgeGeometry(::tessera::mesh::Edge &edge,
+                                  const EdgeGeometry &geometry);
+  /// Record \p spacetime as a `Snapshot`.
   [[nodiscard]] Snapshot snapshotOf(const Spacetime &spacetime) const;
   [[nodiscard]] Snapshot snapshot() const;
+  /// The complex \p complexSnapshot records, rebuilt at \p dimensions from its
+  /// cells with every recorded edge's length AND phase restored by
+  /// `restoreEdgeGeometry`; an edge the record does not hold (one a move
+  /// created) keeps `Spacetime::fromCells`'s auto-wired length and zero
+  /// phase. The one rebuild behind stage-1 candidates, the committed step,
+  /// the precone / refinement cone-ins and checkpoint replay.
+  [[nodiscard]] static std::shared_ptr<Spacetime> rebuild(
+      int dimensions, const Snapshot &complexSnapshot);
+  /// `rebuild` at the node's dimension, carrying the node's edge-wiring mode
+  /// so combinatorial moves scored on the result wire their new edges under
+  /// the same convention.
   [[nodiscard]] std::shared_ptr<Spacetime> build(
       const Snapshot &complexSnapshot) const;
 

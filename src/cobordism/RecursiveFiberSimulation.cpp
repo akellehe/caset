@@ -884,20 +884,17 @@ std::string MultiCobordism::rawComplexJson(
   // connection phase is NOT: the link on the reverse orientation is the
   // inverse, so a phase written against the canonical min->max direction must
   // be negated whenever the live edge stores target->source. Recording the
-  // canonical-direction phase keeps the document a pure function of the
-  // geometry, exactly as the endpoint sort does for the cell order.
-  std::map<std::pair<std::uint64_t, std::uint64_t>, std::pair<complexd, complexd>>
-      edgesByEndpoints;
+  // canonical-direction phase (`edgeGeometryOf`, the stage-1 snapshot's own
+  // record) keeps the document a pure function of the geometry, exactly as
+  // the endpoint sort does for the cell order.
+  std::map<std::pair<std::uint64_t, std::uint64_t>, EdgeGeometry> edgesByEndpoints;
   for (const auto *edge : spacetime->getEdgeList()->toVector()) {
     if (edge == nullptr || edge->getSource() == nullptr ||
         edge->getTarget() == nullptr)
       continue;
     const auto a = edge->getSource()->getId();
     const auto b = edge->getTarget()->getId();
-    const complexd canonicalPhase =
-        (a < b) ? edge->getPhase() : -edge->getPhase();
-    edgesByEndpoints[{std::min(a, b), std::max(a, b)}] = {edge->getLength(),
-                                                         canonicalPhase};
+    edgesByEndpoints[{std::min(a, b), std::max(a, b)}] = edgeGeometryOf(*edge);
   }
   std::string edgeText = "[";
   bool firstEdge = true;
@@ -907,8 +904,8 @@ std::string MultiCobordism::rawComplexJson(
     edgeText += Json::object({
         {"a", Json::integer(static_cast<long long>(entry.first.first))},
         {"b", Json::integer(static_cast<long long>(entry.first.second))},
-        {"length", Json::complexPair(entry.second.first)},
-        {"phase", Json::complexPair(entry.second.second)},
+        {"length", Json::complexPair(entry.second.length)},
+        {"phase", Json::complexPair(entry.second.phase)},
     });
   }
   edgeText += "]";
@@ -1670,10 +1667,13 @@ std::string MultiCobordism::replayCheckpoint(const std::string &checkpoint) {
       cell.push_back(static_cast<std::uint64_t>(Json::asNumber(idText)));
     cells.push_back(std::move(cell));
   }
-  auto spacetime = Spacetime::fromCells(dimensions, cells, 1.0,
-                                        replayPhaseDefault());
-  std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> lengths;
-  std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> phases;
+  // The document IS a snapshot: the cells and, per edge on the canonical
+  // min->max direction, the length and the phase. It is rebuilt through the
+  // same `rebuild` a committed stage-1 move goes through, so replay and the
+  // incremental run restore an edge identically. An edge the document
+  // records without a phase takes `replayPhaseDefault`.
+  Snapshot recorded;
+  recorded.first = std::move(cells);
   for (const auto &edgeText :
        Json::elements(Json::topLevelValue(rawComplex, "edges"))) {
     const auto a = static_cast<std::uint64_t>(
@@ -1682,29 +1682,17 @@ std::string MultiCobordism::replayCheckpoint(const std::string &checkpoint) {
         Json::asNumber(Json::topLevelValue(edgeText, "b")));
     const auto parts = Json::elements(Json::topLevelValue(edgeText, "length"));
     if (parts.size() != 2) continue;
-    lengths[{std::min(a, b), std::max(a, b)}] =
-        complexd{Json::asNumber(parts[0]), Json::asNumber(parts[1])};
+    EdgeGeometry geometry{
+        complexd{Json::asNumber(parts[0]), Json::asNumber(parts[1])},
+        replayPhaseDefault()};
     const auto phaseParts =
         Json::elements(Json::topLevelValue(edgeText, "phase"));
     if (phaseParts.size() == 2)
-      phases[{std::min(a, b), std::max(a, b)}] = complexd{
-          Json::asNumber(phaseParts[0]), Json::asNumber(phaseParts[1])};
+      geometry.phase = complexd{Json::asNumber(phaseParts[0]),
+                                Json::asNumber(phaseParts[1])};
+    recorded.second[{std::min(a, b), std::max(a, b)}] = geometry;
   }
-  for (auto *edge : spacetime->getEdgeList()->toVector()) {
-    if (edge == nullptr || edge->getSource() == nullptr ||
-        edge->getTarget() == nullptr)
-      continue;
-    const auto a = edge->getSource()->getId();
-    const auto b = edge->getTarget()->getId();
-    const auto found = lengths.find({std::min(a, b), std::max(a, b)});
-    if (found != lengths.end()) edge->setLength(found->second);  // branch-exact
-    const auto foundPhase = phases.find({std::min(a, b), std::max(a, b)});
-    if (foundPhase != phases.end())
-      // The document records the phase on the canonical min->max direction;
-      // an edge stored the other way round carries the inverse link, so the
-      // phase is negated back onto its own orientation.
-      edge->setPhase((a < b) ? foundPhase->second : -foundPhase->second);
-  }
+  auto spacetime = rebuild(dimensions, recorded);
 
   // Rebuild the node the checkpoint describes and recompute EVERYTHING cold.
   const std::string provenance = Json::topLevelValue(checkpoint, "provenance");
