@@ -159,7 +159,8 @@ S4. **Synthesis.** Per frame: ordinary stage 1 (adds, flips, cone-outs,
     where r_U under fiber residuals is the sum over blocks of that block's
     residual of D2 (weight `inputResidualWeight`) and the two-body residual.
     Stage 1 runs before stage 2 within a frame (a committed stage-1 move
-    rebuilds the complex with lengths only).
+    rebuilds the complex from a snapshot of its cells and every edge's
+    length and phase).
 
 S5. **Target.** The two-qubit XY flip-flop, mirroring the spin-3/2 experiment:
     H_int = ħJ(σ₁⁺σ₂⁻ + σ₁⁻σ₂⁺), first-order amplitude A = −iJt χ with
@@ -280,8 +281,9 @@ D4. **Animation.** `emergence_animation.py` gains a qubit input mode:
   the face's edges on the boundary; a cone-out dent keeps them; 3-2 flips act
   on interior edges; 4-1 removals act on interior vertices. So edge-indexed
   fibers and markings survive; the surface gains vertices and faces.
-- A committed stage-1 move restores lengths only (phases reset to zero);
-  irrelevant for real tori, but run stage 1 before stage 2 in a frame.
+- A committed stage-1 move restores every surviving edge's length and
+  phase; edges a move creates are auto-wired with a zero phase. Stage 1
+  still runs before stage 2 in a frame.
 - The zero mode of the whole restricted to the boundary is topological: half
   of the boundary's harmonic space extends into W. The bulk metric shapes the
   representative on the edges and the transfer block, not the periods. A
