@@ -242,3 +242,13 @@ These are properties of the construction, not bugs to work around.
 - The true moduli space is `H / SL(2, Z)`, an orbifold with a cusp, not `CP^1`. The map from geometry to state is onto a hemisphere only after fixing the marking.
 - There is no action of `SU(2)` on edge lengths. Unitary gates have no realization as metric deformations. If gate simulation is needed, apply gates to the `state()` output as ordinary 2x2 matrices; do not attempt to pull them back to the complex.
 - The construction is exact for flat tori and first-order accurate in mesh size otherwise.
+
+## 16. Complex geometry
+
+Lengths may be complex. Every formula of §4–§9 is taken over C: the principal
+branch of acos in §4, the continuation branch (from the real reference) of the
+square roots in §4 (Heron) and §9, the transpose (bilinear, not Hermitian)
+pairing in §7 and §8, a complex null space in §6. Link phases are a pure gauge;
+they enter only the periods of §9, taken with parallel transport, and leave
+`tau` invariant. The eigenline of §9 is chosen by continuity from the real
+reference, since `Im(tau) > 0` is not a criterion off the real locus.
