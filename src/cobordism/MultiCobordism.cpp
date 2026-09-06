@@ -21,6 +21,7 @@
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/LevenbergMarquardt.h"
+#include "cobordism/PencilLayer.h"
 #include "cobordism/SurgicalCone.h"
 #include "matter/MatterConfiguration.h"
 #include "mesh/Edge.h"
@@ -2374,6 +2375,14 @@ MultiCobordism::Snapshot MultiCobordism::snapshotOf(
   std::vector<std::vector<std::uint64_t>> cellVertexTuples;
   for (const auto &topSimplex : spacetime.getTopSimplices())
     cellVertexTuples.push_back(topSimplex->topTuple());
+  // A surface input's faces that no top cell covers are cells of the complex
+  // in their own right (the bulk is still being drawn onto them), and a
+  // rebuild from top cells alone would erase them. They follow the top cells,
+  // so the top-cell order — the dual node indexing — is unchanged, and
+  // `Spacetime::fromCells` registers a (d-1)-vertex cell as the non-top
+  // simplex it is. Absent on every node without surface inputs.
+  for (const auto &face : uncoveredInputFacesOn(spacetime))
+    cellVertexTuples.push_back(face);
   std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> lengthsByEdge;
   for (const auto *edge : spacetime.getEdgeList()->toVector())
     lengthsByEdge[edgeKey(edge)] = edge->getLength();  // verbatim, branch-exact
@@ -2417,7 +2426,20 @@ MultiCobordism::MoveSpec MultiCobordism::drawRandomMoveSpecification(
   const char *const *moveKinds =
       shouldProposeDispositions_ ? dispositionMoveKinds : baseMoveKinds;
   const std::size_t nMoveKinds = shouldProposeDispositions_ ? 8u : 6u;
-  const std::string moveKind = moveKinds[randomNumberGenerator_() % nMoveKinds];
+  // The bridge kind (qubit cobordism spec D1) joins the draw ONLY on a node
+  // with surface inputs whose bridge phase is incomplete: its candidates are
+  // the cells adjacent to the drawing's frontier, split across two surface
+  // blocks. Any other node draws exactly the kinds it drew before, from the
+  // same generator stream.
+  std::vector<std::vector<std::uint64_t>> bridgeCandidates;
+  if (hasSurfaceInputs()) bridgeCandidates = bridgeCandidatesOn(spacetime);
+  const std::size_t nKindsOffered =
+      nMoveKinds + (bridgeCandidates.empty() ? 0u : 1u);
+  const std::size_t kindIndex = randomNumberGenerator_() % nKindsOffered;
+  if (kindIndex == nMoveKinds)
+    return {kBridge,
+            bridgeCandidates[randomNumberGenerator_() % bridgeCandidates.size()]};
+  const std::string moveKind = moveKinds[kindIndex];
 
   // Flip the disposition of one existing edge, chosen uniformly. The payload is
   // the edge's two vertex ids.
@@ -2494,6 +2516,9 @@ bool MultiCobordism::applyMoveSpecification(
   } else if (moveKind == kConeOut) {
     moveWasApplied =
         SurgicalCone(spacetime.get()).coneOut(moveSpecification.second).first;
+  } else if (moveKind == kBridge) {
+    moveWasApplied =
+        SurgicalCone(spacetime.get()).bridge(moveSpecification.second).first;
   } else if (moveKind == kFlipDisposition) {
     // #613: negate one edge's squared length, carrying it across the light cone.
     // Spacelike <-> timelike is a DISCRETE step stage 2 cannot take (it would have
@@ -2973,6 +2998,7 @@ void MultiCobordism::seedBlocks(
   // growBlockRegions grows it under the objective, so the carrying topology is fully
   // emergent. The seed vertex is the only anchor (it distinguishes one input/output
   // from another); everything else emerges.
+  std::vector<std::set<std::uint64_t>> regions;
   for (std::size_t blockIndex = 0;
        blockIndex < targets.size() && blockIndex < seeds.size(); ++blockIndex) {
     const std::uint64_t seedVertexId = seeds[blockIndex];
@@ -2983,8 +3009,39 @@ void MultiCobordism::seedBlocks(
           cellVertexIds.end())
         regionVertexIds.insert(cellVertexIds.begin(), cellVertexIds.end());
     }
-    destinationBlocks.push_back(BoundaryBlock{regionVertexIds, targets[blockIndex]});
+    regions.push_back(std::move(regionVertexIds));
   }
+  seedBlockRegions(regions, targets, destinationBlocks, /*surface=*/false);
+}
+
+void MultiCobordism::seedBlockRegions(
+    const std::vector<std::set<std::uint64_t>> &regions,
+    const std::vector<std::vector<complexd>> &targets,
+    std::vector<BoundaryBlock> &destinationBlocks, bool surface) {
+  for (std::size_t blockIndex = 0;
+       blockIndex < targets.size() && blockIndex < regions.size(); ++blockIndex) {
+    BoundaryBlock block{regions[blockIndex], targets[blockIndex]};
+    block.surface = surface;
+    destinationBlocks.push_back(std::move(block));
+  }
+}
+
+void MultiCobordism::seedInputs(const std::vector<std::vector<std::uint64_t>> &regions) {
+  std::set<std::uint64_t> live;
+  for (const auto *vertex : spacetime_->getVertexList()->toVector())
+    if (vertex != nullptr) live.insert(vertex->getId());
+  std::vector<std::set<std::uint64_t>> regionSets;
+  for (const auto &region : regions) {
+    if (region.empty())
+      throw std::invalid_argument("MultiCobordism::seedInputs: an input region is empty");
+    std::set<std::uint64_t> vertices(region.begin(), region.end());
+    for (const std::uint64_t v : vertices)
+      if (!live.count(v))
+        throw std::invalid_argument("MultiCobordism::seedInputs: region vertex " + std::to_string(v) +
+                                    " is not a vertex of the host");
+    regionSets.push_back(std::move(vertices));
+  }
+  seedBlockRegions(regionSets, inputTargets_, inputBlocks_, /*surface=*/true);
 }
 
 std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
@@ -3525,6 +3582,9 @@ void MultiCobordism::buildStep(BuildAction action, int maxSteps, int nCandidateM
     case BuildAction::ConeIn:
       (void)directedConeIn();
       break;
+    case BuildAction::Bridge:
+      (void)drawBridges(maxSteps);
+      break;
   }
 }
 
@@ -3931,6 +3991,483 @@ std::shared_ptr<Spacetime> MultiCobordism::seedSimplex(int dimension, bool balan
   for (auto *edge : host->getEdgeList()->toVector())
     edge->setLength(balancedEdges ? Spacetime::balancedLength(1.0) : std::sqrt(complexd(1.0, 0.0)));
   return host;
+}
+
+MultiCobordism::SurfaceSeed MultiCobordism::seedFromSurfaces(
+    const std::vector<std::shared_ptr<Spacetime>> &surfaces) {
+  if (surfaces.empty())
+    throw std::invalid_argument("MultiCobordism::seedFromSurfaces: no surfaces");
+  int surfaceDimension = -1;
+  for (const auto &surface : surfaces) {
+    if (!surface) throw std::invalid_argument("MultiCobordism::seedFromSurfaces: null surface");
+    if (surfaceDimension < 0) surfaceDimension = surface->getDimensions();
+    if (surface->getDimensions() != surfaceDimension)
+      throw std::invalid_argument("MultiCobordism::seedFromSurfaces: the surfaces differ in dimension");
+    if (surface->getTopSimplices().empty())
+      throw std::invalid_argument("MultiCobordism::seedFromSurfaces: a surface has no top cells");
+  }
+  // Disjoint id ranges: surface s's vertices, in ascending id order, take the
+  // next block of host ids. The host is one d-dimensional complex whose only
+  // cells are the surfaces' own (d-1)-simplices; fromCells registers each as
+  // the non-top simplex it is and auto-wires its edges, which are then set to
+  // the surface's lengths (verbatim) with zero phases.
+  SurfaceSeed seed;
+  std::vector<std::vector<std::uint64_t>> cells;
+  std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> lengths;
+  std::uint64_t nextId = 0;
+  for (const auto &surface : surfaces) {
+    std::vector<std::uint64_t> ids;
+    for (const auto *vertex : surface->getVertexList()->toVector())
+      if (vertex != nullptr) ids.push_back(vertex->getId());
+    std::sort(ids.begin(), ids.end());
+    std::map<std::uint64_t, std::uint64_t> hostId;
+    for (const std::uint64_t id : ids) hostId[id] = nextId++;
+    for (const auto &topSimplex : surface->getTopSimplices()) {
+      std::vector<std::uint64_t> cell;
+      for (const auto *vertex : topSimplex->getVertices()) cell.push_back(hostId.at(vertex->getId()));
+      cells.push_back(std::move(cell));
+    }
+    for (const auto *edge : surface->getEdgeList()->toVector()) {
+      if (edge == nullptr || edge->getSource() == nullptr || edge->getTarget() == nullptr) continue;
+      const std::uint64_t u = hostId.at(edge->getSource()->getId());
+      const std::uint64_t v = hostId.at(edge->getTarget()->getId());
+      lengths[{std::min(u, v), std::max(u, v)}] = edge->getLength();
+    }
+    seed.vertexIds.push_back(std::move(hostId));
+  }
+  seed.host = Spacetime::fromCells(surfaceDimension + 1, cells, 1.0, complexd(0.0, 0.0));
+  for (auto *edge : seed.host->getEdgeList()->toVector()) {
+    const auto found = lengths.find(edgeKey(edge));
+    if (found == lengths.end())
+      throw std::logic_error("MultiCobordism::seedFromSurfaces: a host edge belongs to no surface");
+    edge->setLength(found->second);
+    edge->setPhase(complexd(0.0, 0.0));
+  }
+  return seed;
+}
+
+MultiCobordism::BlockSurface MultiCobordism::blockSurface(const BoundaryBlock &block,
+                                                          const Spacetime &spacetime) {
+  const std::size_t faceSize = static_cast<std::size_t>(std::max(0, spacetime.getDimensions()));
+  const auto inside = [&](const std::vector<std::uint64_t> &ids) {
+    for (const std::uint64_t v : ids)
+      if (!block.vertices.count(v)) return false;
+    return true;
+  };
+  std::set<std::vector<std::uint64_t>> faces;
+  // The host's registered (d-1)-simplices inside the block: the surface's own
+  // triangles, whether or not a top cell has reached them yet.
+  for (const auto &simplex : spacetime.getSimplices()) {
+    if (simplex == nullptr || simplex->isStale() || simplex->size() != faceSize) continue;
+    auto ids = simplex->topTuple();
+    if (inside(ids)) faces.insert(std::move(ids));
+  }
+  // The facets of the top cells inside the block: a covered surface face that
+  // no read has materialized yet is still a face of the surface.
+  for (const auto &topSimplex : spacetime.getTopSimplices()) {
+    const auto cell = topSimplex->topTuple();
+    for (std::size_t omit = 0; omit < cell.size(); ++omit) {
+      std::vector<std::uint64_t> facet;
+      for (std::size_t i = 0; i < cell.size(); ++i)
+        if (i != omit) facet.push_back(cell[i]);
+      if (facet.size() == faceSize && inside(facet)) faces.insert(std::move(facet));
+    }
+  }
+  std::set<std::vector<std::uint64_t>> edges;
+  for (const auto *edge : spacetime.getEdgeList()->toVector()) {
+    if (edge == nullptr || edge->getSource() == nullptr || edge->getTarget() == nullptr) continue;
+    const auto key = edgeKey(edge);
+    if (block.vertices.count(key.first) && block.vertices.count(key.second))
+      edges.insert({key.first, key.second});
+  }
+  return {std::vector<std::vector<std::uint64_t>>(faces.begin(), faces.end()),
+          std::vector<std::vector<std::uint64_t>>(edges.begin(), edges.end())};
+}
+
+MultiCobordism::SurfaceInventory MultiCobordism::surfaceInventoryOf(
+    const Spacetime &spacetime) const {
+  SurfaceInventory inventory;
+  for (const auto &topSimplex : spacetime.getTopSimplices()) {
+    auto cell = topSimplex->topTuple();
+    for (std::size_t omit = 0; omit < cell.size(); ++omit) {
+      std::vector<std::uint64_t> facet;
+      for (std::size_t i = 0; i < cell.size(); ++i)
+        if (i != omit) facet.push_back(cell[i]);
+      ++inventory.facetIncidence[facet];
+    }
+    inventory.topCells.insert(std::move(cell));
+  }
+  for (std::size_t index = 0; index < inputBlocks_.size(); ++index) {
+    const auto &block = inputBlocks_[index];
+    if (!block.surface) continue;
+    const BlockSurface surface = blockSurface(block, spacetime);
+    std::set<std::vector<std::uint64_t>> faces(surface.faces.begin(), surface.faces.end());
+    // Every non-empty subset of a face is a simplex of the surface: the parts
+    // a bridge may take from this block.
+    std::set<std::vector<std::uint64_t>> simplices;
+    for (const auto &face : faces)
+      for (std::uint64_t mask = 1; mask < (std::uint64_t{1} << face.size()); ++mask) {
+        std::vector<std::uint64_t> part;
+        for (std::size_t i = 0; i < face.size(); ++i)
+          if (mask & (std::uint64_t{1} << i)) part.push_back(face[i]);
+        simplices.insert(std::move(part));
+      }
+    inventory.blocks.push_back(index);
+    inventory.faces.push_back(std::move(faces));
+    inventory.simplices.push_back(std::move(simplices));
+  }
+  return inventory;
+}
+
+bool MultiCobordism::hasSurfaceInputs() const {
+  std::size_t count = 0;
+  for (const auto &block : inputBlocks_)
+    if (block.surface) ++count;
+  return count >= 2;
+}
+
+std::vector<std::vector<std::uint64_t>> MultiCobordism::uncoveredInputFacesOn(
+    const Spacetime &spacetime) const {
+  std::vector<std::vector<std::uint64_t>> uncovered;
+  bool anySurface = false;
+  for (const auto &block : inputBlocks_) anySurface = anySurface || block.surface;
+  if (!anySurface) return uncovered;
+  const SurfaceInventory inventory = surfaceInventoryOf(spacetime);
+  for (const auto &faces : inventory.faces)
+    for (const auto &face : faces)
+      if (!inventory.facetIncidence.count(face)) uncovered.push_back(face);
+  return uncovered;
+}
+
+std::vector<std::vector<std::uint64_t>> MultiCobordism::uncoveredInputFaces() const {
+  return uncoveredInputFacesOn(*spacetime_);
+}
+
+bool MultiCobordism::bridgePhaseCompleteOn(const Spacetime &spacetime) const {
+  const SurfaceInventory inventory = surfaceInventoryOf(spacetime);
+  if (inventory.blocks.empty()) return false;
+  // Every surface face has exactly one top cell on it, and the boundary of
+  // the top cells is exactly the union of the surface faces. Both read off
+  // one facet-incidence count, so the two conditions cannot disagree about
+  // what a boundary facet is.
+  std::set<std::vector<std::uint64_t>> surfaceFaces;
+  for (const auto &faces : inventory.faces) surfaceFaces.insert(faces.begin(), faces.end());
+  if (surfaceFaces.empty()) return false;
+  for (const auto &face : surfaceFaces) {
+    const auto found = inventory.facetIncidence.find(face);
+    if (found == inventory.facetIncidence.end() || found->second != 1) return false;
+  }
+  for (const auto &[facet, count] : inventory.facetIncidence)
+    if (count == 1 && !surfaceFaces.count(facet)) return false;
+  return true;
+}
+
+bool MultiCobordism::bridgePhaseComplete() const { return bridgePhaseCompleteOn(*spacetime_); }
+
+std::vector<std::vector<std::uint64_t>> MultiCobordism::bridgeCandidatesOn(
+    const Spacetime &spacetime) const {
+  std::vector<std::vector<std::uint64_t>> candidates;
+  const SurfaceInventory inventory = surfaceInventoryOf(spacetime);
+  if (inventory.blocks.size() < 2) return candidates;
+  const std::size_t faceSize = static_cast<std::size_t>(std::max(0, spacetime.getDimensions()));
+  // Which surface block (by position in the inventory) each vertex belongs to.
+  std::map<std::uint64_t, std::size_t> blockOfVertex;
+  std::vector<std::vector<std::uint64_t>> blockVertices(inventory.blocks.size());
+  for (std::size_t b = 0; b < inventory.blocks.size(); ++b)
+    for (const std::uint64_t v : inputBlocks_[inventory.blocks[b]].vertices) {
+      blockOfVertex.emplace(v, b);
+      blockVertices[b].push_back(v);
+    }
+  // The frontier: boundary facets of the top cells that are not surface faces
+  // (their other side is still open), and surface faces no top cell covers.
+  std::set<std::vector<std::uint64_t>> surfaceFaces;
+  for (const auto &faces : inventory.faces) surfaceFaces.insert(faces.begin(), faces.end());
+  std::vector<std::vector<std::uint64_t>> frontier;
+  for (const auto &[facet, count] : inventory.facetIncidence)
+    if (count == 1 && !surfaceFaces.count(facet)) frontier.push_back(facet);
+  for (const auto &face : surfaceFaces)
+    if (!inventory.facetIncidence.count(face)) frontier.push_back(face);
+  // A part of a candidate cell inside block b is admissible when it is a
+  // simplex of b's surface — and, when it is a whole face, an uncovered one:
+  // a covered surface face already has the one top cell it will ever have.
+  const auto partAdmissible = [&](std::size_t b, std::vector<std::uint64_t> part) {
+    std::sort(part.begin(), part.end());
+    if (!inventory.simplices[b].count(part)) return false;
+    if (part.size() == faceSize && inventory.facetIncidence.count(part)) return false;
+    return true;
+  };
+  std::set<std::vector<std::uint64_t>> distinct;
+  for (const auto &face : frontier) {
+    // The face's vertices by block; a face touching a vertex outside every
+    // surface block (a bulk vertex a later cone-in minted) is not bridged.
+    std::map<std::size_t, std::vector<std::uint64_t>> parts;
+    bool bridgeable = true;
+    for (const std::uint64_t v : face) {
+      const auto found = blockOfVertex.find(v);
+      if (found == blockOfVertex.end()) {
+        bridgeable = false;
+        break;
+      }
+      parts[found->second].push_back(v);
+    }
+    if (!bridgeable || parts.empty() || parts.size() > 2) continue;
+    // The blocks a completing vertex may come from: the face's own blocks,
+    // or — when the face lies in one block — any other surface block.
+    std::vector<std::size_t> sources;
+    for (const auto &[b, part] : parts) sources.push_back(b);
+    if (parts.size() == 1)
+      for (std::size_t b = 0; b < inventory.blocks.size(); ++b)
+        if (!parts.count(b)) sources.push_back(b);
+    for (const std::size_t b : sources)
+      for (const std::uint64_t v : blockVertices[b]) {
+        if (std::find(face.begin(), face.end(), v) != face.end()) continue;
+        std::map<std::size_t, std::vector<std::uint64_t>> cellParts = parts;
+        cellParts[b].push_back(v);
+        if (cellParts.size() != 2) continue;  // the split is across exactly two blocks
+        bool admissible = true;
+        for (const auto &[block, part] : cellParts)
+          if (!partAdmissible(block, part)) {
+            admissible = false;
+            break;
+          }
+        if (!admissible) continue;
+        std::vector<std::uint64_t> cell(face.begin(), face.end());
+        cell.push_back(v);
+        std::sort(cell.begin(), cell.end());
+        if (inventory.topCells.count(cell)) continue;
+        if (distinct.insert(cell).second) candidates.push_back(std::move(cell));
+      }
+  }
+  return candidates;
+}
+
+int MultiCobordism::drawBridges(int maxCells, int maxAttempts) {
+  if (!hasSurfaceInputs())
+    throw std::logic_error("MultiCobordism::drawBridges: the bridge phase needs at least two surface "
+                           "input blocks (seedFromSurfaces, then the region form of seedInputs)");
+  // In place on the live complex through one SurgicalCone, whose LIFO stack is
+  // the search's backtracking record: every kept cell is on it, and a dead end
+  // rolls the last one back bit-exactly.
+  SurgicalCone cone(spacetime_.get());
+  struct Frame {
+    std::vector<std::vector<std::uint64_t>> candidates;
+    std::size_t next{0};
+  };
+  std::vector<Frame> frames;
+  int attempts = 0;
+  int kept = 0;
+  // The facet incidence of the live top cells (top cells per codimension-one
+  // face), recomputed after every change; boundary facets have count one.
+  const auto facetIncidence = [this]() {
+    std::map<std::vector<std::uint64_t>, int> incidence;
+    for (const auto &topSimplex : spacetime_->getTopSimplices()) {
+      const auto cell = topSimplex->topTuple();
+      for (std::size_t omit = 0; omit < cell.size(); ++omit) {
+        std::vector<std::uint64_t> facet;
+        for (std::size_t i = 0; i < cell.size(); ++i)
+          if (i != omit) facet.push_back(cell[i]);
+        ++incidence[facet];
+      }
+    }
+    return incidence;
+  };
+  // Every vertex of the host lies on the boundary of the finished cobordism
+  // (the surfaces are its whole vertex set and a bridge mints none), so a
+  // cell that closes one of its vertices' links into a sphere — a manifold
+  // configuration the gate accepts — has buried a boundary vertex: the
+  // surface faces at that vertex can never be covered again. That is a
+  // configuration the finished drawing cannot contain, so such a cell is not
+  // a candidate; it is not a gate on the dynamics.
+  const auto buriesAVertex = [&](const std::vector<std::uint64_t> &cell) {
+    const auto incidence = facetIncidence();
+    for (const std::uint64_t v : cell) {
+      bool exposed = false;
+      for (const auto &[facet, count] : incidence)
+        if (count == 1 && std::find(facet.begin(), facet.end(), v) != facet.end()) {
+          exposed = true;
+          break;
+        }
+      if (!exposed) return true;
+    }
+    return false;
+  };
+  while (kept < maxCells && !bridgePhaseCompleteOn(*spacetime_)) {
+    if (frames.size() == static_cast<std::size_t>(kept)) {
+      Frame frame;
+      frame.candidates = bridgeCandidatesOn(*spacetime_);
+      std::shuffle(frame.candidates.begin(), frame.candidates.end(), randomNumberGenerator_);
+      // Candidates that close more open faces — boundary facets of the drawing
+      // and uncovered surface faces among the cell's own facets — come first;
+      // the shuffle above breaks ties at random, so a seed still draws a
+      // different drawing. A front that closes what it opens stays small,
+      // which is what keeps the two surfaces' fronts from meeting
+      // inconsistently.
+      const auto incidence = facetIncidence();
+      const SurfaceInventory inventory = surfaceInventoryOf(*spacetime_);
+      std::set<std::vector<std::uint64_t>> surfaceFaces;
+      for (const auto &faces : inventory.faces) surfaceFaces.insert(faces.begin(), faces.end());
+      const auto closes = [&](const std::vector<std::uint64_t> &cell) {
+        int closed = 0;
+        for (std::size_t omit = 0; omit < cell.size(); ++omit) {
+          std::vector<std::uint64_t> facet;
+          for (std::size_t i = 0; i < cell.size(); ++i)
+            if (i != omit) facet.push_back(cell[i]);
+          const auto found = incidence.find(facet);
+          if (found != incidence.end() ? found->second == 1 : surfaceFaces.count(facet) > 0) ++closed;
+        }
+        return closed;
+      };
+      std::stable_sort(frame.candidates.begin(), frame.candidates.end(),
+                       [&](const auto &a, const auto &b) { return closes(a) > closes(b); });
+      frames.push_back(std::move(frame));
+    }
+    Frame &frame = frames.back();
+    const double baseObjective = objectiveFor(spacetime_);
+    bool advanced = false;
+    while (frame.next < frame.candidates.size() && attempts < maxAttempts) {
+      const auto &candidate = frame.candidates[frame.next++];
+      ++attempts;
+      if (!cone.bridge(candidate).first) continue;  // the gate refused; nothing was applied
+      if (buriesAVertex(candidate)) {
+        cone.rollback();
+        continue;
+      }
+      // Scored by the objective in force: a bridge that raises it is rolled
+      // back; one that leaves it — the whole drawing, on an objective with no
+      // term defined on a partial drawing — or lowers it is kept.
+      if (objectiveFor(spacetime_) - baseObjective > convergenceTolerance_) {
+        cone.rollback();
+        continue;
+      }
+      advanced = true;
+      break;
+    }
+    if (advanced) {
+      ++kept;
+      continue;
+    }
+    if (attempts >= maxAttempts) break;  // budget spent: the drawing so far stands
+    // Dead end: no candidate at this depth can be kept. Undo the cell that led
+    // here and let the depth above try its remaining candidates.
+    frames.pop_back();
+    if (kept == 0) break;  // no gated bridge exists at all
+    cone.rollback();
+    --kept;
+  }
+  if (kept > 0) {
+    // The bulk is being linked: block regions are settled from here on (#737),
+    // and the accepted-move cadence counts every cell of the drawing.
+    bulkConnected_ = true;
+    for (int cell = 0; cell < kept; ++cell) noteAcceptedMove();
+  }
+  return kept;
+}
+
+MultiCobordism::MonodromyRead MultiCobordism::monodromy(const std::shared_ptr<Spacetime> &spacetime,
+                                                        const Marking &markingA,
+                                                        const Marking &markingB) {
+  MonodromyRead read;
+  if (!spacetime) {
+    read.obstruction = "no spacetime";
+    return read;
+  }
+  read.betti = betti(*spacetime);
+  // The edges both markings walk, as sorted tuples: the cells the zero mode is
+  // read on.
+  std::map<std::vector<std::uint64_t>, Eigen::Index> rowOf;
+  std::vector<std::vector<std::uint64_t>> cells;
+  for (const Marking *marking : {&markingA, &markingB})
+    for (const auto &cycle : *marking)
+      for (const auto &[u, v] : cycle) {
+        if (u == v) {
+          read.obstruction = "a marking step is a self-loop";
+          return read;
+        }
+        std::vector<std::uint64_t> edge = {std::min(u, v), std::max(u, v)};
+        if (rowOf.emplace(edge, static_cast<Eigen::Index>(cells.size())).second)
+          cells.push_back(std::move(edge));
+      }
+  if (cells.empty()) {
+    read.obstruction = "empty markings";
+    return read;
+  }
+  // Every marking edge must be an edge of the whole (a marking is stated on
+  // the surfaces' edges, which every engine move keeps), named before any
+  // operator is built.
+  {
+    std::set<std::vector<std::uint64_t>> edges;
+    for (auto edge : ChainComplex::fromSpacetime(*spacetime).kSimplexVertices(1)) edges.insert(std::move(edge));
+    for (const auto &cell : cells)
+      if (!edges.count(cell)) {
+        read.obstruction = "marking edge (" + std::to_string(cell[0]) + "," + std::to_string(cell[1]) +
+                           ") is not an edge of the whole";
+        return read;
+      }
+  }
+  BoundaryFiber zeroMode;
+  try {
+    const AssembledPencil assembled = PencilLayer::assemble({spacetime});
+    if (assembled.dimension() < 1) {
+      read.obstruction = "the whole has no edges";
+      return read;
+    }
+    zeroMode = PencilLayer::readBoundaryFiber(assembled, 1, PencilLayer::harmonicContour(assembled, 1),
+                                              cells);
+  } catch (const std::exception &e) {
+    read.obstruction = std::string("the pencil refused the whole: ") + e.what();
+    return read;
+  }
+  read.harmonicRank = static_cast<int>(zeroMode.images.cols());
+  if (read.harmonicRank == 0 || zeroMode.images.rows() != static_cast<Eigen::Index>(cells.size())) {
+    read.obstruction = "the whole has no degree-1 zero mode";
+    return read;
+  }
+  const auto periodsOver = [&](const Marking &marking) {
+    Eigen::MatrixXcd periods = Eigen::MatrixXcd::Zero(static_cast<Eigen::Index>(marking.size()),
+                                                      zeroMode.images.cols());
+    for (std::size_t c = 0; c < marking.size(); ++c)
+      for (const auto &[u, v] : marking[c]) {
+        const Eigen::Index row = rowOf.at({std::min(u, v), std::max(u, v)});
+        const double sign = (u < v) ? 1.0 : -1.0;
+        periods.row(static_cast<Eigen::Index>(c)) += sign * zeroMode.images.row(row);
+      }
+    return periods;
+  };
+  read.periodsA = periodsOver(markingA);
+  read.periodsB = periodsOver(markingB);
+  if (read.periodsA.rows() == 0 || read.periodsB.rows() == 0) {
+    read.obstruction = "a marking has no cycles";
+    return read;
+  }
+  // P_B = M P_A, least squares over the zero mode's columns (exact for a rank-2
+  // zero mode with invertible P_A); M is |B| x |A|.
+  const Eigen::JacobiSVD<Eigen::MatrixXcd> svd(read.periodsA);
+  const double tolerance = 1e-9 * std::max(1.0, svd.singularValues()(0));
+  Eigen::Index rank = 0;
+  for (Eigen::Index i = 0; i < svd.singularValues().size(); ++i)
+    if (svd.singularValues()(i) > tolerance) ++rank;
+  const Eigen::MatrixXcd transposed =
+      read.periodsA.transpose().colPivHouseholderQr().solve(read.periodsB.transpose());
+  read.monodromy = transposed.transpose();
+  const double normB = read.periodsB.norm();
+  read.fitResidual = normB > 0.0 ? (read.monodromy * read.periodsA - read.periodsB).norm() / normB
+                                 : std::numeric_limits<double>::quiet_NaN();
+  read.rounded.assign(static_cast<std::size_t>(read.monodromy.rows()),
+                      std::vector<long>(static_cast<std::size_t>(read.monodromy.cols()), 0));
+  double roundingResidual = 0.0;
+  for (Eigen::Index i = 0; i < read.monodromy.rows(); ++i)
+    for (Eigen::Index j = 0; j < read.monodromy.cols(); ++j) {
+      const long nearest = std::lround(read.monodromy(i, j).real());
+      read.rounded[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = nearest;
+      roundingResidual = std::max(
+          roundingResidual, std::abs(read.monodromy(i, j) - complexd(static_cast<double>(nearest), 0.0)));
+    }
+  read.roundingResidual = roundingResidual;
+  if (rank < read.periodsA.rows())
+    read.obstruction = "the zero mode's periods over marking A have rank " + std::to_string(rank) +
+                       " below the marking's " + std::to_string(read.periodsA.rows()) +
+                       " cycles: the whole does not carry that marking independently";
+  return read;
 }
 
 void MultiCobordism::setInputFiber(std::size_t index, BoundaryFiber fiber) {

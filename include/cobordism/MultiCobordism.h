@@ -49,6 +49,8 @@ using ::tessera::spacetime::Spacetime;
 ///   * **Stage 1 (combinatorial):** greedy best-ΔF single random moves
 ///     `{add,remove,flip,iflip,cone_out,cone_in,cone_in_timelike,flip_disposition}`
 ///     (the last two are the causal dispositions — see `shouldProposeDispositions`),
+///     plus `bridge` on a node with SURFACE inputs while its bridge phase is
+///     incomplete (see `kBridge`; never offered otherwise),
 ///     each gated by `dualComplexValid` and "no input vertex removed", committed
 ///     only if ΔF < 0. Target-conditioned modes may redraw a stalled batch while
 ///     the register is not carried; target-free `JointStationarity` stops that
@@ -74,6 +76,13 @@ class MultiCobordism {
     /// (pinned as boundary data by `pinInputFibers`); read on an output block
     /// by `readOutputFiber` after relaxation.
     std::optional<BoundaryFiber> fiber;
+    /// The block is an input SURFACE of the host (qubit cobordism spec S2):
+    /// seeded by the region form of `seedInputs` on a `seedFromSurfaces` host,
+    /// its \f$ (d-1) \f$-faces are cells of the host that no top cell need
+    /// cover, and the bulk is drawn onto them by bridges. Set nowhere else, so
+    /// a node seeded from a simplex never has one and every existing path is
+    /// unchanged.
+    bool surface{false};
   };
 
   /// An ordered, explicit period constraint evaluated by the existing
@@ -537,6 +546,56 @@ class MultiCobordism {
       const Spacetime &st, int k);
   /// `Σ_e |actionGradientExact_e|²` — the full-complex Regge extremization term.
   [[nodiscard]] static double reggeActionGradient(const std::shared_ptr<Spacetime> &st);
+
+  /// A marking of a boundary surface in HOST vertex ids: cycles, each a
+  /// closed walk of directed steps \f$ (u \to v) \f$ over edges of the host.
+  /// A step contributes \f$ +h(u,v) \f$ to a period when \f$ u < v \f$ (the
+  /// ascending-id reference orientation of `ChainComplex`) and
+  /// \f$ -h(u,v) \f$ otherwise — the `Edge::walkLoop` convention. A
+  /// `SimplicialQubit` cycle (edge index, sign) becomes a step by taking the
+  /// edge's \f$ (i, j) \f$ as \f$ (i \to j) \f$ for \f$ +1 \f$ and
+  /// \f$ (j \to i) \f$ for \f$ -1 \f$, mapped through `SurfaceSeed::vertexIds`.
+  using Marking = std::vector<std::vector<std::pair<std::uint64_t, std::uint64_t>>>;
+
+  /// The monodromy of a drawn cobordism between two marked surfaces (qubit
+  /// cobordism spec S6): the whole's degree-1 ZERO MODE — the harmonic band
+  /// of the chain-level Whitney pencil on `PencilLayer::harmonicContour`,
+  /// bulk and boundary edges in one operator, never the band above it —
+  /// read on the edges of both markings, its periods \f$ P_A \f$
+  /// (\f$ |A| \times r \f$) and \f$ P_B \f$ over the two markings, and the
+  /// matrix \f$ M \f$ with \f$ P_B = M P_A \f$ (\f$ M = P_B P_A^{-1} \f$ for a
+  /// rank-2 zero mode, the least-squares fit otherwise). The zero mode of the
+  /// whole restricted to the boundary is topological, so \f$ M \f$ is a
+  /// matrix of rationals — integers when the restriction to \f$ T_A \f$ is
+  /// unimodular — and `rounded` with `roundingResidual` say how far the read
+  /// sits from an integer matrix: an element of \f$ SL(2,\mathbb Z) \f$
+  /// when \f$ W \f$ is an \f$ I \f$-bundle, a fact to report, never a
+  /// defect. Betti numbers of the whole come with it. A read that cannot be
+  /// made — no zero mode, a marking edge absent from the whole, a
+  /// rank-deficient \f$ P_A \f$, a pencil that refuses the geometry — names
+  /// its `obstruction` instead of guessing.
+  struct MonodromyRead {
+    std::vector<int> betti;
+    /// \f$ r = \dim \ker L_1 \f$ of the whole, the zero mode's rank.
+    int harmonicRank{0};
+    Eigen::MatrixXcd periodsA;
+    Eigen::MatrixXcd periodsB;
+    /// \f$ M \f$ (\f$ |B| \times |A| \f$); empty when obstructed before the fit.
+    Eigen::MatrixXcd monodromy;
+    /// \f$ \operatorname{round}(\operatorname{Re} M) \f$, row-major.
+    std::vector<std::vector<long>> rounded;
+    /// \f$ \max_{ij} |M_{ij} - \operatorname{round}(M_{ij})| \f$ (NaN when obstructed).
+    double roundingResidual{std::numeric_limits<double>::quiet_NaN()};
+    /// \f$ \|M P_A - P_B\|_F / \|P_B\|_F \f$ (zero to rounding when the relation is exact).
+    double fitResidual{std::numeric_limits<double>::quiet_NaN()};
+    /// Empty when the read succeeded; otherwise why it could not be made.
+    std::string obstruction;
+  };
+  /// The monodromy read of \p spacetime between \p markingA and \p markingB
+  /// (see `MonodromyRead`). Read-only on the geometry; the Whitney pencil is
+  /// the metric source by construction.
+  [[nodiscard]] static MonodromyRead monodromy(const std::shared_ptr<Spacetime> &spacetime,
+                                               const Marking &markingA, const Marking &markingB);
   /// The relabeling-invariant, zero-filled residual of `targetState` against the
   /// `L_k` harmonic of `spacetime` over its emergent holes (`r_state` in the
   /// reference, the Python-binding name). For each register degree `k` it reads the
@@ -827,6 +886,16 @@ class MultiCobordism {
   /// tagged with its target). NOT grown here — runStage1's growBlockRegions grows
   /// it emergently under the objective.
   void seedInputs(const std::vector<std::uint64_t> &seeds);
+  /// Seed one INPUT block per explicit vertex REGION — the surface inputs of a
+  /// `seedFromSurfaces` host (qubit cobordism spec S2): a boundary surface
+  /// has no top cell of its own for a seed vertex's cell neighbourhood to
+  /// find, so its vertex set is the block, given as `SurfaceSeed::vertexIds`
+  /// supplies it. Marks each block `BoundaryBlock::surface`. The block's
+  /// target is the constructor's `inputTargets[i]` exactly as for the
+  /// seed-vertex form; the state itself arrives as a fiber later.
+  /// @throws std::invalid_argument on an empty region or a vertex absent from
+  ///   the host.
+  void seedInputs(const std::vector<std::vector<std::uint64_t>> &regions);
   /// Seed one OUTPUT block per seed vertex (see seedInputs).
   void seedOutputs(const std::vector<std::uint64_t> &seeds);
 
@@ -886,6 +955,47 @@ class MultiCobordism {
   /// dimension 4). @throws std::invalid_argument for dimension below 1.
   [[nodiscard]] static std::shared_ptr<Spacetime> seedSimplex(int dimension,
                                                               bool balancedEdges = false);
+
+  /// A host seeded from boundary SURFACES (qubit cobordism spec S2). `host` is
+  /// ONE \f$ d \f$-dimensional `Spacetime` (\f$ d \f$ = the surfaces'
+  /// dimension + 1; 3 for tori) holding every surface as its own simplices —
+  /// its triangles, edges and vertices with the surface's lengths and zero
+  /// phases — on disjoint vertex id ranges, and NO \f$ d \f$-cell: the bulk
+  /// between the surfaces is drawn afterwards by gated bridges, never built
+  /// from a prism or a collar. `vertexIds[s]` maps surface \f$ s \f$'s vertex
+  /// ids to the host's, so a marking or a fiber stated on the surface carries
+  /// over.
+  struct SurfaceSeed {
+    std::shared_ptr<Spacetime> host;
+    std::vector<std::map<std::uint64_t, std::uint64_t>> vertexIds;
+  };
+  /// Build the `SurfaceSeed` of \p surfaces, each a closed
+  /// \f$ (d-1) \f$-dimensional `Spacetime` (e.g.
+  /// `observables::SimplicialQubit::flatTorus(tau, n, n).spacetime()`). The
+  /// metric signature (Lorentzian, dimension \f$ d \f$), the CDT type and the
+  /// preferred foliation are those of `seedSimplex`; the surfaces themselves
+  /// are read, never changed.
+  /// @throws std::invalid_argument on no surfaces, a null surface, surfaces of
+  ///   differing dimension, or a surface without top cells.
+  [[nodiscard]] static SurfaceSeed seedFromSurfaces(
+      const std::vector<std::shared_ptr<Spacetime>> &surfaces);
+
+  /// A block's own surface (qubit cobordism spec D2, the enumeration half):
+  /// its \f$ (d-1) \f$-faces and its edges inside its vertex set, as sorted
+  /// vertex-id tuples. A face is inside the block when the host registers it
+  /// (an uncovered surface triangle) or when it is a facet of a top cell with
+  /// all \f$ d \f$ of its vertices in the block; both are enumerated from
+  /// vertex tuples, never from the lazily materialized facet links, so the
+  /// answer does not depend on what some earlier read happened to
+  /// materialize. For a surface block this is the input surface itself —
+  /// exactly, as long as no chord (an edge or face inside the block that is
+  /// not part of its surface) has been created.
+  struct BlockSurface {
+    std::vector<std::vector<std::uint64_t>> faces;
+    std::vector<std::vector<std::uint64_t>> edges;
+  };
+  [[nodiscard]] static BlockSurface blockSurface(const BoundaryBlock &block,
+                                                const Spacetime &spacetime);
 
   // ---- two-body cobordism map (#941) ----
 
@@ -1063,7 +1173,7 @@ class MultiCobordism {
   /// One canonical solve action on THIS node, the unit a search policy (Proton's build
   /// restart loop, a greedy driver, or the RL agent) composes — so the solve is driven
   /// through the engine, not re-implemented by each consumer.
-  enum class BuildAction { Grow, Evolve, Relax, ConeOut, ConeIn };
+  enum class BuildAction { Grow, Evolve, Relax, ConeOut, ConeIn, Bridge };
 
   /// Candidate ordering for the directed cone-out probe's *secondary* sort (both orders are
   /// interior-first): `AdjacentHolesLast` sends cells that share vertices with the existing
@@ -1073,7 +1183,8 @@ class MultiCobordism {
 
   /// Apply one `BuildAction` to this node (in place). Grow/Evolve = `runStage1` with
   /// `growBoundaries` true/false; Relax = `runStage2`; ConeOut/ConeIn = the directed probes
-  /// below. Irrelevant params for a given action are ignored.
+  /// below; Bridge = `drawBridges` with `maxSteps` as its cell budget. Irrelevant params
+  /// for a given action are ignored.
   void buildStep(BuildAction action, int maxSteps = 30, int nCandidateMoves = 8,
                  double stage2Beta = 1.0, int stage2MaxIters = 10,
                  double stage2Alpha0 = 0.05,
@@ -1100,6 +1211,76 @@ class MultiCobordism {
   /// keeps the cap that most lowers `rU` — i.e. drops the hole that hurts the carry. Repeats
   /// up to `maxClose`; stops when no cap lowers `rU`. Returns #holes capped.
   [[nodiscard]] int directedConeIn(int maxClose = 6);
+
+  // ==================================================================
+  // The bridge phase (qubit cobordism spec S3, D1)
+  // ==================================================================
+  //
+  // Two boundary surfaces sit in one host with nothing between them. The bulk
+  // is DRAWN: a candidate top cell on existing vertices, k from one surface
+  // block and d+1-k from the other (1+3, 2+2, 3+1 for tetrahedra), applied
+  // through `SurgicalCone::bridge`, gated by the manifold check, scored by ΔF,
+  // kept or rolled back — until every surface face has exactly one top cell on
+  // it and no other boundary face exists, ∂W = T_A ⊔ T_B. The split is chosen
+  // so that every part lies in one surface's own simplices, which is what
+  // makes a chord impossible BY CONSTRUCTION rather than by a gate: a chord is
+  // not a topological defect the manifold check could see.
+
+  /// The stage-1 bridge kind (payload = the cell's \f$ d+1 \f$ vertex ids).
+  /// Drawn only on a node with surface inputs whose bridge phase is
+  /// incomplete; the draw is one uniformly chosen candidate of
+  /// `bridgeCandidatesOn`, i.e. a top cell adjacent to the current frontier.
+  static constexpr const char *kBridge = "bridge";
+
+  /// Whether this node has SURFACE inputs: at least two input blocks marked
+  /// `BoundaryBlock::surface`. Only then does the stage-1 draw offer the
+  /// bridge kind; a node seeded from a simplex never sees it.
+  [[nodiscard]] bool hasSurfaceInputs() const;
+
+  /// The faces of the surface input blocks that no top cell covers (sorted
+  /// vertex-id tuples): the faces the drawing has still to reach.
+  [[nodiscard]] std::vector<std::vector<std::uint64_t>> uncoveredInputFaces() const;
+
+  /// Completion of the bridge phase: every face of every surface input block
+  /// has exactly one top cell on it and `Spacetime::getBoundary()` is exactly
+  /// the union of the surface faces, so \f$ \partial W = T_A \sqcup T_B \f$.
+  /// False on a node without surface inputs.
+  [[nodiscard]] bool bridgePhaseComplete() const;
+
+  /// The bridge phase: draw the bulk between the surface inputs by gated
+  /// bridges until `bridgePhaseComplete()`, at most \p maxCells cells and
+  /// \p maxAttempts gated applications. At each depth the candidates adjacent
+  /// to the frontier (`bridgeCandidatesOn`) are shuffled by this node's
+  /// generator (so a seed reproduces the drawing) and then tried in the order
+  /// of how many open faces — boundary facets of the drawing and uncovered
+  /// surface faces among the cell's own facets — each would close, most
+  /// first, ties random. A candidate that fails the manifold gate is not
+  /// applied at all; one that BURIES one of its vertices (closes its link into
+  /// a sphere, a manifold configuration the gate accepts, after which that
+  /// vertex's surface faces can never be covered — every vertex of the host is
+  /// a boundary vertex of the finished cobordism) is rolled back as no
+  /// candidate; one that RAISES the objective by more than the convergence
+  /// tolerance is rolled back; the first that does none of these is kept, and
+  /// the search descends. A depth at which no candidate can be kept is a dead
+  /// end: the last kept cell is rolled back — bit-exactly, through the same
+  /// `SurgicalCone` stack — and the depth above resumes with its remaining
+  /// candidates, so the phase is a depth-first search over gated drawings
+  /// rather than a single greedy pass that a wrong early cell could strand.
+  /// Every cell of the returned drawing passed the gate, buried nothing, and
+  /// did not raise the objective. Acceptance is "does not raise F" rather than
+  /// stage 1's strict descent because no term of the objective is defined on
+  /// a partial drawing — the block residuals read the surfaces' own cells,
+  /// which bridging does not move, and the whole-complex reads refuse a
+  /// complex whose boundary is not yet the two surfaces — so ΔF is exactly
+  /// zero along the drawing; a term that does score partial drawings decides
+  /// through the same rule. Returns the number of cells in the drawing, which
+  /// is complete only when `bridgePhaseComplete()` says so afterwards: on
+  /// 3×3 and 4×4 flat tori this search stalls short of completion (recorded
+  /// in `tests/cobordism/test_bridge_move_python.py`), because a finished
+  /// drawing is a cellular correspondence between the two surfaces that
+  /// local random coning does not discover.
+  /// @throws std::logic_error without at least two surface input blocks.
+  int drawBridges(int maxCells = std::numeric_limits<int>::max(), int maxAttempts = 20000);
 
   // ==================================================================
   // Pinning — a plain geometric constraint
@@ -1619,6 +1800,38 @@ class MultiCobordism {
   void seedBlocks(const std::vector<std::uint64_t> &seeds,
                   const std::vector<std::vector<std::complex<double>>> &targets,
                   std::vector<BoundaryBlock> &destinationBlocks);
+  /// The shared tail of `seedBlocks` and the region form of `seedInputs`: one
+  /// block per (region, target), appended to `destinationBlocks`.
+  void seedBlockRegions(const std::vector<std::set<std::uint64_t>> &regions,
+                        const std::vector<std::vector<std::complex<double>>> &targets,
+                        std::vector<BoundaryBlock> &destinationBlocks, bool surface);
+
+  /// What the bridge phase reads off a complex: the surface input blocks with
+  /// their faces and the simplices of those faces, the top cells, and the
+  /// facet incidence (top cells per codimension-one face) — all as sorted
+  /// vertex-id tuples, computed from vertex tuples alone.
+  struct SurfaceInventory {
+    std::vector<std::size_t> blocks;
+    std::vector<std::set<std::vector<std::uint64_t>>> faces;
+    std::vector<std::set<std::vector<std::uint64_t>>> simplices;
+    std::set<std::vector<std::uint64_t>> topCells;
+    std::map<std::vector<std::uint64_t>, int> facetIncidence;
+  };
+  [[nodiscard]] SurfaceInventory surfaceInventoryOf(const Spacetime &spacetime) const;
+  /// `bridgePhaseComplete` on \p spacetime.
+  [[nodiscard]] bool bridgePhaseCompleteOn(const Spacetime &spacetime) const;
+  /// `uncoveredInputFaces` on \p spacetime.
+  [[nodiscard]] std::vector<std::vector<std::uint64_t>> uncoveredInputFacesOn(
+      const Spacetime &spacetime) const;
+  /// Every bridge candidate adjacent to the frontier of \p spacetime: for each
+  /// frontier face — a boundary facet of the top cells that is not a surface
+  /// face, or an uncovered surface face — every completion by one more vertex
+  /// such that the cell's part in each of the two blocks is a simplex of that
+  /// block's surface, a full face only when it is uncovered. Sorted vertex
+  /// tuples, distinct, none already a top cell; empty when the phase is
+  /// complete or the node has no surface inputs.
+  [[nodiscard]] std::vector<std::vector<std::uint64_t>> bridgeCandidatesOn(
+      const Spacetime &spacetime) const;
 
   [[nodiscard]] Snapshot snapshotOf(const Spacetime &spacetime) const;
   [[nodiscard]] Snapshot snapshot() const;
@@ -1627,8 +1840,10 @@ class MultiCobordism {
 
   /// Draw one random stage-1 move specification on `spacetime`: a `{kind, payload}`
   /// pair where `kind` is one of `add`/`remove`/`flip`/`iflip` (payload = a seed for
-  /// the Pachner move) or `cone_out`/`cone_in` (payload = the cell/face to cone). The
-  /// move is only described here, not applied — see `applyMoveSpecification`.
+  /// the Pachner move), `cone_out`/`cone_in` (payload = the cell/face to cone), or,
+  /// on a node with surface inputs whose bridge phase is incomplete, `bridge`
+  /// (payload = the cell's vertex ids). The move is only described here, not
+  /// applied — see `applyMoveSpecification`.
   [[nodiscard]] MoveSpec drawRandomMoveSpecification(const Spacetime &spacetime);
   /// Apply a move specification from `drawRandomMoveSpecification` to `spacetime`
   /// in place. Returns true iff the move was applied AND the result passes the

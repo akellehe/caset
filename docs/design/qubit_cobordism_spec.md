@@ -289,13 +289,13 @@ C5. `emergence_animation.py --inputs qubit` runs headless and `--live` with
 
 ## 10. Ticket order
 
-T1. Bridge move (D1) with tests: gate, rollback, completion on two spec tori,
+T1. (#960) Bridge move (D1) with tests: gate, rollback, completion on two spec tori,
     no-chord condition, monodromy read on the drawn manifold.
-T2. Block surface complex (D2) with tests: own-Laplacian residual of a torus
+T2. (#961) Block surface complex (D2) with tests: own-Laplacian residual of a torus
     block before and after bridging equals the standalone torus read.
-T3. Transfer in period frames (D3) with tests: identity on a trivially drawn
+T3. (#962) Transfer in period frames (D3) with tests: identity on a trivially drawn
     collar, χ comparison shape 2×2.
-T4. Animation qubit mode (D4) with tests: existing mode unchanged; qubit mode
+T4. (#963) Animation qubit mode (D4) with tests: existing mode unchanged; qubit mode
     produces every channel headless.
-T5. The run: records, findings note `docs/design/qubit_cobordism_findings.md`,
+T5. (#964) The run: records, findings note `docs/design/qubit_cobordism_findings.md`,
     C1–C5 answered with numbers.

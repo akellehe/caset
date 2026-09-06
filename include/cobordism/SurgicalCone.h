@@ -40,6 +40,22 @@ using namespace ::tessera::spacetime;
 ///   joined to \f$ d \f$ chosen existing vertices. Capping a hole's boundary
 ///   this way lowers \f$ b_{d-1} \f$ by 1.
 ///
+/// ## The bridge
+/// * **bridge** (`bridge`) — the bulk-drawer of the qubit cobordism
+///   (`docs/design/qubit_cobordism_spec.md`, D1). Create a top cell on
+///   \f$ d+1 \f$ **existing** vertices, no fresh apex, auto-wiring every edge
+///   the cell lacks with the engine's auto-wired length. It exists because the
+///   bulk between two boundary surfaces is *drawn* on their own vertices (R4:
+///   "choose a vertex on one of the boundary blocks, cone it into 4 vertices
+///   on the other"): a cone-in mints a vertex and a cone-out removes a cell,
+///   so neither can join two surfaces. The cell's faces that lie inside one
+///   surface are that surface's own triangles, so the drawing never buries a
+///   surface face and never creates a chord — that is a property of WHICH
+///   vertices the caller chooses (`MultiCobordism` draws vertex splits across
+///   two blocks), not of this move, which is deliberately NOT gated on
+///   anything but the manifold check: a chord is not a topological defect the
+///   gate could see.
+///
 /// ## The gate
 /// After applying a move the candidate complex is accepted **only if**
 /// `ChainComplex::dualComplexIsValid` holds over its top cells — a genuine
@@ -61,6 +77,14 @@ using namespace ::tessera::spacetime;
 /// walk behind ``Simplex::dualVolume`` retraces the pre-move circumcentric
 /// dual volumes exactly (#587). The moves are first-class and composable
 /// (cone-out two disjoint cells, then roll both back LIFO).
+///
+/// A bridge's undo is the one place the registered-simplex invariant differs:
+/// the surfaces the bulk is drawn onto are registered \f$ (d-1) \f$-cells that
+/// no top cell covers, and `Spacetime::pruneOrphanedSimplices` would delete
+/// exactly those. So a bridge records which of its sub-faces already existed
+/// and its undo unregisters only the faces the move itself introduced (and
+/// the edges it alone inserted), leaving every pre-existing face — covered
+/// or not — untouched.
 class SurgicalCone {
  public:
   /// Bind the cone to a spacetime. Does not mutate it.
@@ -103,6 +127,20 @@ class SurgicalCone {
   /// convention \f$ \ell_t^2 = -\alpha\,\ell_s^2 \f$ with \f$ \alpha = 1 \f$.
   static constexpr double kTimelikeSquaredLength = -1.0;
 
+  /// Gated surgical **bridge**: create the top cell on the \f$ d+1 \f$
+  /// EXISTING, distinct vertices \p cellVertices (matched by vertex SET; the
+  /// stored order is the order given), auto-wiring every edge the cell lacks
+  /// with the engine's auto-wired length (`Spacetime::autoWiredLength`, the
+  /// spacelike class on coordinate-free vertices), then accept only if the
+  /// result is a valid manifold-with-boundary. Returns `(true, "ok")` on
+  /// acceptance; otherwise the cell and every edge it alone introduced are
+  /// removed bit-exactly and the reason returned. Refuses a vertex count other
+  /// than \f$ d+1 \f$, a repeated or unknown vertex, and a cell that already
+  /// exists. Nothing else is checked here: whether the cell's vertices split
+  /// across two boundary blocks without a chord is the caller's draw
+  /// (`MultiCobordism`), because the manifold gate is the ONLY gate.
+  std::pair<bool, std::string> bridge(const std::vector<std::uint64_t> &cellVertices);
+
   /// Undo the last accepted move (LIFO), restoring the complex bit-for-bit —
   /// every edge length and phase, and the restored cell's facet/coface
   /// lattice (so circumcentric dual volumes retrace too). Returns `false` if
@@ -132,9 +170,10 @@ class SurgicalCone {
  private:
   /// One accepted surgical move, with everything needed to invert it exactly.
   struct Move {
-    enum class Kind { ConeOut, ConeIn };
+    enum class Kind { ConeOut, ConeIn, Bridge };
     Kind kind;
-    /// The d+1 vertex ids of the removed (cone-out) / added (cone-in) top cell.
+    /// The d+1 vertex ids of the removed (cone-out) / added (cone-in, bridge)
+    /// top cell.
     std::vector<std::uint64_t> cell;
     /// Edges touched: removed orphans (cone-out, to re-create) / freshly
     /// inserted edges (cone-in, to drop), each (u, v, l2, phase). The full
@@ -155,6 +194,13 @@ class SurgicalCone {
     /// `false` for cone-in and for hosts that never materialized facets, so
     /// a rollback never creates bookkeeping the pre-move complex lacked.
     bool hadFacets{false};
+    /// Bridge only: the proper sub-faces of the cell (sorted vertex-id tuples,
+    /// every size from a single vertex up to a facet) that were REGISTERED
+    /// before the move. The undo leaves these alone — among them are the
+    /// boundary surfaces' own triangles, which no top cell covers and which a
+    /// prune would therefore delete — and unregisters only the sub-faces the
+    /// move's lifetime introduced that no surviving simplex still holds.
+    std::vector<std::vector<std::uint64_t>> preexistingFaces;
   };
 
   /// Top cells of the bound spacetime as sorted vertex-id tuples (canonical
@@ -170,6 +216,12 @@ class SurgicalCone {
   /// Drop the exact cell of a cone-in Move (the top cell, its fresh edges, the
   /// fresh vertex).
   void undoConeIn(const Move &m);
+  /// Drop the exact cell of a bridge Move: the top cell, then every sub-face
+  /// the move introduced that no surviving simplex holds (largest first, so a
+  /// face's coface links are cleaned before its own facets go), then the edges
+  /// the move alone inserted. Pre-existing sub-faces, vertices and edges are
+  /// never touched.
+  void undoBridge(const Move &m);
 
   Spacetime *st_;
   std::vector<Move> moves_;

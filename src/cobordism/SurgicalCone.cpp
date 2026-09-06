@@ -4,7 +4,9 @@
 #include "cobordism/SurgicalCone.h"
 
 #include <algorithm>
+#include <bit>
 #include <map>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -274,6 +276,139 @@ std::pair<bool, std::string> SurgicalCone::coneIn(
   return {true, "ok"};
 }
 
+namespace {
+
+/// The sorted vertex ids selected by a bit mask over `cell`.
+std::vector<std::uint64_t> maskedSubset(const std::vector<std::uint64_t> &cell,
+                                        std::uint64_t mask) {
+  std::vector<std::uint64_t> ids;
+  for (std::size_t i = 0; i < cell.size(); ++i)
+    if (mask & (std::uint64_t{1} << i)) ids.push_back(cell[i]);
+  return ids;  // `cell` is sorted, so the subset is too
+}
+
+}  // namespace
+
+std::pair<bool, std::string> SurgicalCone::bridge(
+    const std::vector<std::uint64_t> &cellVertices) {
+  if (st_ == nullptr) return {false, "no spacetime"};
+  const std::size_t tv = topVerts();
+  if (tv < 2) return {false, "degenerate dimension"};
+  if (cellVertices.size() != tv)
+    return {false, "bridge needs " + std::to_string(tv) + " vertices (got " +
+                       std::to_string(cellVertices.size()) + ")"};
+  // The vertices must be distinct and already exist: a bridge mints nothing.
+  auto vidx = vertexIndex(st_);
+  std::unordered_set<std::uint64_t> seen;
+  ::tessera::mesh::VertexPtrs verts;
+  verts.reserve(tv);
+  for (const std::uint64_t id : cellVertices) {
+    if (!seen.insert(id).second) return {false, "duplicate bridge vertex"};
+    const auto it = vidx.find(id);
+    if (it == vidx.end()) return {false, "no such bridge vertex"};
+    verts.push_back(it->second);
+  }
+  if (auto existing = st_->findSimplexByVerts(verts);
+      existing != nullptr && !existing->isStale())
+    return {false, "cell already exists"};
+
+  Move m;
+  m.kind = Move::Kind::Bridge;
+  m.cell = cellVertices;
+  std::sort(m.cell.begin(), m.cell.end());
+  // Which proper sub-faces of the cell are registered BEFORE the move (the
+  // surfaces' own triangles among them, plus whatever a neighbouring cell's
+  // lattice already materialized). Everything else the move's lifetime
+  // registers under this cell is the move's own and goes on undo.
+  {
+    std::unordered_map<std::uint64_t, ::tessera::mesh::Vertex *> byId;
+    for (const auto v : verts) byId.emplace(v->getId(), v);
+    const std::uint64_t full = (std::uint64_t{1} << tv) - 1;
+    for (std::uint64_t mask = 1; mask < full; ++mask) {
+      const auto ids = maskedSubset(m.cell, mask);
+      ::tessera::mesh::VertexPtrs sub;
+      for (const std::uint64_t id : ids) sub.push_back(byId.at(id));
+      const auto face = st_->findSimplexByVerts(sub);
+      if (face != nullptr && !face->isStale() && face->size() == ids.size())
+        m.preexistingFaces.push_back(ids);
+    }
+  }
+
+  auto r = st_->createSimplexTracked(verts);
+  if (!r.created) return {false, "cell already exists"};
+  for (const auto &e : r.newEdges)
+    if (e != nullptr && e->getSource() != nullptr && e->getTarget() != nullptr)
+      m.edges.emplace_back(e->getSource()->getId(), e->getTarget()->getId(),
+                           e->getLength(), e->getPhase());
+
+  // Gate: the manifold check over the top cells that exist, and nothing else.
+  const auto verdict = validate();
+  if (!verdict.first) {
+    undoBridge(m);
+    return verdict;
+  }
+  moves_.push_back(std::move(m));
+  return {true, "ok"};
+}
+
+void SurgicalCone::undoBridge(const Move &m) {
+  // Drop the top cell first: removeSimplex clears its facets' coface links,
+  // so a sub-face the move introduced is then recognisable by having no
+  // coface left at all.
+  auto vidx = vertexIndex(st_);
+  ::tessera::mesh::VertexPtrs verts;
+  verts.reserve(m.cell.size());
+  for (const std::uint64_t id : m.cell) {
+    const auto it = vidx.find(id);
+    if (it != vidx.end()) verts.push_back(it->second);
+  }
+  if (verts.size() == m.cell.size()) {
+    if (auto s = st_->findSimplexByVerts(verts); s != nullptr && !s->isStale())
+      st_->removeSimplex(s);
+  }
+  // Sub-faces the move introduced: registered now, not registered before the
+  // move, and held by no surviving simplex. Largest first, so a face's own
+  // facets still see it when its coface links are cleaned. A pre-existing
+  // face — a surface triangle no top cell covers, or a neighbour's
+  // materialized facet — is never touched, which is why this is not
+  // Spacetime::pruneOrphanedSimplices (that would delete the uncovered
+  // surface triangles the bulk is being drawn onto).
+  const std::set<std::vector<std::uint64_t>> preexisting(
+      m.preexistingFaces.begin(), m.preexistingFaces.end());
+  const std::size_t n = m.cell.size();
+  std::unordered_map<std::uint64_t, ::tessera::mesh::Vertex *> byId;
+  for (const auto v : verts) byId.emplace(v->getId(), v);
+  for (std::size_t faceSize = n - 1; faceSize >= 1; --faceSize) {
+    for (std::uint64_t mask = 1; mask < (std::uint64_t{1} << n); ++mask) {
+      if (static_cast<std::size_t>(std::popcount(mask)) != faceSize) continue;
+      const auto ids = maskedSubset(m.cell, mask);
+      if (preexisting.count(ids)) continue;
+      ::tessera::mesh::VertexPtrs sub;
+      sub.reserve(ids.size());
+      for (const std::uint64_t id : ids) {
+        const auto it = byId.find(id);
+        if (it == byId.end()) break;
+        sub.push_back(it->second);
+      }
+      if (sub.size() != ids.size()) continue;
+      const auto face = st_->findSimplexByVerts(sub);
+      if (face == nullptr || face->isStale() || face->size() != faceSize) continue;
+      if (!face->getCofaces().empty()) continue;  // held by a survivor
+      st_->removeSimplex(face);
+    }
+  }
+  // The edges this move alone inserted. Every simplex that contained one of
+  // them was introduced by the move too and is gone by now, so removeEdge's
+  // contract (no simplex still holds the edge) is met.
+  auto eidx = edgeIndex(st_);
+  for (const auto &[u, v, w, theta] : m.edges) {
+    (void)w;
+    (void)theta;
+    const auto it = eidx.find({std::min(u, v), std::max(u, v)});
+    if (it != eidx.end()) st_->removeEdge(it->second);
+  }
+}
+
 void SurgicalCone::undoConeOut(const Move &m) {
   // Re-create any isolated vertices first, then the top cell, then restore the
   // removed edges' lengths/phases bit-exactly.
@@ -350,8 +485,10 @@ bool SurgicalCone::rollback() {
   moves_.pop_back();
   if (m.kind == Move::Kind::ConeOut)
     undoConeOut(m);
-  else
+  else if (m.kind == Move::Kind::ConeIn)
     undoConeIn(m);
+  else
+    undoBridge(m);
   return true;
 }
 
