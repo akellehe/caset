@@ -261,34 +261,34 @@ D4. **Animation.** `emergence_animation.py` gains a qubit input mode:
   (`BandDerivative`); no finite differences.
 - Frames (D3, T3): a torus's period frame is `SimplicialQubit::periodFrame`
   (`harmonicBasis` times the inverse period matrix over the marking in
-  force, real, \(n_E \times 2\), periods (1, 0) and (0, 1); the holomorphic
-  form is \(P_A\,F\,(1, \tau)^T\)). A block's frame is held on the block
+  force, real, n_E × 2, periods (1, 0) and (0, 1); the holomorphic form is
+  P_A·F·(1, τ)ᵀ). A block's frame is held on the block
   (`BoundaryBlock::frame`, a `BlockFrame`), set by `setInputFrame` with the
   cells of its attached fiber in the attachment order and held constant by
   the engine (re-attaching the fiber clears it). With both input blocks
   framed, `readTwoBody`, `twoBodyResidual` and the two-body gradient read
-  \(T = (Z_A^\vee)^T \tilde A_{AB} Z_B\) in the frames (`TwoBodyRead::inFrames`;
-  the gradient differentiates the pencil operator only); with neither, in
-  identity frames on the cells, bit-identical to before; one frame is a
-  contract error. `setTwoBodyTarget` checks \(\chi\)'s shape against the
-  frames' ranks when both are present, the cell counts otherwise, once two
-  fibers are attached. The dual-frame contract found in the code:
-  `PencilSchur::transfer` pairs dual images against the pencil operator by
-  the transpose and normalizes nothing, so the dual of a supplied frame is
-  \(Z^\vee = Z\,B^{-T}\) with \(B = Z^T M_1 Z\) the frame's pairing under the
-  Whitney mass matrix of the block's OWN pencil, \((Z^\vee)^T M_1 Z = I\)
-  (`MultiCobordism::dualFrame`, `inputFrameDual`); under it a change of frame
-  \((g_A, g_B)\) sends \(T\) to \(g_A^{-1} T g_B\), the matrix of the operator
-  block in the frames' coordinates. Measured on the collar seed with the
-  period frames (C3): \(T\) is \(2 \times 2\), real, and NOT diagonal —
-  3×3: [[−0.01592, −0.01936], [−0.00433, −0.00569]], Schmidt spectrum
-  (2.6e-2, 2.6e-4); 4×4: [[−0.02871, −0.03901], [−0.02054, −0.05148]],
-  (7.3e-2, 9.3e-3) — the whole's pencil-operator block between the two tori
-  paired through the collar's cells, scaling as one inverse power of a common
-  length scale (the projective residual is scale-invariant), its rows and
-  columns permuted or negated exactly with a remarking of either torus. The
-  identity monodromy is the WHOLE's zero mode read on both markings (a
-  topological fact); the transfer is a metric block and is not the identity.
+  T = (Z_A^∨)ᵀ Ã_AB Z_B in the frames (`TwoBodyRead::inFrames`; the gradient
+  differentiates the pencil operator only); with neither, in identity frames
+  on the cells, bit-identical to before; one frame is a contract error.
+  `setTwoBodyTarget` checks χ's shape against the frames' ranks when both
+  are present, the cell counts otherwise, once two fibers are attached. The
+  dual-frame contract found in the code: `PencilSchur::transfer` pairs dual
+  images against the pencil operator by the transpose and normalizes
+  nothing, so the dual of a supplied frame is Z^∨ = Z·B^{-T} with
+  B = Zᵀ M_1 Z the frame's pairing under the Whitney mass matrix of the
+  block's OWN pencil, (Z^∨)ᵀ M_1 Z = I (`MultiCobordism::dualFrame`,
+  `inputFrameDual`); under it a change of frame (g_A, g_B) sends T to
+  g_A⁻¹ T g_B, the matrix of the operator block in the frames' coordinates.
+  Measured on the collar seed with the period frames (C3): T is 2 × 2, real,
+  and NOT diagonal — 3×3: [[−0.01592, −0.01936], [−0.00433, −0.00569]],
+  Schmidt spectrum (2.6e-2, 2.6e-4); 4×4: [[−0.02871, −0.03901],
+  [−0.02054, −0.05148]], (7.3e-2, 9.3e-3) — the whole's pencil-operator
+  block between the two tori paired through the collar's cells, scaling as
+  one inverse power of a common length scale (the projective residual is
+  scale-invariant), its rows and columns permuted or negated exactly with a
+  remarking of either torus. The identity monodromy is the WHOLE's zero mode
+  read on both markings (a topological fact); the transfer is a metric block
+  and is not the identity.
 - Under the legacy objective with the Regge term on, stage 2 used to descend
   the Regge direction alone and only gate on Γ·r_U (a shortcut from the
   numerical-r_U era, kept for the period residual); under fiber residuals the

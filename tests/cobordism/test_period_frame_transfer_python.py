@@ -43,6 +43,65 @@ inputs (3x3 and 4x4; tau_A = 0.3 + 1.1i, tau_B = -0.2 + 0.8i), Whitney pencil
 metric source, state fibers = holomorphic forms with the block's harmonic
 contour, plus the degree-0 tetrahedral setup of
 ``test_two_body_cobordism_map_python.py`` for bit-identity.
+
+Observed (OMP_NUM_THREADS=8):
+
+* (a) the frame's periods over the marking are the identity to 1.1e-16 on
+  every torus; |omega - F (P_A, P_B)| <= 6.2e-17 and |omega/P_A - F (1, tau)|
+  <= 2.0e-16; a common scale 2.5 of the lengths leaves F and tau (1e-12);
+  swapping the cycles swaps the columns and reversing B negates its column;
+* (b) without frames the collar's transfer is 27x27 (3x3) and 48x48 (4x4)
+  and its residual against the fixed chi is the pre-change value to rounding
+  (0.9965969445169056, 0.999399418478379); the transfer bytes equal the
+  pre-change build's (sha256[:16] cbe38b29eef48f33, 39b9e9fb64ba1f14) and
+  the PencilLayer replica's; explicit identity frames are byte-identical to
+  no frames (transfer, residual, gradient, Schmidt spectrum, reversal
+  residual) on the collar and on the degree-0 node; the no-frame gradient
+  agrees with the pre-change build to one ulp (1.1e-16 relative, the FMA
+  contraction of a recompiled translation unit; see that test's docstring);
+* (c) in the period frames T is 2x2 and real (reversal residual 2.4e-14 and
+  5.7e-15) and equals the identity-frame block contracted with the frames
+  (1e-13): 3x3 T = [[-0.01591958, -0.01935839], [-0.00432690, -0.00568912]],
+  Schmidt spectrum (2.606e-2, 2.612e-4), sigma2/sigma1 1.0e-2; 4x4
+  T = [[-0.02871351, -0.03900510], [-0.02053528, -0.05148094]], (7.302e-2,
+  9.274e-3), 1.3e-1. T is NOT diagonal (off-diagonal/diagonal 1.22 and
+  0.76): spec C3's prediction does not hold for the transfer, which is the
+  whole's pencil-operator block between the two tori paired through the
+  collar's cells - a metric quantity - while the identity monodromy of T1 is
+  the whole's zero mode read on both markings, a topological one. Swapping
+  either torus's marking permutes T's columns (B) or rows (A), reversing a
+  cycle negates its column or row (1e-12); a common scale 1.7 of every
+  length scales T by exactly 1/1.7 (one inverse power of the length) and
+  leaves the projective residual against chi(S5) and against three random
+  chi unchanged (1e-12); residual against chi(S5): 0.526175 (3x3), 0.666443
+  (4x4);
+* (d) |Z^vee.T M_1 Z - I| <= 3.3e-16 on every block; the static builder on
+  the standalone torus agrees (1e-13); the pairing Z.T M_1 Z of a flat
+  torus's period frame is the continuum Gram Im(tau) [[1 + a^2/b^2, -a/b^2],
+  [-a/b^2, 1/b^2]] (tau = a + ib) to 1e-12: [[1.181818, -0.272727],
+  [-0.272727, 0.909091]] for tau_A, [[0.85, 0.25], [0.25, 1.25]] for tau_B;
+  the refusals are by name (wrong cells, wrong order, wrong count, wrong
+  rows, wrong rank, no columns, non-finite, no fiber, absent cell, degree
+  above the dimension, singular pairing, one frame only, target shape
+  against frames and against cells, target set before the frames);
+* (e) chi(S5) for tau_A, tau_B has singular values (0.5800, 0.4195), Schmidt
+  rank 2; the residual on the collar seed is 0.526175; the analytic gradient
+  has |g|max 17.45, Euler defect 2.9e-15, and on edge (1, 14) analytic
+  1.595244e+01 against the central difference 1.595244e+01;
+* (f) Regge term OFF, weight 1e6, one pass of 20 accepted steps: two-body
+  residual 0.526175 -> 0.506543 (objective 0.526175 -> 0.509864), blocks
+  2e-30 -> 9.3e-11 and 3.2e-9 (held by the weight), T -> [[-0.01634,
+  -0.02046], [-0.00509, -0.00621]], Schmidt (2.74e-2, 1.0e-4). Regge term
+  ON (T2's configuration), weight 1e6, one pass of 20 accepted steps:
+  objective 123.65 -> 91.03, Regge stationarity 123.12 -> 90.45, blocks
+  3.0e-9 and 9.5e-9, but the two-body residual RISES 0.526175 -> 0.570502
+  under the Regge-dominated steps, T -> [[-0.01505, -0.01594], [-0.00440,
+  -0.00624]], Schmidt (2.32e-2, 1.03e-3). A chunked drive of the same node
+  (six passes of 10 steps, ~/cobordism-runs/period-frame-transfer/
+  stage2_variants.log) gives 0.5690, 0.5697, 0.5699, 0.5697, 0.5690, 0.5678
+  after 10..60 steps (objective 86.24 at 60): the step follows the total
+  objective, whose Regge part is 200 times the two-body term, so one pass
+  does not lower it; recorded, not asserted.
 """
 import hashlib
 import itertools
@@ -312,11 +371,18 @@ def framed_reads(node):
 def test_without_frames_the_collar_reads_as_before(n, whitney_default):
     """No frames: the transfer is the identity-frame block on the tori's edges
     (nE x nE), its residual against the fixed chi is the pre-change value, and
-    explicit identity frames give the same bytes. Recorded on this machine
-    against the build before this change (OMP_NUM_THREADS=8): T bytes
-    sha256[:16] cbe38b29eef48f33 (3x3), 39b9e9fb64ba1f14 (4x4); gradient bytes
-    9d02b9d5a15a6b55 (3x3), 64402542aa6e42f9 (4x4); residuals
-    0.9965969445169056 and 0.999399418478379 - all equal on the framed build."""
+    explicit identity frames give the same bytes. Compared on this machine
+    against the build before this change (origin/main fea4ed1 built into its
+    own venv, OMP_NUM_THREADS=8): the transfer bytes are equal (sha256[:16]
+    cbe38b29eef48f33 for 3x3, 39b9e9fb64ba1f14 for 4x4) and so are the
+    residuals (0.9965969445169056, 0.999399418478379); the gradient agrees to
+    one ulp - max |dg| 1.7e-18 (3x3) and 8.7e-19 (4x4) against |g|max
+    1.785821e-02 and 7.677589e-03, i.e. 1.0e-16 and 1.1e-16 relative, 17 of
+    90 and 44 of 160 entries differing in the last bit - the FMA contraction
+    of the unchanged arithmetic (-march=native, GCC's default fp-contract)
+    settling differently in the recompiled translation unit; the largest
+    entry is bit-identical. Within one build, explicit identity frames are
+    byte-identical to no frames in every quantity."""
     qa, qb, seed, node = collar(n)
     nE = len(qa.edges())
     node.set_two_body_target(fixed_chi(nE), True)
@@ -590,33 +656,57 @@ def test_spin_half_target_and_gradient(whitney_default):
 # --------------------------------------------------------------------------- #
 # (f) one stage-2 pass with fibers, frames and chi
 # --------------------------------------------------------------------------- #
-def test_stage2_pass_with_frames(whitney_default):
-    qa, qb, seed, node = collar(3, einstein_hilbert=True, real_squared_lengths_only=True, weight=1e6)
+def stage2_pass(einstein_hilbert, max_iters):
+    qa, qb, seed, node = collar(3, einstein_hilbert=einstein_hilbert, real_squared_lengths_only=True, weight=1e6)
     set_frames(node, qa, qb)
     chi = spin_half_chi(np.asarray(qa.state()), np.asarray(qb.state()))
     node.set_two_body_target(chi, True)
     st = node.spacetime()
     assert spacelike_real(st)
-    blocks_before = residuals(node)
-    two_body_before = node.two_body_residual()
-    objective_before = node.objective()
-    terms_before = node.objective_terms()
-    trace = node.run_stage2(beta=1.0, max_iters=20, tolerance=1e-15)
+    before = dict(blocks=residuals(node), two_body=node.two_body_residual(), objective=node.objective(),
+                  terms=node.objective_terms())
+    trace = node.run_stage2(beta=1.0, max_iters=max_iters, tolerance=1e-15)
     st = node.spacetime()
-    blocks_after = residuals(node)
-    two_body_after = node.two_body_residual()
-    terms_after = node.objective_terms()
-    read = node.read_two_body()
-    assert len(trace) > 1 and trace[-1] < objective_before
+    after = dict(blocks=residuals(node), two_body=node.two_body_residual(), objective=trace[-1],
+                 terms=node.objective_terms(), read=node.read_two_body(), steps=len(trace) - 1)
+    assert after["steps"] > 0 and after["objective"] < before["objective"]
     assert spacelike_real(st)
-    assert read.in_frames and np.asarray(read.transfer).shape == (2, 2)
-    assert two_body_after <= two_body_before, f"two-body residual rose: {two_body_before:.6e} -> {two_body_after:.6e}"
-    for index in range(2):
-        assert blocks_after[index] < 1e-5, f"block {index} left its floor: {blocks_after[index]:.3e}"
+    assert after["read"].in_frames and np.asarray(after["read"].transfer).shape == (2, 2)
     assert node.inputs[0].frame is not None and node.inputs[1].frame is not None, "frames are held constant"
-    print(f"\n[T3] stage 2 at weight 1e6 ({len(trace) - 1} accepted steps): objective {objective_before:.6e} -> "
-          f"{trace[-1]:.6e}, Regge stationarity {terms_before.regge_stationarity:.4e} -> "
-          f"{terms_after.regge_stationarity:.4e}; two-body residual {two_body_before:.6e} -> {two_body_after:.6e}; "
-          f"block residuals {blocks_before[0]:.3e} {blocks_before[1]:.3e} -> {blocks_after[0]:.3e} "
-          f"{blocks_after[1]:.3e}; T after = {np.round(np.asarray(read.transfer).real, 8).tolist()}, "
-          f"Schmidt {read.singular_values}")
+    for index in range(2):
+        assert after["blocks"][index] < 1e-5, f"block {index} left its floor: {after['blocks'][index]:.3e}"
+    return before, after
+
+
+def report(label, before, after):
+    read = after["read"]
+    print(f"\n[T3] stage 2 {label} ({after['steps']} accepted steps): objective {before['objective']:.6e} -> "
+          f"{after['objective']:.6e}, Regge stationarity {before['terms'].regge_stationarity:.4e} -> "
+          f"{after['terms'].regge_stationarity:.4e}; two-body residual {before['two_body']:.6e} -> "
+          f"{after['two_body']:.6e}; block residuals {before['blocks'][0]:.3e} {before['blocks'][1]:.3e} -> "
+          f"{after['blocks'][0]:.3e} {after['blocks'][1]:.3e}; T after = "
+          f"{np.round(np.asarray(read.transfer).real, 8).tolist()}, Schmidt {read.singular_values}")
+
+
+def test_stage2_pass_descends_the_two_body_residual(whitney_default):
+    """Both fibers, both frames and chi set, input residual weight 1e6, real
+    locus, the Regge term off: r_U is the only term, the blocks sit at their
+    floor, so stage 2 descends the two-body residual (the analytic gradient of
+    (e) at weight 1) while the weight holds the blocks."""
+    before, after = stage2_pass(einstein_hilbert=False, max_iters=20)
+    assert after["two_body"] < before["two_body"], \
+        f"two-body residual did not descend: {before['two_body']:.6e} -> {after['two_body']:.6e}"
+    for index in range(2):
+        assert after["blocks"][index] < 1e-8
+    report("Regge term off, weight 1e6", before, after)
+
+
+def test_stage2_pass_with_the_regge_term_records_the_two_body_residual(whitney_default):
+    """The same pass with the Regge term on (T2's configuration: the collar
+    seed is far from Regge stationarity, 123.6): the objective and the Regge
+    term descend, the blocks hold at weight 1e6, and the two-body residual is
+    RECORDED - it rises under the Regge-dominated steps (a finding, see the
+    module docstring), so nothing about its direction is asserted here."""
+    before, after = stage2_pass(einstein_hilbert=True, max_iters=20)
+    assert after["terms"].regge_stationarity < before["terms"].regge_stationarity
+    report("Regge term on, weight 1e6", before, after)
