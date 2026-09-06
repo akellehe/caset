@@ -8,7 +8,6 @@
 #ifndef TESSERA_TESSERA_SRC_VERTEX_H_
 #define TESSERA_TESSERA_SRC_VERTEX_H_
 
-#include <unordered_map>
 #include <vector>
 #include <memory>
 #include <unordered_set>
@@ -444,15 +443,6 @@ class Vertex {
         Edges outEdges{};              ///< Edges where this vertex is the source
         Edges inEdges{};               ///< Edges where this vertex is the target
         Simplices simplices{};         ///< Simplices containing this vertex
-        /// Fingerprint of each simplex in ::simplices to its position there.
-        ///
-        /// Without it, adding a simplex has to scan the list to reject a
-        /// duplicate and removing one has to scan to find it. That scan is over
-        /// a list whose length grows with the four-volume -- measured, a vertex
-        /// carries 80 simplices on average at N4 = 24k and 148 at N4 = 50k --
-        /// so every registration cost O(N4) and a sweep, which is N4 moves,
-        /// cost O(N4^2) (#970).
-        std::unordered_map<std::uint64_t, std::uint32_t> simplexSlot_{};
         std::uint64_t id;              ///< Unique identifier
         std::vector<double> coordinates{};  ///< Spacetime position (may be empty)
 };

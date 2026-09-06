@@ -210,8 +210,9 @@ bool Vertex::addSimplex(const SimplexPtr &simplex) {
   checkDuplicates("Duplicated before emplacing a new simplex.");
 #endif
   auto fp = simplex->fingerprint.fingerprint();
-  if (simplexSlot_.find(fp) != simplexSlot_.end()) return false;
-  simplexSlot_.emplace(fp, static_cast<std::uint32_t>(simplices.size()));
+  for (const auto &s : simplices) {
+    if (s->fingerprint.fingerprint() == fp) return false;
+  }
   simplices.push_back(simplex);
 #ifdef TESSERA_ASSERTIONS
   checkDuplicates("Duplicated after emplacing a new simplex.");
@@ -222,20 +223,14 @@ bool Vertex::addSimplex(const SimplexPtr &simplex) {
 bool Vertex::removeSimplex(const SimplexPtr &simplex) {
   CLOG(INFO_LEVEL, "Removing simplex: ", simplex->toString(), " from ", toString());
   auto fp = simplex->fingerprint.fingerprint();
-  auto slotIt = simplexSlot_.find(fp);
-  if (slotIt == simplexSlot_.end()) return false;
-
-  // Swap the last entry into the freed position and re-point its slot, so the
-  // list stays contiguous without moving anything else.
-  const std::uint32_t slot = slotIt->second;
-  SimplexPtr moved = simplices.back();
-  simplices[slot] = moved;
-  simplices.pop_back();
-  simplexSlot_.erase(slotIt);
-  if (moved != simplex) {
-    simplexSlot_[moved->fingerprint.fingerprint()] = slot;
+  for (auto it = simplices.begin(); it != simplices.end(); ++it) {
+    if ((*it)->fingerprint.fingerprint() == fp) {
+      *it = simplices.back();
+      simplices.pop_back();
+      return true;
+    }
   }
-  return true;
+  return false;
 }
 
 const Simplices &
