@@ -229,11 +229,12 @@ D2. **Block surface complex.** `blockSubcomplexWithGeometry` extracts the top
 
 D3. **Transfer in period frames.** `frameTransferOn` uses identity frames on
     the fibers' cells (an edge-by-edge block at degree 1). Each block supplies
-    a frame: the basis of its own harmonic space with periods (1, 0) and
-    (0, 1) over its marking (the qubit read's `harmonic_basis` times the
-    inverse period matrix), images on its edges with dual images. The
+    its marking, the cycles A and B. Its frame is derived by the engine from
+    the marking and the block's live kernel: the kernel elements normalized
+    to periods (1, 0) and (0, 1) with parallel transport, with their dual
+    images under the block's own pencil, recomputed at every read (§2). The
     transfer is read in those frames (2×2), which is what χ is written in.
-    The state fibers stay rank one; the frames are separate data.
+    The state fibers stay rank one; the marking is separate data.
 
 D4. **Animation.** `emergence_animation.py` gains a qubit input mode:
     `--inputs qubit --tau-a --tau-b --grid --J --time`, a node factory in
