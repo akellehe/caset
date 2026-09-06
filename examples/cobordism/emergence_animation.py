@@ -76,6 +76,39 @@ default, magnitude one with the real/imaginary split drawn per edge),
 PRESCRIBED light cone -- timelike between hop layers of M0, spacelike within
 one). Only ``foliated`` prescribes a causal order; it is labelled as such
 wherever it is reported and is never presented as emergent.
+
+The qubit input mode
+--------------------
+``--inputs qubit`` drives the qubit cobordism of
+``docs/design/qubit_cobordism_spec.md`` through this SAME loop (spec R5, D4):
+two flat qubit tori (``SimplicialQubit.flat_torus``) are the boundary of a
+3-complex whose bulk starts as the collar between them
+(``MultiCobordism.seed_collar``) and is then synthesized by stage 1 and stage 2
+against the two-body target chi of spec S5 -- the XY flip-flop of two
+spin-1/2 at ``--J`` and ``--time`` -- while each torus keeps representing its
+input state through the zero mode of its OWN Laplacian, a residual in the
+objective at ``--input-weight``; nothing is pinned. The objective in force is
+the node's default (``legacy``): the Regge stationarity term when ``--regge``
+is on, plus Gamma times r_U, where r_U is the weighted sum of the two blocks'
+own-Laplacian residuals and the two-body residual. Every read-out of spec S6
+is a frame channel, present or ``Absent``: per block the own-Laplacian
+residual and the qubit read on the block's live surface (tau, the Bloch
+vector, the J residual, the Delaunay and condition diagnostics, the
+Fubini-Study and Weil-Petersson distances to the input); for the whole the
+Betti numbers, the boundary components with their Euler characteristics, the
+completion status, the monodromy between the two markings, the restricted
+leak of each input line in the whole's zero mode, the two-body read (the
+transfer in the period frames, its leak against chi, the Schmidt spectrum and
+rank, the reversal residual) and the objective terms. Records go under
+``~/cobordism-runs/qubit-cobordism/``::
+
+    OMP_NUM_THREADS=8 python examples/cobordism/emergence_animation.py run \\
+      --inputs qubit --tau-a 0.3+1.1j --tau-b=-0.2+0.8j --grid 3 --steps 4 \\
+      --out ~/cobordism-runs/qubit-cobordism/run.gif \\
+      --json ~/cobordism-runs/qubit-cobordism/run.json
+
+(``--tau-b=-0.2+0.8j`` with the ``=``: a value that starts with ``-`` is
+otherwise read as an option name.)
 """
 
 import argparse
@@ -86,6 +119,7 @@ import math
 import os
 import random
 import sys
+import warnings
 
 import tessera as T
 
@@ -157,6 +191,65 @@ DECLARED_HOST_SEED = 3
 DECLARED_BETTI_DEGREES = (0, 1, 2)
 
 
+class InputMode:
+    """What the drive's node is built from, as a closed vocabulary.
+
+    `drive` selects its node factory by this value: the neutral host of the
+    existing mode, or two qubit tori on their collar. Named constants rather
+    than bare strings: the value is written by `build_config` and compared
+    by `drive`, `draw_frame` and every mode-dependent read, and a typo in any
+    of them would select a different experiment without failing.
+    """
+
+    #: The neutral refined 4-ball with M0 held -- unforced emergence, the
+    #: existing mode and the default.
+    NEUTRAL = "neutral"
+    #: Two flat qubit tori as the boundary of a 3-complex seeded as their
+    #: collar and synthesized against the two-body target (the qubit
+    #: cobordism spec, delta D4).
+    QUBIT = "qubit"
+
+    #: Every accepted value, in help order.
+    ALL = (NEUTRAL, QUBIT)
+
+
+#: The input mode when the caller names none.
+DECLARED_INPUTS = InputMode.NEUTRAL
+#: The two input moduli of the qubit mode, both in the upper half plane
+#: (spec S1): the pair the T1-T3 tests measured on.
+DECLARED_TAU_A = complex(0.3, 1.1)
+DECLARED_TAU_B = complex(-0.2, 0.8)
+#: Grid of each flat torus (n x n). Below 3 the grid is not a simplicial
+#: complex, which `SimplicialQubit.flat_torus` refuses.
+DECLARED_GRID = 3
+#: The exchange coupling J and the time t of the flip-flop
+#: `H = hbar J (s1+ s2- + s1- s2+)`; only their product `J t` enters the
+#: amplitudes, but both are the experiment's declared parameters.
+DECLARED_COUPLING = 1.0
+DECLARED_TIME = 0.05
+#: Weight of each block's own-Laplacian residual inside r_U. The level a
+#: residual settles at is the balance of this weight against the Regge pull
+#: on the torus's own edges, roughly 1/weight^2 (spec section 6: 2e-9 at 1e6
+#: on the 3x3 collar, 1e-2 at weight 1, where the Regge term wins).
+DECLARED_INPUT_WEIGHT = 1e6
+#: Whether the Regge stationarity term is in the objective (the engine's
+#: `einstein_hilbert`); off, r_U is the whole objective.
+DECLARED_REGGE = True
+#: Product layers of the collar seed. Spec S3 seeds the MINIMAL manifold
+#: between the tori, which is one layer; nothing beyond it is templated.
+DECLARED_COLLAR_LAYERS = 1
+#: Degrees the Betti numbers of the 3-dimensional qubit host are reported at
+#: (the collar is [1, 2, 1, 0]).
+DECLARED_QUBIT_BETTI_DEGREES = (0, 1, 2, 3)
+#: Tolerance on |tau_read - tau_in| for the SEED's surface read, which is
+#: exact on a flat torus (spec S1: the read returns tau_in to rounding).
+DECLARED_TAU_TOLERANCE = 1e-9
+#: The two tori's labels and drawing colours (the layout highlight and the
+#: traces read from the same pair, so a colour and its label cannot disagree).
+DECLARED_TORUS_LABELS = ("A", "B")
+DECLARED_TORUS_COLOURS = ("#d2691e", "#1f8a70")
+
+
 class EdgeDisposition:
     """The causal character the seed's edges are given, as a closed vocabulary.
 
@@ -226,17 +319,22 @@ class DriveResult:
     measurement of the complex at a unit, while the terminator is a fact
     about the run that produced them. Returning them together keeps a frame
     from carrying a field that is meaningless for every frame but the last.
+
+    `inputs` is what the node factory handed the reads -- the `QubitInputs`
+    of the qubit mode, or None in the neutral mode -- a fact about the run
+    as well, recorded once in the run document rather than on every frame.
     """
 
-    __slots__ = ("frames", "terminator")
+    __slots__ = ("frames", "terminator", "inputs")
 
-    def __init__(self, frames, terminator):
+    def __init__(self, frames, terminator, inputs=None):
         if terminator not in Terminator.ALL:
             raise ValueError(
                 "unknown terminator %r: expected one of %s"
                 % (terminator, ", ".join(Terminator.ALL)))
         self.frames = frames
         self.terminator = terminator
+        self.inputs = inputs
 
     def __len__(self):
         return len(self.frames)
@@ -498,6 +596,403 @@ def build_cobordism_host(n_refine=DECLARED_SIZE, seed=DECLARED_HOST_SEED,
 
 
 # =====================================================================
+# the qubit host -- two flat tori on their collar (qubit cobordism spec)
+# =====================================================================
+
+def two_qubit_flip_flop(psi, phi):
+    """chi of spec S5 for two spin-1/2 under the XY flip-flop.
+
+    `H_int = hbar J (s1+ s2- + s1- s2+)` maps the product `psi (x) phi` to
+    `chi = (s- psi)(s+ phi)^T + (s+ psi)(s- phi)^T` in the |0>, |1> bases of
+    the two qubits -- rows qubit A, columns qubit B, `s-|0> = |1>`. The
+    first-order amplitude to an orthogonal final state is `-i J t chi`; chi
+    itself is the two-body target the engine's projective leak scores the
+    transfer against (`MultiCobordism.set_two_body_target`), read in the
+    tori's period frames where `f_A <-> |0>` and `f_B <-> |1>`.
+    """
+    import numpy as np
+
+    lowering = np.array([[0.0, 0.0], [1.0, 0.0]], dtype=complex)
+    raising = lowering.T
+    psi = np.asarray(psi, dtype=complex).reshape(2)
+    phi = np.asarray(phi, dtype=complex).reshape(2)
+    return (np.outer(lowering @ psi, raising @ phi)
+            + np.outer(raising @ psi, lowering @ phi))
+
+
+def flip_flop_evolution(psi, phi, coupling, time):
+    """The exact two-qubit evolution at `J t`, recorded next to first order.
+
+    `[H_int, N] = 0` for the total magnetization `N`, so the propagator is
+    block diagonal on the sectors of `N`: |00> and |11> (size 1, untouched)
+    and {|01>, |10>} (size 2, where `H_int` is `J sigma_x` and the
+    exponential is `cos(Jt) - i sin(Jt) sigma_x`). The exact amplitudes are
+    kept beside `-i J t chi` so a run's transfer can be compared with the
+    algebra at the declared `J t`, as the spin-3/2 experiment does.
+    """
+    import numpy as np
+
+    psi = np.asarray(psi, dtype=complex).reshape(2)
+    phi = np.asarray(phi, dtype=complex).reshape(2)
+    angle = float(coupling) * float(time)
+    propagator = np.eye(4, dtype=complex)
+    propagator[1, 1] = propagator[2, 2] = math.cos(angle)
+    propagator[1, 2] = propagator[2, 1] = -1j * math.sin(angle)
+    product = np.kron(psi, phi)
+    chi = two_qubit_flip_flop(psi, phi)
+    return {"coupling": float(coupling), "time": float(time), "Jt": angle,
+            "psi": psi, "phi": phi, "chi": chi,
+            "product_state": product.reshape(2, 2),
+            "first_order_amplitudes": -1j * angle * chi,
+            "exact_amplitudes": (propagator @ product).reshape(2, 2)}
+
+
+def _torus_fiber(torus, ids):
+    """The torus's state as a fiber on its edges in host ids (spec S1, S2).
+
+    Degree 1, one cell per torus edge in the torus's own edge order carried
+    through the collar's id map, the holomorphic form as the single image
+    column, and the HARMONIC contour of the torus's own pencil on the fiber
+    (spec R7: the zero mode, never the band above it, which is the engine's
+    default contour). Exactly the fiber the T2 tests attach.
+    """
+    import numpy as np
+
+    fiber = cob.BoundaryFiber()
+    fiber.degree = 1
+    fiber.cells = [sorted((ids[int(i)], ids[int(j)])) for i, j in torus.edges()]
+    fiber.images = np.asarray(torus.holomorphic_form()).reshape(-1, 1)
+    fiber.contour = cob.PencilLayer.harmonic_contour(
+        cob.PencilLayer.assemble([torus.spacetime()]), 1)
+    return fiber
+
+
+def _host_marking(torus, ids):
+    """The torus's marking as cycles of directed host steps `(u, v)`.
+
+    `MultiCobordism.monodromy`'s convention: a step contributes `+h(u, v)`
+    when `u < v` and `-h(u, v)` otherwise, so a torus step (edge index, sign)
+    becomes the edge's `(i, j)` as `(i -> j)` for +1 and `(j -> i)` for -1,
+    mapped through the id map.
+    """
+    edges = torus.edges()
+
+    def cycle(steps):
+        out = []
+        for e, sign in steps:
+            i, j = edges[int(e)]
+            u, v = ids[int(i)], ids[int(j)]
+            out.append((u, v) if sign > 0 else (v, u))
+        return out
+
+    return [cycle(torus.cycle_A()), cycle(torus.cycle_B())]
+
+
+def _surface_cycles(marking, surface):
+    """A host marking as (edge index, sign) steps into `surface`'s edge order.
+
+    `SimplicialQubit`'s `Spacetime` constructor indexes edges in ascending
+    `(i, j)` order of its vertices, themselves in ascending id order, so
+    sorting the surface's edges by their id pair gives the order the cycles
+    must index. The live surface may hold more edges than the torus had
+    (spec section 6: the engine's moves never remove a torus edge, but a
+    cone-in adds some), so the index is looked up on the LIVE surface at
+    every frame rather than fixed at the seed.
+
+    Raises `KeyError` naming a marking edge the surface no longer holds.
+    """
+    edges = sorted(tuple(sorted(_edge_endpoints(edge)))
+                   for edge in surface.getEdgeList().toVector())
+    index = {edge: n for n, edge in enumerate(edges)}
+    cycles = []
+    for steps in marking:
+        cycle = []
+        for u, v in steps:
+            key = (min(u, v), max(u, v))
+            if key not in index:
+                raise KeyError("marking edge (%d, %d) is not an edge of the "
+                               "block's live surface" % (u, v))
+            cycle.append((index[key], 1 if u < v else -1))
+        cycles.append(cycle)
+    return cycles
+
+
+def _read_surface_qubit(surface, cycles, reversed_flag):
+    """The qubit read of a live surface, its construction notes captured.
+
+    The constructor reports the spec's diagnostics -- Delaunay violations,
+    the section-13 condition numbers, the section-9 branch note -- as Python
+    warnings. A frame records them as channel values
+    (`SimplicialQubit.warnings`) instead, so they are silenced here rather
+    than printed once per frame.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return obs.SimplicialQubit(surface, cycles[0], cycles[1], reversed_flag)
+
+
+def _same_cyclic_order(face, other):
+    """Whether two vertex triples are one face with one orientation."""
+    a, b, c = face
+    return tuple(other) in ((a, b, c), (b, c, a), (c, a, b))
+
+
+def _orientation_flag(surface, cycles, torus, ids):
+    """The `reversed` flag under which the seed's surface reads as the torus.
+
+    `Spacetime` stores no face orientation, so `SimplicialQubit`'s
+    constructor orients the faces by the fundamental class and `reversed`
+    selects the other hemisphere. The flat torus's own faces are
+    counterclockwise by construction (spec section 12), so the flag is the
+    one under which every face of the read carries the torus's cyclic order
+    through the id map. That read reproduces tau_in to rounding, which is
+    asserted by name: the other orientation reads tau_in too, but only by
+    taking the conjugate eigenvector (the branch note of section 9). Decided
+    once, on the seed, and held for the run -- the surface's orientation is a
+    topological fact the engine's moves preserve.
+    """
+    surface_ids = sorted(int(v.getId())
+                         for v in surface.getVertexList().toVector())
+    own_faces = {}
+    for face in torus.faces():
+        mapped = tuple(ids[int(v)] for v in face)
+        own_faces[frozenset(mapped)] = mapped
+    for flag in (False, True):
+        read = _read_surface_qubit(surface, cycles, flag)
+        oriented = True
+        for face in read.faces():
+            mapped = tuple(surface_ids[int(n)] for n in face)
+            own = own_faces.get(frozenset(mapped))
+            if own is None or not _same_cyclic_order(own, mapped):
+                oriented = False
+                break
+        if not oriented:
+            continue
+        if abs(complex(read.tau()) - complex(torus.tau())) > DECLARED_TAU_TOLERANCE:
+            raise RuntimeError(
+                "the seed surface read with reversed=%s carries the torus's "
+                "face orientation but reads tau = %s against tau_in = %s"
+                % (flag, read.tau(), torus.tau()))
+        return flag
+    raise RuntimeError("neither orientation of the seed surface reproduces "
+                       "the torus's counterclockwise faces through the id map")
+
+
+class QubitInputs:
+    """What the qubit factory hands every frame read: the two input tori and
+    how they sit in the host.
+
+    Nothing here is a measurement. These are the INPUTS of spec S1 and the
+    id-mapped data the read-outs of spec S6 need: the tori and their moduli,
+    the id maps, the attached fiber cells (host ids, in the torus's edge
+    order), the markings as host steps, the orientation flag of each surface
+    read, the two-body target chi with the algebra it comes from, and the
+    objective the node descends. `to_json` puts them in the run document
+    once, next to the config; a frame never repeats them.
+    """
+
+    __slots__ = ("tori", "tau_in", "vertex_ids", "cells", "markings",
+                 "reversed", "algebra", "weight", "regge", "layers",
+                 "objective_name", "objective_terms", "torus_warnings", "seed")
+
+    def __init__(self, tori, tau_in, vertex_ids, cells, markings, reversed_,
+                 algebra, weight, regge, layers, objective_name,
+                 objective_terms, torus_warnings, seed):
+        self.tori = list(tori)
+        self.tau_in = [complex(tau) for tau in tau_in]
+        self.vertex_ids = [dict(mapping) for mapping in vertex_ids]
+        self.cells = [[list(cell) for cell in block] for block in cells]
+        self.markings = [[list(cycle) for cycle in marking]
+                         for marking in markings]
+        self.reversed = [bool(flag) for flag in reversed_]
+        self.algebra = algebra
+        self.weight = float(weight)
+        self.regge = bool(regge)
+        self.layers = int(layers)
+        self.objective_name = str(objective_name)
+        self.objective_terms = [str(name) for name in objective_terms]
+        self.torus_warnings = [[str(w) for w in notes] for notes in torus_warnings]
+        self.seed = dict(seed)
+
+    @property
+    def labels(self):
+        return DECLARED_TORUS_LABELS[:len(self.tori)]
+
+    def highlight(self):
+        """The tori's edges for the layout panel: (label, colour, id pairs)."""
+        return [(label, colour, {tuple(cell) for cell in cells})
+                for label, colour, cells in zip(self.labels,
+                                                DECLARED_TORUS_COLOURS,
+                                                self.cells)]
+
+    def to_json(self):
+        import numpy as np
+
+        def matrix(value):
+            return [[complex(z) for z in row] for row in np.asarray(value)]
+
+        algebra = {key: (float(value) if key in ("coupling", "time", "Jt")
+                         else matrix(value) if key in ("chi", "product_state",
+                                                       "first_order_amplitudes",
+                                                       "exact_amplitudes")
+                         else [complex(z) for z in np.asarray(value)])
+                   for key, value in self.algebra.items()}
+        return _json_safe({
+            "labels": list(self.labels),
+            "tau_in": self.tau_in,
+            "bloch_in": [[float(x) for x in torus.bloch()] for torus in self.tori],
+            "grid": [len(torus.vertices()) for torus in self.tori],
+            "layers": self.layers,
+            "vertex_ids": self.vertex_ids,
+            "cells": self.cells,
+            "markings": [[[list(step) for step in cycle] for cycle in marking]
+                         for marking in self.markings],
+            "reversed": self.reversed,
+            "input_weight": self.weight,
+            "regge": self.regge,
+            "objective": self.objective_name,
+            "objective_terms": self.objective_terms,
+            "torus_warnings": self.torus_warnings,
+            "seed": self.seed,
+            "algebra": algebra,
+        })
+
+
+def build_qubit_node(config):
+    """The qubit node: two flat tori on their collar, seeded as the input
+    blocks with their state fibers, period frames and the two-body target.
+
+    Step by step the setup the T1-T3 tests measured under (spec S1-S3, S5):
+    the tori `SimplicialQubit.flat_torus(tau, n, n)`; the collar
+    `MultiCobordism.seed_collar`, one gated whole refused by name; the node
+    with the degree-1 register, real squared lengths (the tori are real and
+    spacelike), the Regge term per `regge` and the Whitney pencil as its
+    metric source; each torus's vertex set one input block (`seed_inputs`);
+    each torus's holomorphic form attached as a degree-1 fiber on its edges
+    with the harmonic contour (`attach_input_fiber`); each torus's period
+    frame with its dual on the block's own pencil (`set_input_frame`); chi of
+    spec S5 as the Choi-decomposed two-body target (`set_two_body_target`);
+    the fiber residuals in r_U at the input weight. No region is pinned and
+    no objective is injected: the node's default objective is what T2 and T3
+    measured under, and `QubitInputs.objective_name` records it.
+
+    Returns the node and its `QubitInputs`.
+    """
+    import numpy as np
+
+    tau_in = [complex(*config["tau_a"]), complex(*config["tau_b"])]
+    grid = int(config["grid"])
+    with warnings.catch_warnings():
+        # The tori's construction notes are recorded from `warnings()` in
+        # `QubitInputs`, not printed.
+        warnings.simplefilter("ignore")
+        tori = [obs.SimplicialQubit.flat_torus(tau, grid, grid)
+                for tau in tau_in]
+    seed = MC.seed_collar(tori[0].spacetime(), tori[1].spacetime(),
+                          config["layers"])
+    ids = [{int(k): int(v) for k, v in mapping.items()}
+           for mapping in seed.vertex_ids]
+    node = MC(seed.host, [[1.0 + 0j], [1.0 + 0j]], [],
+              degrees=list(config["register_degrees"]), seed=config["seed"],
+              einstein_hilbert=bool(config["regge"]),
+              real_squared_lengths_only=True,
+              metric_source=cob.HodgeMetricSource.WhitneyPencil)
+    node.seed_inputs([sorted(mapping.values()) for mapping in ids])
+    node.use_fiber_residuals(True)
+    node.set_input_residual_weight(config["input_weight"])
+    cells = []
+    for index, torus in enumerate(tori):
+        fiber = _torus_fiber(torus, ids[index])
+        node.attach_input_fiber(index, fiber, fiber.cells)
+        cells.append([list(cell) for cell in node.inputs[index].fiber.cells])
+    for index, torus in enumerate(tori):
+        images = np.asarray(torus.period_frame()).astype(complex)
+        node.set_input_frame(index, cells[index], images,
+                             np.asarray(node.input_frame_dual(index, images)))
+    algebra = flip_flop_evolution(np.asarray(tori[0].state()),
+                                  np.asarray(tori[1].state()),
+                                  config["coupling"], config["time"])
+    node.set_two_body_target(algebra["chi"], True)
+    markings = [_host_marking(torus, ids[index])
+                for index, torus in enumerate(tori)]
+    flags = []
+    for index, torus in enumerate(tori):
+        surface = MC.block_surface_subcomplex(node.inputs[index],
+                                              node.spacetime())
+        flags.append(_orientation_flag(
+            surface, _surface_cycles(markings[index], surface), torus,
+            ids[index]))
+    host = node.spacetime()
+    inputs = QubitInputs(
+        tori, tau_in, ids, cells, markings, flags, algebra,
+        config["input_weight"], config["regge"], config["layers"],
+        node.objective_name, MC.objective_term_names(),
+        [torus.warnings() for torus in tori],
+        {"cells": len(host.getTopSimplices()),
+         "vertices": len(host.getVertexList().toVector()),
+         "edges": len(host.getEdgeList().toVector())})
+    return node, inputs
+
+
+#: The node factories `drive` selects by `config["inputs"]`. The neutral
+#: mode's factory is spelled inside `drive` itself, because it IS the
+#: existing drive; only the other modes are registered here.
+NODE_FACTORIES = {InputMode.QUBIT: build_qubit_node}
+
+
+def _boundary_components(faces, regions):
+    """The connected components of a boundary, each with its Euler
+    characteristic and the input block it lies in.
+
+    Two boundary faces are joined when they share a ridge (a face of one
+    dimension less), which is how a closed surface's triangles hang
+    together. The Euler characteristic is the alternating count of every
+    sub-simplex of the component's faces -- 0 for a torus. A component whose
+    vertices all lie in one input block's vertex set is labelled with that
+    block; one that spans blocks, or lies outside every block, carries None.
+    """
+    parent = list(range(len(faces)))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    owner = {}
+    for index, face in enumerate(faces):
+        for ridge in itertools.combinations(face, len(face) - 1):
+            other = owner.setdefault(ridge, index)
+            if other != index:
+                parent[find(other)] = find(index)
+    groups = {}
+    for index in range(len(faces)):
+        groups.setdefault(find(index), []).append(index)
+    components = []
+    for members in groups.values():
+        simplices = set()
+        for index in members:
+            face = faces[index]
+            for size in range(1, len(face) + 1):
+                simplices.update(itertools.combinations(face, size))
+        vertices = {s[0] for s in simplices if len(s) == 1}
+        block = None
+        for candidate, region in enumerate(regions):
+            if vertices <= region:
+                block = candidate
+                break
+        components.append({
+            "faces": len(members),
+            "vertices": len(vertices),
+            "euler_characteristic": sum((-1) ** (len(s) - 1) for s in simplices),
+            "block": block,
+        })
+    components.sort(key=lambda c: (c["block"] is None, c["block"] or 0,
+                                   -c["faces"]))
+    return components
+
+
+# =====================================================================
 # small helpers -- unknown is None, never zero
 # =====================================================================
 
@@ -564,15 +1059,51 @@ class EmergenceFrame:
     so a panel can always say what it is showing.
     """
 
-    def __init__(self, node, spacetime, step, config):
+    #: The channels of the neutral mode's instrument: the paper's
+    #: certificates, read in the order their reads chain.
+    CERTIFICATE_CHANNELS = ("clusters", "bands", "anchors", "transports",
+                            "statistics", "crossings", "spin", "verdict")
+    #: The channels of the qubit mode's instrument: the read-outs of spec S6.
+    QUBIT_CHANNELS = ("blocks", "leaks", "monodromy", "two_body", "boundary",
+                      "completion")
+
+    def __init__(self, node, spacetime, step, config, inputs=None):
         self.step = step
         self.config = config
         self.spacetime = spacetime
+        #: The `QubitInputs` the frame was read against, or None in the
+        #: neutral mode. Not a measurement and not in the record: the run
+        #: document carries the inputs once.
+        self.inputs = inputs
         self.objective = self._read_objective(node)
-        self.layout = self._read_layout(spacetime)
-        # Drawing-only, like `layout`: neither appears in `to_json`, so the
-        # record is unchanged by anything the figure needs.
-        self.dual = self._read_dual_curvature(spacetime)
+        self.layout = self._read_layout(
+            spacetime, inputs.highlight() if inputs is not None else ())
+        if inputs is None:
+            # Drawing-only, like `layout`: neither appears in `to_json`, so
+            # the record is unchanged by anything the figure needs.
+            self.dual = self._read_dual_curvature(spacetime)
+            self._read_certificates(spacetime, config)
+            for name in self.QUBIT_CHANNELS:
+                setattr(self, name, Absent(
+                    "no qubit inputs: the neutral mode drives no input torus"))
+            return
+        # The qubit host is 3-dimensional and its hinges are edges; the dual
+        # curvature panels read triangle hinges of a 4-dimensional host.
+        self.dual = Absent("dual curvature is drawn from the triangle hinges "
+                           "of a 4-dimensional host; the qubit host is "
+                           "3-dimensional")
+        for name in self.CERTIFICATE_CHANNELS:
+            setattr(self, name, Absent(
+                "not read in the qubit input mode: the baryon certificates "
+                "are the neutral mode's instrument"))
+        self.betti = self._read_betti(spacetime, config)
+        self._read_qubit_channels(node, spacetime, inputs)
+
+    def _read_certificates(self, spacetime, config):
+        """The paper's certificate channels, in the order the reads chain:
+        the bands need the clusters, the anchors the bands' states, the
+        transports and crossings the accepted bands, the verdict the quark
+        reads."""
         self.clusters = self._read_clusters(spacetime, config)
         self.bands = self._read_bands(spacetime, config)
         self.states = self._build_states()
@@ -583,6 +1114,16 @@ class EmergenceFrame:
         self.spin = self._read_spin()
         self.betti = self._read_betti(spacetime, config)
         self.verdict = self._read_verdict()
+
+    def _read_qubit_channels(self, node, spacetime, inputs):
+        """The read-outs of spec S6 over the live complex, all read-only."""
+        self.blocks = [self._read_block(node, spacetime, inputs, index)
+                       for index in range(len(inputs.tori))]
+        self.leaks = self._read_restricted_leaks(spacetime, inputs)
+        self.monodromy = self._read_monodromy(spacetime, inputs)
+        self.two_body = self._read_two_body(node)
+        self.boundary = self._read_boundary(spacetime, node)
+        self.completion = self._read_completion(node)
 
     # ---- 1. the objective -------------------------------------------
 
@@ -608,13 +1149,18 @@ class EmergenceFrame:
     # ---- 2. the drawing layout --------------------------------------
 
     @staticmethod
-    def _read_layout(spacetime):
+    def _read_layout(spacetime, highlight=()):
         """2-D coordinates per vertex for DRAWING ONLY.
 
         Classical multidimensional scaling on graph shortest paths under
         |l^2|^(1/2). This is a picture, not a spacetime coordinate system:
         it carries no causal content and no position here means anything
         physical.
+
+        `highlight` names edge sets to draw apart -- `(label, colour, id
+        pairs)` per set, the qubit mode's input tori -- and rides along as
+        `highlight` in the returned block, indexed like `edges`; empty in the
+        neutral mode.
         """
         try:
             import numpy as np
@@ -667,6 +1213,12 @@ class EmergenceFrame:
         coords = vectors[:, order] * np.sqrt(np.clip(values[order], 0, None))
         coords = coords - coords.mean(0)
         rms = math.sqrt((coords ** 2).sum(1).mean()) or 1.0
+        marked = []
+        for label, colour, keys in highlight:
+            drawn = [(index[u], index[v]) for u, v in sorted(keys)
+                     if u in index and v in index]
+            marked.append({"label": label, "colour": colour, "edges": drawn,
+                           "missing": len(keys) - len(drawn)})
         return {"coords": {vertices[i]: tuple(coords[i] / rms)
                            for i in range(n)},
                 "edges": pairs,
@@ -674,7 +1226,8 @@ class EmergenceFrame:
                 "edge_intervals": [(z * z).real for z in lengths],
                 "edge_causal_classes": classes,
                 "edge_causal_arguments": arguments,
-                "vertices": vertices}
+                "vertices": vertices,
+                "highlight": marked}
 
     # ---- 2b. dual curvature, for the two heat panels ----------------
 
@@ -1097,10 +1650,203 @@ class EmergenceFrame:
                 "confidence": _finite(read.confidence),
                 "reasons": _reasons(read)}
 
+    # ---- 12. the qubit blocks (spec S6, per block) ------------------
+
+    @staticmethod
+    def _read_block(node, spacetime, inputs, index):
+        """One input block: its own-Laplacian residual and its qubit read.
+
+        The residual is `fiber_residual_for_input_block` -- the leak of the
+        torus's state fiber in the zero mode of the block's OWN pencil on its
+        live surface (spec R3, D2), reported with the weight it is scored at.
+        The qubit read is `SimplicialQubit` on `block_surface_subcomplex`,
+        the block's own triangles with the host's live lengths, over the
+        torus's marking carried through the id map (tau-hat, the Bloch
+        vector, the spec's J residual, the Delaunay and condition
+        diagnostics) and the two distances of spec section 11 to the input
+        torus. Both are read-outs; neither is a target (spec section 7).
+        """
+        torus = inputs.tori[index]
+        row = {"label": inputs.labels[index],
+               "tau_in": inputs.tau_in[index],
+               "weight": inputs.weight,
+               "reversed": inputs.reversed[index]}
+        try:
+            row["residual"] = _finite(node.fiber_residual_for_input_block(index))
+        except Exception as error:                        # noqa: BLE001
+            row["residual"] = Absent("own-Laplacian residual refused: %s"
+                                     % error)
+        surface = MC.block_surface_subcomplex(node.inputs[index], spacetime)
+        if surface is None:
+            row["read"] = Absent("the block has no surface: a face of the "
+                                 "torus lost an edge, so it carries no state")
+            return row
+        try:
+            cycles = _surface_cycles(inputs.markings[index], surface)
+            read = _read_surface_qubit(surface, cycles, inputs.reversed[index])
+        except (KeyError, ValueError, RuntimeError) as error:
+            row["read"] = Absent("qubit read refused: %s" % error)
+            return row
+        row["read"] = {
+            "tau": complex(read.tau()),
+            "bloch": [float(x) for x in read.bloch()],
+            "j_residual": _finite(read.j_residual()),
+            "non_delaunay_edges": len(read.non_delaunay_edges()),
+            "negative_weight_edges": len(read.negative_weight_edges()),
+            "condition_m1": _finite(read.condition_m1()),
+            "condition_g": _finite(read.condition_g()),
+            "near_degenerate": bool(read.near_degenerate()),
+            "marking_swapped": bool(read.marking_swapped()),
+            "warnings": [str(w) for w in read.warnings()],
+            "vertices": len(read.vertices()),
+            "edges": len(read.edges()),
+            "faces": len(read.faces()),
+            "fubini_study_distance": _finite(
+                obs.fubini_study_distance(read, torus)),
+            "weil_petersson_distance": _finite(
+                obs.weil_petersson_distance(read, torus)),
+        }
+        return row
+
+    # ---- 13. the whole's zero mode restricted to each torus ---------
+
+    @staticmethod
+    def _read_restricted_leaks(spacetime, inputs):
+        """The leak of each input line in the WHOLE's zero mode, restricted
+        to that torus's edges (spec S6; a read-out channel per R1, never the
+        definition of the output state).
+
+        The whole -- bulk and boundary edges in one operator -- is assembled
+        as one chain-level Whitney pencil, its degree-1 zero mode read on the
+        harmonic contour (R7) and restricted to the torus's cells
+        (`PencilLayer.read_boundary_fiber`); the leak is the least-squares
+        residual of the torus's holomorphic form in those restricted images.
+        The restriction is topological in its periods and metric in its
+        representative (spec section 6), so this need not vanish even on
+        the collar seed; it is recorded, not ruled.
+        """
+        import numpy as np
+
+        try:
+            assembled = cob.PencilLayer.assemble([spacetime])
+            contour = cob.PencilLayer.harmonic_contour(assembled, 1)
+        except Exception as error:                        # noqa: BLE001
+            return Absent("the whole's zero mode could not be read: %s"
+                          % error)
+        rows = []
+        rank = None
+        for index, torus in enumerate(inputs.tori):
+            try:
+                read = cob.PencilLayer.read_boundary_fiber(
+                    assembled, 1, contour, inputs.cells[index])
+            except Exception as error:                    # noqa: BLE001
+                rows.append(Absent("restricted read refused: %s" % error))
+                continue
+            images = np.asarray(read.images)
+            target = np.asarray(torus.holomorphic_form()).reshape(-1)
+            if images.ndim != 2 or images.shape[0] != target.shape[0] \
+                    or images.shape[1] == 0:
+                rows.append(Absent("the zero mode restricted to torus %s has "
+                                   "shape %s against %d edges"
+                                   % (inputs.labels[index], images.shape,
+                                      target.shape[0])))
+                continue
+            coefficients = np.linalg.lstsq(images, target, rcond=None)[0]
+            leak = (np.linalg.norm(images @ coefficients - target) ** 2
+                    / np.linalg.norm(target) ** 2)
+            rank = int(images.shape[1])
+            rows.append({"leak": _finite(leak), "rank": rank})
+        return {"per_block": rows, "harmonic_rank": rank}
+
+    # ---- 14. the monodromy between the two markings -----------------
+
+    @staticmethod
+    def _read_monodromy(spacetime, inputs):
+        """`MultiCobordism.monodromy` with both markings: the integer matrix
+        relating them through the whole's zero mode (spec S6), with the Betti
+        numbers, the harmonic rank and the rounding and fit residuals. An
+        obstructed read names its obstruction and is Absent."""
+        import numpy as np
+
+        try:
+            read = MC.monodromy(spacetime, inputs.markings[0],
+                                inputs.markings[1])
+        except Exception as error:                        # noqa: BLE001
+            return Absent("monodromy read refused: %s" % error)
+        if read.obstruction:
+            return Absent("monodromy read obstructed: %s (Betti %s, harmonic "
+                          "rank %d)" % (read.obstruction, list(read.betti),
+                                        read.harmonic_rank))
+        matrix = np.asarray(read.monodromy)
+        return {"betti": [int(b) for b in read.betti],
+                "harmonic_rank": int(read.harmonic_rank),
+                "monodromy": [[complex(z) for z in row] for row in matrix],
+                "rounded": [[int(x) for x in row] for row in read.rounded],
+                "rounding_residual": _finite(read.rounding_residual),
+                "fit_residual": _finite(read.fit_residual)}
+
+    # ---- 15. the two-body read ----------------------------------------
+
+    @staticmethod
+    def _read_two_body(node):
+        """`read_two_body`: the transfer in the two period frames (2 x 2 for
+        two qubits), its projective leak against chi, the Schmidt spectrum
+        and rank of the Choi state, the reversal residual, and the blocks'
+        fiber residuals as the engine reports them."""
+        import numpy as np
+
+        try:
+            read = node.read_two_body()
+        except Exception as error:                        # noqa: BLE001
+            return Absent("two-body read refused: %s" % error)
+        transfer = np.asarray(read.transfer)
+        return {"in_frames": bool(read.in_frames),
+                "choi_decomposed": bool(read.choi_decomposed),
+                "transfer": [[complex(z) for z in row] for row in transfer],
+                "shape": [int(n) for n in transfer.shape],
+                "residual": _finite(read.residual),
+                "singular_values": [_finite(s) for s in read.singular_values],
+                "schmidt_rank": int(read.schmidt_rank),
+                "reversal_residual": _finite(read.reversal_residual),
+                "input_fiber_residuals": [_finite(r) for r in
+                                          read.input_fiber_residuals]}
+
+    # ---- 16. the boundary and the completion status -----------------
+
+    @staticmethod
+    def _read_boundary(spacetime, node):
+        """The boundary of W as connected components, each with its Euler
+        characteristic and the input block it lies in (`getBoundary` split
+        on shared ridges; 0 for a torus)."""
+        try:
+            faces = [tuple(int(v) for v in face)
+                     for face in spacetime.getBoundary()]
+        except Exception as error:                        # noqa: BLE001
+            return Absent("boundary unavailable: %s" % error)
+        if not faces:
+            return Absent("the complex is closed: no boundary face")
+        regions = [set(int(v) for v in block.vertices) for block in node.inputs]
+        components = _boundary_components(faces, regions)
+        return {"count": len(components), "faces": len(faces),
+                "components": components}
+
+    @staticmethod
+    def _read_completion(node):
+        """`bridge_phase_complete` and the uncovered torus faces: whether the
+        boundary of W is exactly the two tori (true by construction on the
+        collar; a cone-out dent reopens it)."""
+        try:
+            uncovered = node.uncovered_input_faces()
+            complete = bool(node.bridge_phase_complete())
+        except Exception as error:                        # noqa: BLE001
+            return Absent("completion status unavailable: %s" % error)
+        return {"bridge_phase_complete": complete,
+                "uncovered_faces": len(uncovered)}
+
     # ---- serialization ----------------------------------------------
 
     def to_json(self):
-        return _json_safe({
+        document = {
             "step": self.step,
             "objective": self.objective,
             "clusters": self.clusters,
@@ -1112,7 +1858,13 @@ class EmergenceFrame:
             "spin": self.spin,
             "betti": self.betti,
             "verdict": self.verdict,
-        })
+        }
+        # The qubit channels ride along only when they were read: the
+        # neutral mode's record keeps its schema byte for byte.
+        if self.inputs is not None:
+            for name in self.QUBIT_CHANNELS:
+                document[name] = getattr(self, name)
+        return _json_safe(document)
 
 
 # =====================================================================
@@ -1128,33 +1880,48 @@ def drive(config, progress=False, on_frame=None):
     the frames are the same either way, so a live view cannot diverge from
     the run it claims to be showing.
 
-    Returns a `DriveResult` carrying the frames and the terminator.
-    """
-    host = build_cobordism_host(config["size"], config["host_seed"],
-                                config["edge_disposition"])
-    node = MC(host, [], [], list(config["register_degrees"]), 1.0,
-              config["seed"])
-    node.set_objective(cob.JointStationarityObjective())
-    # Declared here rather than inherited from the register degrees above: the
-    # degrees a register is constructed at and the degrees whose entropy should
-    # be stationary are different questions.
-    node.set_hodge_degrees(list(config["hodge_degrees"]))
-    node.set_simulation_mode(MC.SimulationMode.EMERGENCE,
-                             MC.EmergenceSubmode.STRICT)
-    # M0 is HELD, not targeted. Declaring the region says only WHICH cells do
-    # not vary -- the paper's fixed boundary with a relaxed bulk. No pinned
-    # objective is set, so the bulk objective scores the whole cobordism
-    # including M0 and the run stays bit-identical to an unpinned one in
-    # everything except which coordinates are free.
-    node.declare_pinned_region(M0_REGION, set(boundary_vertices(host)))
+    The node is built by a FACTORY selected by `config["inputs"]`: the
+    neutral host with its unpinned node (the default, spelled here because
+    it is the existing drive) or one of `NODE_FACTORIES` -- the qubit mode's
+    two tori on their collar. The factory returns the node and what the
+    frame reads need to know about its inputs (None for the neutral host);
+    the loop below is the same for every factory, so the modes cannot
+    diverge in how they are driven, only in what they drive.
 
-    # EVERY frame reads `node.spacetime()`, never the `host` handed to the
+    Returns a `DriveResult` carrying the frames, the terminator and the
+    inputs.
+    """
+    def neutral_node(config):
+        host = build_cobordism_host(config["size"], config["host_seed"],
+                                    config["edge_disposition"])
+        node = MC(host, [], [], list(config["register_degrees"]), 1.0,
+                  config["seed"])
+        node.set_objective(cob.JointStationarityObjective())
+        # Declared here rather than inherited from the register degrees
+        # above: the degrees a register is constructed at and the degrees
+        # whose entropy should be stationary are different questions.
+        node.set_hodge_degrees(list(config["hodge_degrees"]))
+        node.set_simulation_mode(MC.SimulationMode.EMERGENCE,
+                                 MC.EmergenceSubmode.STRICT)
+        # M0 is HELD, not targeted. Declaring the region says only WHICH
+        # cells do not vary -- the paper's fixed boundary with a relaxed
+        # bulk. No pinned objective is set, so the bulk objective scores the
+        # whole cobordism including M0 and the run stays bit-identical to an
+        # unpinned one in everything except which coordinates are free.
+        node.declare_pinned_region(M0_REGION, set(boundary_vertices(host)))
+        return node, None
+
+    factory = NODE_FACTORIES.get(config.get("inputs", DECLARED_INPUTS),
+                                 neutral_node)
+    node, inputs = factory(config)
+
+    # EVERY frame reads `node.spacetime()`, never the host handed to the
     # constructor. Stage 1 REPLACES the node's complex when it commits a move,
-    # so `host` stops being the complex the node is driving from the first
+    # so the host stops being the complex the node is driving from the first
     # committed move onward. Reading it would freeze every panel at the initial
     # geometry while the objective tracked something else entirely -- the two
     # diverge silently, with no error and no empty frame to give it away.
-    frames = [EmergenceFrame(node, node.spacetime(), 0, config)]
+    frames = [EmergenceFrame(node, node.spacetime(), 0, config, inputs)]
     if progress:
         _report(frames[-1])
     if on_frame is not None:
@@ -1162,12 +1929,16 @@ def drive(config, progress=False, on_frame=None):
     terminator = Terminator.STEPS
     for step in range(1, config["steps"] + 1):
         before = _objective_total(frames[-1])
+        # Stage 1 before stage 2 within a unit (spec S4): a committed
+        # combinatorial move rebuilds the complex with lengths only, and
+        # stage 2 then relaxes every edge of the rebuilt complex.
         list(node.run_stage1(max_steps=config["stage1_iters"],
                              n_candidate_moves=config["candidate_moves"],
                              max_lookahead=config["surgical_depth"]))
         list(node.run_stage2(max_iters=config["stage2_iters"],
                              tolerance=config["tolerance"]))
-        frames.append(EmergenceFrame(node, node.spacetime(), step, config))
+        frames.append(EmergenceFrame(node, node.spacetime(), step, config,
+                                     inputs))
         if progress:
             _report(frames[-1])
         if on_frame is not None:
@@ -1185,7 +1956,7 @@ def drive(config, progress=False, on_frame=None):
                       config["tolerance"]):
             terminator = Terminator.TOLERANCE
             break
-    return DriveResult(frames, terminator)
+    return DriveResult(frames, terminator, inputs)
 
 
 def _objective_total(frame):
@@ -1216,6 +1987,8 @@ def _converged(before, after, tolerance):
 
 def _report(frame):
     """One line per frame on stdout, so a long run is legible while it runs."""
+    if frame.inputs is not None:
+        return _report_qubit(frame)
     verdict = (frame.verdict.reason if isinstance(frame.verdict, Absent)
                else frame.verdict["classification"])
     clusters = ("absent" if isinstance(frame.clusters, Absent)
@@ -1228,6 +2001,47 @@ def _report(frame):
         % (frame.step,
            "n/a" if total is None else "%.6g" % total,
            clusters, bands, verdict))
+    sys.stdout.flush()
+
+
+def _tau_text(value):
+    return "n/a" if value is None else "%.5f%+.5fi" % (value.real, value.imag)
+
+
+def _report_qubit(frame):
+    """The qubit mode's stdout line: the residuals, the moduli, the topology."""
+    def block_residual(index):
+        if isinstance(frame.blocks, Absent):
+            return "absent"
+        value = frame.blocks[index].get("residual")
+        return "absent" if not isinstance(value, float) else "%.2e" % value
+
+    def tau_hat(index):
+        if isinstance(frame.blocks, Absent):
+            return "absent"
+        read = frame.blocks[index].get("read")
+        return "absent" if isinstance(read, Absent) else _tau_text(read["tau"])
+
+    def leak(index):
+        if isinstance(frame.leaks, Absent):
+            return "absent"
+        row = frame.leaks["per_block"][index]
+        return "absent" if isinstance(row, Absent) else "%.2e" % row["leak"]
+
+    two_body = ("absent" if isinstance(frame.two_body, Absent)
+                else "%.4f" % frame.two_body["residual"])
+    betti = ("absent" if isinstance(frame.betti, Absent)
+             else [frame.betti["numbers"][d]
+                   for d in sorted(frame.betti["numbers"])])
+    monodromy = ("absent" if isinstance(frame.monodromy, Absent)
+                 else frame.monodromy["rounded"])
+    total = frame.objective.get("total")
+    sys.stdout.write(
+        "[step %2d] objective %s | blocks %s %s | two-body %s | leaks %s %s "
+        "| tau %s %s | betti %s | monodromy %s\n"
+        % (frame.step, "n/a" if total is None else "%.6g" % total,
+           block_residual(0), block_residual(1), two_body, leak(0), leak(1),
+           tau_hat(0), tau_hat(1), betti, monodromy))
     sys.stdout.flush()
 
 
@@ -1410,6 +2224,18 @@ def _panel_layout(axis, frame, placement=None):
                       linewidth=1.4,
                       label="%s (%d)" % (_CAUSAL_LEGEND[c], counts[c]))
                for c in CausalClass.ALL if c in counts]
+    # The drawn boundary: the qubit mode's input tori, drawn over the causal
+    # colouring in their own colours so the surfaces the residuals hold can
+    # be told from the bulk between them. Empty in the neutral mode.
+    for mark in frame.layout.get("highlight", []):
+        for a, b in mark["edges"]:
+            va = coords[vertices[a]]
+            vb = coords[vertices[b]]
+            axis.plot([va[0], vb[0]], [va[1], vb[1]], linewidth=1.7,
+                      color=mark["colour"], alpha=0.9, zorder=3)
+        handles.append(Line2D([0], [0], color=mark["colour"], linewidth=2.0,
+                              label="torus %s (%d edges)"
+                                    % (mark["label"], len(mark["edges"]))))
     if handles:
         axis.legend(handles=handles, fontsize=5, loc="upper right",
                     frameon=True, framealpha=0.85, borderpad=0.3,
@@ -1708,11 +2534,289 @@ def _panel_verdict(axis, frame):
               fontsize=6, color="#666666")
 
 
+# ---- the qubit mode's panels (spec D4) ----------------------------------
+
+def _block_value(frame, index, key):
+    """One block's channel value on a frame, or None where it is absent."""
+    if isinstance(frame.blocks, Absent) or index >= len(frame.blocks):
+        return None
+    value = frame.blocks[index].get(key)
+    return None if isinstance(value, Absent) else value
+
+
+def _block_read(frame, index):
+    """One block's qubit read on a frame, or None where it is absent."""
+    read = _block_value(frame, index, "read")
+    return read if isinstance(read, dict) else None
+
+
+def _leak_value(frame, index):
+    if isinstance(frame.leaks, Absent):
+        return None
+    rows = frame.leaks["per_block"]
+    if index >= len(rows) or isinstance(rows[index], Absent):
+        return None
+    return rows[index]["leak"]
+
+
+def _qubit_reason(frame):
+    """Why a qubit panel has nothing to draw on this frame."""
+    if isinstance(frame.blocks, Absent):
+        return frame.blocks.reason
+    reasons = [row["read"].reason for row in frame.blocks
+               if isinstance(row.get("read"), Absent)]
+    return "; ".join(reasons) or "no block read on this frame"
+
+
+def _panel_residuals(axis, frames):
+    """Every residual of spec S6 that has a trace, on a log scale: the two
+    blocks' own-Laplacian residuals, the two-body leak against chi, and the
+    two restricted leaks in the whole's zero mode. Non-positive values have
+    no place on a log axis and are left out rather than clipped to a floor
+    that would read as a measurement."""
+    title = "residuals (log scale)"
+    last = frames[-1]
+    if last.inputs is None or isinstance(last.blocks, Absent):
+        return _absent_panel(axis, title, _qubit_reason(last))
+    labels = last.inputs.labels
+    series = []
+    for index, (label, colour) in enumerate(zip(labels, DECLARED_TORUS_COLOURS)):
+        series.append(("block %s (weight %g)" % (label, last.inputs.weight),
+                       colour, "-", lambda f, i=index: _block_value(f, i, "residual")))
+        series.append(("leak %s in the whole" % label, colour, ":",
+                       lambda f, i=index: _leak_value(f, i)))
+    series.append(("two-body vs chi", "#1f4e79", "--",
+                   lambda f: None if isinstance(f.two_body, Absent)
+                   else f.two_body["residual"]))
+    drawn = 0
+    for label, colour, style, value_of in series:
+        points = [(f.step, value_of(f)) for f in frames]
+        points = [(s, v) for s, v in points
+                  if isinstance(v, float) and math.isfinite(v) and v > 0.0]
+        if not points:
+            continue
+        axis.plot([s for s, _ in points], [v for _, v in points], marker="o",
+                  markersize=2.2, linewidth=0.9, linestyle=style, color=colour,
+                  label=label)
+        drawn += 1
+    if not drawn:
+        return _absent_panel(axis, title, "no residual carried a positive "
+                                          "finite value")
+    axis.set_yscale("log")
+    axis.set_title(title, fontsize=8)
+    axis.set_xlabel("engine unit", fontsize=6)
+    axis.tick_params(labelsize=6)
+    axis.grid(alpha=0.25, linewidth=0.4, which="both")
+    axis.legend(fontsize=5, loc="best", frameon=True, framealpha=0.85)
+
+
+def _panel_moduli(axis, frames):
+    """The two tau-hat trajectories on the upper half plane, tau_in marked.
+
+    tau is read-out only (spec section 7): the panel shows how far each
+    torus's own conformal structure drifted from its input while the
+    residual held its state, next to the Weil-Petersson distance that
+    measures it."""
+    title = "tau-hat on the upper half plane (star: tau_in)"
+    last = frames[-1]
+    if last.inputs is None or isinstance(last.blocks, Absent):
+        return _absent_panel(axis, title, _qubit_reason(last))
+    drawn = 0
+    for index, (label, colour) in enumerate(zip(last.inputs.labels,
+                                                DECLARED_TORUS_COLOURS)):
+        tau_in = last.inputs.tau_in[index]
+        axis.plot([tau_in.real], [tau_in.imag], marker="*", markersize=9,
+                  color=colour, linestyle="none", zorder=3)
+        path = [_block_read(f, index) for f in frames]
+        path = [read["tau"] for read in path if read is not None]
+        if not path:
+            continue
+        drawn += 1
+        axis.plot([t.real for t in path], [t.imag for t in path], marker="o",
+                  markersize=2.2, linewidth=0.8, color=colour, zorder=2,
+                  label="tau-hat %s = %s" % (label, _tau_text(path[-1])))
+        axis.plot([path[-1].real], [path[-1].imag], marker="o", markersize=5,
+                  color=colour, linestyle="none", zorder=4)
+    if not drawn:
+        return _absent_panel(axis, title, _qubit_reason(last))
+    axis.set_title(title, fontsize=8)
+    axis.axhline(0.0, linewidth=0.5, color="#333333")
+    low, high = axis.get_ylim()
+    axis.set_ylim(min(0.0, low), max(high, 0.1))
+    axis.set_xlabel("Re tau", fontsize=6)
+    axis.set_ylabel("Im tau", fontsize=6)
+    axis.tick_params(labelsize=6)
+    axis.grid(alpha=0.25, linewidth=0.4)
+    axis.legend(fontsize=5, loc="best", frameon=True, framealpha=0.85)
+
+
+def _panel_bloch(axis, frame):
+    """The Bloch hemisphere the tori can represent (Im tau > 0, i.e.
+    r_y > 0), seen from +y: the (r_x, r_z) disk, the read vectors as arrows
+    and the input vectors as hollow markers, r_y written beside each."""
+    title = "Bloch hemisphere r_y > 0 (from +y; ring: input)"
+    if frame.inputs is None or isinstance(frame.blocks, Absent):
+        return _absent_panel(axis, title, _qubit_reason(frame))
+    import numpy as np
+
+    theta = np.linspace(0.0, 2.0 * math.pi, 181)
+    axis.plot(np.cos(theta), np.sin(theta), color="#bbbbbb", linewidth=0.6)
+    axis.axhline(0.0, linewidth=0.4, color="#cccccc")
+    axis.axvline(0.0, linewidth=0.4, color="#cccccc")
+    drawn = 0
+    for index, (label, colour) in enumerate(zip(frame.inputs.labels,
+                                                DECLARED_TORUS_COLOURS)):
+        r_in = [float(x) for x in frame.inputs.tori[index].bloch()]
+        axis.plot([r_in[0]], [r_in[2]], marker="o", markersize=7,
+                  markerfacecolor="none", markeredgecolor=colour,
+                  linestyle="none", zorder=2)
+        read = _block_read(frame, index)
+        if read is None:
+            continue
+        drawn += 1
+        r = read["bloch"]
+        axis.annotate("", xy=(r[0], r[2]), xytext=(0.0, 0.0),
+                      arrowprops=dict(arrowstyle="->", color=colour,
+                                      linewidth=1.3), zorder=3)
+        axis.text(r[0], r[2], " %s  r_y=%.3f" % (label, r[1]), fontsize=5.5,
+                  color=colour, va="center")
+    if not drawn:
+        return _absent_panel(axis, title, _qubit_reason(frame))
+    axis.set_title(title, fontsize=8)
+    axis.set_xlim(-1.2, 1.2)
+    axis.set_ylim(-1.2, 1.2)
+    axis.set_aspect("equal")
+    axis.set_xlabel("r_x", fontsize=6)
+    axis.set_ylabel("r_z", fontsize=6)
+    axis.tick_params(labelsize=6)
+
+
+def _panel_transfer(axis, frame):
+    """|T| and |chi| side by side, each scaled by its own maximum: T is the
+    whole's pencil-operator block between the two period frames (a metric
+    quantity, one inverse power of the length scale), chi the algebra's
+    target; the projective leak the engine scores, the Schmidt spectrum and
+    the reversal residual are in the title."""
+    title = "|T| (period frames) vs |chi| (spec S5)"
+    if frame.inputs is None:
+        return _absent_panel(axis, title, _qubit_reason(frame))
+    if isinstance(frame.two_body, Absent):
+        return _absent_panel(axis, title, frame.two_body.reason)
+    import numpy as np
+
+    transfer = np.abs(np.asarray(frame.two_body["transfer"], dtype=complex))
+    chi = np.abs(np.asarray(frame.inputs.algebra["chi"], dtype=complex))
+    if transfer.shape != chi.shape:
+        return _absent_panel(axis, title, "the transfer is %s but chi is %s: "
+                                          "not read in the period frames"
+                             % (transfer.shape, chi.shape))
+    rows, columns = chi.shape
+    grid = np.full((rows, 2 * columns + 1), np.nan)
+    grid[:, :columns] = transfer / max(float(transfer.max()), 1e-300)
+    grid[:, columns + 1:] = chi / max(float(chi.max()), 1e-300)
+    axis.imshow(grid, cmap="Blues", vmin=0.0, vmax=1.0, aspect="equal")
+
+    def ink(value):
+        # Legible on both ends of the colour map.
+        return "#ffffff" if value > 0.6 else "#333333"
+
+    for i in range(rows):
+        for j in range(columns):
+            axis.text(j, i, "%.3g" % transfer[i, j], ha="center", va="center",
+                      fontsize=5.5, color=ink(grid[i, j]))
+            axis.text(columns + 1 + j, i, "%.3g" % chi[i, j], ha="center",
+                      va="center", fontsize=5.5, color=ink(grid[i, columns + 1 + j]))
+    axis.set_xticks(list(range(columns)) + list(range(columns + 1, 2 * columns + 1)))
+    axis.set_xticklabels(["|%d>" % j for j in range(columns)] * 2, fontsize=6)
+    axis.set_yticks(range(rows))
+    axis.set_yticklabels(["|%d>" % i for i in range(rows)], fontsize=6)
+    # A blank band above the matrices carries their labels inside the axes,
+    # clear of the title.
+    axis.set_ylim(rows - 0.5, -1.3)
+    axis.text((columns - 1) / 2.0, -0.85, "|T| / max", ha="center",
+              fontsize=6, color="#333333")
+    axis.text(columns + 1 + (columns - 1) / 2.0, -0.85, "|chi| / max",
+              ha="center", fontsize=6, color="#333333")
+    read = frame.two_body
+    spectrum = ", ".join("%.3g" % s for s in read["singular_values"]
+                         if s is not None)
+    axis.set_title("%s\nleak %.4g, Schmidt (%s) rank %d, reversal %.1e%s"
+                   % (title, read["residual"] if read["residual"] is not None
+                      else float("nan"), spectrum, read["schmidt_rank"],
+                      read["reversal_residual"]
+                      if read["reversal_residual"] is not None
+                      else float("nan"),
+                      "" if read["in_frames"] else ", identity frames"),
+                   fontsize=6.5)
+
+
+def _panel_topology(axis, frame):
+    """The whole's topology as text: Betti numbers, the boundary components
+    with their Euler characteristics, the completion status, the harmonic
+    rank and the monodromy between the two markings with its residuals."""
+    title = "the whole: Betti, boundary, monodromy"
+    if frame.inputs is None:
+        return _absent_panel(axis, title, _qubit_reason(frame))
+    lines = []
+    if isinstance(frame.betti, Absent):
+        lines.append("Betti: " + frame.betti.reason)
+    else:
+        numbers = frame.betti["numbers"]
+        lines.append("Betti %s" % [numbers[d] for d in sorted(numbers)])
+    if isinstance(frame.boundary, Absent):
+        lines.append("boundary: " + frame.boundary.reason)
+    else:
+        parts = ["chi=%d (%d faces, %s)"
+                 % (c["euler_characteristic"], c["faces"],
+                    "block %s" % frame.inputs.labels[c["block"]]
+                    if c["block"] is not None else "no single block")
+                 for c in frame.boundary["components"]]
+        lines.append("boundary: %d component(s): %s"
+                     % (frame.boundary["count"], "; ".join(parts)))
+    if isinstance(frame.completion, Absent):
+        lines.append("completion: " + frame.completion.reason)
+    else:
+        lines.append("boundary of W is the two tori: %s (%d uncovered face(s))"
+                     % ("yes" if frame.completion["bridge_phase_complete"]
+                        else "no", frame.completion["uncovered_faces"]))
+    if isinstance(frame.leaks, Absent):
+        lines.append("zero mode of the whole: " + frame.leaks.reason)
+    else:
+        lines.append("harmonic rank of the whole: %s"
+                     % frame.leaks["harmonic_rank"])
+    if isinstance(frame.monodromy, Absent):
+        lines.append("monodromy: " + frame.monodromy.reason)
+    else:
+        m = frame.monodromy
+        lines.append("monodromy rounded %s (rounding %s, fit %s)"
+                     % (m["rounded"],
+                        "n/a" if m["rounding_residual"] is None
+                        else "%.1e" % m["rounding_residual"],
+                        "n/a" if m["fit_residual"] is None
+                        else "%.1e" % m["fit_residual"]))
+    axis.set_title(title, fontsize=8)
+    axis.set_xticks([])
+    axis.set_yticks([])
+    y = 0.95
+    for line in lines:
+        wrapped = _wrap(line, 48)
+        axis.text(0.03, y, wrapped, transform=axis.transAxes, fontsize=5.8,
+                  va="top", ha="left", color="#333333")
+        y -= 0.095 * (wrapped.count("\n") + 1)
+
+
 #: Panels whose painter also takes the frame's stabilized placement. Named
 #: rather than detected by signature, so adding a painter that needs it is a
 #: deliberate act rather than something that silently starts working.
 _PLACED_PANELS = ("layout", "dual_spatial", "dual_temporal")
 
+#: Panels whose painter takes the frames so far rather than one frame: the
+#: traces. Named for the same reason as `_PLACED_PANELS`.
+_TRACE_PANELS = ("objective", "residuals", "moduli")
+
+#: Every panel, in the neutral mode's order: the existing panels first, the
+#: qubit mode's after them. One set of painters serves both modes; a panel
+#: whose channel the mode does not read draws its named absence.
 _PANELS = [
     ("objective", _panel_objective),
     ("layout", _panel_layout),
@@ -1728,13 +2832,59 @@ _PANELS = [
     ("spin", _panel_spin),
     ("betti", _panel_betti),
     ("verdict", _panel_verdict),
+    ("residuals", _panel_residuals),
+    ("moduli", _panel_moduli),
+    ("bloch", _panel_bloch),
+    ("transfer", _panel_transfer),
+    ("topology", _panel_topology),
 ]
+
+#: The same panels in the qubit mode's order: the panels that read that
+#: mode's channels first, the certificate panels (absent there) after.
+_QUBIT_PANEL_ORDER = ("objective", "residuals", "moduli", "bloch", "transfer",
+                      "topology", "layout", "betti")
+_QUBIT_PANELS = ([panel for name in _QUBIT_PANEL_ORDER
+                  for panel in _PANELS if panel[0] == name]
+                 + [panel for panel in _PANELS
+                    if panel[0] not in _QUBIT_PANEL_ORDER])
+
+
+def panels_for(config):
+    """The panel order for a run's input mode (one painter set, two orders)."""
+    if config.get("inputs", DECLARED_INPUTS) == InputMode.QUBIT:
+        return _QUBIT_PANELS
+    return _PANELS
 
 
 #: Grid the panels are laid out on. Wide enough for every panel with room to
 #: spare; the spare axes are removed rather than left as empty boxes, which
 #: would read as absent measurements.
-DECLARED_PANEL_GRID = (4, 4)
+DECLARED_PANEL_GRID = (4, 5)
+
+
+def _suptitle(frame, last_step):
+    """The figure's title: what was driven, and that the read-outs are
+    post-hoc."""
+    if frame.inputs is not None:
+        inputs = frame.inputs
+        return ("qubit cobordism -- engine unit %d of %d -- tau_A %s, tau_B "
+                "%s, %dx%d tori, J t = %g, input weight %g, Regge term %s, "
+                "objective %s (read-outs post-hoc, tau read-out only)"
+                % (frame.step, last_step, _tau_text(inputs.tau_in[0]),
+                   _tau_text(inputs.tau_in[1]), frame.config["grid"],
+                   frame.config["grid"], inputs.algebra["Jt"], inputs.weight,
+                   "on" if inputs.regge else "off", inputs.objective_name))
+    disposition = frame.config.get("edge_disposition",
+                                   DECLARED_EDGE_DISPOSITION)
+    # `foliated` prescribes a causal order rather than letting one emerge, so
+    # a frame drawn under it must say so on its face and never read as
+    # emergent.
+    seed_note = ("seed %s -- a PRESCRIBED foliation, not emergent"
+                 % disposition if disposition == EdgeDisposition.FOLIATED
+                 else "seed %s" % disposition)
+    return ("unforced Regge-Hodge emergence -- engine unit %d of %d -- %s "
+            "(certificates read post-hoc, firewalled from the objective)"
+            % (frame.step, last_step, seed_note))
 
 
 def draw_frame(figure, frames, index, placed=None):
@@ -1747,30 +2897,20 @@ def draw_frame(figure, frames, index, placed=None):
     figure.clear()
     frame = frames[index]
     placement = placed[index] if placed else None
+    panels = panels_for(frame.config)
     rows, columns = DECLARED_PANEL_GRID
     axes = figure.subplots(rows, columns)
     flat = [ax for row in axes for ax in row]
-    for axis in flat[len(_PANELS):]:
+    for axis in flat[len(panels):]:
         figure.delaxes(axis)
-    for (name, painter), axis in zip(_PANELS, flat):
-        if name == "objective":
+    for (name, painter), axis in zip(panels, flat):
+        if name in _TRACE_PANELS:
             painter(axis, frames[:index + 1])
         elif name in _PLACED_PANELS:
             painter(axis, frame, placement)
         else:
             painter(axis, frame)
-    disposition = frame.config.get("edge_disposition",
-                                   DECLARED_EDGE_DISPOSITION)
-    # `foliated` prescribes a causal order rather than letting one emerge, so
-    # a frame drawn under it must say so on its face and never read as
-    # emergent.
-    seed_note = ("seed %s -- a PRESCRIBED foliation, not emergent"
-                 % disposition if disposition == EdgeDisposition.FOLIATED
-                 else "seed %s" % disposition)
-    figure.suptitle(
-        "unforced Regge-Hodge emergence -- engine unit %d of %d -- %s "
-        "(certificates read post-hoc, firewalled from the objective)"
-        % (frame.step, frames[-1].step, seed_note), fontsize=9)
+    figure.suptitle(_suptitle(frame, frames[-1].step), fontsize=9)
     figure.tight_layout(rect=(0, 0, 1, 0.95))
 
 
@@ -1829,7 +2969,7 @@ def drive_live(config, progress=False):
             "drive is identical either way." % backend)
     if not plt.isinteractive():
         plt.ion()
-    figure = plt.figure(figsize=(15, 9))
+    figure = plt.figure(figsize=(18, 10))
 
     ready = queue.Queue()
     published = {}
@@ -1882,7 +3022,7 @@ def render(frames, path):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    figure = plt.figure(figsize=(16, 12))
+    figure = plt.figure(figsize=(20, 12))
     # Computed once, in frame order: the alignment is a chain, so a renderer
     # that redraws a frame or draws only the last must still see the same
     # positions it would have seen drawing them all in sequence.
@@ -1911,6 +3051,19 @@ def render(frames, path):
 # CLI
 # =====================================================================
 
+def _as_complex(value):
+    """A complex from a number, a string like ``0.3+1.1j`` or a ``[re, im]``
+    pair (the config's JSON form)."""
+    if isinstance(value, (list, tuple)):
+        if len(value) != 2:
+            raise ValueError("a modulus is a complex number or a [re, im] "
+                             "pair, got %r" % (value,))
+        return complex(float(value[0]), float(value[1]))
+    if isinstance(value, str):
+        return complex(value.replace(" ", ""))
+    return complex(value)
+
+
 def build_config(size=DECLARED_SIZE, steps=DECLARED_STEPS, seed=DECLARED_SEED,
                  host_seed=DECLARED_HOST_SEED,
                  resolution=DECLARED_RESOLUTION,
@@ -1918,11 +3071,37 @@ def build_config(size=DECLARED_SIZE, steps=DECLARED_STEPS, seed=DECLARED_SEED,
                  stage1_iters=DECLARED_STAGE1_ITERS,
                  stage2_iters=DECLARED_STAGE2_ITERS,
                  tolerance=DECLARED_TOLERANCE,
-                 surgical_depth=DECLARED_SURGICAL_DEPTH):
+                 surgical_depth=DECLARED_SURGICAL_DEPTH,
+                 inputs=DECLARED_INPUTS, tau_a=DECLARED_TAU_A,
+                 tau_b=DECLARED_TAU_B, grid=DECLARED_GRID,
+                 coupling=DECLARED_COUPLING, time=DECLARED_TIME,
+                 input_weight=DECLARED_INPUT_WEIGHT, regge=DECLARED_REGGE):
     if edge_disposition not in EdgeDisposition.ALL:
         raise ValueError(
             "unknown edge disposition %r: expected one of %s"
             % (edge_disposition, ", ".join(EdgeDisposition.ALL)))
+    if inputs not in InputMode.ALL:
+        raise ValueError("unknown input mode %r: expected one of %s"
+                         % (inputs, ", ".join(InputMode.ALL)))
+    moduli = {}
+    for label, value in (("tau_a", tau_a), ("tau_b", tau_b)):
+        tau = _as_complex(value)
+        if not (math.isfinite(tau.real) and math.isfinite(tau.imag)
+                and tau.imag > 0.0):
+            raise ValueError(
+                "%s must lie in the upper half plane (Im > 0), got %r: the "
+                "poles |0> and |1> are limits reached by pinching, not "
+                "inputs (spec S1)" % (label, tau))
+        moduli[label] = [tau.real, tau.imag]
+    if grid < 3:
+        raise ValueError("grid must be at least 3 (below 3 the torus grid is "
+                         "not a simplicial complex), got %r" % (grid,))
+    if not (input_weight > 0.0 and math.isfinite(input_weight)):
+        raise ValueError("input weight must be a positive finite number, "
+                         "got %r" % (input_weight,))
+    for label, value in (("J", coupling), ("time", time)):
+        if not math.isfinite(value):
+            raise ValueError("%s must be finite, got %r" % (label, value))
     if stage1_iters < 1:
         raise ValueError("stage-one iterations must be at least 1, got %r"
                          % (stage1_iters,))
@@ -1950,8 +3129,30 @@ def build_config(size=DECLARED_SIZE, steps=DECLARED_STEPS, seed=DECLARED_SEED,
         "register_degrees": list(DECLARED_REGISTER_DEGREES),
         "hodge_degrees": list(DECLARED_HODGE_DEGREES),
         "degrees": list(DECLARED_ANALYSIS_DEGREES),
-        "betti_degrees": list(DECLARED_BETTI_DEGREES),
+        "betti_degrees": list(DECLARED_QUBIT_BETTI_DEGREES
+                              if inputs == InputMode.QUBIT
+                              else DECLARED_BETTI_DEGREES),
+        # The qubit mode's parameters (spec D4). The moduli are kept as
+        # [re, im] pairs so the config stays JSON as it is written.
+        "inputs": inputs,
+        "tau_a": moduli["tau_a"],
+        "tau_b": moduli["tau_b"],
+        "grid": int(grid),
+        "layers": DECLARED_COLLAR_LAYERS,
+        "coupling": float(coupling),
+        "time": float(time),
+        "input_weight": float(input_weight),
+        "regge": bool(regge),
     }
+
+
+def _complex_argument(text):
+    """The CLI's complex parser: ``0.3+1.1j``, ``1.1j``, ``-0.2+0.8j``."""
+    try:
+        return _as_complex(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            "%r is not a complex number; write it like 0.3+1.1j" % (text,))
 
 
 def build_parser():
@@ -1998,6 +3199,45 @@ def build_parser():
                           "EXITS once a whole engine unit fails to improve "
                           "it by this much. Never relative"
                           % DECLARED_TOLERANCE)
+    run.add_argument("--inputs", choices=list(InputMode.ALL),
+                     default=DECLARED_INPUTS,
+                     help="what the node is built from: neutral (default, "
+                          "the refined 4-ball of unforced emergence) or "
+                          "qubit (two flat qubit tori on their collar, "
+                          "synthesized against the two-body flip-flop "
+                          "target; the qubit cobordism spec)")
+    run.add_argument("--tau-a", type=_complex_argument, default=DECLARED_TAU_A,
+                     help="qubit mode: the modulus of torus A in the upper "
+                          "half plane, e.g. 0.3+1.1j (default %s)"
+                          % DECLARED_TAU_A)
+    run.add_argument("--tau-b", type=_complex_argument, default=DECLARED_TAU_B,
+                     help="qubit mode: the modulus of torus B; a value with "
+                          "a negative real part needs the = form, "
+                          "--tau-b=-0.2+0.8j (default %s)" % DECLARED_TAU_B)
+    run.add_argument("--grid", type=int, default=DECLARED_GRID,
+                     help="qubit mode: each flat torus is a grid x grid "
+                          "triangulation, at least 3 (default %d)"
+                          % DECLARED_GRID)
+    run.add_argument("--J", dest="coupling", type=float,
+                     default=DECLARED_COUPLING,
+                     help="qubit mode: the exchange coupling J of the "
+                          "flip-flop H = hbar J (s1+ s2- + s1- s2+) "
+                          "(default %g)" % DECLARED_COUPLING)
+    run.add_argument("--time", type=float, default=DECLARED_TIME,
+                     help="qubit mode: the time t of the recorded exact "
+                          "evolution and first-order amplitude -i J t chi "
+                          "(default %g)" % DECLARED_TIME)
+    run.add_argument("--input-weight", type=float,
+                     default=DECLARED_INPUT_WEIGHT,
+                     help="qubit mode: weight of each torus's own-Laplacian "
+                          "residual in r_U; the residual settles near "
+                          "1/weight^2 against the Regge pull (default %g)"
+                          % DECLARED_INPUT_WEIGHT)
+    run.add_argument("--regge", action=argparse.BooleanOptionalAction,
+                     default=DECLARED_REGGE,
+                     help="qubit mode: keep the Regge stationarity term in "
+                          "the objective (--no-regge leaves r_U alone; "
+                          "default %s)" % ("on" if DECLARED_REGGE else "off"))
     run.add_argument("--live", action="store_true",
                      help="draw each frame as it is computed instead of only "
                           "at the end; still writes --out and --json. Needs "
@@ -2017,7 +3257,11 @@ def main(argv=None):
                           args.resolution, args.edge_disposition,
                           args.stage_one_iterations,
                           args.stage_two_iterations,
-                          args.tolerance, args.surgical_depth)
+                          args.tolerance, args.surgical_depth,
+                          inputs=args.inputs, tau_a=args.tau_a,
+                          tau_b=args.tau_b, grid=args.grid,
+                          coupling=args.coupling, time=args.time,
+                          input_weight=args.input_weight, regge=args.regge)
     result = (drive_live(config, progress=not args.quiet) if args.live
               else drive(config, progress=not args.quiet))
     frames = result.frames
@@ -2030,6 +3274,11 @@ def main(argv=None):
         document = {"config": config,
                     "terminator": result.terminator,
                     "frames": [f.to_json() for f in frames]}
+        if result.inputs is not None:
+            # The inputs once, next to the config: what the tori are, how
+            # they sit in the host, chi and the algebra it comes from, and
+            # the objective the node descended.
+            document["inputs"] = result.inputs.to_json()
         with open(args.json, "w") as handle:
             json.dump(document, handle, indent=2, sort_keys=True)
         if not args.quiet:
