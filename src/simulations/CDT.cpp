@@ -270,19 +270,24 @@ int CDT::sweep() {
 
 double CDT::measureVolumeDrift(int windowSweeps, std::size_t floorVolume,
                                std::size_t ceilingVolume) {
-  auto volume = [this] {
-    return spacetime->getN41() + spacetime->getN32();
+  // Least-squares slope of volume against sweep number. Sums are kept in the
+  // centred form so the fit needs one pass and no storage.
+  double n = 0.0, sumX = 0.0, sumY = 0.0, sumXX = 0.0, sumXY = 0.0;
+  auto observe = [&](double x, double y) {
+    n += 1.0; sumX += x; sumY += y; sumXX += x * x; sumXY += x * y;
   };
-  const double before = std::max(static_cast<double>(volume()), 1.0);
-  int done = 0;
-  for (int i = 0; i < windowSweeps; ++i) {
+  observe(0.0, static_cast<double>(spacetime->getN41() + spacetime->getN32()));
+  for (int i = 1; i <= windowSweeps; ++i) {
     sweep();
-    ++done;
-    const std::size_t now = volume();
+    const std::size_t now = spacetime->getN41() + spacetime->getN32();
+    observe(static_cast<double>(i), static_cast<double>(now));
     if (now < floorVolume || now > ceilingVolume) break;
   }
-  const double after = static_cast<double>(volume());
-  return (after - before) / (before * static_cast<double>(std::max(done, 1)));
+  const double denominator = n * sumXX - sumX * sumX;
+  const double mean = sumY / n;
+  if (denominator <= 0.0 || mean <= 0.0) return 0.0;
+  const double slope = (n * sumXY - sumX * sumY) / denominator;
+  return slope / mean;
 }
 
 void CDT::locatePseudoCriticalCoupling(int windowSweeps, int bisectionSteps,
@@ -332,9 +337,11 @@ void CDT::locatePseudoCriticalCoupling(int windowSweeps, int bisectionSteps,
   // If the sign never changed the bracket is open on one side and the last k4
   // tried is the best estimate available, so the bisection is skipped.
   if (below < above) {
+    int window = windowSweeps;
     for (int i = 0; i < bisectionSteps && above - below > tolerance; ++i) {
       k4 = 0.5 * (below + above);
-      drift = measureVolumeDrift(windowSweeps, floorVolume, ceilingVolume);
+      window = std::min(2 * window, kTuneMaxWindowSweeps);
+      drift = measureVolumeDrift(window, floorVolume, ceilingVolume);
       report();
       if (drift > 0.0) below = k4;
       else above = k4;

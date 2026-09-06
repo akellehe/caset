@@ -288,8 +288,15 @@ class CDT : public Simulation {
     bool relabelVertices_{true};
     std::mt19937 rng{std::random_device{}()};
 
-    /// Sweeps to run per drift measurement.
-    static constexpr int kTuneWindowSweeps = 25;
+    /// Sweeps in the first drift measurement. Far from the critical coupling
+    /// the volume moves fast and a short window settles the sign.
+    static constexpr int kTuneWindowSweeps = 64;
+    /// Longest drift measurement. As the bracket narrows the drift being
+    /// measured shrinks toward the size of the volume's own fluctuations, so
+    /// the window has to grow with it: at 0.4 below critical the drift is about
+    /// 3e-5 per sweep against fluctuations of a few percent, which needs
+    /// roughly a thousand sweeps to resolve.
+    static constexpr int kTuneMaxWindowSweeps = 4096;
 
     /// Doubling steps allowed while bracketing the drift sign change.
     static constexpr int kTuneMaxBracketSteps = 12;
@@ -298,20 +305,27 @@ class CDT : public Simulation {
     /// Width in \f$ k_4 \f$ below which the bracket is considered located.
     static constexpr double kTuneTolerance = 0.01;
 
-    /// Fraction of the volume a drift measurement is allowed to move before
-    /// it stops early. Only the sign of the drift is used, and the sign is
-    /// settled well before this, so the band keeps tuning cheap and keeps it
-    /// from reshaping the configuration it was handed.
-    static constexpr double kTuneVolumeBand = 0.25;
+    /// Fraction of the volume a drift measurement is allowed to move before it
+    /// stops early, bounding the complex to between half and double the volume
+    /// tuning started at. Wide enough that a long window near the critical
+    /// coupling runs to completion -- the volume's own fluctuations are a few
+    /// percent and it wanders while the fixing term is inactive -- and narrow
+    /// enough that a coupling far from critical stops early.
+    static constexpr double kTuneVolumeBand = 1.0;
 
-    /// Mean relative change in the four-volume per sweep, measured over
-    /// @p windowSweeps sweeps at the current couplings. Positive means the
+    /// Relative drift of the four-volume per sweep at the current couplings,
+    /// as the least-squares slope of the volume against sweep number over
+    /// @p windowSweeps sweeps, divided by the mean volume. Positive means the
     /// volume is growing, so \f$ k_4 \f$ is below its pseudo-critical value.
+    ///
+    /// The slope is taken over the whole window rather than differencing its
+    /// endpoints, because near the critical coupling the drift is smaller than
+    /// the volume's own fluctuations and two endpoints cannot separate them.
     ///
     /// The measurement stops as soon as the volume leaves
     /// [@p floorVolume, @p ceilingVolume], reporting the drift accumulated so
-    /// far: a coupling far from critical settles the sign in a few sweeps, and
-    /// stopping there stops it from dismantling or inflating the complex.
+    /// far: a coupling far from critical settles the sign quickly, and stopping
+    /// there keeps it from dismantling or inflating the complex.
     [[nodiscard]] double measureVolumeDrift(int windowSweeps,
                                             std::size_t floorVolume,
                                             std::size_t ceilingVolume);
